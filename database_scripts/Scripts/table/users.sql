@@ -5,8 +5,9 @@
 -- DROP TABLE prod.users;
 
 CREATE TABLE prod.users (
-	id serial4 NOT NULL,
-	id_telegram int4 NOT NULL,
-	CONSTRAINT users_id_telegram_key UNIQUE (id_telegram),
+	id int8 NOT NULL,
+	username varchar(100) null, 
+	first_name varchar(100) null, 
+	last_name varchar(100) null,
 	CONSTRAINT users_pkey PRIMARY KEY (id)
 );
