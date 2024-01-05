@@ -10,6 +10,8 @@ AS $function$
 
 begin
 
+SET search_path to 'prod';
+	
 -- вcтавляем новые категории 
 insert into categories(id_group, name, percent, user_id, is_income, date_from, date_to, is_activ)
 VALUES(null, _category_name, 1, _user_id, _is_income, current_timestamp, '9999-12-31'::timestamp, true);
