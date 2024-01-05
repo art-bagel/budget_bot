@@ -10,6 +10,8 @@ declare delete_category_amount numeric;
 
 begin
 	
+SET search_path to 'prod';
+	
 -- проеряем что сумма процентов по группе равняется 100%
 IF (select id_group from categories where user_id = _user_id and id = _id_category ) != null THEN
    RAISE EXCEPTION 'Нельзя удалить категорию, которая находится в группе. Сперва исключите категорию из группы';
