@@ -8,6 +8,8 @@ AS $function$
 
 
 begin
+	
+set search_path to 'prod';
 
 return query
 		-- получаем пополнния и расходы по активным категориям

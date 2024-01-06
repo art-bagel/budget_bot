@@ -9,6 +9,8 @@ AS $function$
 declare _date_transaction timestamp := current_timestamp;
 
 begin
+	
+set search_path to 'prod';
 
 insert into transactions (user_id, category_from, category_to, date, amount, description)
 values(_user_id, _id_category_from, _id_category_to, _date_transaction, _amount, _description);

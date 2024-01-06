@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import common, default, create_category
+from handlers import common, default
+from handlers.categories import create_category, delete_category
 
 
 async def main():
@@ -15,8 +16,10 @@ async def main():
 
     dp.include_router(common.router)
     dp.include_router(create_category.router)
+    dp.include_router(delete_category.router)
     dp.include_router(default.router)
 
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)  # опрашивать телеграм на наличие новых событий
 
 if __name__ == '__main__':
