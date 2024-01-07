@@ -1,5 +1,5 @@
 from aiogram import F, Router
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State, default_state
@@ -26,7 +26,7 @@ class DeleteCategories(StatesGroup):
 @router.message(default_state, Command("delete_category"))
 @router.message(default_state, F.text.lower() == "удалить категорию")
 async def handle_delete_category(message: Message, state: FSMContext):
-    categories_names = db_categories.get_name_categories(message.from_user.id, None, True).keys()
+    categories_names = db_categories.get_name_categories(message.from_user.id, is_active=True).keys()
     next_state = DeleteCategories.choosing_delete_category_name
     if categories_names:
         text = "Какую категорию будем удалять?"
@@ -40,7 +40,7 @@ async def handle_delete_category(message: Message, state: FSMContext):
 
 
 @router.message(DeleteCategories.choosing_delete_category_name,
-                CategoryNameFilter(db_categories, is_income=None, is_active=True))
+                CategoryNameFilter(db_categories, is_active=True))
 async def handle_delete_name_chosen(message: Message, state: FSMContext, category_id: int):
     balance = db_categories.get_one_category_balance(message.from_user.id, category_id)
     next_state = DeleteCategories.choosing_repeat_delete

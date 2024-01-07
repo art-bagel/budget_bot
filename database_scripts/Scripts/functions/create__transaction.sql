@@ -1,10 +1,9 @@
-
--- создает одиночную запись для перемешения суммы из одной категории в другую
-
 CREATE OR REPLACE FUNCTION prod.create__transaction(_user_id bigint, _id_category_from bigint, _amount numeric, _id_category_to bigint DEFAULT NULL::bigint, _description text DEFAULT ''::text)
  RETURNS text
  LANGUAGE plpgsql
+ volatile 
 AS $function$
+
 
 declare _date_transaction timestamp := current_timestamp;
 

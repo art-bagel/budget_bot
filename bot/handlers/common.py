@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from database_tools.users import Users
 from config import postgres_conn
 from keyboards.builder import make_column_keyboard
-from keyboards.menu import main, settings, categories
+from keyboards.menu import analytic, main, income, settings, categories
 
 router = Router()
 
@@ -32,6 +32,28 @@ async def handle_cancel(message: Message, state: FSMContext):
     await message.answer(
         text=text,
         reply_markup=make_column_keyboard(main)
+    )
+    await state.clear()
+
+
+@router.message(Command(commands=["income"]))
+@router.message(F.text.lower() == "пополнить")
+async def handle_cancel(message: Message, state: FSMContext):
+    text = "Бабки, бабки, бабки"
+    await message.answer(
+        text=text,
+        reply_markup=make_column_keyboard(income)
+    )
+    await state.clear()
+
+
+@router.message(Command(commands=["analytics"]))
+@router.message(F.text.lower() == "аналитика")
+async def handle_cancel(message: Message, state: FSMContext):
+    text = "Убытки, убытки-то какие! Мы так скоро по миру пойдем!"
+    await message.answer(
+        text=text,
+        reply_markup=make_column_keyboard(analytic)
     )
     await state.clear()
 
