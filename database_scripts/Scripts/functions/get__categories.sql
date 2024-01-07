@@ -15,15 +15,36 @@ set search_path to 'prod';
 
 if _is_activ is null
 then 
-	select json_agg(json_build_object('id_category', id, 'name', name, 'is_income', is_income, 'is_activ', is_activ, 'is_group', is_group)) 
+	select json_agg(
+				json_build_object(
+						'id_category', c.id, 
+						'name', c.name, 
+						'is_income', c.is_income, 
+						'is_activ', c.is_activ, 
+						'is_group', c.is_group, 
+						'is_ownere', cu.is_owner
+				)
+		    ) 
 	   into result_json 
-	FROM  categories 
-	where user_id = _user_id;
+	FROM  categories c
+		  join category_user cu on cu.category_id = c.id
+	where cu.user_id = _user_id;
 else 
-	select json_agg(json_build_object('id_category', id, 'name', name, 'is_income', is_income, 'is_activ', is_activ, 'is_group', is_group)) 
+
+	select json_agg(
+				json_build_object(
+						'id_category', c.id, 
+						'name', c.name, 
+						'is_income', c.is_income, 
+						'is_activ', c.is_activ, 
+						'is_group', c.is_group, 
+						'is_ownere', cu.is_owner
+				)
+		    ) 
 	   into result_json 
-	FROM  categories 
-	where user_id = _user_id and is_activ = _is_activ;
+	FROM  categories c
+		  join category_user cu on cu.category_id = c.id
+	where cu.user_id = _user_id and is_activ = _is_activ;
 end if;
 
 return result_json;

@@ -11,8 +11,13 @@ declare _delete_category_amount numeric;
 begin
 	
 SET search_path to 'prod';
+
+IF not (select is_owner from category_user where user_id = _user_id and category_id = _id_category)
+THEN
+   RAISE EXCEPTION 'Только владелец категории может ее удалить';
+end if;
 	
--- проеряем что сумма процентов по группе равняется 100%
+
 IF (select group_id from category_groups where user_id = _user_id and category_id = _id_category ) is not null 
 THEN
    RAISE EXCEPTION 'Нельзя удалить категорию, которая находится в группе. Сперва исключите категорию из группы';
@@ -38,11 +43,13 @@ THEN
 END IF;
 					
 
-update categories 
+update categories c
 		set is_activ = false,
 			date_to = current_timestamp
-where user_id = _user_id
-	  and id = _id_category;
+from category_user cu
+where cu.category_id = _id_category
+	  and cu.user_id = _user_id
+	  and c.id = cu.category_id;
 
 return 'ok';
 

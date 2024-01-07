@@ -21,6 +21,8 @@ async def handle_balance(message: Message):
     button = make_column_keyboard(analytic)
     for categories in balance:
         text += f"{categories['name']}    {categories['balance']} \n"
+    if not text:
+        text = "Пусто, попробуй сперва добавить категории"
     await message.answer(text=text, reply_markup=button)
 
 

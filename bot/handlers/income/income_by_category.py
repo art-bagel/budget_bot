@@ -4,12 +4,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.fsm.state import StatesGroup, State, default_state
 
-from keyboards.menu import main
+from keyboards.menu import main, categories
 from keyboards.builder import make_column_keyboard
 from config import postgres_conn
 from database_tools.categories import Categories
 from database_tools.transactions import Transactions
 from filters.category_name import CategoryNameFilter
+# from handlers.categories.create_category import NewCategories
 
 router = Router()
 
@@ -30,8 +31,13 @@ async def handle_income_by_category(message: Message, state: FSMContext):
         message.from_user.id, is_income=True, is_active=True, is_group=False).keys()
     text = "Кто спонсирует?"
     button = make_column_keyboard([[name] for name in categories_names])
+    next_state = NewIncomeByCategory.choosing_income_from
+    if not categories_names:
+        text = "Хорошо бы для начала добавить категорию дохода"
+        button = make_column_keyboard(categories)
+        next_state = default_state
     await message.answer(text=text, reply_markup=button)
-    await state.set_state(NewIncomeByCategory.choosing_income_from)
+    await state.set_state(next_state)
 
 
 @router.message(NewIncomeByCategory.choosing_income_from,

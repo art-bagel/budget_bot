@@ -18,14 +18,22 @@ with cte as (
 		select c.id as id_category, c.is_activ, c.is_income, c.name, coalesce(t.amount, 0) as amount
 		from transactions t
 			 right join categories c on c.id = t.category_to 
-		where c.user_id = _user_id and c.is_activ and is_income = false and is_group = false
+			 	   join category_user cu on cu.category_id = c.id
+		where cu.user_id = _user_id 
+			  and c.is_activ 
+			  and c.is_income = false 
+			  and c.is_group = false
 		
 		union all 
 
 		select c.id as id_category, c.is_activ, c.is_income, c.name, coalesce(-t.amount, 0) as amount
 		from transactions t
 			 right join categories c on c.id = t.category_from
-		where c.user_id = _user_id and c.is_activ and is_income = false and is_group = false
+		 		   join category_user cu on cu.category_id = c.id
+		where cu.user_id = _user_id 
+			  and c.is_activ 
+			  and c.is_income = false 
+			  and c.is_group = false
 -- группируем и получаем остаток по активным категориям
 ), balance as (
 		select id_category, name, sum(amount) as balance
