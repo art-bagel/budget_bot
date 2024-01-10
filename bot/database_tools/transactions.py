@@ -4,7 +4,7 @@ from database_tools.databases import DataBase
 
 class Transactions(DataBase):
 
-    def create_transaction(self, user_id: int, id_from: int, amount: float, id_to: int, descr: str = '') -> str:
+    def create_transaction(self, user_id: int, id_from: int, amount: float, id_to: int = None, descr: str = '') -> str:
         func = f'{self.schema}.create__transaction'
         return self.call_function(func, user_id, id_from, amount, id_to, descr)[0]
 

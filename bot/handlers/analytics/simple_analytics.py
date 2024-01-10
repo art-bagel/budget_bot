@@ -33,7 +33,9 @@ async def handle_last_transaction(message: Message):
     text = ""
     button = make_column_keyboard(analytic)
     for categories in lasts_transaction:
-        text += f"из {categories['name_from']} в {categories['name_to']}:  {categories['amount']}\n"
+        name_from = f"из {categories['name_from']}" if categories['name_from'] else ""
+        name_to = f"в {categories['name_to']}" if categories['name_to'] else ""
+        text += f"{name_from} {name_to}:  {categories['amount']}  {categories['description']}\n"
     if not text:
         text = "Пусто, а чего ты ожидал увидеть!?"
     await message.answer(text=text, reply_markup=button)

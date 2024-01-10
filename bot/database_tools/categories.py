@@ -57,7 +57,14 @@ class Categories(DataBase):
         result = self.call_function(func, user_id, is_active)[0]
         return result if result else []
 
-    def get_name_categories(self, user_id: int, is_income: bool = None, is_active: bool = None, is_group: bool = None) -> dict[str, int]:
+    def get_name_categories(
+            self,
+            user_id: int,
+            is_income: bool = None,
+            is_active: bool = None,
+            is_group: bool = None,
+            exclude: tuple = None
+    ) -> dict[str, int]:
         """
         Возвращает словарь в формате {"имя_категории": "id_категории"}.
         Все ключи в нижнем регистре.
@@ -65,12 +72,15 @@ class Categories(DataBase):
         :param is_income: категория дохода или нет
         :param is_active: принимает три состояния 1. None - все 2. True - только активные 3. False - только неактивные
         :param is_group: категория является группой или нет
+        :param exclude: исключить id категорий из выдачи
         :return: dict
         """
         result = dict()
         categories = self.get_full_categories(user_id, is_active)
 
         for category in categories:
+            if exclude and category["id_category"] in exclude:
+                continue
             if is_income is None and is_group is None:
                 result.update({category['name'].lower(): category['id_category']})
             elif is_income is None and category['is_group'] == is_group:

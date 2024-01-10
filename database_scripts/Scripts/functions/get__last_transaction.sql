@@ -13,13 +13,13 @@ BEGIN
 SET search_path TO 'prod';
 
 with cte as (
-	select c.name as name_from, c2.name as name_to, t.amount 
+	select c.name as name_from, c2.name as name_to, t.amount, t.description  
 	from transactions t 
 		 left join categories c on t.category_from = c.id 
 		 left join categories c2 on t.category_to = c2.id
 	where t.user_id = _user_id and  date = get__last_date_transactions(_user_id)
 )
-select json_agg(json_build_object('name_from', name_from, 'name_to', name_to, 'amount', amount)) 
+select json_agg(json_build_object('name_from', name_from, 'name_to', name_to, 'amount', amount, 'description', description)) 
 	   into result_json 
 FROM cte;
 

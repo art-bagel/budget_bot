@@ -37,7 +37,7 @@ async def handle_cancel(message: Message, state: FSMContext):
 
 
 @router.message(Command(commands=["income"]))
-@router.message(F.text.lower() == "пополнить")
+@router.message(F.text.lower() == "внести доход")
 async def handle_cancel(message: Message, state: FSMContext):
     text = "Бабки, бабки, бабки"
     await message.answer(

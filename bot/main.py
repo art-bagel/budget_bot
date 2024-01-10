@@ -8,6 +8,7 @@ from config import BOT_TOKEN
 from handlers import common, default
 from handlers.categories import create_category, delete_category
 from handlers.income import income_by_category
+from handlers.transactions import create_spend, between_categories
 from handlers.analytics import simple_analytics
 
 
@@ -20,6 +21,8 @@ async def main():
     dp.include_router(create_category.router)
     dp.include_router(delete_category.router)
     dp.include_router(income_by_category.router)
+    dp.include_router(create_spend.router)
+    dp.include_router(between_categories.router)
     dp.include_router(simple_analytics.router)
     dp.include_router(default.router)
 
