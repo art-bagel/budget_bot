@@ -5,7 +5,7 @@ from database_tools.databases import DataBase
 
 class Categories(DataBase):
 
-    def create_category(self, user_id: int, category_name: int, is_income: bool, is_group: bool) -> str:
+    def create_category(self, user_id: int, category_name: int, is_income: bool, is_group: bool = False) -> str:
         func = f'{self.schema}.create__category'
         return self.call_function(func, category_name, user_id, is_income, is_group)[0]
 
@@ -63,7 +63,7 @@ class Categories(DataBase):
             is_income: bool = None,
             is_active: bool = None,
             is_group: bool = None,
-            exclude: tuple = None
+            exclude: list = None
     ) -> dict[str, int]:
         """
         Возвращает словарь в формате {"имя_категории": "id_категории"}.

@@ -17,7 +17,6 @@ db_categories = Categories(postgres_conn)
 class NewCategories(StatesGroup):
     choosing_category_name = State()
     choosing_category_is_income = State()
-    choosing_category_is_group = State()
     choosing_category_repeat = State()
 
 
@@ -44,24 +43,9 @@ async def handle_category_name_chosen(message: Message, state: FSMContext):
 async def handle_category_is_income_chosen(message: Message, state: FSMContext):
     text = "Категория создана. Забабахаем еще одну?"
     button = make_column_keyboard([["Да", "Нет"]])
-    next_state = NewCategories.choosing_category_repeat
-    if message.text.lower() == "да":
-        user_data = await state.get_data()
-        db_categories.create_category(message.from_user.id, user_data["category_name"], True, False)
-    else:
-        text = "Давай подумаем, будет ли она группой для других категорий?"
-        next_state = NewCategories.choosing_category_is_group
-    await message.answer(text=text, reply_markup=button)
-    await state.set_state(next_state)
-
-
-@router.message(NewCategories.choosing_category_is_group, F.text.in_(["Да", "Нет"]))
-async def handle_category_is_group_chosen(message: Message, state: FSMContext):
-    text = "Категория создана. Забабахаем еще одну?"
-    button = make_column_keyboard([["Да", "Нет"]])
     user_data = await state.get_data()
-    is_group = True if message.text.lower() == "да" else False
-    db_categories.create_category(message.from_user.id, user_data["category_name"], False, is_group)
+    is_income = True if message.text.lower() == "да" else False
+    db_categories.create_category(message.from_user.id, user_data["category_name"], is_income)
     await message.answer(text=text, reply_markup=button)
     await state.set_state(NewCategories.choosing_category_repeat)
 
