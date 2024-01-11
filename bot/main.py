@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 from handlers import common, default
 from handlers.categories import create_category, delete_category, union_in_group
-from handlers.income import income_by_category
+from handlers.income import income_by_category, income_on_group
 from handlers.transactions import create_spend, between_categories
 from handlers.analytics import simple_analytics
 
@@ -22,6 +22,7 @@ async def main():
     dp.include_router(union_in_group.router)
     dp.include_router(delete_category.router)
     dp.include_router(income_by_category.router)
+    dp.include_router(income_on_group.router)
     dp.include_router(create_spend.router)
     dp.include_router(between_categories.router)
     dp.include_router(simple_analytics.router)

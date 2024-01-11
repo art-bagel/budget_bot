@@ -5,9 +5,13 @@ from database_tools.databases import DataBase
 
 class Categories(DataBase):
 
-    def create_category(self, user_id: int, category_name: int, is_income: bool, is_group: bool = False) -> str:
+    def create_category(self, user_id: int, category_name: int, is_income: bool, is_group: bool = False) -> int:
         func = f'{self.schema}.create__category'
         return self.call_function(func, category_name, user_id, is_income, is_group)[0]
+
+    def union_category_in_group(self, user_id: int, id_categories: list, percents: list, id_group: int) -> str:
+        func = f'{self.schema}.union__category_in_group'
+        return self.call_function(func, user_id, id_categories, percents, id_group)[0]
 
     def get_one_category_balance(self, user_id: int, category_id: int) -> float:
         func = f'{self.schema}.get_one__category_balance'

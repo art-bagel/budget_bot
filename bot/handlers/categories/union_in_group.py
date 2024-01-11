@@ -16,6 +16,19 @@ router = Router()
 db_categories = Categories(postgres_conn)
 
 
+def _union_group(user_id, group_name, union_categories: dict[str, int]) -> None:
+    group_id = db_categories.create_category(user_id, group_name, is_income=False, is_group=True)
+    id_categories = []
+    percents = []
+    print(union_categories)
+
+    for c_id, c_perc in union_categories.items():
+        id_categories.append(c_id)
+        percents.append(c_perc / 100)
+
+    db_categories.union_category_in_group(user_id, id_categories, percents, group_id)
+
+
 class UnionInGroup(StatesGroup):
     choosing_group_name = State()
     choosing_categories_in_group = State()
@@ -81,7 +94,8 @@ async def handle_categories_in_group_chosen(message: Message, state: FSMContext,
 @router.message(UnionInGroup.choosing_percent_by_category)
 async def handle_percent_by_category_choosing(message: Message, state: FSMContext):
     user_data = await state.get_data()
-    text = "Огонь группа создана. Это было трудно но ты справился"
+    next_state = UnionInGroup.choosing_percent_by_category
+    button = ReplyKeyboardRemove()
     if user_data.get("loop"):
         print("-1")
         category_id = user_data["category_id"]
@@ -109,6 +123,12 @@ async def handle_percent_by_category_choosing(message: Message, state: FSMContex
                         user_data["new_group"] = user_data["tmp_group"].copy()
                         await state.update_data(user_data)
                         print(await state.get_data())
+                    else:
+                        print(user_data["result"])
+                        _union_group(message.from_user.id, user_data["group_name"], user_data["result"])
+                        text = "Огонь группа создана. Это было трудно но ты справился"
+                        next_state = default_state
+
             else:
                 print("4")
                 text = "Ай, яй.. Я же говорю, процент должен быть от 1 до 100. Попробуй еще раз."
@@ -126,6 +146,7 @@ async def handle_percent_by_category_choosing(message: Message, state: FSMContex
                 "Помни, что общий процент всех категорий в группе должен быть равен 100")
         await state.update_data(result={}, category_id=c_id, tmp_group=tmp_data, loop=True)
 
-    await state.set_state(UnionInGroup.choosing_percent_by_category)
+    await state.set_state(next_state)
     print(await state.get_data())
-    await message.answer(text=text, reply_markup=ReplyKeyboardRemove())
+    await message.answer(text=text, reply_markup=button)
+

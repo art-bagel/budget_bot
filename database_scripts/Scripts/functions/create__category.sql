@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION prod.create__category(_category_name text, _user_id bigint, _is_income boolean, _is_group boolean default false)
- RETURNS text
+ RETURNS int8
  LANGUAGE plpgsql
  volatile 
 AS $function$
@@ -19,7 +19,7 @@ returning id into _category_id;
 insert into category_user (category_id, user_id, is_owner)
 values (_category_id, _user_id, true);
 
-return 'ok';
+return _category_id;
 
 	
 end
