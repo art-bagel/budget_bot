@@ -108,7 +108,7 @@ async def handle_percent_by_category_choosing(message: Message, state: FSMContex
                     c_id, c_name = user_data["new_group"].popitem()
                     user_data["category_id"] = c_id
                     await state.update_data(user_data)
-                    text = (f"Выбери процент для категории {c_name} в группе в формате от 1 до 100\n"
+                    text = (f"Выбери процент для категории < {c_name} > в группе в формате от 1 до 100\n"
                             "Помни, что общий процент всех категорий в группе должен быть равен 100")
                     print("1")
                 else:
@@ -126,7 +126,7 @@ async def handle_percent_by_category_choosing(message: Message, state: FSMContex
                     else:
                         print(user_data["result"])
                         _union_group(message.from_user.id, user_data["group_name"], user_data["result"])
-                        text = "Огонь группа создана. Это было трудно но ты справился"
+                        text = "Долой разрозненность, да будет единство. Это было трудно, но ты справился товарищ"
                         next_state = default_state
 
             else:

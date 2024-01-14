@@ -17,6 +17,22 @@ class Categories(DataBase):
         func = f'{self.schema}.get_one__category_balance'
         return self.call_function(func, user_id, category_id)[0]
 
+    def check_is_member_groups(self, group_id: int):
+        func = f'{self.schema}.check__is_member_groups'
+        return self.call_function(func, group_id)[0]
+
+    def disband_group(self, user_id: int, group_id: int):
+        func = f'{self.schema}.disband_group'
+        return self.call_function(func, user_id, group_id)[0]
+
+    def get_one_category(self, user_id: int, category_id: int):
+        func = f'{self.schema}.get_one__category_data'
+        return self.call_function(func, user_id, category_id)[0]
+
+    def get_group_info(self, user_id: int, group_id: int):
+        func = f'{self.schema}.get__group_info'
+        return self.call_function(func, user_id, group_id)[0]
+
     def get_full_categories(self, user_id: int,  is_active: bool = None) -> List[dict[str, Any]]:
         """
         Возвращает список словарей с полной информацией по категориям пользователя
@@ -70,7 +86,7 @@ class Categories(DataBase):
             exclude: list = None
     ) -> dict[str, int]:
         """
-        Возвращает словарь в формате {"имя_категории": "id_категории"}.
+        Возвращает словарь в формате {"имя_категории": "id_категории", "is_owner": boolean}.
         Все ключи в нижнем регистре.
         :param user_id: пользователь телеграмм
         :param is_income: категория дохода или нет

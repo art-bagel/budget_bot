@@ -22,7 +22,7 @@ then
 						'is_income', c.is_income, 
 						'is_activ', c.is_activ, 
 						'is_group', c.is_group, 
-						'is_ownere', cu.is_owner
+						'is_owner', cu.is_owner
 				)
 		    ) 
 	   into result_json 
@@ -38,7 +38,7 @@ else
 						'is_income', c.is_income, 
 						'is_activ', c.is_activ, 
 						'is_group', c.is_group, 
-						'is_ownere', cu.is_owner
+						'is_owner', cu.is_owner
 				)
 		    ) 
 	   into result_json 

@@ -1,8 +1,7 @@
-CREATE OR REPLACE FUNCTION prod.create__recursive_transaction(_user_id int8, _from_category_id int8, _to_category_id int8, _amount numeric, _description text default '')
-RETURNS text
-LANGUAGE plpgsql
-volatile 
-AS $$
+CREATE OR REPLACE FUNCTION prod.create__recursive_transaction(_user_id bigint, _from_category_id bigint, _to_category_id bigint, _amount numeric, _description text DEFAULT ''::text)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
 
 -- проходится по категориям в группе распределяя доход по группе категорий
 -- если в группу вложены другие группы проходит их рекурсивно
@@ -16,12 +15,11 @@ SET search_path TO 'prod';
 FOR cat IN (
 			select c.id as category_id, cg.group_id, c.name, cg."percent", c.is_group 
 			from categories c 
-				 join category_user cu on cu.category_id = c.id
 				 left join category_groups cg on cg.category_id = c.id
 			where c.is_income = false 
 				  and c.is_activ 
 				  and cg.group_id = _to_category_id
-				  and cu.user_id = _user_id
+				  and c.user_id = _user_id
 			)
 loop
 	if cat.is_group 
@@ -39,4 +37,5 @@ END LOOP;
 return 'ok';
 
 END 
-$$;
+$function$
+;
