@@ -1,9 +1,9 @@
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
 from database_tools.databases import ConnectData
 
-load_dotenv()
+# load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
