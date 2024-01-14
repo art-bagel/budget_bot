@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+  db:
+    image: postgres:13.1
+    volumes:
+      - pgdata:/var/lib/postgresql/data/pgdata
+    restart: on-failure
+    ports:
+      - 5432:5432
+    env_file:
+      - ./.env
+
+  bot:
+    build: .
+    command: sh -c "python -m bot"
+    env_file:
+      - ./.env
+    restart: always
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
