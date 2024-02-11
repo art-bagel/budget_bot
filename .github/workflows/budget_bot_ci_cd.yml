@@ -22,4 +22,4 @@ jobs:
           context: bot/infra/
           push: true
           tags: shurakostenko/budget_bot:latest
-          file: Dockerfile
+          file: bot/infra/Dockerfile
