@@ -19,7 +19,7 @@ jobs:
       - name: Push bot to Docker Hub
         uses: docker/build-push-action@v2
         with:
-          context: /bot/infra/
+          context: bot/infra/
           push: true
           tags: shurakostenko/budget_bot:latest
           file: bot/infra/Dockerfile
