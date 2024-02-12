@@ -36,16 +36,16 @@ jobs:
             key: ${{ secrets.SSH_KEY }}
             passphrase: ${{ secrets.PASSPHRASE }}
             script: |
-              cd budget_bot
-              rm .env
-              touch .env 
-              echo DB_HOST=${{ secrets.DB_HOST }} >> .env
-              echo DB_PORT=${{ secrets.DB_PORT }} >> .env
-              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> .env
-              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> .env
-              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> .env
-              echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> budget_bot/.env
-              echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> .env
+              cd budget_bot/
+              rm ./.env
+              touch ./.env
+              echo DB_HOST=${{ secrets.DB_HOST }} >> ./.env
+              echo DB_PORT=${{ secrets.DB_PORT }} >> ./.env
+              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> ./.env
+              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> ./.env
+              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> ./.env
+              echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> ./.env
+              echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> ./.env
               git pull
               cd bot 
               sudo docker-compose stop
