@@ -36,7 +36,7 @@ jobs:
             key: ${{ secrets.SSH_KEY }}
             passphrase: ${{ secrets.PASSPHRASE }}
             script: |
-              cd budget_bot/
+              cd budget_bot/bot/
               rm ./.env
               touch ./.env
               echo DB_HOST=${{ secrets.DB_HOST }} >> ./.env
@@ -47,7 +47,6 @@ jobs:
               echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> ./.env
               echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> ./.env
               git pull
-              cd bot 
               docker-compose stop
               docker-compose rm bot-bot-1
               docker-compose rm bot-db-1
