@@ -36,12 +36,14 @@ jobs:
             key: ${{ secrets.SSH_KEY }}
             passphrase: ${{ secrets.PASSPHRASE }}
             script: |
-              rm budget_bot/.env
-              touch budget_bot/.env 
-              echo DB_HOST=${{ secrets.DB_HOST }} >> budget_bot/.env
-              echo DB_PORT=${{ secrets.DB_PORT }} >> budget_bot/.env
-              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> budget_bot/.env
-              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> budget_bot/.env
-              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> budget_bot/.env
+              cd budget_bot
+              rm .env
+              touch .env 
+              echo DB_HOST=${{ secrets.DB_HOST }} >> .env
+              echo DB_PORT=${{ secrets.DB_PORT }} >> .env
+              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> .env
+              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> .env
+              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> .env
               echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> budget_bot/.env
-              echo SECRET_KEY=${{ secrets.SECRET_KEY }} >> budget_bot/.env
+              echo TELEGRAM_TOKEN=${{ secrets.TELEGRAM_TOKEN }} >> .env
+              git pull

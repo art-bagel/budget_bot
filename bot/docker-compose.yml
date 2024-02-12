@@ -12,7 +12,7 @@ services:
       - ./.env
 
   bot:
-    build: infra
+    image: shurakostenko/budget_bot:latest
     command: sh -c "python -m bot"
     env_file:
       - ./.env
