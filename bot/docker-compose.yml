@@ -13,7 +13,7 @@ services:
 
   bot:
     image: shurakostenko/budget_bot:latest
-    command: sh -c "python -m bot"
+    command: sh -c "python -m main"
     env_file:
       - ./.env
     restart: always

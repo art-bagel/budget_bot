@@ -46,6 +46,7 @@ jobs:
               echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> ./.env
               echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> ./.env
               echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> ./.env
+              echo PGDATA=/var/lib/postgresql/data/pgdata >> ./.env
               git pull
               docker-compose stop
               docker-compose rm bot-bot-1
