@@ -37,7 +37,7 @@ jobs:
             passphrase: ${{ secrets.PASSPHRASE }}
             script: |
               rm budget_bot/.env
-              touch budget_bot/.env
+              touch budget_bot/.env 
               echo DB_HOST=${{ secrets.DB_HOST }} >> budget_bot/.env
               echo DB_PORT=${{ secrets.DB_PORT }} >> budget_bot/.env
               echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> budget_bot/.env
