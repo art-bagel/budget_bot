@@ -37,7 +37,6 @@ jobs:
             passphrase: ${{ secrets.PASSPHRASE }}
             script: |
               cd budget_bot
-              git pull
               rm .env
               touch .env 
               echo DB_HOST=${{ secrets.DB_HOST }} >> .env
@@ -47,8 +46,10 @@ jobs:
               echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> .env
               echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> budget_bot/.env
               echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> .env
+              git pull
               cd bot 
               sudo docker-compose stop
               sudo docker-compose rm bot-bot-1
               sudo docker-compose rm bot-db-1
               sudo docker-compose up -d
+              
