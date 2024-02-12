@@ -12,7 +12,7 @@ services:
       - ./.env
 
   bot:
-    build: .
+    build: infra
     command: sh -c "python -m bot"
     env_file:
       - ./.env
