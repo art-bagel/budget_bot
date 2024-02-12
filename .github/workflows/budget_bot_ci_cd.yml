@@ -24,24 +24,24 @@ jobs:
           tags: shurakostenko/budget_bot:latest
           file: bot/Dockerfile
 
-deploy:
-    runs-on: ubuntu-latest
-    needs: build_and_push_to_docker_hub
-    steps:
-      - name: executing remote ssh commands to deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USER }}
-          key: ${{ secrets.SSH_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
-          script: |
-            rm budget_bot/.env
-            touch budget_bot/.env
-            echo DB_HOST=${{ secrets.DB_HOST }} >> budget_bot/.env
-            echo DB_PORT=${{ secrets.DB_PORT }} >> budget_bot/.env
-            echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> budget_bot/.env
-            echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> budget_bot/.env
-            echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> budget_bot/.env
-            echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> budget_bot/.env
-            echo SECRET_KEY=${{ secrets.SECRET_KEY }} >> budget_bot/.env
+  deploy:
+      runs-on: ubuntu-latest
+      needs: build_and_push_to_docker_hub
+      steps:
+        - name: executing remote ssh commands to deploy
+          uses: appleboy/ssh-action@master
+          with:
+            host: ${{ secrets.HOST }}
+            username: ${{ secrets.USER }}
+            key: ${{ secrets.SSH_KEY }}
+            passphrase: ${{ secrets.PASSPHRASE }}
+            script: |
+              rm budget_bot/.env
+              touch budget_bot/.env
+              echo DB_HOST=${{ secrets.DB_HOST }} >> budget_bot/.env
+              echo DB_PORT=${{ secrets.DB_PORT }} >> budget_bot/.env
+              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> budget_bot/.env
+              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> budget_bot/.env
+              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> budget_bot/.env
+              echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> budget_bot/.env
+              echo SECRET_KEY=${{ secrets.SECRET_KEY }} >> budget_bot/.env
