@@ -12,7 +12,7 @@ postgres_conn = ConnectData(
     host=os.getenv("DB_HOST"),
     port=os.getenv("DB_PORT"),
     database=os.getenv("DB_DATABASE"),
-    schema=os.getenv("DB_SCHEMA"),
-    username=os.getenv("DB_USERNAME"),
-    password=os.getenv("DB_PASSWORD")
+    username=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    schema=os.getenv("DB_SCHEMA")
 )
