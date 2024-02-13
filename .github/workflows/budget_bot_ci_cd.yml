@@ -51,5 +51,3 @@ jobs:
               docker-compose down
               docker-compose up -d
               docker cp ../database_scripts/ bot_db_1:/
-
-              
