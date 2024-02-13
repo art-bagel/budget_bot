@@ -52,4 +52,6 @@ jobs:
               docker-compose rm bot-bot-1
               docker-compose rm bot-db-1
               docker-compose up -d
+              docker cp ../database_scripts/ bot_db_1:/scripts/
+
               
