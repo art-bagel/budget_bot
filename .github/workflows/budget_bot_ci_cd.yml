@@ -48,9 +48,7 @@ jobs:
               echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> ./.env
               echo PGDATA=/var/lib/postgresql/data/pgdata >> ./.env
               git pull
-              docker-compose stop
-              docker-compose rm bot_bot_1
-              docker-compose rm bot_db_1
+              docker-compose down
               docker-compose up -d
               docker cp ../database_scripts/ bot_db_1:/
 
