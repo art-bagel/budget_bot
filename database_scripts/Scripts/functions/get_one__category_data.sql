@@ -3,6 +3,7 @@ CREATE OR REPLACE FUNCTION prod.get_one__category_data(_user_id bigint, _categor
  LANGUAGE plpgsql
  volatile 
 AS $function$
+--Comment
 
 declare result_json jsonb;
 
