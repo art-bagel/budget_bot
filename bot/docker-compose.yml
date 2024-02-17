@@ -6,7 +6,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data/pgdata
       - ../database_scripts/Scripts:/Scripts
-    command: /Scripts/run_func_scripts.sh
+    command: /bin/chmod +x /Scripts/run_func_scripts.sh && /Scripts/run_func_scripts.sh
     restart: on-failure
     ports:
       - 5432:5432
