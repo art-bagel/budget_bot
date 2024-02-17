@@ -50,8 +50,3 @@ jobs:
               git pull
               docker-compose down
               docker-compose up -d
-              docker cp ../database_scripts/Scripts/ bot_db_1:/
-              docker exec -it bot_db_1 bash
-              chmod 755 /Scripts/run_func_scripts.sh
-              cd /Scripts
-              ./run_func_scripts.sh
