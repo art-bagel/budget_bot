@@ -6,7 +6,6 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data/pgdata
       - ../database_scripts/Scripts/:/Scripts
-    entrypoint: [ "bash", "-c", "/Scripts/run_func_scripts.sh" ]
     restart: on-failure
     ports:
       - 5432:5432
