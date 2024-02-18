@@ -5,7 +5,7 @@ services:
     image: postgres:13.1
     volumes:
       - pgdata:/var/lib/postgresql/data/pgdata
-      - ../database_scripts/Scripts:/Scripts
+      - ../database_scripts/Scripts/functions/:/docker-entrypoint-initdb.d
     restart: on-failure
     ports:
       - 5432:5432
