@@ -50,4 +50,5 @@ jobs:
               git pull
               docker-compose down
               docker-compose up -d
-              docker  exec -i bot_db_1 sh -c '/Scripts/run_func_scripts.sh'
+              docker cp ../database_scripts/Scripts/ bot_db_1:/Scripts
+              docker exec -i bot_db_1 sh -c '/Scripts/run_func_scripts.sh'
