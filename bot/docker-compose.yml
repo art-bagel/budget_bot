@@ -5,9 +5,8 @@ services:
     image: postgres:13.1
     volumes:
       - pgdata:/var/lib/postgresql/data/pgdata
-      - ../database_scripts/Scripts/functions/:/init-scripts
-    command: [ "postgres", "-c", "log_statement=all" ]
-    entrypoint: [ "bash", "-c", "cp -r /init-scripts/* /docker-entrypoint-initdb.d/ && docker-entrypoint.sh postgres" ]
+      - ../database_scripts/Scripts/:/Scripts
+    entrypoint: [ "bash", "-c", "/Scripts/run_func_scripts.sh" ]
     restart: on-failure
     ports:
       - 5432:5432
