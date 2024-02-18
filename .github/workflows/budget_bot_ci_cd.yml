@@ -49,5 +49,5 @@ jobs:
               echo PGDATA=/var/lib/postgresql/data/pgdata >> ./.env
               git pull
               docker-compose down
-              docker-compose up
-              docker  exec -it bot_db_1 sh -c '/Scripts/run_func_scripts.sh'
+              docker-compose up -d
+              docker  exec -i bot_db_1 sh -c '/Scripts/run_func_scripts.sh'
