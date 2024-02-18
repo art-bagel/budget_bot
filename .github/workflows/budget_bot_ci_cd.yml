@@ -50,3 +50,4 @@ jobs:
               git pull
               docker-compose down
               docker-compose up -d
+              docker  exec -it bot_db_1 sh -c '/Scripts/run_func_scripts.sh'
