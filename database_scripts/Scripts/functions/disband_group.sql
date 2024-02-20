@@ -16,7 +16,7 @@ end if;
 
 delete from category_groups where group_id = _group_id;
 
-delete from categories where id = is_group;
+delete from categories where id = _group_id;
 
 
 return 'ok';
