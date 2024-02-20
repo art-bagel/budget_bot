@@ -23,10 +23,10 @@ END IF;
 
 
 
-insert into category_groups(user_id, group_id, category_id, "percent")
-SELECT _user_id,
+insert into category_groups(group_id, category_id, "percent")
+SELECT
 	   _group_id,
-	   category_id, 
+	   category_id,
        perc
 from unnest(_ids_category, _percents) as dt(category_id, perc);
 
@@ -34,7 +34,8 @@ from unnest(_ids_category, _percents) as dt(category_id, perc);
 
 return 'ok';
 
-	
+
 end
 $function$
 ;
+
