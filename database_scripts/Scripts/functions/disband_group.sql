@@ -14,6 +14,8 @@ THEN
    RAISE EXCEPTION 'Только владелец группы может ее удалить';
 end if;
 
+delete from category_user where category_id = _group_id;
+
 delete from category_groups where group_id = _group_id;
 
 delete from categories where id = _group_id;
