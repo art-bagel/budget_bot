@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { recordIncome } from '../api';
-import type { UserContext, RecordIncomeResponse } from '../types';
+import { useEffect, useState } from 'react';
+import { fetchCurrencies, recordIncome } from '../api';
+import type { UserContext, Currency, RecordIncomeResponse } from '../types';
 
 interface IncomeEntry {
   operation_id: number;
@@ -12,6 +12,9 @@ interface IncomeEntry {
 }
 
 export default function Operations({ user }: { user: UserContext }) {
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [loadingCurrencies, setLoadingCurrencies] = useState(true);
+
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
   const [budgetAmountInBase, setBudgetAmountInBase] = useState('');
@@ -20,12 +23,18 @@ export default function Operations({ user }: { user: UserContext }) {
   const [error, setError] = useState<string | null>(null);
   const [incomes, setIncomes] = useState<IncomeEntry[]>([]);
 
+  useEffect(() => {
+    fetchCurrencies()
+      .then(setCurrencies)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoadingCurrencies(false));
+  }, []);
+
   const isNonBase = currencyCode !== user.base_currency_code;
 
   const handleSubmit = async () => {
     const parsedAmount = parseFloat(amount);
     if (!parsedAmount || parsedAmount <= 0) return;
-
     if (isNonBase && (!budgetAmountInBase || parseFloat(budgetAmountInBase) <= 0)) return;
 
     setSubmitting(true);
@@ -67,6 +76,14 @@ export default function Operations({ user }: { user: UserContext }) {
     parseFloat(amount) > 0 &&
     (!isNonBase || parseFloat(budgetAmountInBase) > 0);
 
+  if (loadingCurrencies) {
+    return (
+      <div className="status-screen">
+        <h1>Загрузка...</h1>
+      </div>
+    );
+  }
+
   return (
     <>
       <h1 className="page-title">Операции</h1>
@@ -79,22 +96,25 @@ export default function Operations({ user }: { user: UserContext }) {
           <div className="form-row">
             <input
               className="input"
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="Сумма"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               min="0"
               step="0.01"
             />
-            <input
+            <select
               className="input"
-              type="text"
-              placeholder="Валюта"
               value={currencyCode}
-              onChange={(e) => setCurrencyCode(e.target.value.toUpperCase())}
-              maxLength={3}
-              style={{ width: 80 }}
-            />
+              onChange={(e) => setCurrencyCode(e.target.value)}
+            >
+              {currencies.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}
+                </option>
+              ))}
+            </select>
           </div>
 
           {isNonBase && (
@@ -102,11 +122,13 @@ export default function Operations({ user }: { user: UserContext }) {
               <input
                 className="input"
                 type="number"
+                inputMode="decimal"
                 placeholder={`Стоимость в ${user.base_currency_code}`}
                 value={budgetAmountInBase}
                 onChange={(e) => setBudgetAmountInBase(e.target.value)}
                 min="0"
                 step="0.01"
+                style={{ flex: 1 }}
               />
             </div>
           )}

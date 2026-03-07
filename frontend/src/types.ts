@@ -15,6 +15,12 @@ export interface Category {
   created_at: string;
 }
 
+export interface Currency {
+  code: string;
+  name: string;
+  scale: number;
+}
+
 export interface RecordIncomeRequest {
   bank_account_id: number;
   amount: number;

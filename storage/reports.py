@@ -6,11 +6,18 @@ from storage.databases import DataBase
 class Reports(DataBase):
     SCHEMA = 'budgeting'
 
+    F_GET__CURRENCIES = 'get__currencies'
     F_GET__CATEGORIES = 'get__categories'
     F_GET__GROUP_MEMBERS = 'get__group_members'
     F_GET__BANK_SNAPSHOT = 'get__bank_snapshot'
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
     F_GET__PORTFOLIO_VALUATION = 'get__portfolio_valuation'
+
+    async def get__currencies(self) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__CURRENCIES),
+        )
+        return result if result else []
 
     async def get__categories(self, user_id: int, is_active: Optional[bool] = True) -> list[dict]:
         """

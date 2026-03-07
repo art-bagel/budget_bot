@@ -1,4 +1,4 @@
-import type { UserContext, Category, RecordIncomeRequest, RecordIncomeResponse } from './types';
+import type { UserContext, Category, Currency, RecordIncomeRequest, RecordIncomeResponse } from './types';
 
 const API_BASE = '/api/v1';
 
@@ -28,6 +28,10 @@ export async function register(baseCurrencyCode: string): Promise<UserContext> {
     method: 'POST',
     body: JSON.stringify({ base_currency_code: baseCurrencyCode }),
   });
+}
+
+export async function fetchCurrencies(): Promise<Currency[]> {
+  return apiFetch<Currency[]>('/currencies');
 }
 
 export async function fetchCategories(): Promise<Category[]> {
