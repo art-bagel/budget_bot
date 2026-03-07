@@ -3,10 +3,11 @@ set -euo pipefail
 
 USERNAME="$POSTGRES_USER"
 DATABASE="$DB_DATABASE"
-DIRECTORY="/Scripts/functions"
+DIRECTORY="/Scripts/budgeting/func"
 FILES=(
     "put__register_user_context.sql"
     "put__create_category.sql"
+    "put__create_income_source.sql"
     "set__replace_group_members.sql"
     "put__record_fx_rate_snapshot.sql"
     "put__record_income.sql"
@@ -15,7 +16,9 @@ FILES=(
     "put__exchange_currency.sql"
     "put__record_expense.sql"
     "put__reverse_operation.sql"
+    "get__currencies.sql"
     "get__categories.sql"
+    "get__income_sources.sql"
     "get__group_members.sql"
     "get__bank_snapshot.sql"
     "get__budget_snapshot.sql"

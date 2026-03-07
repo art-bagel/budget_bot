@@ -6,6 +6,7 @@
 --   _bank_account_id bigint - Bank account that receives the funds.
 --   _amount numeric - Amount received in the bank currency.
 --   _currency_code char(3) - Currency of the received amount.
+--   _income_source_id bigint - Optional income source for analytics.
 --   _budget_amount_in_base numeric - Historical cost of the received amount in the user's base currency.
 --   _comment text - Optional comment.
 -- Returns:
@@ -15,6 +16,7 @@ CREATE OR REPLACE FUNCTION budgeting.put__record_income(
     _bank_account_id bigint,
     _amount numeric,
     _currency_code char(3),
+    _income_source_id bigint DEFAULT NULL,
     _budget_amount_in_base numeric DEFAULT NULL,
     _comment text DEFAULT NULL
 )
@@ -26,6 +28,7 @@ DECLARE
     _base_currency_code char(3);
     _unallocated_category_id bigint;
     _effective_budget_amount_in_base numeric(20, 2);
+    _income_source_user_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
@@ -52,6 +55,22 @@ BEGIN
         RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
     END IF;
 
+    IF _income_source_id IS NOT NULL THEN
+        SELECT user_id
+        INTO _income_source_user_id
+        FROM income_sources
+        WHERE id = _income_source_id
+          AND is_active;
+
+        IF _income_source_user_id IS NULL THEN
+            RAISE EXCEPTION 'Unknown active income source %', _income_source_id;
+        END IF;
+
+        IF _income_source_user_id <> _user_id THEN
+            RAISE EXCEPTION 'Income source % does not belong to user %', _income_source_id, _user_id;
+        END IF;
+    END IF;
+
     SELECT id
     INTO _unallocated_category_id
     FROM categories
@@ -74,8 +93,8 @@ BEGIN
         _effective_budget_amount_in_base := round(_budget_amount_in_base, 2);
     END IF;
 
-    INSERT INTO operations (user_id, type, comment)
-    VALUES (_user_id, 'income', _comment)
+    INSERT INTO operations (user_id, income_source_id, type, comment)
+    VALUES (_user_id, _income_source_id, 'income', _comment)
     RETURNING id
     INTO _operation_id;
 

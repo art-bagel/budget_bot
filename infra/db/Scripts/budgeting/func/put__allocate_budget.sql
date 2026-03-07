@@ -55,7 +55,7 @@ BEGIN
         RAISE EXCEPTION 'Unknown active source category %', _from_category_id;
     END IF;
 
-    IF _from_kind IN ('group', 'income') THEN
+    IF _from_kind = 'group' THEN
         RAISE EXCEPTION 'Source category % cannot be of kind %', _from_category_id, _from_kind;
     END IF;
 
@@ -70,7 +70,7 @@ BEGIN
         RAISE EXCEPTION 'Unknown active destination category %', _to_category_id;
     END IF;
 
-    IF _to_kind IN ('group', 'income') THEN
+    IF _to_kind IN ('group', 'system') THEN
         RAISE EXCEPTION 'Destination category % cannot be of kind %', _to_category_id, _to_kind;
     END IF;
 

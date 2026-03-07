@@ -1,9 +1,9 @@
 -- Description:
---   Creates a user category for budget or income tracking.
+--   Creates a user category for budget tracking.
 -- Parameters:
 --   _user_id bigint - Category owner.
 --   _name text - Category name.
---   _kind text - Category kind: regular, group or income.
+--   _kind text - Category kind: regular or group.
 -- Returns:
 --   bigint - Identifier of the created category.
 CREATE OR REPLACE FUNCTION budgeting.put__create_category(
@@ -24,7 +24,7 @@ BEGIN
         RAISE EXCEPTION 'Category name cannot be empty';
     END IF;
 
-    IF _kind NOT IN ('regular', 'group', 'income') THEN
+    IF _kind NOT IN ('regular', 'group') THEN
         RAISE EXCEPTION 'Unsupported category kind: %', _kind;
     END IF;
 

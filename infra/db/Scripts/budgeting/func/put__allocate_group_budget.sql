@@ -56,7 +56,7 @@ BEGIN
         RAISE EXCEPTION 'Unknown active source category %', _from_category_id;
     END IF;
 
-    IF _source_kind IN ('group', 'income') THEN
+    IF _source_kind = 'group' THEN
         RAISE EXCEPTION 'Source category % cannot be of kind %', _from_category_id, _source_kind;
     END IF;
 
