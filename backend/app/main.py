@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import settings
-from backend.app.routers import auth
+from backend.app.routers import auth, categories
 from backend.app import storage as app_storage
 
 
@@ -32,6 +32,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(categories.router)
 
 
 @app.get('/health')
