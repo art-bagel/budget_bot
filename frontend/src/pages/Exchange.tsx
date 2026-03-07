@@ -1,6 +1,7 @@
 import { IconExchange } from '../components/Icons';
+import type { UserContext } from '../types';
 
-export default function Exchange() {
+export default function Exchange(_props: { user: UserContext }) {
   return (
     <div className="placeholder-page">
       <span className="placeholder-page__icon"><IconExchange /></span>

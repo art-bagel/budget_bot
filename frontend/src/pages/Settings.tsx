@@ -8,7 +8,9 @@ const THEME_OPTIONS: { value: Theme; label: string; icon: () => JSX.Element }[] 
   { value: 'dark', label: 'Тёмная', icon: IconMoon },
 ];
 
-export default function Settings() {
+import type { UserContext } from '../types';
+
+export default function Settings(_props: { user: UserContext }) {
   const { theme, setTheme } = useTheme();
 
   return (

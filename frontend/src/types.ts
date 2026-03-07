@@ -14,3 +14,17 @@ export interface Category {
   is_active: boolean;
   created_at: string;
 }
+
+export interface RecordIncomeRequest {
+  bank_account_id: number;
+  amount: number;
+  currency_code: string;
+  budget_amount_in_base?: number;
+  comment?: string;
+}
+
+export interface RecordIncomeResponse {
+  operation_id: number;
+  budget_amount_in_base: number;
+  base_currency_code: string;
+}

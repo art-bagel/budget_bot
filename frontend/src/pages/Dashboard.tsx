@@ -1,6 +1,7 @@
 import { IconDashboard } from '../components/Icons';
+import type { UserContext } from '../types';
 
-export default function Dashboard() {
+export default function Dashboard(_props: { user: UserContext }) {
   return (
     <div className="placeholder-page">
       <span className="placeholder-page__icon"><IconDashboard /></span>

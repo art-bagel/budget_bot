@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchCategories, createCategory } from '../api';
-import type { Category } from '../types';
+import type { Category, UserContext } from '../types';
 
 const KIND_LABELS: Record<string, string> = {
   system: 'Системная',
@@ -15,7 +15,7 @@ const CREATABLE_KINDS = [
   { value: 'group', label: 'Группа' },
 ];
 
-export default function Categories() {
+export default function Categories(_props: { user: UserContext }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

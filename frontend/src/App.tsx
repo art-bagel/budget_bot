@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
+import type { UserContext } from './types';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
 import Categories from './pages/Categories';
@@ -8,7 +9,7 @@ import Exchange from './pages/Exchange';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 
-const PAGES: Record<Page, () => JSX.Element> = {
+const PAGES: Record<Page, (props: { user: UserContext }) => JSX.Element> = {
   dashboard: Dashboard,
   operations: Operations,
   categories: Categories,
@@ -41,7 +42,7 @@ export default function App() {
 
   return (
     <Layout page={page} onNavigate={setPage}>
-      <PageComponent />
+      <PageComponent user={user} />
     </Layout>
   );
 }
