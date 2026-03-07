@@ -9,6 +9,7 @@ class Context(DataBase):
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
+    F_SET__ARCHIVE_CATEGORY = 'set__archive_category'
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
 
     async def put__register_user_context(
@@ -63,6 +64,19 @@ class Context(DataBase):
             self._fn(self.F_PUT__CREATE_INCOME_SOURCE),
             user_id,
             name,
+        )
+
+    async def set__archive_category(self, user_id: int, category_id: int) -> dict:
+        """
+        Архивирует категорию или группу.
+        :param user_id: Идентификатор владельца категории.
+        :param category_id: Идентификатор архивируемой категории.
+        :return: Словарь с идентификатором и типом архивированной категории.
+        """
+        return await self.call_function(
+            self._fn(self.F_SET__ARCHIVE_CATEGORY),
+            user_id,
+            category_id,
         )
 
     async def set__replace_group_members(

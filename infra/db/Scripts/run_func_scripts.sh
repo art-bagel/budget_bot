@@ -8,6 +8,7 @@ FILES=(
     "put__register_user_context.sql"
     "put__create_category.sql"
     "put__create_income_source.sql"
+    "set__archive_category.sql"
     "set__replace_group_members.sql"
     "put__record_fx_rate_snapshot.sql"
     "put__record_income.sql"

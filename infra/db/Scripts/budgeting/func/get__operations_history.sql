@@ -51,6 +51,11 @@ BEGIN
             o.comment,
             o.created_at,
             o.reversal_of_operation_id,
+            EXISTS (
+                SELECT 1
+                FROM operations ro
+                WHERE ro.reversal_of_operation_id = o.id
+            ) AS has_reversal,
             ins.name AS income_source_name
         FROM operations o
         LEFT JOIN income_sources ins
@@ -105,6 +110,7 @@ BEGIN
             'comment', so.comment,
             'created_at', so.created_at,
             'reversal_of_operation_id', so.reversal_of_operation_id,
+            'has_reversal', so.has_reversal,
             'income_source_name', so.income_source_name,
             'bank_entries', COALESCE(ba.bank_entries, '[]'::jsonb),
             'budget_entries', COALESCE(bga.budget_entries, '[]'::jsonb)

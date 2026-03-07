@@ -27,6 +27,13 @@ class CreateCategoryResponse(BaseModel):
     id: int
 
 
+class ArchiveCategoryResponse(BaseModel):
+    category_id: int
+    kind: str
+    name: str
+    is_active: bool
+
+
 @router.get('', response_model=List[CategoryItem])
 async def get_categories(
     user: TelegramUser = Depends(get_telegram_user),
@@ -46,3 +53,15 @@ async def create_category(
         kind=body.kind,
     )
     return CreateCategoryResponse(id=category_id)
+
+
+@router.post('/{category_id}/archive', response_model=ArchiveCategoryResponse)
+async def archive_category(
+    category_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> ArchiveCategoryResponse:
+    result = await context.set__archive_category(
+        user_id=user.user_id,
+        category_id=category_id,
+    )
+    return ArchiveCategoryResponse(**result)

@@ -10,6 +10,7 @@ import {
   fetchOperationsHistory,
   recordExpense,
   recordIncome,
+  reverseOperation,
 } from '../api';
 import type {
   Category,
@@ -136,6 +137,7 @@ export default function Operations({ user }: { user: UserContext }) {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyTypeFilter, setHistoryTypeFilter] = useState('');
+  const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
 
   const loadHistory = async (
     offset: number,
@@ -345,6 +347,22 @@ export default function Operations({ user }: { user: UserContext }) {
     parseFloat(allocationAmount) > 0;
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
+
+  const handleReverseOperation = async (operationId: number) => {
+    setReversingOperationId(operationId);
+    setHistoryError(null);
+
+    try {
+      await reverseOperation({
+        operation_id: operationId,
+      });
+      await loadHistory(0, true);
+    } catch (e: any) {
+      setHistoryError(e.message);
+    } finally {
+      setReversingOperationId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -660,8 +678,18 @@ export default function Operations({ user }: { user: UserContext }) {
                         ))}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div className="history-side">
                       <span className="tag tag--neutral">{formatDateTime(item.created_at)}</span>
+                      {item.type !== 'reversal' && !item.has_reversal && (
+                        <button
+                          className="btn"
+                          type="button"
+                          disabled={reversingOperationId === item.operation_id}
+                          onClick={() => handleReverseOperation(item.operation_id)}
+                        >
+                          {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}

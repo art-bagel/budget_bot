@@ -87,6 +87,22 @@ export interface RecordExpenseResponse {
   base_currency_code: string;
 }
 
+export interface ExchangeCurrencyRequest {
+  bank_account_id: number;
+  from_currency_code: string;
+  from_amount: number;
+  to_currency_code: string;
+  to_amount: number;
+  comment?: string;
+}
+
+export interface ExchangeCurrencyResponse {
+  operation_id: number;
+  effective_rate: number;
+  realized_fx_result_in_base: number;
+  base_currency_code: string;
+}
+
 export interface AllocateBudgetRequest {
   from_category_id: number;
   to_category_id: number;
@@ -129,6 +145,7 @@ export interface OperationHistoryItem {
   comment?: string | null;
   created_at: string;
   reversal_of_operation_id?: number | null;
+  has_reversal: boolean;
   income_source_name?: string | null;
   bank_entries: OperationHistoryBankEntry[];
   budget_entries: OperationHistoryBudgetEntry[];
@@ -139,4 +156,14 @@ export interface OperationHistoryResponse {
   total_count: number;
   limit: number;
   offset: number;
+}
+
+export interface ReverseOperationRequest {
+  operation_id: number;
+  comment?: string;
+}
+
+export interface ReverseOperationResponse {
+  reversal_operation_id: number;
+  reversed_operation_id: number;
 }

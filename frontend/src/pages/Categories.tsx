@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import {
+  archiveCategory,
   createCategory,
   fetchCategories,
   fetchGroupMembers,
   replaceGroupMembers,
 } from '../api';
-import type { Category, GroupMember, UserContext } from '../types';
+import type { Category, UserContext } from '../types';
 
 
 const KIND_LABELS: Record<string, string> = {
@@ -35,7 +36,13 @@ function createDraftRow(index: number): GroupDraftRow {
 }
 
 
-export default function Categories(_props: { user: UserContext }) {
+export default function Categories({
+  user,
+  embedded = false,
+}: {
+  user: UserContext;
+  embedded?: boolean;
+}) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +56,7 @@ export default function Categories(_props: { user: UserContext }) {
   const [loadingGroup, setLoadingGroup] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
+  const [archivingCategoryId, setArchivingCategoryId] = useState<number | null>(null);
 
   const regularCategories = useMemo(
     () => categories.filter((item) => item.kind === 'regular'),
@@ -59,29 +67,8 @@ export default function Categories(_props: { user: UserContext }) {
     [categories],
   );
 
-  const loadCategories = () => {
-    setLoading(true);
-    setError(null);
-
-    fetchCategories()
-      .then((loadedCategories) => {
-        const visibleCategories = loadedCategories.filter((item) => item.kind !== 'system');
-        setCategories(visibleCategories);
-        if (!selectedGroupId) {
-          const firstGroup = visibleCategories.find((item) => item.kind === 'group');
-          if (firstGroup) {
-            setSelectedGroupId(String(firstGroup.id));
-          }
-        }
-      })
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(loadCategories, []);
-
-  useEffect(() => {
-    if (!selectedGroupId) {
+  const loadGroupMembers = async (groupId: string) => {
+    if (!groupId) {
       setGroupRows([createDraftRow(1)]);
       return;
     }
@@ -89,23 +76,58 @@ export default function Categories(_props: { user: UserContext }) {
     setLoadingGroup(true);
     setGroupError(null);
 
-    fetchGroupMembers(Number(selectedGroupId))
-      .then((members: GroupMember[]) => {
-        if (members.length === 0) {
-          setGroupRows([createDraftRow(1)]);
-          return;
-        }
+    try {
+      const members = await fetchGroupMembers(Number(groupId));
 
-        setGroupRows(
-          members.map((member, index) => ({
-            key: 'member-' + index + '-' + member.child_category_id,
-            child_category_id: String(member.child_category_id),
-            share_percent: String(Number((member.share * 100).toFixed(2))),
-          })),
-        );
-      })
-      .catch((reason: Error) => setGroupError(reason.message))
-      .finally(() => setLoadingGroup(false));
+      if (members.length === 0) {
+        setGroupRows([createDraftRow(1)]);
+        return;
+      }
+
+      setGroupRows(
+        members.map((member, index) => ({
+          key: 'member-' + index + '-' + member.child_category_id,
+          child_category_id: String(member.child_category_id),
+          share_percent: String(Number((member.share * 100).toFixed(2))),
+        })),
+      );
+    } catch (reason: any) {
+      setGroupError(reason.message);
+    } finally {
+      setLoadingGroup(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const loadedCategories = await fetchCategories();
+      const visibleCategories = loadedCategories.filter((item) => item.kind !== 'system');
+      const availableGroups = visibleCategories.filter((item) => item.kind === 'group');
+      const hasSelectedGroup = availableGroups.some((item) => String(item.id) === selectedGroupId);
+
+      setCategories(visibleCategories);
+
+      if (availableGroups.length === 0) {
+        setSelectedGroupId('');
+      } else if (!hasSelectedGroup) {
+        setSelectedGroupId(String(availableGroups[0].id));
+      }
+    } catch (reason: any) {
+      setError(reason.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCategories();
+  }, []);
+
+  useEffect(() => {
+    void loadGroupMembers(selectedGroupId);
   }, [selectedGroupId]);
 
   const handleCreate = async () => {
@@ -168,10 +190,28 @@ export default function Categories(_props: { user: UserContext }) {
     try {
       await replaceGroupMembers(Number(selectedGroupId), childCategoryIds, shares);
       await loadCategories();
+      await loadGroupMembers(selectedGroupId);
     } catch (reason: any) {
       setGroupError(reason.message);
     } finally {
       setSavingGroup(false);
+    }
+  };
+
+  const handleArchiveCategory = async (categoryId: number) => {
+    setArchivingCategoryId(categoryId);
+    setError(null);
+
+    try {
+      const result = await archiveCategory(categoryId);
+      await loadCategories();
+      if (result.kind !== 'group' && selectedGroupId) {
+        await loadGroupMembers(selectedGroupId);
+      }
+    } catch (reason: any) {
+      setError(reason.message);
+    } finally {
+      setArchivingCategoryId(null);
     }
   };
 
@@ -185,7 +225,7 @@ export default function Categories(_props: { user: UserContext }) {
 
   return (
     <>
-      <h1 className="page-title">Категории и группы</h1>
+      {!embedded && <h1 className="page-title">Категории и группы</h1>}
 
       <section className="section">
         <div className="section__header">
@@ -320,7 +360,17 @@ export default function Categories(_props: { user: UserContext }) {
                     <div className="list-row__title">{category.name}</div>
                     <div className="list-row__sub">{KIND_LABELS[category.kind] || category.kind}</div>
                   </div>
-                  <span className="pill">{category.kind}</span>
+                  <div className="list-row__actions">
+                    <span className="pill">{category.kind}</span>
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={archivingCategoryId === category.id}
+                      onClick={() => handleArchiveCategory(category.id)}
+                    >
+                      {archivingCategoryId === category.id ? '...' : 'В архив'}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

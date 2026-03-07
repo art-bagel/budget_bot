@@ -12,8 +12,12 @@ import type {
   OperationHistoryResponse,
   RecordExpenseRequest,
   RecordExpenseResponse,
+  ExchangeCurrencyRequest,
+  ExchangeCurrencyResponse,
   RecordIncomeRequest,
   RecordIncomeResponse,
+  ReverseOperationRequest,
+  ReverseOperationResponse,
 } from './types';
 
 const API_BASE = '/api/v1';
@@ -109,6 +113,13 @@ export async function recordExpense(data: RecordExpenseRequest): Promise<RecordE
   });
 }
 
+export async function exchangeCurrency(data: ExchangeCurrencyRequest): Promise<ExchangeCurrencyResponse> {
+  return apiFetch<ExchangeCurrencyResponse>('/operations/exchange', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function allocateBudget(data: AllocateBudgetRequest): Promise<AllocateBudgetResponse> {
   return apiFetch<AllocateBudgetResponse>('/operations/allocate', {
     method: 'POST',
@@ -140,4 +151,17 @@ export async function fetchOperationsHistory(
   }
 
   return apiFetch<OperationHistoryResponse>(`/operations/history?${params.toString()}`);
+}
+
+export async function reverseOperation(data: ReverseOperationRequest): Promise<ReverseOperationResponse> {
+  return apiFetch<ReverseOperationResponse>('/operations/reverse', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function archiveCategory(categoryId: number): Promise<{ category_id: number; kind: string; name: string; is_active: boolean }> {
+  return apiFetch<{ category_id: number; kind: string; name: string; is_active: boolean }>(`/categories/${categoryId}/archive`, {
+    method: 'POST',
+  });
 }

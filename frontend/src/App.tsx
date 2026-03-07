@@ -5,7 +5,6 @@ import type { Page } from './components/Layout';
 import type { UserContext } from './types';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
-import Categories from './pages/Categories';
 import Exchange from './pages/Exchange';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
@@ -13,7 +12,6 @@ import { useAuth } from './hooks/useAuth';
 const PAGES: Record<Page, ComponentType<{ user: UserContext }>> = {
   dashboard: Dashboard,
   operations: Operations,
-  categories: Categories,
   exchange: Exchange,
   settings: Settings,
 };

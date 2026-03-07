@@ -2,12 +2,11 @@ import type { ReactNode } from 'react';
 import {
   IconDashboard,
   IconOperations,
-  IconCategories,
   IconExchange,
   IconSettings,
 } from './Icons';
 
-export type Page = 'dashboard' | 'operations' | 'categories' | 'exchange' | 'settings';
+export type Page = 'dashboard' | 'operations' | 'exchange' | 'settings';
 
 interface Props {
   page: Page;
@@ -18,7 +17,6 @@ interface Props {
 const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
   { id: 'dashboard', label: 'Обзор', icon: IconDashboard },
   { id: 'operations', label: 'Операции', icon: IconOperations },
-  { id: 'categories', label: 'Категории', icon: IconCategories },
   { id: 'exchange', label: 'Обмен', icon: IconExchange },
   { id: 'settings', label: 'Настройки', icon: IconSettings },
 ];

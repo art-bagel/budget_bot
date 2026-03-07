@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
+import Categories from './Categories';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
@@ -12,7 +13,7 @@ const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
 
 import type { UserContext } from '../types';
 
-export default function Settings(_props: { user: UserContext }) {
+export default function Settings({ user }: { user: UserContext }) {
   const { theme, setTheme } = useTheme();
 
   return (
@@ -49,18 +50,20 @@ export default function Settings(_props: { user: UserContext }) {
                 <div className="settings-row__title">Базовая валюта</div>
                 <div className="settings-row__sub">Все бюджетные категории ведутся в этой валюте</div>
               </div>
-              <span className="pill">RUB</span>
+              <span className="pill">{user.base_currency_code}</span>
             </li>
             <li className="settings-row">
               <div>
                 <div className="settings-row__title">Банковский счёт</div>
                 <div className="settings-row__sub">Основной счёт для операций</div>
               </div>
-              <span className="tag tag--neutral">Основной</span>
+              <span className="tag tag--neutral">Main #{user.bank_account_id}</span>
             </li>
           </ul>
         </div>
       </section>
+
+      <Categories user={user} embedded />
 
       {/* Data */}
       <section className="settings-section">

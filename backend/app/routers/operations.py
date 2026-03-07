@@ -41,6 +41,22 @@ class RecordExpenseResponse(BaseModel):
     base_currency_code: str
 
 
+class ExchangeCurrencyRequest(BaseModel):
+    bank_account_id: int
+    from_currency_code: str
+    from_amount: float
+    to_currency_code: str
+    to_amount: float
+    comment: Optional[str] = None
+
+
+class ExchangeCurrencyResponse(BaseModel):
+    operation_id: int
+    effective_rate: float
+    realized_fx_result_in_base: float
+    base_currency_code: str
+
+
 class AllocateBudgetRequest(BaseModel):
     from_category_id: int
     to_category_id: int
@@ -64,6 +80,16 @@ class AllocateGroupBudgetResponse(BaseModel):
     members_count: int
 
 
+class ReverseOperationRequest(BaseModel):
+    operation_id: int
+    comment: Optional[str] = None
+
+
+class ReverseOperationResponse(BaseModel):
+    reversal_operation_id: int
+    reversed_operation_id: int
+
+
 class OperationBankEntry(BaseModel):
     currency_code: str
     amount: float
@@ -83,6 +109,7 @@ class OperationHistoryItem(BaseModel):
     comment: Optional[str] = None
     created_at: str
     reversal_of_operation_id: Optional[int] = None
+    has_reversal: bool = False
     income_source_name: Optional[str] = None
     bank_entries: List[OperationBankEntry]
     budget_entries: List[OperationBudgetEntry]
@@ -128,6 +155,23 @@ async def record_expense(
     return RecordExpenseResponse(**result)
 
 
+@router.post('/exchange', response_model=ExchangeCurrencyResponse)
+async def exchange_currency(
+    body: ExchangeCurrencyRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> ExchangeCurrencyResponse:
+    result = await ledger.put__exchange_currency(
+        user_id=user.user_id,
+        bank_account_id=body.bank_account_id,
+        from_currency_code=body.from_currency_code,
+        from_amount=body.from_amount,
+        to_currency_code=body.to_currency_code,
+        to_amount=body.to_amount,
+        comment=body.comment,
+    )
+    return ExchangeCurrencyResponse(**result)
+
+
 @router.post('/allocate', response_model=AllocateBudgetResponse)
 async def allocate_budget(
     body: AllocateBudgetRequest,
@@ -156,6 +200,19 @@ async def allocate_group_budget(
         comment=body.comment,
     )
     return AllocateGroupBudgetResponse(**result)
+
+
+@router.post('/reverse', response_model=ReverseOperationResponse)
+async def reverse_operation(
+    body: ReverseOperationRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> ReverseOperationResponse:
+    result = await ledger.put__reverse_operation(
+        user_id=user.user_id,
+        operation_id=body.operation_id,
+        comment=body.comment,
+    )
+    return ReverseOperationResponse(**result)
 
 
 @router.get('/history', response_model=OperationHistoryResponse)
