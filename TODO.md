@@ -65,6 +65,8 @@
   Ничто не мешает `amount_remaining > amount_initial` и `cost_base_remaining > cost_base_initial`.
   Решение: добавить `CHECK (amount_remaining <= amount_initial)` и аналогично для cost.
 
+- [ ] **Убрать категорию доход из визуального интерфейса** 
+
 ## LOW
 
 - [ ] **Несогласованные сообщения об ошибках** — разный формат RAISE EXCEPTION в функциях.

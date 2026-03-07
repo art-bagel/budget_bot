@@ -3,6 +3,8 @@ import type {
   Category,
   Currency,
   IncomeSource,
+  RecordExpenseRequest,
+  RecordExpenseResponse,
   RecordIncomeRequest,
   RecordIncomeResponse,
 } from './types';
@@ -65,6 +67,13 @@ export async function createIncomeSource(name: string): Promise<{ id: number }> 
 
 export async function recordIncome(data: RecordIncomeRequest): Promise<RecordIncomeResponse> {
   return apiFetch<RecordIncomeResponse>('/operations/income', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function recordExpense(data: RecordExpenseRequest): Promise<RecordExpenseResponse> {
+  return apiFetch<RecordExpenseResponse>('/operations/expense', {
     method: 'POST',
     body: JSON.stringify(data),
   });

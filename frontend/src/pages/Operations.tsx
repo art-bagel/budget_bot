@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react';
-import { createIncomeSource, fetchCurrencies, fetchIncomeSources, recordIncome } from '../api';
-import type { UserContext, Currency, IncomeSource, RecordIncomeResponse } from '../types';
+import {
+  createIncomeSource,
+  fetchCategories,
+  fetchCurrencies,
+  fetchIncomeSources,
+  recordExpense,
+  recordIncome,
+} from '../api';
+import type {
+  Category,
+  UserContext,
+  Currency,
+  IncomeSource,
+  RecordExpenseResponse,
+  RecordIncomeResponse,
+} from '../types';
 
 interface IncomeEntry {
   operation_id: number;
@@ -12,44 +26,72 @@ interface IncomeEntry {
   comment: string;
 }
 
+interface ExpenseEntry {
+  operation_id: number;
+  category_name: string;
+  amount: number;
+  currency_code: string;
+  expense_cost_in_base: number;
+  base_currency_code: string;
+  comment: string;
+}
+
 export default function Operations({ user }: { user: UserContext }) {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [amount, setAmount] = useState('');
-  const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
+  const [incomeAmount, setIncomeAmount] = useState('');
+  const [incomeCurrencyCode, setIncomeCurrencyCode] = useState(user.base_currency_code);
   const [incomeSourceId, setIncomeSourceId] = useState('');
   const [newIncomeSourceName, setNewIncomeSourceName] = useState('');
-  const [budgetAmountInBase, setBudgetAmountInBase] = useState('');
-  const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [incomeBudgetAmountInBase, setIncomeBudgetAmountInBase] = useState('');
+  const [incomeComment, setIncomeComment] = useState('');
+  const [submittingIncome, setSubmittingIncome] = useState(false);
   const [creatingIncomeSource, setCreatingIncomeSource] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [incomeError, setIncomeError] = useState<string | null>(null);
   const [incomes, setIncomes] = useState<IncomeEntry[]>([]);
 
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseCurrencyCode, setExpenseCurrencyCode] = useState(user.base_currency_code);
+  const [expenseCategoryId, setExpenseCategoryId] = useState('');
+  const [expenseComment, setExpenseComment] = useState('');
+  const [submittingExpense, setSubmittingExpense] = useState(false);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
+
   useEffect(() => {
-    Promise.all([fetchCurrencies(), fetchIncomeSources()])
-      .then(([loadedCurrencies, loadedIncomeSources]) => {
+    Promise.all([fetchCurrencies(), fetchIncomeSources(), fetchCategories()])
+      .then(([loadedCurrencies, loadedIncomeSources, loadedCategories]) => {
         setCurrencies(loadedCurrencies);
         setIncomeSources(loadedIncomeSources);
+        const regularCategories = loadedCategories.filter((item) => item.kind === 'regular');
+        setCategories(regularCategories);
         if (loadedIncomeSources.length > 0) {
           setIncomeSourceId(String(loadedIncomeSources[0].id));
         }
+        if (regularCategories.length > 0) {
+          setExpenseCategoryId(String(regularCategories[0].id));
+        }
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => {
+        setIncomeError(e.message);
+        setExpenseError(e.message);
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const isNonBase = currencyCode !== user.base_currency_code;
+  const isIncomeNonBase = incomeCurrencyCode !== user.base_currency_code;
   const selectedIncomeSource = incomeSources.find((item) => String(item.id) === incomeSourceId);
+  const selectedExpenseCategory = categories.find((item) => String(item.id) === expenseCategoryId);
 
   const handleCreateIncomeSource = async () => {
     const normalizedName = newIncomeSourceName.trim();
     if (!normalizedName) return;
 
     setCreatingIncomeSource(true);
-    setError(null);
+    setIncomeError(null);
 
     try {
       const result = await createIncomeSource(normalizedName);
@@ -64,29 +106,29 @@ export default function Operations({ user }: { user: UserContext }) {
       setIncomeSourceId(String(createdSource.id));
       setNewIncomeSourceName('');
     } catch (e: any) {
-      setError(e.message);
+      setIncomeError(e.message);
     } finally {
       setCreatingIncomeSource(false);
     }
   };
 
-  const handleSubmit = async () => {
-    const parsedAmount = parseFloat(amount);
+  const handleIncomeSubmit = async () => {
+    const parsedAmount = parseFloat(incomeAmount);
     if (!parsedAmount || parsedAmount <= 0) return;
-    if (isNonBase && (!budgetAmountInBase || parseFloat(budgetAmountInBase) <= 0)) return;
+    if (isIncomeNonBase && (!incomeBudgetAmountInBase || parseFloat(incomeBudgetAmountInBase) <= 0)) return;
     if (!selectedIncomeSource) return;
 
-    setSubmitting(true);
-    setError(null);
+    setSubmittingIncome(true);
+    setIncomeError(null);
 
     try {
       const result: RecordIncomeResponse = await recordIncome({
         bank_account_id: user.bank_account_id,
         income_source_id: selectedIncomeSource.id,
         amount: parsedAmount,
-        currency_code: currencyCode,
-        budget_amount_in_base: isNonBase ? parseFloat(budgetAmountInBase) : undefined,
-        comment: comment.trim() || undefined,
+        currency_code: incomeCurrencyCode,
+        budget_amount_in_base: isIncomeNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
+        comment: incomeComment.trim() || undefined,
       });
 
       setIncomes((prev) => [
@@ -94,29 +136,72 @@ export default function Operations({ user }: { user: UserContext }) {
           operation_id: result.operation_id,
           income_source_name: selectedIncomeSource.name,
           amount: parsedAmount,
-          currency_code: currencyCode,
+          currency_code: incomeCurrencyCode,
           budget_amount_in_base: result.budget_amount_in_base,
           base_currency_code: result.base_currency_code,
-          comment: comment.trim(),
+          comment: incomeComment.trim(),
         },
         ...prev,
       ]);
 
-      setAmount('');
-      setBudgetAmountInBase('');
-      setComment('');
+      setIncomeAmount('');
+      setIncomeBudgetAmountInBase('');
+      setIncomeComment('');
     } catch (e: any) {
-      setError(e.message);
+      setIncomeError(e.message);
     } finally {
-      setSubmitting(false);
+      setSubmittingIncome(false);
     }
   };
 
-  const canSubmit =
-    !submitting &&
+  const handleExpenseSubmit = async () => {
+    const parsedAmount = parseFloat(expenseAmount);
+    if (!parsedAmount || parsedAmount <= 0 || !selectedExpenseCategory) return;
+
+    setSubmittingExpense(true);
+    setExpenseError(null);
+
+    try {
+      const result: RecordExpenseResponse = await recordExpense({
+        bank_account_id: user.bank_account_id,
+        category_id: selectedExpenseCategory.id,
+        amount: parsedAmount,
+        currency_code: expenseCurrencyCode,
+        comment: expenseComment.trim() || undefined,
+      });
+
+      setExpenses((prev) => [
+        {
+          operation_id: result.operation_id,
+          category_name: selectedExpenseCategory.name,
+          amount: parsedAmount,
+          currency_code: expenseCurrencyCode,
+          expense_cost_in_base: result.expense_cost_in_base,
+          base_currency_code: result.base_currency_code,
+          comment: expenseComment.trim(),
+        },
+        ...prev,
+      ]);
+
+      setExpenseAmount('');
+      setExpenseComment('');
+    } catch (e: any) {
+      setExpenseError(e.message);
+    } finally {
+      setSubmittingExpense(false);
+    }
+  };
+
+  const canSubmitIncome =
+    !submittingIncome &&
     !!selectedIncomeSource &&
-    parseFloat(amount) > 0 &&
-    (!isNonBase || parseFloat(budgetAmountInBase) > 0);
+    parseFloat(incomeAmount) > 0 &&
+    (!isIncomeNonBase || parseFloat(incomeBudgetAmountInBase) > 0);
+
+  const canSubmitExpense =
+    !submittingExpense &&
+    !!selectedExpenseCategory &&
+    parseFloat(expenseAmount) > 0;
 
   if (loading) {
     return (
@@ -186,15 +271,15 @@ export default function Operations({ user }: { user: UserContext }) {
               type="text"
               inputMode="decimal"
               placeholder="Сумма"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              value={incomeAmount}
+              onChange={(e) => setIncomeAmount(e.target.value)}
               min="0"
               step="0.01"
             />
             <select
               className="input"
-              value={currencyCode}
-              onChange={(e) => setCurrencyCode(e.target.value)}
+              value={incomeCurrencyCode}
+              onChange={(e) => setIncomeCurrencyCode(e.target.value)}
             >
               {currencies.map((c) => (
                 <option key={c.code} value={c.code}>
@@ -204,15 +289,15 @@ export default function Operations({ user }: { user: UserContext }) {
             </select>
           </div>
 
-          {isNonBase && (
+          {isIncomeNonBase && (
             <div className="form-row">
               <input
                 className="input"
                 type="text"
                 inputMode="decimal"
                 placeholder={`Стоимость в ${user.base_currency_code}`}
-                value={budgetAmountInBase}
-                onChange={(e) => setBudgetAmountInBase(e.target.value)}
+                value={incomeBudgetAmountInBase}
+                onChange={(e) => setIncomeBudgetAmountInBase(e.target.value)}
                 min="0"
                 step="0.01"
                 style={{ flex: 1 }}
@@ -225,30 +310,119 @@ export default function Operations({ user }: { user: UserContext }) {
               className="input"
               type="text"
               placeholder="Комментарий (необязательно)"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
+              value={incomeComment}
+              onChange={(e) => setIncomeComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canSubmitIncome && handleIncomeSubmit()}
               style={{ flex: 1 }}
             />
             <button
               className="btn btn--primary"
               type="button"
-              disabled={!canSubmit}
-              onClick={handleSubmit}
+              disabled={!canSubmitIncome}
+              onClick={handleIncomeSubmit}
             >
-              {submitting ? '...' : 'Записать'}
+              {submittingIncome ? '...' : 'Записать'}
             </button>
           </div>
 
-          {error && (
+          {incomeError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>
-              {error}
+              {incomeError}
             </p>
           )}
 
-          {incomeSources.length === 0 && !error && (
+          {incomeSources.length === 0 && !incomeError && (
             <p className="operations-hint">
               Без источника дохода форма записи не активируется.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section__header">
+          <h2 className="section__title">Записать расход</h2>
+        </div>
+        <div className="panel">
+          <div className="operations-note">
+            Расход списывает валюту из банка и бюджетную стоимость из выбранной категории.
+          </div>
+
+          <div className="form-row">
+            <select
+              className="input"
+              value={expenseCategoryId}
+              onChange={(e) => setExpenseCategoryId(e.target.value)}
+              disabled={categories.length === 0}
+            >
+              {categories.length === 0 ? (
+                <option value="">Сначала создайте обычную категорию</option>
+              ) : (
+                categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))
+              )}
+            </select>
+            <div className="input input--read-only">
+              Счет: Main #{user.bank_account_id}
+            </div>
+          </div>
+
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              inputMode="decimal"
+              placeholder="Сумма"
+              value={expenseAmount}
+              onChange={(e) => setExpenseAmount(e.target.value)}
+              min="0"
+              step="0.01"
+            />
+            <select
+              className="input"
+              value={expenseCurrencyCode}
+              onChange={(e) => setExpenseCurrencyCode(e.target.value)}
+            >
+              {currencies.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              placeholder="Комментарий (необязательно)"
+              value={expenseComment}
+              onChange={(e) => setExpenseComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canSubmitExpense && handleExpenseSubmit()}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn btn--primary"
+              type="button"
+              disabled={!canSubmitExpense}
+              onClick={handleExpenseSubmit}
+            >
+              {submittingExpense ? '...' : 'Списать'}
+            </button>
+          </div>
+
+          {expenseError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>
+              {expenseError}
+            </p>
+          )}
+
+          {categories.length === 0 && !expenseError && (
+            <p className="operations-hint">
+              Для расхода нужна хотя бы одна категория типа regular.
             </p>
           )}
         </div>
@@ -274,6 +448,35 @@ export default function Operations({ user }: { user: UserContext }) {
                   <div style={{ textAlign: 'right' }}>
                     <span className="tag tag--in">
                       {inc.budget_amount_in_base} {inc.base_currency_code}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      {expenses.length > 0 && (
+        <section className="section">
+          <div className="section__header">
+            <h2 className="section__title">Записанные расходы</h2>
+          </div>
+          <div className="panel">
+            <ul>
+              {expenses.map((exp) => (
+                <li className="list-row" key={exp.operation_id}>
+                  <div>
+                    <div className="list-row__title">
+                      -{exp.amount} {exp.currency_code}
+                    </div>
+                    <div className="list-row__sub">
+                      {exp.comment || `Операция #${exp.operation_id}`} · {exp.category_name}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className="tag tag--out">
+                      {exp.expense_cost_in_base} {exp.base_currency_code}
                     </span>
                   </div>
                 </li>

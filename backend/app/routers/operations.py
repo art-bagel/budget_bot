@@ -25,6 +25,20 @@ class RecordIncomeResponse(BaseModel):
     base_currency_code: str
 
 
+class RecordExpenseRequest(BaseModel):
+    bank_account_id: int
+    category_id: int
+    amount: float
+    currency_code: str
+    comment: Optional[str] = None
+
+
+class RecordExpenseResponse(BaseModel):
+    operation_id: int
+    expense_cost_in_base: float
+    base_currency_code: str
+
+
 @router.post('/income', response_model=RecordIncomeResponse)
 async def record_income(
     body: RecordIncomeRequest,
@@ -40,3 +54,19 @@ async def record_income(
         comment=body.comment,
     )
     return RecordIncomeResponse(**result)
+
+
+@router.post('/expense', response_model=RecordExpenseResponse)
+async def record_expense(
+    body: RecordExpenseRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> RecordExpenseResponse:
+    result = await ledger.put__record_expense(
+        user_id=user.user_id,
+        bank_account_id=body.bank_account_id,
+        category_id=body.category_id,
+        amount=body.amount,
+        currency_code=body.currency_code,
+        comment=body.comment,
+    )
+    return RecordExpenseResponse(**result)

@@ -42,3 +42,17 @@ export interface RecordIncomeResponse {
   budget_amount_in_base: number;
   base_currency_code: string;
 }
+
+export interface RecordExpenseRequest {
+  bank_account_id: number;
+  category_id: number;
+  amount: number;
+  currency_code: string;
+  comment?: string;
+}
+
+export interface RecordExpenseResponse {
+  operation_id: number;
+  expense_cost_in_base: number;
+  base_currency_code: string;
+}
