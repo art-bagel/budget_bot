@@ -31,6 +31,15 @@ interface AllocationSourceOption {
 
 
 const HISTORY_PAGE_SIZE = 20;
+const HISTORY_TYPE_OPTIONS = [
+  { value: '', label: 'Все типы' },
+  { value: 'income', label: 'Доход' },
+  { value: 'expense', label: 'Расход' },
+  { value: 'allocate', label: 'Распределение по категории' },
+  { value: 'group_allocate', label: 'Распределение по группе' },
+  { value: 'exchange', label: 'Обмен валют' },
+  { value: 'reversal', label: 'Отмена операции' },
+];
 
 
 function formatDateTime(value: string): string {
@@ -126,13 +135,22 @@ export default function Operations({ user }: { user: UserContext }) {
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyTypeFilter, setHistoryTypeFilter] = useState('');
 
-  const loadHistory = async (offset: number, replace = false) => {
+  const loadHistory = async (
+    offset: number,
+    replace = false,
+    operationType = historyTypeFilter,
+  ) => {
     setLoadingHistory(true);
     setHistoryError(null);
 
     try {
-      const result = await fetchOperationsHistory(HISTORY_PAGE_SIZE, offset);
+      const result = await fetchOperationsHistory(
+        HISTORY_PAGE_SIZE,
+        offset,
+        operationType || undefined,
+      );
       setHistoryItems((prev) => (replace ? result.items : [...prev, ...result.items]));
       setHistoryTotalCount(result.total_count);
     } catch (e: any) {
@@ -143,7 +161,7 @@ export default function Operations({ user }: { user: UserContext }) {
   };
 
   useEffect(() => {
-    Promise.all([fetchCurrencies(), fetchIncomeSources(), fetchCategories(), loadHistory(0, true)])
+    Promise.all([fetchCurrencies(), fetchIncomeSources(), fetchCategories()])
       .then(([loadedCurrencies, loadedIncomeSources, loadedCategories]) => {
         const visibleCategories = loadedCategories.filter((item) => item.kind !== 'system');
         const regularCategories = visibleCategories.filter((item) => item.kind === 'regular');
@@ -173,6 +191,10 @@ export default function Operations({ user }: { user: UserContext }) {
       })
       .finally(() => setLoading(false));
   }, [user.unallocated_category_id]);
+
+  useEffect(() => {
+    void loadHistory(0, true);
+  }, [historyTypeFilter]);
 
   const regularCategories = categories.filter((item) => item.kind === 'regular');
   const sourceOptions: AllocationSourceOption[] = [
@@ -596,7 +618,20 @@ export default function Operations({ user }: { user: UserContext }) {
       <section className="section">
         <div className="section__header">
           <h2 className="section__title">История операций</h2>
-          <span className="tag tag--neutral">{historyTotalCount} всего</span>
+          <div className="section__header-actions">
+            <select
+              className="input input--compact"
+              value={historyTypeFilter}
+              onChange={(e) => setHistoryTypeFilter(e.target.value)}
+            >
+              {HISTORY_TYPE_OPTIONS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="tag tag--neutral">{historyTotalCount} всего</span>
+          </div>
         </div>
         <div className="panel">
           {historyError && (

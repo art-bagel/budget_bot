@@ -125,6 +125,19 @@ export async function allocateGroupBudget(
   });
 }
 
-export async function fetchOperationsHistory(limit = 20, offset = 0): Promise<OperationHistoryResponse> {
-  return apiFetch<OperationHistoryResponse>(`/operations/history?limit=${limit}&offset=${offset}`);
+export async function fetchOperationsHistory(
+  limit = 20,
+  offset = 0,
+  operationType?: string,
+): Promise<OperationHistoryResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  if (operationType) {
+    params.set('operation_type', operationType);
+  }
+
+  return apiFetch<OperationHistoryResponse>(`/operations/history?${params.toString()}`);
 }

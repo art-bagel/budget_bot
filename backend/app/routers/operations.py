@@ -162,11 +162,13 @@ async def allocate_group_budget(
 async def get_operations_history(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    operation_type: Optional[str] = Query(None),
     user: TelegramUser = Depends(get_telegram_user),
 ) -> OperationHistoryResponse:
     result = await reports.get__operations_history(
         user_id=user.user_id,
         limit=limit,
         offset=offset,
+        operation_type=operation_type,
     )
     return OperationHistoryResponse(**result)

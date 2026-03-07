@@ -4,20 +4,25 @@
 --   _user_id bigint - Operation owner.
 --   _limit integer - Number of operations to return.
 --   _offset integer - Number of operations to skip.
+--   _operation_type text - Optional operation type filter.
 -- Returns:
 --   jsonb - Paginated operations history with total count.
 CREATE OR REPLACE FUNCTION budgeting.get__operations_history(
     _user_id bigint,
     _limit integer DEFAULT 20,
-    _offset integer DEFAULT 0
+    _offset integer DEFAULT 0,
+    _operation_type text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
     _result jsonb;
+    _normalized_operation_type text;
 BEGIN
     SET search_path TO budgeting;
+
+    _normalized_operation_type := nullif(trim(_operation_type), '');
 
     IF _limit IS NULL OR _limit <= 0 THEN
         RAISE EXCEPTION 'History limit must be positive';
@@ -25,6 +30,18 @@ BEGIN
 
     IF _offset IS NULL OR _offset < 0 THEN
         RAISE EXCEPTION 'History offset must be zero or positive';
+    END IF;
+
+    IF _normalized_operation_type IS NOT NULL
+       AND _normalized_operation_type NOT IN (
+           'income',
+           'allocate',
+           'group_allocate',
+           'exchange',
+           'expense',
+           'reversal'
+       ) THEN
+        RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
     END IF;
 
     WITH selected_operations AS (
@@ -39,6 +56,7 @@ BEGIN
         LEFT JOIN income_sources ins
           ON ins.id = o.income_source_id
         WHERE o.user_id = _user_id
+          AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
         ORDER BY o.created_at DESC, o.id DESC
         LIMIT _limit OFFSET _offset
     ),
@@ -104,6 +122,7 @@ BEGIN
             SELECT count(*)
             FROM operations o
             WHERE o.user_id = _user_id
+              AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
         ),
         'limit', _limit,
         'offset', _offset

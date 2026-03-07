@@ -272,7 +272,15 @@ p { margin: 0; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 14px;
+}
+
+.section__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .section__title {
@@ -318,6 +326,11 @@ p { margin: 0; }
   align-items: center;
   color: var(--text-secondary);
   background: var(--bg-inset);
+}
+
+.input--compact {
+  width: auto;
+  min-width: 220px;
 }
 
 /* ── Balance cards ───────────────────────────────── */

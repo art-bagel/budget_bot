@@ -91,12 +91,19 @@ class Reports(DataBase):
         )
         return result if result else []
 
-    async def get__operations_history(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
+    async def get__operations_history(
+        self,
+        user_id: int,
+        limit: int = 20,
+        offset: int = 0,
+        operation_type: Optional[str] = None,
+    ) -> dict:
         """
         Возвращает историю операций пользователя.
         :param user_id: Идентификатор владельца операций.
         :param limit: Количество операций в выборке.
         :param offset: Смещение от начала истории.
+        :param operation_type: Тип операции для фильтрации истории.
         :return: Словарь с массивом операций и параметрами пагинации.
         """
         result = await self.call_function(
@@ -104,6 +111,7 @@ class Reports(DataBase):
             user_id,
             limit,
             offset,
+            operation_type,
         )
         return result if result else {
             'items': [],
