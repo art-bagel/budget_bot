@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ComponentType } from 'react';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import type { UserContext } from './types';
@@ -9,7 +10,7 @@ import Exchange from './pages/Exchange';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 
-const PAGES: Record<Page, (props: { user: UserContext }) => JSX.Element> = {
+const PAGES: Record<Page, ComponentType<{ user: UserContext }>> = {
   dashboard: Dashboard,
   operations: Operations,
   categories: Categories,

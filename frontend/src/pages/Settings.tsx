@@ -1,8 +1,10 @@
+import type { ComponentType } from 'react';
+
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
 
-const THEME_OPTIONS: { value: Theme; label: string; icon: () => JSX.Element }[] = [
+const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
   { value: 'light', label: 'Светлая', icon: IconSun },
   { value: 'dark', label: 'Тёмная', icon: IconMoon },
@@ -29,7 +31,7 @@ export default function Settings(_props: { user: UserContext }) {
                 className={`theme-picker__option${theme === opt.value ? ' theme-picker__option--active' : ''}`}
                 onClick={() => setTheme(opt.value)}
               >
-                <span className="theme-picker__icon">{opt.icon()}</span>
+                <span className="theme-picker__icon"><opt.icon /></span>
                 {opt.label}
               </button>
             ))}

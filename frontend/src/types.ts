@@ -21,8 +21,16 @@ export interface Currency {
   scale: number;
 }
 
+export interface IncomeSource {
+  id: number;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface RecordIncomeRequest {
   bank_account_id: number;
+  income_source_id?: number;
   amount: number;
   currency_code: string;
   budget_amount_in_base?: number;

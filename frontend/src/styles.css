@@ -300,6 +300,26 @@ p { margin: 0; }
   padding: 20px;
 }
 
+.operations-note,
+.operations-hint {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.operations-hint {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.input--read-only {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+}
+
 /* ── Balance cards ───────────────────────────────── */
 
 .balance-scroll {

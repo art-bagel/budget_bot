@@ -1,4 +1,11 @@
-import type { UserContext, Category, Currency, RecordIncomeRequest, RecordIncomeResponse } from './types';
+import type {
+  UserContext,
+  Category,
+  Currency,
+  IncomeSource,
+  RecordIncomeRequest,
+  RecordIncomeResponse,
+} from './types';
 
 const API_BASE = '/api/v1';
 
@@ -42,6 +49,17 @@ export async function createCategory(name: string, kind: string): Promise<{ id: 
   return apiFetch<{ id: number }>('/categories', {
     method: 'POST',
     body: JSON.stringify({ name, kind }),
+  });
+}
+
+export async function fetchIncomeSources(): Promise<IncomeSource[]> {
+  return apiFetch<IncomeSource[]>('/income-sources');
+}
+
+export async function createIncomeSource(name: string): Promise<{ id: number }> {
+  return apiFetch<{ id: number }>('/income-sources', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
   });
 }
 
