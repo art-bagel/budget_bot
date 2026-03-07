@@ -46,6 +46,7 @@ class Ledger(DataBase):
         bank_account_id: int,
         amount: float,
         currency_code: str,
+        income_source_id: Optional[int] = None,
         budget_amount_in_base: Optional[float] = None,
         comment: Optional[str] = None,
     ) -> dict:
@@ -53,6 +54,7 @@ class Ledger(DataBase):
         Записывает доход в банк и в нераспределенный бюджет.
         :param user_id: Идентификатор владельца операции.
         :param bank_account_id: Идентификатор банковского счета.
+        :param income_source_id: Идентификатор источника дохода.
         :param amount: Сумма дохода в валюте операции.
         :param currency_code: Код валюты дохода.
         :param budget_amount_in_base: Историческая стоимость в базовой валюте.
@@ -65,6 +67,7 @@ class Ledger(DataBase):
             bank_account_id,
             amount,
             currency_code,
+            income_source_id,
             budget_amount_in_base,
             comment,
         )

@@ -8,6 +8,7 @@ class Context(DataBase):
 
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
+    F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
 
     async def put__register_user_context(
@@ -49,6 +50,19 @@ class Context(DataBase):
             user_id,
             name,
             kind,
+        )
+
+    async def put__create_income_source(self, user_id: int, name: str) -> int:
+        """
+        Создает источник дохода.
+        :param user_id: Идентификатор владельца источника дохода.
+        :param name: Имя источника дохода.
+        :return: Идентификатор созданного источника дохода.
+        """
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_INCOME_SOURCE),
+            user_id,
+            name,
         )
 
     async def set__replace_group_members(

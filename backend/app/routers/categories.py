@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ class CategoryItem(BaseModel):
 
 class CreateCategoryRequest(BaseModel):
     name: str
-    kind: str
+    kind: Literal['regular', 'group']
 
 
 class CreateCategoryResponse(BaseModel):

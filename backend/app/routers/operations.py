@@ -12,6 +12,7 @@ router = APIRouter(prefix='/api/v1/operations', tags=['operations'])
 
 class RecordIncomeRequest(BaseModel):
     bank_account_id: int
+    income_source_id: Optional[int] = None
     amount: float
     currency_code: str
     budget_amount_in_base: Optional[float] = None
@@ -32,6 +33,7 @@ async def record_income(
     result = await ledger.put__record_income(
         user_id=user.user_id,
         bank_account_id=body.bank_account_id,
+        income_source_id=body.income_source_id,
         amount=body.amount,
         currency_code=body.currency_code,
         budget_amount_in_base=body.budget_amount_in_base,

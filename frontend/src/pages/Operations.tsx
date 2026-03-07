@@ -121,7 +121,7 @@ export default function Operations({ user }: { user: UserContext }) {
             <div className="form-row">
               <input
                 className="input"
-                type="number"
+                type="text"
                 inputMode="decimal"
                 placeholder={`Стоимость в ${user.base_currency_code}`}
                 value={budgetAmountInBase}

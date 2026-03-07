@@ -8,6 +8,7 @@ class Reports(DataBase):
 
     F_GET__CURRENCIES = 'get__currencies'
     F_GET__CATEGORIES = 'get__categories'
+    F_GET__INCOME_SOURCES = 'get__income_sources'
     F_GET__GROUP_MEMBERS = 'get__group_members'
     F_GET__BANK_SNAPSHOT = 'get__bank_snapshot'
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
@@ -28,6 +29,20 @@ class Reports(DataBase):
         """
         result = await self.call_function(
             self._fn(self.F_GET__CATEGORIES),
+            user_id,
+            is_active,
+        )
+        return result if result else []
+
+    async def get__income_sources(self, user_id: int, is_active: Optional[bool] = True) -> list[dict]:
+        """
+        Возвращает источники дохода пользователя.
+        :param user_id: Идентификатор владельца источников дохода.
+        :param is_active: Признак активности источников дохода.
+        :return: Список словарей с источниками дохода.
+        """
+        result = await self.call_function(
+            self._fn(self.F_GET__INCOME_SOURCES),
             user_id,
             is_active,
         )
