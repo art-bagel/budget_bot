@@ -12,6 +12,7 @@ class Reports(DataBase):
     F_GET__GROUP_MEMBERS = 'get__group_members'
     F_GET__BANK_SNAPSHOT = 'get__bank_snapshot'
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
+    F_GET__OPERATIONS_HISTORY = 'get__operations_history'
     F_GET__PORTFOLIO_VALUATION = 'get__portfolio_valuation'
 
     async def get__currencies(self) -> list[dict]:
@@ -89,6 +90,27 @@ class Reports(DataBase):
             is_active,
         )
         return result if result else []
+
+    async def get__operations_history(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
+        """
+        Возвращает историю операций пользователя.
+        :param user_id: Идентификатор владельца операций.
+        :param limit: Количество операций в выборке.
+        :param offset: Смещение от начала истории.
+        :return: Словарь с массивом операций и параметрами пагинации.
+        """
+        result = await self.call_function(
+            self._fn(self.F_GET__OPERATIONS_HISTORY),
+            user_id,
+            limit,
+            offset,
+        )
+        return result if result else {
+            'items': [],
+            'total_count': 0,
+            'limit': limit,
+            'offset': offset,
+        }
 
     async def get__portfolio_valuation(
         self,

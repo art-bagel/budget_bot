@@ -425,6 +425,27 @@ p { margin: 0; }
   white-space: nowrap;
 }
 
+.list-row--history {
+  align-items: flex-start;
+}
+
+.history-list {
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.history-lines {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.history-line {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
 /* ── Inputs ──────────────────────────────────────── */
 
 .input {

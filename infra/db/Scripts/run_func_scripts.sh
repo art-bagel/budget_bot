@@ -22,6 +22,7 @@ FILES=(
     "get__group_members.sql"
     "get__bank_snapshot.sql"
     "get__budget_snapshot.sql"
+    "get__operations_history.sql"
     "get__portfolio_valuation.sql"
 )
 

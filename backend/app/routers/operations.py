@@ -1,10 +1,12 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from typing import List
+
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
-from backend.app.storage import ledger
+from backend.app.storage import ledger, reports
 
 
 router = APIRouter(prefix='/api/v1/operations', tags=['operations'])
@@ -39,6 +41,60 @@ class RecordExpenseResponse(BaseModel):
     base_currency_code: str
 
 
+class AllocateBudgetRequest(BaseModel):
+    from_category_id: int
+    to_category_id: int
+    amount_in_base: float
+    comment: Optional[str] = None
+
+
+class AllocateBudgetResponse(BaseModel):
+    operation_id: int
+
+
+class AllocateGroupBudgetRequest(BaseModel):
+    from_category_id: int
+    group_id: int
+    amount_in_base: float
+    comment: Optional[str] = None
+
+
+class AllocateGroupBudgetResponse(BaseModel):
+    operation_id: int
+    members_count: int
+
+
+class OperationBankEntry(BaseModel):
+    currency_code: str
+    amount: float
+
+
+class OperationBudgetEntry(BaseModel):
+    category_id: int
+    category_name: str
+    category_kind: str
+    currency_code: str
+    amount: float
+
+
+class OperationHistoryItem(BaseModel):
+    operation_id: int
+    type: str
+    comment: Optional[str] = None
+    created_at: str
+    reversal_of_operation_id: Optional[int] = None
+    income_source_name: Optional[str] = None
+    bank_entries: List[OperationBankEntry]
+    budget_entries: List[OperationBudgetEntry]
+
+
+class OperationHistoryResponse(BaseModel):
+    items: List[OperationHistoryItem]
+    total_count: int
+    limit: int
+    offset: int
+
+
 @router.post('/income', response_model=RecordIncomeResponse)
 async def record_income(
     body: RecordIncomeRequest,
@@ -70,3 +126,47 @@ async def record_expense(
         comment=body.comment,
     )
     return RecordExpenseResponse(**result)
+
+
+@router.post('/allocate', response_model=AllocateBudgetResponse)
+async def allocate_budget(
+    body: AllocateBudgetRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> AllocateBudgetResponse:
+    operation_id = await ledger.put__allocate_budget(
+        user_id=user.user_id,
+        from_category_id=body.from_category_id,
+        to_category_id=body.to_category_id,
+        amount_in_base=body.amount_in_base,
+        comment=body.comment,
+    )
+    return AllocateBudgetResponse(operation_id=operation_id)
+
+
+@router.post('/allocate-group', response_model=AllocateGroupBudgetResponse)
+async def allocate_group_budget(
+    body: AllocateGroupBudgetRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> AllocateGroupBudgetResponse:
+    result = await ledger.put__allocate_group_budget(
+        user_id=user.user_id,
+        from_category_id=body.from_category_id,
+        group_id=body.group_id,
+        amount_in_base=body.amount_in_base,
+        comment=body.comment,
+    )
+    return AllocateGroupBudgetResponse(**result)
+
+
+@router.get('/history', response_model=OperationHistoryResponse)
+async def get_operations_history(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user: TelegramUser = Depends(get_telegram_user),
+) -> OperationHistoryResponse:
+    result = await reports.get__operations_history(
+        user_id=user.user_id,
+        limit=limit,
+        offset=offset,
+    )
+    return OperationHistoryResponse(**result)

@@ -2,7 +2,14 @@ import type {
   UserContext,
   Category,
   Currency,
+  DashboardOverview,
+  GroupMember,
   IncomeSource,
+  AllocateBudgetRequest,
+  AllocateBudgetResponse,
+  AllocateGroupBudgetRequest,
+  AllocateGroupBudgetResponse,
+  OperationHistoryResponse,
   RecordExpenseRequest,
   RecordExpenseResponse,
   RecordIncomeRequest,
@@ -47,10 +54,33 @@ export async function fetchCategories(): Promise<Category[]> {
   return apiFetch<Category[]>('/categories');
 }
 
+export async function fetchDashboardOverview(bankAccountId: number): Promise<DashboardOverview> {
+  return apiFetch<DashboardOverview>(`/dashboard/overview?bank_account_id=${bankAccountId}`);
+}
+
 export async function createCategory(name: string, kind: string): Promise<{ id: number }> {
   return apiFetch<{ id: number }>('/categories', {
     method: 'POST',
     body: JSON.stringify({ name, kind }),
+  });
+}
+
+export async function fetchGroupMembers(groupId: number): Promise<GroupMember[]> {
+  return apiFetch<GroupMember[]>(`/groups/${groupId}/members`);
+}
+
+export async function replaceGroupMembers(
+  groupId: number,
+  childCategoryIds: number[],
+  shares: number[],
+): Promise<{ group_id: number; members_count: number }> {
+  return apiFetch<{ group_id: number; members_count: number }>('/groups/members', {
+    method: 'PUT',
+    body: JSON.stringify({
+      group_id: groupId,
+      child_category_ids: childCategoryIds,
+      shares,
+    }),
   });
 }
 
@@ -77,4 +107,24 @@ export async function recordExpense(data: RecordExpenseRequest): Promise<RecordE
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function allocateBudget(data: AllocateBudgetRequest): Promise<AllocateBudgetResponse> {
+  return apiFetch<AllocateBudgetResponse>('/operations/allocate', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function allocateGroupBudget(
+  data: AllocateGroupBudgetRequest,
+): Promise<AllocateGroupBudgetResponse> {
+  return apiFetch<AllocateGroupBudgetResponse>('/operations/allocate-group', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchOperationsHistory(limit = 20, offset = 0): Promise<OperationHistoryResponse> {
+  return apiFetch<OperationHistoryResponse>(`/operations/history?limit=${limit}&offset=${offset}`);
 }
