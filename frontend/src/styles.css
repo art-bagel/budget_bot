@@ -27,6 +27,8 @@
   --tag-out-fg: #a03030;
   --tag-neutral-bg: rgba(82, 98, 112, 0.1);
   --tag-neutral-fg: #50606c;
+  --tag-exchange-bg: rgba(160, 120, 0, 0.1);
+  --tag-exchange-fg: #9a7200;
 
   --shadow-card: 0 2px 12px rgba(88, 76, 56, 0.08);
   --shadow-elevated: 0 8px 32px rgba(88, 76, 56, 0.12);
@@ -60,6 +62,8 @@
   --tag-out-fg: #e06060;
   --tag-neutral-bg: rgba(140, 160, 180, 0.12);
   --tag-neutral-fg: #8aa0b0;
+  --tag-exchange-bg: rgba(200, 160, 0, 0.14);
+  --tag-exchange-fg: #c8a000;
 
   --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.2);
   --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -88,6 +92,8 @@
     --tag-out-fg: #e06060;
     --tag-neutral-bg: rgba(140, 160, 180, 0.12);
     --tag-neutral-fg: #8aa0b0;
+    --tag-exchange-bg: rgba(200, 160, 0, 0.14);
+    --tag-exchange-fg: #c8a000;
 
     --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.2);
     --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -657,6 +663,28 @@ p { margin: 0; }
 
 .list-row--history {
   align-items: flex-start;
+  border-left: 3px solid transparent;
+  padding-left: 12px;
+}
+
+.list-row--history-income {
+  border-left-color: var(--tag-in-fg);
+  filter: brightness(1.15);
+}
+
+.list-row--history-expense {
+  border-left-color: var(--tag-out-fg);
+  filter: brightness(1.15);
+}
+
+.list-row--history-exchange {
+  border-left-color: var(--tag-exchange-fg);
+  filter: brightness(1.15);
+}
+
+.list-row--history-reversal {
+  border-left-color: transparent;
+  opacity: 0.5;
 }
 
 .history-side {

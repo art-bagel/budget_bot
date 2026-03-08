@@ -157,7 +157,17 @@ export default function Operations({ user: _user }: { user: UserContext }) {
             <div className="history-list">
               <ul>
                 {historyItems.map((item) => (
-                  <li className="list-row list-row--history" key={'history-' + item.operation_id}>
+                  <li
+                    className={[
+                      'list-row',
+                      'list-row--history',
+                      item.type === 'income' ? 'list-row--history-income' : '',
+                      item.type === 'expense' ? 'list-row--history-expense' : '',
+                      item.type === 'exchange' ? 'list-row--history-exchange' : '',
+                      item.type === 'reversal' ? 'list-row--history-reversal' : '',
+                    ].filter(Boolean).join(' ')}
+                    key={'history-' + item.operation_id}
+                  >
                     <div>
                       <div className="list-row__title">{getOperationTitle(item)}</div>
                       <div className="list-row__sub">
