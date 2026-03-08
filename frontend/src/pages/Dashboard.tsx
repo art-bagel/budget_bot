@@ -15,6 +15,7 @@ import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
 import CategoryDialog from '../components/CategoryDialog';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
+import ExpenseDialog from '../components/ExpenseDialog';
 
 
 export default function Dashboard({ user }: { user: UserContext }) {
@@ -25,6 +26,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
   const [swipeSourceId, setSwipeSourceId] = useState<number | null>(null);
+  const [expenseCategory, setExpenseCategory] = useState<DashboardBudgetCategory | null>(null);
   const [transferSource, setTransferSource] = useState<TransferSource | null>(null);
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
@@ -40,16 +42,25 @@ export default function Dashboard({ user }: { user: UserContext }) {
     startX: number;
     startY: number;
     sourceId: number;
+    kind: 'regular' | 'free_budget';
+    category: DashboardBudgetCategory | null;
     decided: boolean;
     isHorizontal: boolean;
     element: HTMLElement | null;
   } | null>(null);
 
-  const handleSwipeStart = (sourceId: number, e: React.TouchEvent) => {
+  const handleSwipeStart = (
+    sourceId: number,
+    kind: 'regular' | 'free_budget',
+    category: DashboardBudgetCategory | null,
+    e: React.TouchEvent,
+  ) => {
     swipeRef.current = {
       startX: e.touches[0].clientX,
       startY: e.touches[0].clientY,
       sourceId,
+      kind,
+      category,
       decided: false,
       isHorizontal: false,
       element: e.currentTarget as HTMLElement,
@@ -70,7 +81,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
     }
 
     if (s.isHorizontal) {
-      const offset = Math.min(0, Math.max(-80, dx));
+      // free_budget: only left swipe; regular: both directions
+      const minOffset = -80;
+      const maxOffset = s.kind === 'regular' ? 80 : 0;
+      const offset = Math.min(maxOffset, Math.max(minOffset, dx));
       s.element.style.transform = `translateX(${offset}px)`;
       s.element.style.transition = 'none';
     }
@@ -92,7 +106,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
       suppressClickUntilRef.current = Date.now() + 300;
       const dx = e.changedTouches[0].clientX - s.startX;
       if (dx < -50) {
+        // Left swipe → transfer source
         setSwipeSourceId(s.sourceId);
+        navigator.vibrate?.(20);
+      } else if (dx > 50 && s.kind === 'regular' && s.category) {
+        // Right swipe → expense
+        setExpenseCategory(s.category);
         navigator.vibrate?.(20);
       }
     }
@@ -224,6 +243,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setSelectedCategory(null);
     setCreateDialogKind(null);
     setSwipeSourceId(null);
+    setExpenseCategory(null);
     await loadOverview();
   };
 
@@ -339,7 +359,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
             </div>
           ) : (
             <div className="operations-note">
-              Свайпни влево по источнику, чтобы начать перевод. На компьютере можно перетаскивать.
+              Свайп влево — перевод бюджета. Свайп вправо по категории — записать расход.
             </div>
           )}
           <div className="dashboard-transfer-source">
@@ -375,7 +395,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 handleDropOnCategory(freeBudgetTarget);
               }}
               onTouchStart={(e) => {
-                if (overview.free_budget_in_base > 0) handleSwipeStart(freeBudgetSource.category_id, e);
+                if (overview.free_budget_in_base > 0) handleSwipeStart(freeBudgetSource.category_id, 'free_budget', null, e);
               }}
               onTouchMove={handleSwipeMove}
               onTouchEnd={handleSwipeEnd}
@@ -441,7 +461,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         tabIndex={0}
                         onDragStart={(e) => handleDragStart(category, e)}
                         onDragEnd={handleDragEnd}
-                        onTouchStart={(e) => handleSwipeStart(category.category_id, e)}
+                        onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
                         onTouchMove={handleSwipeMove}
                         onTouchEnd={handleSwipeEnd}
                         onClick={() => {
@@ -490,7 +510,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           <div className="list-row__sub">
                             {isValidTarget
                               ? 'Нажми, чтобы перевести сюда'
-                              : 'Свайпни влево для перевода · нажми для редактирования'}
+                              : '← перевод · → расход · нажми для редактирования'}
                           </div>
                         </div>
                         <div className="dashboard-budget-row__side">
@@ -628,6 +648,15 @@ export default function Dashboard({ user }: { user: UserContext }) {
         <CategoryDialog
           category={selectedCategory}
           onClose={() => setSelectedCategory(null)}
+          onSuccess={() => void handleDialogSuccess()}
+        />
+      )}
+
+      {expenseCategory && (
+        <ExpenseDialog
+          category={expenseCategory}
+          user={user}
+          onClose={() => setExpenseCategory(null)}
           onSuccess={() => void handleDialogSuccess()}
         />
       )}
