@@ -20,6 +20,13 @@ interface TelegramMainButton {
   offClick?: (callback: () => void) => void;
 }
 
+interface TelegramSafeAreaInset {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 interface TelegramWebApp {
   initData: string;
   initDataUnsafe?: {
@@ -27,6 +34,8 @@ interface TelegramWebApp {
   };
   colorScheme?: 'light' | 'dark';
   isVerticalSwipesEnabled?: boolean;
+  safeAreaInset?: TelegramSafeAreaInset;
+  contentSafeAreaInset?: TelegramSafeAreaInset;
   BackButton?: TelegramBackButton;
   MainButton?: TelegramMainButton;
   ready: () => void;
@@ -63,6 +72,20 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp || null;
 }
 
+function applySafeAreaVars(webApp: TelegramWebApp): void {
+  const root = document.documentElement;
+
+  // contentSafeAreaInset.top = system status bar + Telegram header bar
+  const contentTop = webApp.contentSafeAreaInset?.top ?? 0;
+  // safeAreaInset.top = system status bar only (notch / Dynamic Island)
+  const safeTop = webApp.safeAreaInset?.top ?? 0;
+  const safeBottom = webApp.safeAreaInset?.bottom ?? 0;
+
+  root.style.setProperty('--tg-content-safe-area-inset-top', `${contentTop}px`);
+  root.style.setProperty('--tg-safe-area-inset-top', `${safeTop}px`);
+  root.style.setProperty('--tg-safe-area-inset-bottom', `${safeBottom}px`);
+}
+
 export function initTelegramWebApp(): void {
   const webApp = getTelegramWebApp();
 
@@ -94,6 +117,11 @@ export function initTelegramWebApp(): void {
   }
 
   webApp.MainButton?.hide();
+
+  // Apply safe area CSS variables from JS (reliable across all Telegram versions)
+  applySafeAreaVars(webApp);
+  webApp.onEvent?.('safeAreaChanged', () => applySafeAreaVars(webApp));
+  webApp.onEvent?.('contentSafeAreaChanged', () => applySafeAreaVars(webApp));
 }
 
 export function getTelegramInitData(): string | null {

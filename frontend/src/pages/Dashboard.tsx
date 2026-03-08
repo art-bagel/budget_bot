@@ -26,6 +26,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   const [showBankDetail, setShowBankDetail] = useState(false);
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
+
+  useEffect(() => {
+    if (showBankDetail) {
+      document.body.classList.add('modal-open');
+      return () => document.body.classList.remove('modal-open');
+    }
+  }, [showBankDetail]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
   const [swipeSourceId, setSwipeSourceId] = useState<number | null>(null);

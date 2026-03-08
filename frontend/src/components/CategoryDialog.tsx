@@ -7,6 +7,7 @@ import {
   replaceGroupMembers,
   updateCategory,
 } from '../api';
+import { useModalOpen } from '../hooks/useModalOpen';
 import type {
   Category,
   DashboardBudgetCategory,
@@ -50,6 +51,7 @@ interface Props {
 
 
 export default function CategoryDialog({ category, onClose, onSuccess }: Props) {
+  useModalOpen();
   const [nameDraft, setNameDraft] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

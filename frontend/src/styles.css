@@ -712,10 +712,11 @@ p { margin: 0; }
 }
 
 /* When modal is open, darken html+body so keyboard rounded corners
-   don't show the light page background (white-corner artefact) */
-html:has(.modal-backdrop),
-body:has(.modal-backdrop) {
-  background-color: rgb(12, 16, 20);
+   don't show the light page background (white-corner artefact).
+   Class is added via JS (useModalOpen hook) — more reliable than :has() in Telegram WebApp. */
+html:has(body.modal-open),
+body.modal-open {
+  background-color: rgb(12, 16, 20) !important;
 }
 
 .modal-backdrop {

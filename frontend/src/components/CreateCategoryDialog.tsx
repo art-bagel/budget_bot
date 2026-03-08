@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { createCategory } from '../api';
+import { useModalOpen } from '../hooks/useModalOpen';
 
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 
 export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props) {
+  useModalOpen();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);

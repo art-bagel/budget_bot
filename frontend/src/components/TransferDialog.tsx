@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { useModalOpen } from '../hooks/useModalOpen';
+
 import {
   allocateBudget,
   allocateGroupBudget,
@@ -39,6 +41,7 @@ interface Props {
 
 
 export default function TransferDialog({ source, target, baseCurrencyCode, onClose, onSuccess }: Props) {
+  useModalOpen();
   const [amount, setAmount] = useState('');
   const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);

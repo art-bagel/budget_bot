@@ -6,6 +6,7 @@ import {
   fetchIncomeSources,
   recordIncome,
 } from '../api';
+import { useModalOpen } from '../hooks/useModalOpen';
 import type { Currency, IncomeSource, RecordIncomeRequest, UserContext } from '../types';
 import { sanitizeDecimalInput } from '../utils/validation';
 
@@ -18,6 +19,7 @@ interface Props {
 
 
 export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
+  useModalOpen();
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [loading, setLoading] = useState(true);

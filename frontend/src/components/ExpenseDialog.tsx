@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { fetchCurrencies, recordExpense } from '../api';
+import { useModalOpen } from '../hooks/useModalOpen';
 import type { Currency, DashboardBudgetCategory, UserContext } from '../types';
 import { formatAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -15,6 +16,7 @@ interface Props {
 
 
 export default function ExpenseDialog({ category, user, onClose, onSuccess }: Props) {
+  useModalOpen();
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
