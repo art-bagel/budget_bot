@@ -11,13 +11,8 @@ import type {
   ExchangeCurrencyRequest,
   UserContext,
 } from '../types';
-
-
-function formatAmount(amount: number, currencyCode: string): string {
-  return new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: 2,
-  }).format(amount) + ' ' + currencyCode;
-}
+import { formatAmount } from '../utils/format';
+import { sanitizeDecimalInput } from '../utils/validation';
 
 
 export default function Exchange({ user }: { user: UserContext }) {
@@ -57,8 +52,8 @@ export default function Exchange({ user }: { user: UserContext }) {
           setToCurrencyCode(firstAlternative.code);
         }
       }
-    } catch (reason: any) {
-      setError(reason.message);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setLoading(false);
     }
@@ -109,8 +104,8 @@ export default function Exchange({ user }: { user: UserContext }) {
       setToAmount('');
       setComment('');
       await loadExchangeContext();
-    } catch (reason: any) {
-      setSubmitError(reason.message);
+    } catch (reason: unknown) {
+      setSubmitError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSubmitting(false);
     }
@@ -185,7 +180,7 @@ export default function Exchange({ user }: { user: UserContext }) {
               inputMode="decimal"
               placeholder="Сколько отдали"
               value={fromAmount}
-              onChange={(event) => setFromAmount(event.target.value)}
+              onChange={(event) => setFromAmount(sanitizeDecimalInput(event.target.value))}
             />
           </div>
 
@@ -205,7 +200,7 @@ export default function Exchange({ user }: { user: UserContext }) {
               inputMode="decimal"
               placeholder="Сколько получили"
               value={toAmount}
-              onChange={(event) => setToAmount(event.target.value)}
+              onChange={(event) => setToAmount(sanitizeDecimalInput(event.target.value))}
             />
           </div>
 

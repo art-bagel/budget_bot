@@ -19,6 +19,7 @@ import type {
   RecordIncomeRequest,
   UserContext,
 } from '../types';
+import { sanitizeDecimalInput } from '../utils/validation';
 
 
 const HISTORY_PAGE_SIZE = 20;
@@ -138,8 +139,8 @@ export default function Operations({ user }: { user: UserContext }) {
       );
       setHistoryItems((prev) => (replace ? result.items : [...prev, ...result.items]));
       setHistoryTotalCount(result.total_count);
-    } catch (e: any) {
-      setHistoryError(e.message);
+    } catch (e: unknown) {
+      setHistoryError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoadingHistory(false);
     }
@@ -199,8 +200,8 @@ export default function Operations({ user }: { user: UserContext }) {
       setIncomeSources((prev) => [...prev, createdSource]);
       setIncomeSourceId(String(createdSource.id));
       setNewIncomeSourceName('');
-    } catch (e: any) {
-      setIncomeError(e.message);
+    } catch (e: unknown) {
+      setIncomeError(e instanceof Error ? e.message : String(e));
     } finally {
       setCreatingIncomeSource(false);
     }
@@ -229,8 +230,8 @@ export default function Operations({ user }: { user: UserContext }) {
       setIncomeBudgetAmountInBase('');
       setIncomeComment('');
       await loadHistory(0, true);
-    } catch (e: any) {
-      setIncomeError(e.message);
+    } catch (e: unknown) {
+      setIncomeError(e instanceof Error ? e.message : String(e));
     } finally {
       setSubmittingIncome(false);
     }
@@ -256,8 +257,8 @@ export default function Operations({ user }: { user: UserContext }) {
       setExpenseAmount('');
       setExpenseComment('');
       await loadHistory(0, true);
-    } catch (e: any) {
-      setExpenseError(e.message);
+    } catch (e: unknown) {
+      setExpenseError(e instanceof Error ? e.message : String(e));
     } finally {
       setSubmittingExpense(false);
     }
@@ -285,8 +286,8 @@ export default function Operations({ user }: { user: UserContext }) {
         operation_id: operationId,
       });
       await loadHistory(0, true);
-    } catch (e: any) {
-      setHistoryError(e.message);
+    } catch (e: unknown) {
+      setHistoryError(e instanceof Error ? e.message : String(e));
     } finally {
       setReversingOperationId(null);
     }
@@ -361,7 +362,7 @@ export default function Operations({ user }: { user: UserContext }) {
               inputMode="decimal"
               placeholder="Сумма"
               value={incomeAmount}
-              onChange={(e) => setIncomeAmount(e.target.value)}
+              onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value))}
             />
             <select
               className="input"
@@ -384,7 +385,7 @@ export default function Operations({ user }: { user: UserContext }) {
                 inputMode="decimal"
                 placeholder={`Стоимость в ${user.base_currency_code}`}
                 value={incomeBudgetAmountInBase}
-                onChange={(e) => setIncomeBudgetAmountInBase(e.target.value)}
+                onChange={(e) => setIncomeBudgetAmountInBase(sanitizeDecimalInput(e.target.value))}
                 style={{ flex: 1 }}
               />
             </div>
@@ -456,7 +457,7 @@ export default function Operations({ user }: { user: UserContext }) {
               inputMode="decimal"
               placeholder="Сумма"
               value={expenseAmount}
-              onChange={(e) => setExpenseAmount(e.target.value)}
+              onChange={(e) => setExpenseAmount(sanitizeDecimalInput(e.target.value))}
             />
             <select
               className="input"

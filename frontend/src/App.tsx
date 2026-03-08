@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ComponentType } from 'react';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import type { UserContext } from './types';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
@@ -44,7 +45,9 @@ export default function App() {
 
   return (
     <Layout page={page} onNavigate={setPage}>
-      <PageComponent user={user} />
+      <ErrorBoundary>
+        <PageComponent user={user} />
+      </ErrorBoundary>
     </Layout>
   );
 }
