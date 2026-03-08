@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import {
-  allocateBudget,
-  allocateGroupBudget,
   createIncomeSource,
   fetchCategories,
   fetchCurrencies,
@@ -19,16 +17,8 @@ import type {
   OperationHistoryItem,
   RecordExpenseRequest,
   RecordIncomeRequest,
-  AllocateBudgetRequest,
-  AllocateGroupBudgetRequest,
   UserContext,
 } from '../types';
-
-
-interface AllocationSourceOption {
-  id: number;
-  name: string;
-}
 
 
 const HISTORY_PAGE_SIZE = 20;
@@ -125,13 +115,6 @@ export default function Operations({ user }: { user: UserContext }) {
   const [submittingExpense, setSubmittingExpense] = useState(false);
   const [expenseError, setExpenseError] = useState<string | null>(null);
 
-  const [allocationSourceId, setAllocationSourceId] = useState('');
-  const [allocationTargetId, setAllocationTargetId] = useState('');
-  const [allocationAmount, setAllocationAmount] = useState('');
-  const [allocationComment, setAllocationComment] = useState('');
-  const [submittingAllocation, setSubmittingAllocation] = useState(false);
-  const [allocationError, setAllocationError] = useState<string | null>(null);
-
   const [historyItems, setHistoryItems] = useState<OperationHistoryItem[]>([]);
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -179,36 +162,22 @@ export default function Operations({ user }: { user: UserContext }) {
         if (regularCategories.length > 0) {
           setExpenseCategoryId(String(regularCategories[0].id));
         }
-
-        if (visibleCategories.length > 0) {
-          setAllocationTargetId(String(visibleCategories[0].id));
-        }
-
-        setAllocationSourceId(String(user.unallocated_category_id));
       })
       .catch((e: Error) => {
         setIncomeError(e.message);
         setExpenseError(e.message);
-        setAllocationError(e.message);
       })
       .finally(() => setLoading(false));
-  }, [user.unallocated_category_id]);
+  }, []);
 
   useEffect(() => {
     void loadHistory(0, true);
   }, [historyTypeFilter]);
 
   const regularCategories = categories.filter((item) => item.kind === 'regular');
-  const sourceOptions: AllocationSourceOption[] = [
-    { id: user.unallocated_category_id, name: 'Свободный остаток' },
-    ...regularCategories.map((item) => ({ id: item.id, name: item.name })),
-  ];
-
   const isIncomeNonBase = incomeCurrencyCode !== user.base_currency_code;
   const selectedIncomeSource = incomeSources.find((item) => String(item.id) === incomeSourceId);
   const selectedExpenseCategory = categories.find((item) => String(item.id) === expenseCategoryId);
-  const selectedAllocationSource = sourceOptions.find((item) => String(item.id) === allocationSourceId);
-  const selectedAllocationTarget = categories.find((item) => String(item.id) === allocationTargetId);
 
   const handleCreateIncomeSource = async () => {
     const normalizedName = newIncomeSourceName.trim();
@@ -294,41 +263,6 @@ export default function Operations({ user }: { user: UserContext }) {
     }
   };
 
-  const handleAllocationSubmit = async () => {
-    const parsedAmount = parseFloat(allocationAmount);
-
-    if (!parsedAmount || parsedAmount <= 0 || !selectedAllocationSource || !selectedAllocationTarget) return;
-
-    setSubmittingAllocation(true);
-    setAllocationError(null);
-
-    try {
-      if (selectedAllocationTarget.kind === 'group') {
-        await allocateGroupBudget({
-          from_category_id: selectedAllocationSource.id,
-          group_id: selectedAllocationTarget.id,
-          amount_in_base: parsedAmount,
-          comment: allocationComment.trim() || undefined,
-        } as AllocateGroupBudgetRequest);
-      } else {
-        await allocateBudget({
-          from_category_id: selectedAllocationSource.id,
-          to_category_id: selectedAllocationTarget.id,
-          amount_in_base: parsedAmount,
-          comment: allocationComment.trim() || undefined,
-        } as AllocateBudgetRequest);
-      }
-
-      setAllocationAmount('');
-      setAllocationComment('');
-      await loadHistory(0, true);
-    } catch (e: any) {
-      setAllocationError(e.message);
-    } finally {
-      setSubmittingAllocation(false);
-    }
-  };
-
   const canSubmitIncome =
     !submittingIncome &&
     !!selectedIncomeSource &&
@@ -339,12 +273,6 @@ export default function Operations({ user }: { user: UserContext }) {
     !submittingExpense &&
     !!selectedExpenseCategory &&
     parseFloat(expenseAmount) > 0;
-
-  const canSubmitAllocation =
-    !submittingAllocation &&
-    !!selectedAllocationSource &&
-    !!selectedAllocationTarget &&
-    parseFloat(allocationAmount) > 0;
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
 
@@ -566,68 +494,6 @@ export default function Operations({ user }: { user: UserContext }) {
           {expenseError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>
               {expenseError}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Распределить бюджет</h2>
-        </div>
-        <div className="panel">
-          <div className="operations-note">
-            Выбери назначение. Если это группа, сумма автоматически разойдется по ее правилам.
-          </div>
-
-          <div className="form-row">
-            <select className="input" value={allocationSourceId} onChange={(e) => setAllocationSourceId(e.target.value)}>
-              {sourceOptions.map((source) => (
-                <option key={source.id} value={source.id}>
-                  Из: {source.name}
-                </option>
-              ))}
-            </select>
-            <select className="input" value={allocationTargetId} onChange={(e) => setAllocationTargetId(e.target.value)}>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  В: {category.name} ({category.kind === 'group' ? 'группа' : 'категория'})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-row">
-            <input
-              className="input"
-              type="text"
-              inputMode="decimal"
-              placeholder={`Сумма в ${user.base_currency_code}`}
-              value={allocationAmount}
-              onChange={(e) => setAllocationAmount(e.target.value)}
-            />
-            <input
-              className="input"
-              type="text"
-              placeholder="Комментарий (необязательно)"
-              value={allocationComment}
-              onChange={(e) => setAllocationComment(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && canSubmitAllocation && handleAllocationSubmit()}
-              style={{ flex: 1 }}
-            />
-            <button
-              className="btn btn--primary"
-              type="button"
-              disabled={!canSubmitAllocation}
-              onClick={handleAllocationSubmit}
-            >
-              {submittingAllocation ? '...' : 'Распределить'}
-            </button>
-          </div>
-
-          {allocationError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>
-              {allocationError}
             </p>
           )}
         </div>

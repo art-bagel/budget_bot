@@ -27,6 +27,10 @@ class CreateCategoryResponse(BaseModel):
     id: int
 
 
+class UpdateCategoryRequest(BaseModel):
+    name: str
+
+
 class ArchiveCategoryResponse(BaseModel):
     category_id: int
     kind: str
@@ -53,6 +57,20 @@ async def create_category(
         kind=body.kind,
     )
     return CreateCategoryResponse(id=category_id)
+
+
+@router.put('/{category_id}', response_model=CategoryItem)
+async def update_category(
+    category_id: int,
+    body: UpdateCategoryRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CategoryItem:
+    result = await context.set__update_category(
+        user_id=user.user_id,
+        category_id=category_id,
+        name=body.name,
+    )
+    return CategoryItem(**result)
 
 
 @router.post('/{category_id}/archive', response_model=ArchiveCategoryResponse)

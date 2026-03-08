@@ -438,9 +438,28 @@ p { margin: 0; }
   border-top: 1px solid var(--border);
 }
 
+.list-row--interactive {
+  cursor: pointer;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.list-row--interactive:hover {
+  background: var(--bg-inset);
+  border-radius: var(--radius-s);
+}
+
+.list-row--interactive:focus-visible {
+  outline: 2px solid var(--text-accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-s);
+}
+
 .list-row--draggable {
   cursor: grab;
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
 .list-row--dragging {
@@ -450,8 +469,6 @@ p { margin: 0; }
 .list-row--drop-target {
   background: var(--tag-in-bg);
   border-radius: var(--radius-s);
-  padding-left: 12px;
-  padding-right: 12px;
 }
 
 .list-row:first-child {
@@ -541,6 +558,17 @@ p { margin: 0; }
   flex-wrap: wrap;
 }
 
+.modal-actions--split {
+  justify-content: space-between;
+}
+
+.modal-actions-group {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ── Inputs ──────────────────────────────────────── */
 
 .input {
@@ -592,6 +620,14 @@ select.input option {
   flex-wrap: wrap;
 }
 
+.form-row--group-editor .input:first-child {
+  flex: 1 1 220px;
+}
+
+.form-row--group-editor .input:nth-child(2) {
+  width: 120px;
+}
+
 /* ── Buttons ─────────────────────────────────────── */
 
 .btn {
@@ -621,6 +657,18 @@ select.input option {
 
 .btn--primary:hover {
   opacity: 0.9;
+}
+
+.btn--danger {
+  border-color: rgba(180, 50, 50, 0.24);
+  background: var(--tag-out-bg);
+  color: var(--tag-out-fg);
+}
+
+.btn--danger:hover {
+  border-color: rgba(180, 50, 50, 0.34);
+  background: rgba(180, 50, 50, 0.16);
+  color: var(--tag-out-fg);
 }
 
 /* ── Settings page ───────────────────────────────── */

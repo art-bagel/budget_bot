@@ -1,9 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { allocateBudget, allocateGroupBudget, fetchDashboardOverview } from '../api';
+import {
+  allocateBudget,
+  allocateGroupBudget,
+  archiveCategory,
+  fetchCategories,
+  fetchDashboardOverview,
+  fetchGroupMembers,
+  replaceGroupMembers,
+  updateCategory,
+} from '../api';
 import type {
   AllocateBudgetRequest,
   AllocateGroupBudgetRequest,
+  Category,
   DashboardBudgetCategory,
   DashboardOverview as DashboardOverviewType,
   UserContext,
@@ -33,6 +43,34 @@ interface TransferTarget {
   currency_code: string;
 }
 
+interface GroupDraftRow {
+  key: string;
+  child_category_id: string;
+  share_percent: string;
+}
+
+
+function createDraftRow(index: number): GroupDraftRow {
+  return {
+    key: 'draft-' + index,
+    child_category_id: '',
+    share_percent: '',
+  };
+}
+
+
+function serializeGroupRows(rows: GroupDraftRow[]): string {
+  return JSON.stringify(
+    rows
+      .filter((row) => row.child_category_id && row.share_percent && Number(row.share_percent) > 0)
+      .map((row) => ({
+        child_category_id: Number(row.child_category_id),
+        share_percent: Number(Number(row.share_percent).toFixed(2)),
+      }))
+      .sort((left, right) => left.child_category_id - right.child_category_id),
+  );
+}
+
 
 export default function Dashboard({ user }: { user: UserContext }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
@@ -47,6 +85,17 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [transferComment, setTransferComment] = useState('');
   const [transferError, setTransferError] = useState<string | null>(null);
   const [submittingTransfer, setSubmittingTransfer] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
+  const [categoryNameDraft, setCategoryNameDraft] = useState('');
+  const [categoryDialogError, setCategoryDialogError] = useState<string | null>(null);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [archivingCategory, setArchivingCategory] = useState(false);
+  const suppressCategoryClickUntilRef = useRef(0);
+  const groupSettingsRequestIdRef = useRef(0);
+  const [groupRows, setGroupRows] = useState<GroupDraftRow[]>([createDraftRow(1)]);
+  const [initialGroupRowsSnapshot, setInitialGroupRowsSnapshot] = useState('[]');
+  const [groupRegularCategories, setGroupRegularCategories] = useState<Category[]>([]);
+  const [loadingGroupSettings, setLoadingGroupSettings] = useState(false);
 
   const loadOverview = async () => {
     setLoading(true);
@@ -66,11 +115,59 @@ export default function Dashboard({ user }: { user: UserContext }) {
     void loadOverview();
   }, [user.bank_account_id]);
 
-  const regularBudgetCategories = useMemo(
-    () => overview?.budget_categories.filter((category) => category.kind === 'regular') || [],
-    [overview],
-  );
+  useEffect(() => {
+    if (!selectedCategory || selectedCategory.kind !== 'group') {
+      groupSettingsRequestIdRef.current += 1;
+      setGroupRows([createDraftRow(1)]);
+      setInitialGroupRowsSnapshot('[]');
+      setGroupRegularCategories([]);
+      setLoadingGroupSettings(false);
+      return;
+    }
+
+    const requestId = groupSettingsRequestIdRef.current + 1;
+    groupSettingsRequestIdRef.current = requestId;
+    setLoadingGroupSettings(true);
+    setCategoryDialogError(null);
+
+    void Promise.all([
+      fetchCategories(),
+      fetchGroupMembers(selectedCategory.category_id),
+    ])
+      .then(([loadedCategories, members]) => {
+        if (groupSettingsRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const nextRows = members.length > 0
+          ? members.map((member, index) => ({
+              key: 'member-' + index + '-' + member.child_category_id,
+              child_category_id: String(member.child_category_id),
+              share_percent: String(Number((member.share * 100).toFixed(2))),
+            }))
+          : [createDraftRow(1)];
+
+        setGroupRegularCategories(
+          loadedCategories.filter((item) => item.kind === 'regular' && item.is_active),
+        );
+        setGroupRows(nextRows);
+        setInitialGroupRowsSnapshot(serializeGroupRows(nextRows));
+      })
+      .catch((reason: any) => {
+        if (groupSettingsRequestIdRef.current !== requestId) {
+          return;
+        }
+        setCategoryDialogError(reason.message);
+      })
+      .finally(() => {
+        if (groupSettingsRequestIdRef.current === requestId) {
+          setLoadingGroupSettings(false);
+        }
+      });
+  }, [selectedCategory]);
+
   const handleDragStart = (source: TransferSource) => {
+    suppressCategoryClickUntilRef.current = Date.now() + 250;
     setDraggedCategoryId(source.category_id);
     setTransferError(null);
   };
@@ -126,6 +223,123 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setTransferError(null);
     setDraggedCategoryId(null);
     setDropTargetCategoryId(null);
+  };
+
+  const openCategoryDialog = (category: DashboardBudgetCategory) => {
+    if (Date.now() < suppressCategoryClickUntilRef.current) {
+      return;
+    }
+
+    setSelectedCategory(category);
+    setCategoryNameDraft(category.name);
+    setCategoryDialogError(null);
+  };
+
+  const closeCategoryDialog = (force = false) => {
+    if ((savingCategory || archivingCategory) && !force) {
+      return;
+    }
+
+    setSelectedCategory(null);
+    setCategoryNameDraft('');
+    setCategoryDialogError(null);
+  };
+
+  const handleGroupRowChange = (
+    rowKey: string,
+    field: 'child_category_id' | 'share_percent',
+    value: string,
+  ) => {
+    setGroupRows((prev) =>
+      prev.map((row) => (row.key === rowKey ? { ...row, [field]: value } : row)),
+    );
+  };
+
+  const addGroupRow = () => {
+    setGroupRows((prev) => [...prev, createDraftRow(prev.length + 1)]);
+  };
+
+  const removeGroupRow = (rowKey: string) => {
+    setGroupRows((prev) => {
+      const nextRows = prev.filter((row) => row.key !== rowKey);
+      return nextRows.length > 0 ? nextRows : [createDraftRow(1)];
+    });
+  };
+
+  const validGroupRows = groupRows.filter(
+    (row) => row.child_category_id && row.share_percent && Number(row.share_percent) > 0,
+  );
+  const totalSharePercent = validGroupRows.reduce(
+    (acc, row) => acc + Number(row.share_percent || 0),
+    0,
+  );
+  const groupRowsChanged = selectedCategory?.kind === 'group' &&
+    serializeGroupRows(groupRows) !== initialGroupRowsSnapshot;
+  const hasNameChanged = !!selectedCategory && categoryNameDraft.trim() !== selectedCategory.name;
+  const canSaveGroupSettings = selectedCategory?.kind === 'group' &&
+    !loadingGroupSettings &&
+    validGroupRows.length > 0 &&
+    Math.abs(totalSharePercent - 100) < 0.001;
+  const canSubmitCategoryChanges =
+    !savingCategory &&
+    !archivingCategory &&
+    !!selectedCategory &&
+    !!categoryNameDraft.trim() &&
+    (hasNameChanged || groupRowsChanged) &&
+    (selectedCategory.kind !== 'group' || !groupRowsChanged || canSaveGroupSettings);
+
+  const handleCategorySubmit = async () => {
+    if (!selectedCategory || !categoryNameDraft.trim()) {
+      return;
+    }
+
+    if (selectedCategory.kind === 'group' && groupRowsChanged && !canSaveGroupSettings) {
+      setCategoryDialogError('Для группы нужна хотя бы одна категория, а сумма долей должна быть ровно 100%.');
+      return;
+    }
+
+    setSavingCategory(true);
+    setCategoryDialogError(null);
+
+    try {
+      if (hasNameChanged) {
+        await updateCategory(selectedCategory.category_id, categoryNameDraft.trim());
+      }
+
+      if (selectedCategory.kind === 'group' && groupRowsChanged) {
+        await replaceGroupMembers(
+          selectedCategory.category_id,
+          validGroupRows.map((row) => Number(row.child_category_id)),
+          validGroupRows.map((row) => Number(row.share_percent) / 100),
+        );
+      }
+
+      closeCategoryDialog(true);
+      await loadOverview();
+    } catch (reason: any) {
+      setCategoryDialogError(reason.message);
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
+  const handleCategoryArchive = async () => {
+    if (!selectedCategory) {
+      return;
+    }
+
+    setArchivingCategory(true);
+    setCategoryDialogError(null);
+
+    try {
+      await archiveCategory(selectedCategory.category_id);
+      closeCategoryDialog(true);
+      await loadOverview();
+    } catch (reason: any) {
+      setCategoryDialogError(reason.message);
+    } finally {
+      setArchivingCategory(false);
+    }
   };
 
   const handleTransferSubmit = async () => {
@@ -301,14 +515,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <li
                   className={[
                     'list-row',
+                    'list-row--interactive',
                     isRegular ? 'list-row--draggable' : '',
                     isDragging ? 'list-row--dragging' : '',
                     isDropTarget ? 'list-row--drop-target' : '',
                   ].join(' ').trim()}
                   key={category.category_id}
                   draggable={isRegular}
+                  role="button"
+                  tabIndex={0}
                   onDragStart={() => isRegular && handleDragStart(category)}
                   onDragEnd={handleDragEnd}
+                  onClick={() => openCategoryDialog(category)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openCategoryDialog(category);
+                    }
+                  }}
                   onDragOver={(event) => {
                     if (!isDroppable || draggedCategoryId === null || draggedCategoryId === category.category_id) {
                       return;
@@ -337,6 +561,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                       Тип: {category.kind}
                       {isRegular ? ' · можно перетаскивать' : ''}
                       {category.kind === 'group' ? ' · можно бросить сюда' : ''}
+                      {' · нажми, чтобы редактировать'}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -415,6 +640,134 @@ export default function Dashboard({ user }: { user: UserContext }) {
               >
                 {submittingTransfer ? '...' : 'Перевести'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedCategory && (
+        <div className="modal-backdrop" onClick={() => closeCategoryDialog()}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="section__header">
+              <div>
+                <div className="section__eyebrow">Категория</div>
+                <h2 className="section__title">Редактирование категории</h2>
+              </div>
+              <span className="pill">{selectedCategory.kind}</span>
+            </div>
+
+            <div className="operations-note">
+              Тут можно переименовать категорию или убрать её в архив.
+            </div>
+
+            <div className="form-row">
+              <input
+                className="input"
+                type="text"
+                placeholder="Название категории"
+                value={categoryNameDraft}
+                onChange={(event) => setCategoryNameDraft(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && !savingCategory && handleCategorySubmit()}
+                style={{ flex: 1 }}
+              />
+            </div>
+
+            {selectedCategory.kind === 'group' && (
+              <>
+                <div className="operations-note">
+                  Для группы можно менять состав и доли распределения. Сумма долей должна быть ровно 100%.
+                </div>
+
+                <div className="form-row">
+                  <span className="tag tag--neutral">
+                    Сумма долей: {totalSharePercent.toFixed(2)}%
+                  </span>
+                  {loadingGroupSettings && <span className="tag tag--neutral">Загружаем состав группы...</span>}
+                </div>
+
+                {!loadingGroupSettings && groupRows.map((row) => (
+                  <div className="form-row form-row--group-editor" key={row.key}>
+                    <select
+                      className="input"
+                      value={row.child_category_id}
+                      onChange={(event) => handleGroupRowChange(row.key, 'child_category_id', event.target.value)}
+                      disabled={savingCategory}
+                    >
+                      <option value="">Выберите категорию</option>
+                      {groupRegularCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Доля, %"
+                      value={row.share_percent}
+                      onChange={(event) => handleGroupRowChange(row.key, 'share_percent', event.target.value)}
+                      disabled={savingCategory}
+                    />
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={() => removeGroupRow(row.key)}
+                      disabled={savingCategory}
+                    >
+                      Убрать
+                    </button>
+                  </div>
+                ))}
+
+                {!loadingGroupSettings && (
+                  <div className="form-row">
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={addGroupRow}
+                      disabled={savingCategory}
+                    >
+                      Добавить категорию
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {categoryDialogError && (
+              <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+                {categoryDialogError}
+              </p>
+            )}
+
+            <div className="modal-actions modal-actions--split">
+              <button
+                className="btn btn--danger"
+                type="button"
+                onClick={handleCategoryArchive}
+                disabled={savingCategory || archivingCategory}
+              >
+                {archivingCategory ? '...' : 'В архив'}
+              </button>
+              <div className="modal-actions-group">
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => closeCategoryDialog()}
+                  disabled={savingCategory || archivingCategory}
+                >
+                  Отмена
+                </button>
+                <button
+                  className="btn btn--primary"
+                  type="button"
+                  onClick={handleCategorySubmit}
+                  disabled={!canSubmitCategoryChanges}
+                >
+                  {savingCategory ? '...' : 'Сохранить'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

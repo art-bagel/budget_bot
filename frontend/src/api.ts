@@ -69,6 +69,13 @@ export async function createCategory(name: string, kind: string): Promise<{ id: 
   });
 }
 
+export async function updateCategory(categoryId: number, name: string): Promise<Category> {
+  return apiFetch<Category>(`/categories/${categoryId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+}
+
 export async function fetchGroupMembers(groupId: number): Promise<GroupMember[]> {
   return apiFetch<GroupMember[]>(`/groups/${groupId}/members`);
 }

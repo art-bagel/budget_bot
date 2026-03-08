@@ -9,6 +9,7 @@ class Context(DataBase):
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
+    F_SET__UPDATE_CATEGORY = 'set__update_category'
     F_SET__ARCHIVE_CATEGORY = 'set__archive_category'
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
 
@@ -63,6 +64,21 @@ class Context(DataBase):
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_INCOME_SOURCE),
             user_id,
+            name,
+        )
+
+    async def set__update_category(self, user_id: int, category_id: int, name: str) -> dict:
+        """
+        Обновляет имя активной категории или группы.
+        :param user_id: Идентификатор владельца категории.
+        :param category_id: Идентификатор обновляемой категории.
+        :param name: Новое имя категории.
+        :return: Словарь с обновленными данными категории.
+        """
+        return await self.call_function(
+            self._fn(self.F_SET__UPDATE_CATEGORY),
+            user_id,
+            category_id,
             name,
         )
 
