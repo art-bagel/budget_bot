@@ -23,6 +23,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [showBankDetail, setShowBankDetail] = useState(false);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
   const [swipeSourceId, setSwipeSourceId] = useState<number | null>(null);
@@ -298,42 +299,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
       <h1 className="page-title">Обзор</h1>
 
       <section className="metrics">
-        <article className="metric-card">
+        <article
+          className="metric-card metric-card--accent metric-card--clickable"
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowBankDetail(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+        >
           <span className="metric-card__label">Банк по себестоимости</span>
           <strong className="metric-card__value">
             {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
           </strong>
         </article>
-        <article className="metric-card metric-card--accent">
+        <article className="metric-card">
           <span className="metric-card__label">Бюджет по категориям</span>
           <strong className="metric-card__value">
             {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
           </strong>
         </article>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <div>
-            <div className="section__eyebrow">Банк</div>
-            <h2 className="section__title">Сколько денег лежит по валютам</h2>
-          </div>
-        </div>
-        <div className="balance-scroll">
-          {overview.bank_balances.map((balance) => (
-            <article className="balance-card" key={balance.currency_code}>
-              <div className="balance-card__head">
-                <span className="pill">{balance.currency_code}</span>
-              </div>
-              <strong className="balance-card__amount">
-                {formatAmount(balance.amount, balance.currency_code)}
-              </strong>
-              <div className="balance-card__sub">
-                Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-              </div>
-            </article>
-          ))}
-        </div>
       </section>
 
       <section className="section">
@@ -665,6 +648,39 @@ export default function Dashboard({ user }: { user: UserContext }) {
           onClose={() => setCreateDialogKind(null)}
           onSuccess={() => void handleDialogSuccess()}
         />
+      )}
+
+      {showBankDetail && (
+        <div className="modal-backdrop" onClick={() => setShowBankDetail(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="section__header">
+              <div>
+                <div className="section__eyebrow">Банк</div>
+                <h2 className="section__title">Сколько денег лежит по валютам</h2>
+              </div>
+            </div>
+            <ul className="bank-detail-list">
+              {overview.bank_balances.map((balance) => (
+                <li className="bank-detail-row" key={balance.currency_code}>
+                  <div className="bank-detail-row__main">
+                    <span className="pill">{balance.currency_code}</span>
+                    <strong className="bank-detail-row__amount">
+                      {formatAmount(balance.amount, balance.currency_code)}
+                    </strong>
+                  </div>
+                  <div className="bank-detail-row__sub">
+                    Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="modal-actions">
+              <button className="btn btn--primary" type="button" onClick={() => setShowBankDetail(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
