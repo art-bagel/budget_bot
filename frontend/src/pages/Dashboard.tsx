@@ -344,24 +344,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
           </div>
         </div>
         <div className="panel">
-          {swipeSourceId !== null ? (
-            <div className="transfer-banner">
-              <span>
-                Из <strong>{swipeSourceName}</strong> — нажми куда перевести
-              </span>
-              <button
-                className="btn btn--small"
-                type="button"
-                onClick={() => setSwipeSourceId(null)}
-              >
-                Отмена
-              </button>
-            </div>
-          ) : (
-            <div className="operations-note">
-              Свайп влево — перевод бюджета. Свайп вправо по категории — записать расход.
-            </div>
-          )}
+          <div className={`transfer-banner${swipeSourceId !== null ? ' transfer-banner--active' : ''}`}>
+            {swipeSourceId !== null ? (
+              <>
+                <span>
+                  Из <strong>{swipeSourceName}</strong> — нажми куда перевести
+                </span>
+                <button
+                  className="btn btn--small"
+                  type="button"
+                  onClick={() => setSwipeSourceId(null)}
+                >
+                  Отмена
+                </button>
+              </>
+            ) : (
+              <span>Свайп влево — перевод бюджета. Свайп вправо по категории — расход.</span>
+            )}
+          </div>
           <div className="dashboard-transfer-source">
             <div
               className={[
@@ -394,9 +394,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 event.preventDefault();
                 handleDropOnCategory(freeBudgetTarget);
               }}
-              onTouchStart={(e) => {
-                if (overview.free_budget_in_base > 0) handleSwipeStart(freeBudgetSource.category_id, 'free_budget', null, e);
-              }}
+              onTouchStart={(e) => handleSwipeStart(freeBudgetSource.category_id, 'free_budget', null, e)}
               onTouchMove={handleSwipeMove}
               onTouchEnd={handleSwipeEnd}
               onClick={() => {
