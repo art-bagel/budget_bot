@@ -24,12 +24,15 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
+  const [tapSourceId, setTapSourceId] = useState<number | null>(null);
   const [transferSource, setTransferSource] = useState<TransferSource | null>(null);
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
   const suppressCategoryClickUntilRef = useRef(0);
   const [groupMembersByGroupId, setGroupMembersByGroupId] = useState<Record<number, GroupMember[]>>({});
   const [createDialogKind, setCreateDialogKind] = useState<'regular' | 'group' | null>(null);
+
+  const activeSourceId = draggedCategoryId ?? tapSourceId;
 
   const loadOverview = async () => {
     setLoading(true);
@@ -91,7 +94,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
     };
   }, [overview]);
 
-  const handleDragStart = (source: TransferSource) => {
+  const handleDragStart = (source: TransferSource, event: React.DragEvent) => {
+    event.dataTransfer.setData('text/plain', '');
+    event.dataTransfer.effectAllowed = 'move';
     suppressCategoryClickUntilRef.current = Date.now() + 250;
     setDraggedCategoryId(source.category_id);
   };
@@ -101,14 +106,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setDropTargetCategoryId(null);
   };
 
-  const handleDropOnCategory = (targetCategory: TransferTarget) => {
-    if (!overview || !draggedCategoryId) {
-      setDraggedCategoryId(null);
-      setDropTargetCategoryId(null);
-      return;
-    }
+  const completeTransfer = (sourceId: number, target: TransferTarget) => {
+    if (!overview) return;
 
-    const sourceCategory = draggedCategoryId === user.unallocated_category_id
+    const source: TransferSource | null = sourceId === user.unallocated_category_id
       ? {
           category_id: user.unallocated_category_id,
           name: 'Свободный остаток',
@@ -117,19 +118,29 @@ export default function Dashboard({ user }: { user: UserContext }) {
           currency_code: overview.base_currency_code,
         }
       : overview.budget_categories.find(
-          (category) => category.category_id === draggedCategoryId && category.kind === 'regular',
+          (category) => category.category_id === sourceId && category.kind === 'regular',
         ) || null;
 
-    if (!sourceCategory || targetCategory.kind === 'system' || draggedCategoryId === targetCategory.category_id) {
+    if (!source || target.kind === 'system' || sourceId === target.category_id) {
       setDraggedCategoryId(null);
       setDropTargetCategoryId(null);
+      setTapSourceId(null);
       return;
     }
 
-    setTransferSource(sourceCategory);
-    setTransferTarget(targetCategory);
+    setTransferSource(source);
+    setTransferTarget(target);
     setDraggedCategoryId(null);
     setDropTargetCategoryId(null);
+    setTapSourceId(null);
+  };
+
+  const handleDropOnCategory = (target: TransferTarget) => {
+    if (!draggedCategoryId) {
+      handleDragEnd();
+      return;
+    }
+    completeTransfer(draggedCategoryId, target);
   };
 
   const openCategoryDialog = (category: DashboardBudgetCategory) => {
@@ -137,11 +148,17 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setSelectedCategory(category);
   };
 
+  const handleCategoryTransfer = (category: DashboardBudgetCategory) => {
+    setSelectedCategory(null);
+    setTapSourceId(category.category_id);
+  };
+
   const handleDialogSuccess = async () => {
     setTransferSource(null);
     setTransferTarget(null);
     setSelectedCategory(null);
     setCreateDialogKind(null);
+    setTapSourceId(null);
     await loadOverview();
   };
 
@@ -182,6 +199,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
     acc[category.category_id] = category.balance;
     return acc;
   }, {});
+
+  const tapSourceName = tapSourceId !== null
+    ? (tapSourceId === user.unallocated_category_id
+        ? 'Свободный остаток'
+        : overview.budget_categories.find((c) => c.category_id === tapSourceId)?.name || '')
+    : '';
 
   return (
     <>
@@ -234,25 +257,43 @@ export default function Dashboard({ user }: { user: UserContext }) {
           </div>
         </div>
         <div className="panel">
-          <div className="operations-note">
-            Перетаскивай свободный остаток или обычную категорию на категорию или группу, чтобы открыть перевод бюджета.
-          </div>
+          {tapSourceId !== null ? (
+            <div className="transfer-banner">
+              <span>
+                Выбрано: <strong>{tapSourceName}</strong>. Нажми на категорию или группу для перевода.
+              </span>
+              <button
+                className="btn btn--small"
+                type="button"
+                onClick={() => setTapSourceId(null)}
+              >
+                Отмена
+              </button>
+            </div>
+          ) : (
+            <div className="operations-note">
+              Нажми на свободный остаток, чтобы выбрать источник перевода. На компьютере также можно перетаскивать.
+            </div>
+          )}
           <div className="dashboard-transfer-source">
             <div
               className={[
                 'balance-card',
                 'balance-card--draggable',
-                draggedCategoryId !== null && draggedCategoryId !== freeBudgetSource.category_id
+                activeSourceId !== null && activeSourceId !== freeBudgetSource.category_id
                   ? 'balance-card--droppable'
                   : '',
+                activeSourceId === freeBudgetSource.category_id ? 'balance-card--tap-selected' : '',
                 draggedCategoryId === freeBudgetSource.category_id ? 'balance-card--dragging' : '',
                 dropTargetCategoryId === freeBudgetTarget.category_id ? 'balance-card--drop-target' : '',
               ].join(' ').trim()}
               draggable={overview.free_budget_in_base > 0}
-              onDragStart={() => overview.free_budget_in_base > 0 && handleDragStart(freeBudgetSource)}
+              onDragStart={(e) => {
+                if (overview.free_budget_in_base > 0) handleDragStart(freeBudgetSource, e);
+              }}
               onDragEnd={handleDragEnd}
               onDragOver={(event) => {
-                if (draggedCategoryId === null || draggedCategoryId === freeBudgetTarget.category_id) return;
+                if (activeSourceId === null || activeSourceId === freeBudgetTarget.category_id) return;
                 event.preventDefault();
                 setDropTargetCategoryId(freeBudgetTarget.category_id);
               }}
@@ -265,6 +306,15 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 event.preventDefault();
                 handleDropOnCategory(freeBudgetTarget);
               }}
+              onClick={() => {
+                if (activeSourceId === freeBudgetSource.category_id) {
+                  setTapSourceId(null);
+                } else if (activeSourceId !== null) {
+                  completeTransfer(activeSourceId, freeBudgetTarget);
+                } else if (overview.free_budget_in_base > 0) {
+                  setTapSourceId(freeBudgetSource.category_id);
+                }
+              }}
             >
               <div className="balance-card__head">
                 <span className="pill">Свободный остаток</span>
@@ -273,7 +323,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
               </strong>
               <div className="balance-card__sub">
-                Перетащи на категорию или группу для распределения. Сюда тоже можно вернуть деньги из категории.
+                Нажми, чтобы выбрать как источник перевода. Сюда тоже можно вернуть деньги из категории.
               </div>
             </div>
           </div>
@@ -297,6 +347,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <ul>
                   {regularBudgetCategories.map((category) => {
                     const isDropTarget = dropTargetCategoryId === category.category_id;
+                    const isActiveSource = activeSourceId === category.category_id;
+                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
 
                     return (
                       <li
@@ -306,15 +358,31 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           'list-row--interactive',
                           'list-row--draggable',
                           draggedCategoryId === category.category_id ? 'list-row--dragging' : '',
+                          isActiveSource ? 'list-row--tap-selected' : '',
                           isDropTarget ? 'list-row--drop-target' : '',
+                          isValidTarget ? 'list-row--valid-target' : '',
                         ].join(' ').trim()}
                         key={category.category_id}
                         draggable
                         role="button"
                         tabIndex={0}
-                        onDragStart={() => handleDragStart(category)}
+                        onDragStart={(e) => handleDragStart(category, e)}
                         onDragEnd={handleDragEnd}
-                        onClick={() => openCategoryDialog(category)}
+                        onClick={() => {
+                          if (Date.now() < suppressCategoryClickUntilRef.current) return;
+                          if (isActiveSource) {
+                            setTapSourceId(null);
+                          } else if (activeSourceId !== null) {
+                            completeTransfer(activeSourceId, {
+                              category_id: category.category_id,
+                              name: category.name,
+                              kind: category.kind,
+                              currency_code: category.currency_code,
+                            });
+                          } else {
+                            openCategoryDialog(category);
+                          }
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
@@ -322,7 +390,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           }
                         }}
                         onDragOver={(event) => {
-                          if (draggedCategoryId === null || draggedCategoryId === category.category_id) return;
+                          if (activeSourceId === null || activeSourceId === category.category_id) return;
                           event.preventDefault();
                           setDropTargetCategoryId(category.category_id);
                         }}
@@ -344,7 +412,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         <div className="dashboard-budget-row__main">
                           <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
-                            Обычная категория · можно перетаскивать · нажми, чтобы редактировать
+                            {isValidTarget
+                              ? 'Нажми сюда, чтобы перевести'
+                              : 'Нажми, чтобы редактировать'}
                           </div>
                         </div>
                         <div className="dashboard-budget-row__side">
@@ -378,6 +448,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <ul>
                   {groupBudgetCategories.map((category) => {
                     const isDropTarget = dropTargetCategoryId === category.category_id;
+                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
                     const groupMembers = groupMembersByGroupId[category.category_id] || [];
                     const groupComposition = groupMembers.length > 0
                       ? groupMembers
@@ -399,12 +470,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           'list-row--interactive',
                           'list-row--group',
                           isDropTarget ? 'list-row--drop-target' : '',
+                          isValidTarget ? 'list-row--valid-target' : '',
                         ].join(' ').trim()}
                         key={category.category_id}
                         role="button"
                         tabIndex={0}
                         onDragEnd={handleDragEnd}
-                        onClick={() => openCategoryDialog(category)}
+                        onClick={() => {
+                          if (activeSourceId !== null) {
+                            completeTransfer(activeSourceId, {
+                              category_id: category.category_id,
+                              name: category.name,
+                              kind: category.kind,
+                              currency_code: category.currency_code,
+                            });
+                          } else {
+                            openCategoryDialog(category);
+                          }
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
@@ -412,7 +495,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           }
                         }}
                         onDragOver={(event) => {
-                          if (draggedCategoryId === null || draggedCategoryId === category.category_id) return;
+                          if (activeSourceId === null || activeSourceId === category.category_id) return;
                           event.preventDefault();
                           setDropTargetCategoryId(category.category_id);
                         }}
@@ -434,7 +517,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         <div className="dashboard-budget-row__main">
                           <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
-                            Группа распределения · можно бросить сюда · нажми, чтобы редактировать состав
+                            {isValidTarget
+                              ? 'Нажми сюда, чтобы перевести'
+                              : 'Группа распределения · нажми, чтобы редактировать состав'}
                           </div>
                           <div className="list-row__meta">{groupComposition}</div>
                         </div>
@@ -468,6 +553,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
           category={selectedCategory}
           onClose={() => setSelectedCategory(null)}
           onSuccess={() => void handleDialogSuccess()}
+          onTransfer={
+            selectedCategory.kind === 'regular'
+              ? () => handleCategoryTransfer(selectedCategory)
+              : undefined
+          }
         />
       )}
 

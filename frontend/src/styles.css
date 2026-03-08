@@ -317,6 +317,21 @@ p { margin: 0; }
   margin-bottom: 14px;
 }
 
+.transfer-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--tag-in-bg);
+  border: 1px solid var(--text-accent);
+  border-radius: var(--radius-s);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
 .operations-hint {
   margin-top: 12px;
   margin-bottom: 0;
@@ -375,6 +390,11 @@ p { margin: 0; }
 .balance-card--drop-target {
   background: var(--tag-in-bg);
   border-color: var(--text-accent);
+}
+
+.balance-card--tap-selected {
+  border-color: var(--text-accent);
+  box-shadow: 0 0 0 2px var(--text-accent);
 }
 
 .dashboard-transfer-source {
@@ -511,6 +531,18 @@ p { margin: 0; }
 .list-row--drop-target {
   background: var(--tag-in-bg);
   border-radius: var(--radius-s);
+}
+
+.list-row--tap-selected {
+  background: var(--tag-in-bg);
+  border-radius: var(--radius-s);
+  box-shadow: inset 3px 0 0 var(--text-accent);
+}
+
+.list-row--valid-target {
+  border-radius: var(--radius-s);
+  outline: 1px dashed var(--text-accent);
+  outline-offset: -1px;
 }
 
 .list-row:first-child {
@@ -720,6 +752,23 @@ select.input option {
   border-radius: 999px;
   font-size: 1.15rem;
   line-height: 1;
+}
+
+.btn--small {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.btn--outline-accent {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+  background: transparent;
+  width: 100%;
+}
+
+.btn--outline-accent:hover {
+  background: var(--tag-in-bg);
 }
 
 .btn--danger {
