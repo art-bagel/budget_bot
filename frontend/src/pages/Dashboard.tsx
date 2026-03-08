@@ -4,6 +4,7 @@ import {
   allocateBudget,
   allocateGroupBudget,
   archiveCategory,
+  createCategory,
   fetchCategories,
   fetchDashboardOverview,
   fetchGroupMembers,
@@ -16,6 +17,7 @@ import type {
   Category,
   DashboardBudgetCategory,
   DashboardOverview as DashboardOverviewType,
+  GroupMember,
   UserContext,
 } from '../types';
 
@@ -96,6 +98,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [initialGroupRowsSnapshot, setInitialGroupRowsSnapshot] = useState('[]');
   const [groupRegularCategories, setGroupRegularCategories] = useState<Category[]>([]);
   const [loadingGroupSettings, setLoadingGroupSettings] = useState(false);
+  const [groupMembersByGroupId, setGroupMembersByGroupId] = useState<Record<number, GroupMember[]>>({});
+  const [createDialogKind, setCreateDialogKind] = useState<'regular' | 'group' | null>(null);
+  const [createCategoryName, setCreateCategoryName] = useState('');
+  const [createCategoryError, setCreateCategoryError] = useState<string | null>(null);
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
   const loadOverview = async () => {
     setLoading(true);
@@ -114,6 +121,50 @@ export default function Dashboard({ user }: { user: UserContext }) {
   useEffect(() => {
     void loadOverview();
   }, [user.bank_account_id]);
+
+  useEffect(() => {
+    if (!overview) {
+      setGroupMembersByGroupId({});
+      return;
+    }
+
+    const groupCategories = overview.budget_categories.filter((category) => category.kind === 'group');
+
+    if (groupCategories.length === 0) {
+      setGroupMembersByGroupId({});
+      return;
+    }
+
+    let cancelled = false;
+
+    void Promise.all(
+      groupCategories.map(async (group) => ({
+        groupId: group.category_id,
+        members: await fetchGroupMembers(group.category_id),
+      })),
+    )
+      .then((results) => {
+        if (cancelled) {
+          return;
+        }
+
+        setGroupMembersByGroupId(
+          results.reduce<Record<number, GroupMember[]>>((acc, result) => {
+            acc[result.groupId] = result.members;
+            return acc;
+          }, {}),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGroupMembersByGroupId({});
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [overview]);
 
   useEffect(() => {
     if (!selectedCategory || selectedCategory.kind !== 'group') {
@@ -243,6 +294,41 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setSelectedCategory(null);
     setCategoryNameDraft('');
     setCategoryDialogError(null);
+  };
+
+  const openCreateDialog = (kind: 'regular' | 'group') => {
+    setCreateDialogKind(kind);
+    setCreateCategoryName('');
+    setCreateCategoryError(null);
+  };
+
+  const closeCreateDialog = (force = false) => {
+    if (creatingCategory && !force) {
+      return;
+    }
+
+    setCreateDialogKind(null);
+    setCreateCategoryName('');
+    setCreateCategoryError(null);
+  };
+
+  const handleCreateCategory = async () => {
+    if (!createDialogKind || !createCategoryName.trim()) {
+      return;
+    }
+
+    setCreatingCategory(true);
+    setCreateCategoryError(null);
+
+    try {
+      await createCategory(createCategoryName.trim(), createDialogKind);
+      closeCreateDialog(true);
+      await loadOverview();
+    } catch (reason: any) {
+      setCreateCategoryError(reason.message);
+    } finally {
+      setCreatingCategory(false);
+    }
   };
 
   const handleGroupRowChange = (
@@ -407,6 +493,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
     kind: 'free_budget',
     currency_code: overview.base_currency_code,
   };
+  const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
+  const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
+  const regularCategoryBalanceById = regularBudgetCategories.reduce<Record<number, number>>((acc, category) => {
+    acc[category.category_id] = category.balance;
+    return acc;
+  }, {});
 
   return (
     <>
@@ -504,75 +596,182 @@ export default function Dashboard({ user }: { user: UserContext }) {
               </div>
             </div>
           </div>
-          <ul>
-            {overview.budget_categories.map((category) => {
-              const isRegular = category.kind === 'regular';
-              const isDroppable = category.kind === 'regular' || category.kind === 'group';
-              const isDragging = draggedCategoryId === category.category_id && isRegular;
-              const isDropTarget = dropTargetCategoryId === category.category_id;
-
-              return (
-                <li
-                  className={[
-                    'list-row',
-                    'list-row--interactive',
-                    isRegular ? 'list-row--draggable' : '',
-                    isDragging ? 'list-row--dragging' : '',
-                    isDropTarget ? 'list-row--drop-target' : '',
-                  ].join(' ').trim()}
-                  key={category.category_id}
-                  draggable={isRegular}
-                  role="button"
-                  tabIndex={0}
-                  onDragStart={() => isRegular && handleDragStart(category)}
-                  onDragEnd={handleDragEnd}
-                  onClick={() => openCategoryDialog(category)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      openCategoryDialog(category);
-                    }
-                  }}
-                  onDragOver={(event) => {
-                    if (!isDroppable || draggedCategoryId === null || draggedCategoryId === category.category_id) {
-                      return;
-                    }
-                    event.preventDefault();
-                    setDropTargetCategoryId(category.category_id);
-                  }}
-                  onDragLeave={() => {
-                    if (dropTargetCategoryId === category.category_id) {
-                      setDropTargetCategoryId(null);
-                    }
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    handleDropOnCategory({
-                      category_id: category.category_id,
-                      name: category.name,
-                      kind: category.kind,
-                      currency_code: category.currency_code,
-                    });
-                  }}
+          <div className="dashboard-budget-sections">
+            <div className="dashboard-budget-section">
+              <div className="dashboard-budget-section__header">
+                <div className="section__eyebrow">Категории</div>
+                <button
+                  className="btn btn--icon"
+                  type="button"
+                  onClick={() => openCreateDialog('regular')}
+                  aria-label="Добавить категорию"
+                  title="Добавить категорию"
                 >
-                  <div>
-                    <div className="list-row__title">{category.name}</div>
-                    <div className="list-row__sub">
-                      Тип: {category.kind}
-                      {isRegular ? ' · можно перетаскивать' : ''}
-                      {category.kind === 'group' ? ' · можно бросить сюда' : ''}
-                      {' · нажми, чтобы редактировать'}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="list-row__value">
-                      {formatAmount(category.balance, category.currency_code)}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  +
+                </button>
+              </div>
+              {regularBudgetCategories.length === 0 ? (
+                <p className="list-row__sub">Обычных категорий пока нет.</p>
+              ) : (
+                <ul>
+                  {regularBudgetCategories.map((category) => {
+                    const isRegular = true;
+                    const isDropTarget = dropTargetCategoryId === category.category_id;
+
+                    return (
+                      <li
+                        className={[
+                          'list-row',
+                          'list-row--interactive',
+                          'list-row--draggable',
+                          draggedCategoryId === category.category_id ? 'list-row--dragging' : '',
+                          isDropTarget ? 'list-row--drop-target' : '',
+                        ].join(' ').trim()}
+                        key={category.category_id}
+                        draggable
+                        role="button"
+                        tabIndex={0}
+                        onDragStart={() => handleDragStart(category)}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => openCategoryDialog(category)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openCategoryDialog(category);
+                          }
+                        }}
+                        onDragOver={(event) => {
+                          if (draggedCategoryId === null || draggedCategoryId === category.category_id) {
+                            return;
+                          }
+                          event.preventDefault();
+                          setDropTargetCategoryId(category.category_id);
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetCategoryId === category.category_id) {
+                            setDropTargetCategoryId(null);
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          handleDropOnCategory({
+                            category_id: category.category_id,
+                            name: category.name,
+                            kind: category.kind,
+                            currency_code: category.currency_code,
+                          });
+                        }}
+                      >
+                        <div>
+                          <div className="list-row__title">{category.name}</div>
+                          <div className="list-row__sub">
+                            Обычная категория · можно перетаскивать · нажми, чтобы редактировать
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div className="list-row__value">
+                            {formatAmount(category.balance, category.currency_code)}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="dashboard-budget-section dashboard-budget-section--groups">
+              <div className="dashboard-budget-section__header">
+                <div className="section__eyebrow">Группы</div>
+                <button
+                  className="btn btn--icon"
+                  type="button"
+                  onClick={() => openCreateDialog('group')}
+                  aria-label="Добавить группу"
+                  title="Добавить группу"
+                >
+                  +
+                </button>
+              </div>
+              {groupBudgetCategories.length === 0 ? (
+                <p className="list-row__sub">Групп пока нет.</p>
+              ) : (
+                <ul>
+                  {groupBudgetCategories.map((category) => {
+                    const isDropTarget = dropTargetCategoryId === category.category_id;
+                    const groupMembers = groupMembersByGroupId[category.category_id] || [];
+                    const groupComposition = groupMembers.length > 0
+                      ? groupMembers
+                          .map((member) => `${member.child_category_name} ${Number((member.share * 100).toFixed(2))}%`)
+                          .join(' · ')
+                      : 'Состав группы пока не настроен';
+                    const groupBalance = groupMembers.length > 0
+                      ? groupMembers.reduce(
+                          (sum, member) => sum + (regularCategoryBalanceById[member.child_category_id] || 0),
+                          0,
+                        )
+                      : 0;
+
+                    return (
+                      <li
+                        className={[
+                          'list-row',
+                          'list-row--interactive',
+                          'list-row--group',
+                          isDropTarget ? 'list-row--drop-target' : '',
+                        ].join(' ').trim()}
+                        key={category.category_id}
+                        role="button"
+                        tabIndex={0}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => openCategoryDialog(category)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openCategoryDialog(category);
+                          }
+                        }}
+                        onDragOver={(event) => {
+                          if (draggedCategoryId === null || draggedCategoryId === category.category_id) {
+                            return;
+                          }
+                          event.preventDefault();
+                          setDropTargetCategoryId(category.category_id);
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetCategoryId === category.category_id) {
+                            setDropTargetCategoryId(null);
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          handleDropOnCategory({
+                            category_id: category.category_id,
+                            name: category.name,
+                            kind: category.kind,
+                            currency_code: category.currency_code,
+                          });
+                        }}
+                      >
+                        <div>
+                          <div className="list-row__title">{category.name}</div>
+                          <div className="list-row__sub">
+                            Группа распределения · можно бросить сюда · нажми, чтобы редактировать состав
+                          </div>
+                          <div className="list-row__meta">{groupComposition}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div className="list-row__value">
+                            {formatAmount(groupBalance, category.currency_code)}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -768,6 +967,64 @@ export default function Dashboard({ user }: { user: UserContext }) {
                   {savingCategory ? '...' : 'Сохранить'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createDialogKind && (
+        <div className="modal-backdrop" onClick={() => closeCreateDialog()}>
+          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
+            <div className="section__header">
+              <div>
+                <div className="section__eyebrow">Создание</div>
+                <h2 className="section__title">
+                  {createDialogKind === 'group' ? 'Новая группа' : 'Новая категория'}
+                </h2>
+              </div>
+            </div>
+
+            <div className="operations-note">
+              {createDialogKind === 'group'
+                ? 'Создай группу, затем нажми на неё, чтобы настроить состав и доли.'
+                : 'Добавь новую категорию, чтобы потом распределять по ней бюджет.'}
+            </div>
+
+            <div className="form-row">
+              <input
+                className="input"
+                type="text"
+                placeholder={createDialogKind === 'group' ? 'Название группы' : 'Название категории'}
+                value={createCategoryName}
+                onChange={(event) => setCreateCategoryName(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && !creatingCategory && handleCreateCategory()}
+                style={{ flex: 1 }}
+              />
+            </div>
+
+            {createCategoryError && (
+              <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+                {createCategoryError}
+              </p>
+            )}
+
+            <div className="modal-actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => closeCreateDialog()}
+                disabled={creatingCategory}
+              >
+                Отмена
+              </button>
+              <button
+                className="btn btn--primary"
+                type="button"
+                onClick={handleCreateCategory}
+                disabled={creatingCategory || !createCategoryName.trim()}
+              >
+                {creatingCategory ? '...' : 'Создать'}
+              </button>
             </div>
           </div>
         </div>

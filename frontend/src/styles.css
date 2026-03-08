@@ -380,6 +380,28 @@ p { margin: 0; }
   margin-bottom: 16px;
 }
 
+.dashboard-budget-sections {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-budget-section {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-budget-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-budget-section--groups {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .balance-card__head {
   display: flex;
   justify-content: space-between;
@@ -466,6 +488,11 @@ p { margin: 0; }
   opacity: 0.45;
 }
 
+.list-row--group {
+  background: var(--bg-inset);
+  border-radius: var(--radius-s);
+}
+
 .list-row--drop-target {
   background: var(--tag-in-bg);
   border-radius: var(--radius-s);
@@ -484,6 +511,13 @@ p { margin: 0; }
 .list-row__sub {
   font-size: 0.8rem;
   color: var(--text-tertiary);
+}
+
+.list-row__meta {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .list-row__value {
@@ -548,6 +582,10 @@ p { margin: 0; }
   border-radius: var(--radius-l);
   box-shadow: var(--shadow-elevated);
   padding: 20px;
+}
+
+.modal-card--compact {
+  width: min(460px, 100%);
 }
 
 .modal-actions {
@@ -657,6 +695,16 @@ select.input option {
 
 .btn--primary:hover {
   opacity: 0.9;
+}
+
+.btn--icon {
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .btn--danger {
