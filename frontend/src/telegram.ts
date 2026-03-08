@@ -26,10 +26,13 @@ interface TelegramWebApp {
     user?: TelegramWebAppUser;
   };
   colorScheme?: 'light' | 'dark';
+  isVerticalSwipesEnabled?: boolean;
   BackButton?: TelegramBackButton;
   MainButton?: TelegramMainButton;
   ready: () => void;
   expand: () => void;
+  disableVerticalSwipes?: () => void;
+  enableClosingConfirmation?: () => void;
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
   onEvent?: (eventType: string, callback: () => void) => void;
@@ -69,6 +72,7 @@ export function initTelegramWebApp(): void {
 
   webApp.ready();
   webApp.expand();
+  webApp.disableVerticalSwipes?.();
 
   const rootStyles = getComputedStyle(document.documentElement);
   const backgroundColor = rootStyles.getPropertyValue('--bg-root').trim();
