@@ -36,7 +36,7 @@ uvicorn app.main:app --reload
 ```env
 APP_HOST=127.0.0.1
 APP_PORT=8000
-FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+FRONTEND_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
 DB_HOST=localhost
 DB_PORT=5432
 DB_DATABASE=budget_bot
@@ -53,7 +53,7 @@ npm install
 npm run dev
 ```
 
-После запуска frontend открой `http://localhost:5173`.
+После запуска frontend открой `http://localhost:8080`.
 
 Сейчас UI получает данные из mock endpoint:
 

@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getTelegramColorScheme, getTelegramWebApp, subscribeTelegramThemeChanged } from '../telegram';
 
 export type Theme = 'light' | 'dark' | 'system';
 
 const STORAGE_KEY = 'budgeting-theme';
 
 function getSystemTheme(): 'light' | 'dark' {
+  const telegramColorScheme = getTelegramColorScheme();
+
+  if (telegramColorScheme) {
+    return telegramColorScheme;
+  }
+
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
@@ -24,14 +31,28 @@ export function useTheme() {
       root.setAttribute('data-theme', theme);
     }
     localStorage.setItem(STORAGE_KEY, theme);
+
+    const webApp = getTelegramWebApp();
+    const backgroundColor = getComputedStyle(root).getPropertyValue('--bg-root').trim();
+
+    if (backgroundColor) {
+      webApp?.setBackgroundColor?.(backgroundColor);
+      webApp?.setHeaderColor?.(backgroundColor);
+    }
   }, [theme]);
 
   useEffect(() => {
     if (theme !== 'system') return;
+
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = () => setThemeRaw('system');
     mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    const unsubscribeTelegram = subscribeTelegramThemeChanged(handler);
+
+    return () => {
+      mq.removeEventListener('change', handler);
+      unsubscribeTelegram();
+    };
   }, [theme]);
 
   const setTheme = useCallback((t: Theme) => setThemeRaw(t), []);

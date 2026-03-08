@@ -1,54 +1,54 @@
-name: Budget_bot workflow
-
-on: [push]
-
-jobs:
-  build_and_push_to_docker_hub:
-    name: Push Docker image to Docker Hub
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@v2
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      - name: Login to Docker
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Push bot to Docker Hub
-        uses: docker/build-push-action@v2
-        with:
-          context: bot/
-          push: true
-          tags: shurakostenko/budget_bot:latest
-          file: bot/Dockerfile
-
-  deploy:
-      runs-on: ubuntu-latest
-      needs: build_and_push_to_docker_hub
-      steps:
-        - name: executing remote ssh commands to deploy
-          uses: appleboy/ssh-action@master
-          with:
-            host: ${{ secrets.HOST }}
-            username: ${{ secrets.USER }}
-            key: ${{ secrets.SSH_KEY }}
-            passphrase: ${{ secrets.PASSPHRASE }}
-            script: |
-              cd budget_bot/bot/
-              rm ./.env
-              touch ./.env
-              echo DB_HOST=${{ secrets.DB_HOST }} >> ./.env
-              echo DB_PORT=${{ secrets.DB_PORT }} >> ./.env
-              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> ./.env
-              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> ./.env
-              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> ./.env
-              echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> ./.env
-              echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> ./.env
-              echo PGDATA=/var/lib/postgresql/data/pgdata >> ./.env
-              git pull
-              docker-compose down
-              docker-compose up -d
-              docker cp ../database_scripts/Scripts/ bot_db_1:/Scripts
-              docker exec -i bot_db_1 sh -c '/Scripts/run_func_scripts.sh'
+#name: Budget_bot workflow
+#
+#on: [push]
+#
+#jobs:
+#  build_and_push_to_docker_hub:
+#    name: Push Docker image to Docker Hub
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out the repo
+#        uses: actions/checkout@v2
+#      - name: Set up Docker Buildx
+#        uses: docker/setup-buildx-action@v1
+#      - name: Login to Docker
+#        uses: docker/login-action@v1
+#        with:
+#          username: ${{ secrets.DOCKER_USERNAME }}
+#          password: ${{ secrets.DOCKER_PASSWORD }}
+#      - name: Push bot to Docker Hub
+#        uses: docker/build-push-action@v2
+#        with:
+#          context: bot/
+#          push: true
+#          tags: shurakostenko/budget_bot:latest
+#          file: bot/Dockerfile
+#
+#  deploy:
+#      runs-on: ubuntu-latest
+#      needs: build_and_push_to_docker_hub
+#      steps:
+#        - name: executing remote ssh commands to deploy
+#          uses: appleboy/ssh-action@master
+#          with:
+#            host: ${{ secrets.HOST }}
+#            username: ${{ secrets.USER }}
+#            key: ${{ secrets.SSH_KEY }}
+#            passphrase: ${{ secrets.PASSPHRASE }}
+#            script: |
+#              cd budget_bot/bot/
+#              rm ./.env
+#              touch ./.env
+#              echo DB_HOST=${{ secrets.DB_HOST }} >> ./.env
+#              echo DB_PORT=${{ secrets.DB_PORT }} >> ./.env
+#              echo DB_DATABASE=${{ secrets.DB_DATABASE }} >> ./.env
+#              echo POSTGRES_USER=${{ secrets.POSTGRES_USER }} >> ./.env
+#              echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} >> ./.env
+#              echo DB_SCHEMA=${{ secrets.DB_SCHEMA }} >> ./.env
+#              echo BOT_TOKEN=${{ secrets.BOT_TOKEN }} >> ./.env
+#              echo PGDATA=/var/lib/postgresql/data/pgdata >> ./.env
+#              git pull
+#              docker-compose down
+#              docker-compose up -d
+#              docker cp ../database_scripts/Scripts/ bot_db_1:/Scripts
+#              docker exec -i bot_db_1 sh -c '/Scripts/run_func_scripts.sh'

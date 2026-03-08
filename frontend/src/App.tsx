@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ComponentType } from 'react';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
@@ -8,6 +8,7 @@ import Operations from './pages/Operations';
 import Exchange from './pages/Exchange';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
+import { bindTelegramBackButton } from './telegram';
 
 const PAGES: Record<Page, ComponentType<{ user: UserContext }>> = {
   dashboard: Dashboard,
@@ -20,6 +21,8 @@ export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const { user, loading, error } = useAuth();
   const PageComponent = PAGES[page];
+
+  useEffect(() => bindTelegramBackButton(page !== 'dashboard', () => setPage('dashboard')), [page]);
 
   if (loading) {
     return (

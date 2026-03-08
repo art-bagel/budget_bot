@@ -19,21 +19,28 @@ import type {
   ReverseOperationRequest,
   ReverseOperationResponse,
 } from './types';
+import { getTelegramInitData, getTelegramUserId } from './telegram';
 
 const API_BASE = '/api/v1';
 
-function getTelegramUserId(): string {
-  // Telegram WebApp — будет window.Telegram.WebApp.initDataUnsafe.user.id
-  // Локальная разработка — фиксированный тестовый id
-  return '1';
-}
-
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const telegramInitData = getTelegramInitData();
+  const telegramUserId = getTelegramUserId();
+
+  if (!telegramInitData && !telegramUserId) {
+    throw new Error('Открой приложение внутри Telegram WebApp или укажи VITE_DEV_TELEGRAM_USER_ID для локальной разработки.');
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Telegram-User-Id': getTelegramUserId(),
     ...(init?.headers as Record<string, string> || {}),
   };
+
+  if (telegramInitData) {
+    headers['X-Telegram-Init-Data'] = telegramInitData;
+  } else if (telegramUserId) {
+    headers['X-Telegram-User-Id'] = telegramUserId;
+  }
 
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
