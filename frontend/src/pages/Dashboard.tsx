@@ -16,6 +16,7 @@ import type { TransferSource, TransferTarget } from '../components/TransferDialo
 import CategoryDialog from '../components/CategoryDialog';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
+import IncomeDialog from '../components/IncomeDialog';
 
 
 export default function Dashboard({ user }: { user: UserContext }) {
@@ -24,6 +25,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [error, setError] = useState<string | null>(null);
 
   const [showBankDetail, setShowBankDetail] = useState(false);
+  const [showIncomeDialog, setShowIncomeDialog] = useState(false);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
   const [swipeSourceId, setSwipeSourceId] = useState<number | null>(null);
@@ -650,6 +652,14 @@ export default function Dashboard({ user }: { user: UserContext }) {
         />
       )}
 
+      {showIncomeDialog && (
+        <IncomeDialog
+          user={user}
+          onClose={() => setShowIncomeDialog(false)}
+          onSuccess={() => { setShowIncomeDialog(false); void loadOverview(); }}
+        />
+      )}
+
       {showBankDetail && (
         <div className="modal-backdrop" onClick={() => setShowBankDetail(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -674,9 +684,16 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 </li>
               ))}
             </ul>
-            <div className="modal-actions">
-              <button className="btn btn--primary" type="button" onClick={() => setShowBankDetail(false)}>
+            <div className="modal-actions modal-actions--split">
+              <button className="btn" type="button" onClick={() => setShowBankDetail(false)}>
                 Закрыть
+              </button>
+              <button
+                className="btn btn--primary"
+                type="button"
+                onClick={() => { setShowBankDetail(false); setShowIncomeDialog(true); }}
+              >
+                Пополнить
               </button>
             </div>
           </div>
