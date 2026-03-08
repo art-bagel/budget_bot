@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   db:
-    image: postgres:13.1
+    image: postgres:17
     volumes:
       - pgdata:/var/lib/postgresql/data/pgdata
     restart: on-failure
@@ -11,14 +11,14 @@ services:
     env_file:
       - ./.env
 
-  bot:
-    image: shurakostenko/budget_bot:latest
-    command: sh -c "python -m main"
-    env_file:
-      - ./.env
-    restart: always
-    depends_on:
-      - db
+#  bot:
+#    image: shurakostenko/budget_bot:latest
+#    command: sh -c "python -m main"
+#    env_file:
+#      - ./.env
+#    restart: always
+#    depends_on:
+#      - db
 
 volumes:
   pgdata:
