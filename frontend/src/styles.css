@@ -358,6 +358,28 @@ p { margin: 0; }
   border: 1px solid var(--border);
 }
 
+.balance-card--draggable {
+  cursor: grab;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+
+.balance-card--droppable {
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.balance-card--dragging {
+  opacity: 0.45;
+}
+
+.balance-card--drop-target {
+  background: var(--tag-in-bg);
+  border-color: var(--text-accent);
+}
+
+.dashboard-transfer-source {
+  margin-bottom: 16px;
+}
+
 .balance-card__head {
   display: flex;
   justify-content: space-between;
@@ -416,9 +438,24 @@ p { margin: 0; }
   border-top: 1px solid var(--border);
 }
 
+.list-row--draggable {
+  cursor: grab;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.list-row--dragging {
+  opacity: 0.45;
+}
+
+.list-row--drop-target {
+  background: var(--tag-in-bg);
+  border-radius: var(--radius-s);
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .list-row:first-child {
   border-top: 0;
-  padding-top: 0;
 }
 
 .list-row__title {
@@ -472,6 +509,36 @@ p { margin: 0; }
 .history-line {
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 16, 20, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 150;
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-elevated);
+  padding: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
 }
 
 /* ── Inputs ──────────────────────────────────────── */

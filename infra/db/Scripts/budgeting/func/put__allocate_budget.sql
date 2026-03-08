@@ -22,6 +22,7 @@ DECLARE
     _base_currency_code char(3);
     _from_kind text;
     _to_kind text;
+    _to_name text;
     _from_balance numeric(20, 2);
     _operation_id bigint;
 BEGIN
@@ -59,8 +60,8 @@ BEGIN
         RAISE EXCEPTION 'Source category % cannot be of kind %', _from_category_id, _from_kind;
     END IF;
 
-    SELECT kind
-    INTO _to_kind
+    SELECT kind, name
+    INTO _to_kind, _to_name
     FROM categories
     WHERE id = _to_category_id
       AND user_id = _user_id
@@ -70,8 +71,12 @@ BEGIN
         RAISE EXCEPTION 'Unknown active destination category %', _to_category_id;
     END IF;
 
-    IF _to_kind IN ('group', 'system') THEN
+    IF _to_kind = 'group' THEN
         RAISE EXCEPTION 'Destination category % cannot be of kind %', _to_category_id, _to_kind;
+    END IF;
+
+    IF _to_kind = 'system' AND _to_name <> 'Unallocated' THEN
+        RAISE EXCEPTION 'Destination system category % is not supported', _to_category_id;
     END IF;
 
     SELECT COALESCE(sum(amount), 0)
