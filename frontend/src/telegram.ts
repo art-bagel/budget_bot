@@ -73,6 +73,17 @@ export function initTelegramWebApp(): void {
   webApp.ready();
   webApp.expand();
   webApp.disableVerticalSwipes?.();
+  webApp.enableClosingConfirmation?.();
+
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+  });
 
   const rootStyles = getComputedStyle(document.documentElement);
   const backgroundColor = rootStyles.getPropertyValue('--bg-root').trim();
