@@ -629,16 +629,25 @@ p { margin: 0; }
   color: var(--text-secondary);
 }
 
+/* When modal is open, darken html bg so keyboard rounded corners
+   don't show the light page background (white-corner artefact) */
+html:has(.modal-backdrop) {
+  background-color: rgb(12, 16, 20);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(12, 16, 20, 0.42);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* Extend 300px below viewport so keyboard corner areas are also covered */
+  bottom: -300px;
+  background: rgba(12, 16, 20, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 16px;
+  /* safe-area-inset-top default 56px covers Telegram native header on most devices */
+  padding: calc(env(safe-area-inset-top, 56px) + 12px) 16px 16px;
   z-index: 150;
   overflow-y: auto;
 }
