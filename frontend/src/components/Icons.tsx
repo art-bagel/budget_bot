@@ -8,10 +8,6 @@ export function IconOperations() {
   return <svg viewBox="0 0 24 24" {...s}><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg>;
 }
 
-export function IconCategories() {
-  return <svg viewBox="0 0 24 24" {...s}><path d="M3 7h18M3 12h18M3 17h12"/></svg>;
-}
-
 export function IconExchange() {
   return <svg viewBox="0 0 24 24" {...s}><path d="M7 10l-3 3 3 3"/><path d="M4 13h13"/><path d="M17 14l3-3-3-3"/><path d="M20 11H7"/></svg>;
 }
