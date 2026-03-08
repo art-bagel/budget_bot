@@ -55,6 +55,30 @@ npm run dev
 
 После запуска frontend открой `http://localhost:8080`.
 
+### Запуск через Docker Compose
+
+В `infra` есть compose для полного web-стека: PostgreSQL + API + frontend.
+
+1. Скопируй переменные:
+
+```bash
+cd infra
+cp .env.example .env
+```
+
+2. Заполни `TELEGRAM_BOT_TOKEN` в `.env`
+
+3. Подними стек:
+
+```bash
+docker compose up --build -d
+```
+
+После запуска:
+
+- frontend: `http://localhost:8080`
+- backend healthcheck: `http://localhost:8000/health`
+
 Сейчас UI получает данные из mock endpoint:
 
 - `GET /health`
