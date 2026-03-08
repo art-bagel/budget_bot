@@ -621,6 +621,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                     return (
                       <li
                         className={[
+                          'dashboard-budget-row',
                           'list-row',
                           'list-row--interactive',
                           'list-row--draggable',
@@ -662,13 +663,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           });
                         }}
                       >
-                        <div>
+                        <div className="dashboard-budget-row__main">
                           <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
                             Обычная категория · можно перетаскивать · нажми, чтобы редактировать
                           </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div className="dashboard-budget-row__side">
                           <div className="list-row__value">
                             {formatAmount(category.balance, category.currency_code)}
                           </div>
@@ -715,6 +716,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                     return (
                       <li
                         className={[
+                          'dashboard-budget-row',
                           'list-row',
                           'list-row--interactive',
                           'list-row--group',
@@ -753,14 +755,14 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           });
                         }}
                       >
-                        <div>
+                        <div className="dashboard-budget-row__main">
                           <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
                             Группа распределения · можно бросить сюда · нажми, чтобы редактировать состав
                           </div>
                           <div className="list-row__meta">{groupComposition}</div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div className="dashboard-budget-row__side">
                           <div className="list-row__value">
                             {formatAmount(groupBalance, category.currency_code)}
                           </div>

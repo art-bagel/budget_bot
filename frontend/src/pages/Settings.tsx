@@ -3,7 +3,6 @@ import type { ComponentType } from 'react';
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
-import Categories from './Categories';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
@@ -62,8 +61,6 @@ export default function Settings({ user }: { user: UserContext }) {
           </ul>
         </div>
       </section>
-
-      <Categories user={user} embedded />
 
       {/* Data */}
       <section className="settings-section">

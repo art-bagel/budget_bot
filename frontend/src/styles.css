@@ -402,6 +402,20 @@ p { margin: 0; }
   border-top: 1px solid var(--border);
 }
 
+.dashboard-budget-row {
+  min-height: 92px;
+}
+
+.dashboard-budget-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-budget-row__side {
+  text-align: right;
+  flex-shrink: 0;
+}
+
 .balance-card__head {
   display: flex;
   justify-content: space-between;
