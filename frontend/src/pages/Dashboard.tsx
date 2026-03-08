@@ -24,15 +24,81 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
-  const [tapSourceId, setTapSourceId] = useState<number | null>(null);
+  const [swipeSourceId, setSwipeSourceId] = useState<number | null>(null);
   const [transferSource, setTransferSource] = useState<TransferSource | null>(null);
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
-  const suppressCategoryClickUntilRef = useRef(0);
+  const suppressClickUntilRef = useRef(0);
   const [groupMembersByGroupId, setGroupMembersByGroupId] = useState<Record<number, GroupMember[]>>({});
   const [createDialogKind, setCreateDialogKind] = useState<'regular' | 'group' | null>(null);
 
-  const activeSourceId = draggedCategoryId ?? tapSourceId;
+  const activeSourceId = draggedCategoryId ?? swipeSourceId;
+
+  /* ── swipe tracking ─────────────────────────────── */
+
+  const swipeRef = useRef<{
+    startX: number;
+    startY: number;
+    sourceId: number;
+    decided: boolean;
+    isHorizontal: boolean;
+    element: HTMLElement | null;
+  } | null>(null);
+
+  const handleSwipeStart = (sourceId: number, e: React.TouchEvent) => {
+    swipeRef.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      sourceId,
+      decided: false,
+      isHorizontal: false,
+      element: e.currentTarget as HTMLElement,
+    };
+  };
+
+  const handleSwipeMove = (e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    if (!s || !s.element) return;
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - s.startX;
+    const dy = touch.clientY - s.startY;
+
+    if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      s.decided = true;
+      s.isHorizontal = Math.abs(dx) > Math.abs(dy);
+    }
+
+    if (s.isHorizontal) {
+      const offset = Math.min(0, Math.max(-80, dx));
+      s.element.style.transform = `translateX(${offset}px)`;
+      s.element.style.transition = 'none';
+    }
+  };
+
+  const handleSwipeEnd = (e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    swipeRef.current = null;
+    if (!s) return;
+
+    if (s.element) {
+      s.element.style.transition = 'transform 0.2s ease';
+      s.element.style.transform = '';
+      const el = s.element;
+      setTimeout(() => { el.style.transition = ''; }, 200);
+    }
+
+    if (s.decided && s.isHorizontal) {
+      suppressClickUntilRef.current = Date.now() + 300;
+      const dx = e.changedTouches[0].clientX - s.startX;
+      if (dx < -50) {
+        setSwipeSourceId(s.sourceId);
+        navigator.vibrate?.(20);
+      }
+    }
+  };
+
+  /* ── data loading ───────────────────────────────── */
 
   const loadOverview = async () => {
     setLoading(true);
@@ -94,10 +160,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
     };
   }, [overview]);
 
+  /* ── desktop DnD handlers ──────────────────────── */
+
   const handleDragStart = (source: TransferSource, event: React.DragEvent) => {
     event.dataTransfer.setData('text/plain', '');
     event.dataTransfer.effectAllowed = 'move';
-    suppressCategoryClickUntilRef.current = Date.now() + 250;
+    suppressClickUntilRef.current = Date.now() + 250;
     setDraggedCategoryId(source.category_id);
   };
 
@@ -105,6 +173,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setDraggedCategoryId(null);
     setDropTargetCategoryId(null);
   };
+
+  /* ── shared transfer logic ─────────────────────── */
 
   const completeTransfer = (sourceId: number, target: TransferTarget) => {
     if (!overview) return;
@@ -124,7 +194,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     if (!source || target.kind === 'system' || sourceId === target.category_id) {
       setDraggedCategoryId(null);
       setDropTargetCategoryId(null);
-      setTapSourceId(null);
+      setSwipeSourceId(null);
       return;
     }
 
@@ -132,7 +202,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setTransferTarget(target);
     setDraggedCategoryId(null);
     setDropTargetCategoryId(null);
-    setTapSourceId(null);
+    setSwipeSourceId(null);
   };
 
   const handleDropOnCategory = (target: TransferTarget) => {
@@ -144,13 +214,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
   };
 
   const openCategoryDialog = (category: DashboardBudgetCategory) => {
-    if (Date.now() < suppressCategoryClickUntilRef.current) return;
+    if (Date.now() < suppressClickUntilRef.current) return;
     setSelectedCategory(category);
-  };
-
-  const handleCategoryTransfer = (category: DashboardBudgetCategory) => {
-    setSelectedCategory(null);
-    setTapSourceId(category.category_id);
   };
 
   const handleDialogSuccess = async () => {
@@ -158,9 +223,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setTransferTarget(null);
     setSelectedCategory(null);
     setCreateDialogKind(null);
-    setTapSourceId(null);
+    setSwipeSourceId(null);
     await loadOverview();
   };
+
+  /* ── render ─────────────────────────────────────── */
 
   if (loading) {
     return (
@@ -200,10 +267,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
     return acc;
   }, {});
 
-  const tapSourceName = tapSourceId !== null
-    ? (tapSourceId === user.unallocated_category_id
+  const swipeSourceName = swipeSourceId !== null
+    ? (swipeSourceId === user.unallocated_category_id
         ? 'Свободный остаток'
-        : overview.budget_categories.find((c) => c.category_id === tapSourceId)?.name || '')
+        : overview.budget_categories.find((c) => c.category_id === swipeSourceId)?.name || '')
     : '';
 
   return (
@@ -257,22 +324,22 @@ export default function Dashboard({ user }: { user: UserContext }) {
           </div>
         </div>
         <div className="panel">
-          {tapSourceId !== null ? (
+          {swipeSourceId !== null ? (
             <div className="transfer-banner">
               <span>
-                Выбрано: <strong>{tapSourceName}</strong>. Нажми на категорию или группу для перевода.
+                Из <strong>{swipeSourceName}</strong> — нажми куда перевести
               </span>
               <button
                 className="btn btn--small"
                 type="button"
-                onClick={() => setTapSourceId(null)}
+                onClick={() => setSwipeSourceId(null)}
               >
                 Отмена
               </button>
             </div>
           ) : (
             <div className="operations-note">
-              Нажми на свободный остаток, чтобы выбрать источник перевода. На компьютере также можно перетаскивать.
+              Свайпни влево по источнику, чтобы начать перевод. На компьютере можно перетаскивать.
             </div>
           )}
           <div className="dashboard-transfer-source">
@@ -280,10 +347,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
               className={[
                 'balance-card',
                 'balance-card--draggable',
+                'swipeable',
                 activeSourceId !== null && activeSourceId !== freeBudgetSource.category_id
-                  ? 'balance-card--droppable'
+                  ? 'balance-card--valid-target'
                   : '',
-                activeSourceId === freeBudgetSource.category_id ? 'balance-card--tap-selected' : '',
+                activeSourceId === freeBudgetSource.category_id ? 'balance-card--active-source' : '',
                 draggedCategoryId === freeBudgetSource.category_id ? 'balance-card--dragging' : '',
                 dropTargetCategoryId === freeBudgetTarget.category_id ? 'balance-card--drop-target' : '',
               ].join(' ').trim()}
@@ -306,13 +374,17 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 event.preventDefault();
                 handleDropOnCategory(freeBudgetTarget);
               }}
+              onTouchStart={(e) => {
+                if (overview.free_budget_in_base > 0) handleSwipeStart(freeBudgetSource.category_id, e);
+              }}
+              onTouchMove={handleSwipeMove}
+              onTouchEnd={handleSwipeEnd}
               onClick={() => {
-                if (activeSourceId === freeBudgetSource.category_id) {
-                  setTapSourceId(null);
+                if (Date.now() < suppressClickUntilRef.current) return;
+                if (swipeSourceId === freeBudgetSource.category_id) {
+                  setSwipeSourceId(null);
                 } else if (activeSourceId !== null) {
                   completeTransfer(activeSourceId, freeBudgetTarget);
-                } else if (overview.free_budget_in_base > 0) {
-                  setTapSourceId(freeBudgetSource.category_id);
                 }
               }}
             >
@@ -323,7 +395,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
               </strong>
               <div className="balance-card__sub">
-                Нажми, чтобы выбрать как источник перевода. Сюда тоже можно вернуть деньги из категории.
+                Свайпни влево для перевода. Сюда тоже можно вернуть из категории.
               </div>
             </div>
           </div>
@@ -357,8 +429,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           'list-row',
                           'list-row--interactive',
                           'list-row--draggable',
+                          'swipeable',
                           draggedCategoryId === category.category_id ? 'list-row--dragging' : '',
-                          isActiveSource ? 'list-row--tap-selected' : '',
+                          isActiveSource ? 'list-row--active-source' : '',
                           isDropTarget ? 'list-row--drop-target' : '',
                           isValidTarget ? 'list-row--valid-target' : '',
                         ].join(' ').trim()}
@@ -368,10 +441,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         tabIndex={0}
                         onDragStart={(e) => handleDragStart(category, e)}
                         onDragEnd={handleDragEnd}
+                        onTouchStart={(e) => handleSwipeStart(category.category_id, e)}
+                        onTouchMove={handleSwipeMove}
+                        onTouchEnd={handleSwipeEnd}
                         onClick={() => {
-                          if (Date.now() < suppressCategoryClickUntilRef.current) return;
-                          if (isActiveSource) {
-                            setTapSourceId(null);
+                          if (Date.now() < suppressClickUntilRef.current) return;
+                          if (swipeSourceId === category.category_id) {
+                            setSwipeSourceId(null);
                           } else if (activeSourceId !== null) {
                             completeTransfer(activeSourceId, {
                               category_id: category.category_id,
@@ -413,8 +489,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
                             {isValidTarget
-                              ? 'Нажми сюда, чтобы перевести'
-                              : 'Нажми, чтобы редактировать'}
+                              ? 'Нажми, чтобы перевести сюда'
+                              : 'Свайпни влево для перевода · нажми для редактирования'}
                           </div>
                         </div>
                         <div className="dashboard-budget-row__side">
@@ -518,8 +594,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
                             {isValidTarget
-                              ? 'Нажми сюда, чтобы перевести'
-                              : 'Группа распределения · нажми, чтобы редактировать состав'}
+                              ? 'Нажми, чтобы перевести сюда'
+                              : 'Группа распределения · нажми для редактирования'}
                           </div>
                           <div className="list-row__meta">{groupComposition}</div>
                         </div>
@@ -553,11 +629,6 @@ export default function Dashboard({ user }: { user: UserContext }) {
           category={selectedCategory}
           onClose={() => setSelectedCategory(null)}
           onSuccess={() => void handleDialogSuccess()}
-          onTransfer={
-            selectedCategory.kind === 'regular'
-              ? () => handleCategoryTransfer(selectedCategory)
-              : undefined
-          }
         />
       )}
 

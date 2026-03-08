@@ -46,11 +46,10 @@ interface Props {
   category: DashboardBudgetCategory;
   onClose: () => void;
   onSuccess: () => void;
-  onTransfer?: () => void;
 }
 
 
-export default function CategoryDialog({ category, onClose, onSuccess, onTransfer }: Props) {
+export default function CategoryDialog({ category, onClose, onSuccess }: Props) {
   const [nameDraft, setNameDraft] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -292,19 +291,6 @@ export default function CategoryDialog({ category, onClose, onSuccess, onTransfe
           <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
             {error}
           </p>
-        )}
-
-        {onTransfer && (
-          <div className="form-row">
-            <button
-              className="btn btn--outline-accent"
-              type="button"
-              onClick={onTransfer}
-              disabled={isBusy}
-            >
-              Перевести отсюда
-            </button>
-          </div>
         )}
 
         <div className="modal-actions modal-actions--split">
