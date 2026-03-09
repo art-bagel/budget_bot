@@ -5,6 +5,7 @@ import type {
   DashboardOverview,
   GroupMember,
   IncomeSource,
+  ParentGroup,
   AllocateBudgetRequest,
   AllocateBudgetResponse,
   AllocateGroupBudgetRequest,
@@ -91,6 +92,10 @@ export async function updateCategory(categoryId: number, name: string): Promise<
 
 export async function fetchGroupMembers(groupId: number): Promise<GroupMember[]> {
   return apiFetch<GroupMember[]>(`/groups/${groupId}/members`);
+}
+
+export async function fetchCategoryParentGroups(categoryId: number): Promise<ParentGroup[]> {
+  return apiFetch<ParentGroup[]>(`/categories/${categoryId}/parent-groups`);
 }
 
 export async function replaceGroupMembers(

@@ -102,14 +102,47 @@ BEGIN
         RAISE EXCEPTION 'Insufficient budget in category %', _from_category_id;
     END IF;
 
+    WITH RECURSIVE expanded_members AS (
+        SELECT
+            gm.child_category_id AS category_id,
+            gm.share AS effective_share,
+            ARRAY[_group_id, gm.child_category_id]::bigint[] AS path
+        FROM group_members gm
+        JOIN categories c
+          ON c.id = gm.child_category_id
+        WHERE gm.group_id = _group_id
+          AND c.user_id = _user_id
+          AND c.is_active
+
+        UNION ALL
+
+        SELECT
+            gm.child_category_id,
+            em.effective_share * gm.share,
+            em.path || gm.child_category_id
+        FROM expanded_members em
+        JOIN categories parent
+          ON parent.id = em.category_id
+        JOIN group_members gm
+          ON gm.group_id = em.category_id
+        JOIN categories c
+          ON c.id = gm.child_category_id
+        WHERE parent.kind = 'group'
+          AND c.user_id = _user_id
+          AND c.is_active
+          AND NOT gm.child_category_id = ANY(em.path)
+    ),
+    leaf_members AS (
+        SELECT em.category_id
+        FROM expanded_members em
+        JOIN categories c
+          ON c.id = em.category_id
+        WHERE c.kind = 'regular'
+        GROUP BY em.category_id
+    )
     SELECT count(*)
     INTO _member_count
-    FROM group_members gm
-    JOIN categories c
-      ON c.id = gm.child_category_id
-    WHERE gm.group_id = _group_id
-      AND c.user_id = _user_id
-      AND c.is_active;
+    FROM leaf_members;
 
     IF _member_count = 0 THEN
         RAISE EXCEPTION 'Group % has no active child categories', _group_id;
@@ -124,14 +157,45 @@ BEGIN
     VALUES (_operation_id, _from_category_id, _base_currency_code, -round(_amount_in_base, 2));
 
     FOR _member IN
-        SELECT gm.child_category_id, gm.share
-        FROM group_members gm
+        WITH RECURSIVE expanded_members AS (
+            SELECT
+                gm.child_category_id AS category_id,
+                gm.share AS effective_share,
+                ARRAY[_group_id, gm.child_category_id]::bigint[] AS path
+            FROM group_members gm
+            JOIN categories c
+              ON c.id = gm.child_category_id
+            WHERE gm.group_id = _group_id
+              AND c.user_id = _user_id
+              AND c.is_active
+
+            UNION ALL
+
+            SELECT
+                gm.child_category_id,
+                em.effective_share * gm.share,
+                em.path || gm.child_category_id
+            FROM expanded_members em
+            JOIN categories parent
+              ON parent.id = em.category_id
+            JOIN group_members gm
+              ON gm.group_id = em.category_id
+            JOIN categories c
+              ON c.id = gm.child_category_id
+            WHERE parent.kind = 'group'
+              AND c.user_id = _user_id
+              AND c.is_active
+              AND NOT gm.child_category_id = ANY(em.path)
+        )
+        SELECT
+            em.category_id AS child_category_id,
+            sum(em.effective_share) AS share
+        FROM expanded_members em
         JOIN categories c
-          ON c.id = gm.child_category_id
-        WHERE gm.group_id = _group_id
-          AND c.user_id = _user_id
-          AND c.is_active
-        ORDER BY gm.child_category_id
+          ON c.id = em.category_id
+        WHERE c.kind = 'regular'
+        GROUP BY em.category_id
+        ORDER BY em.category_id
     LOOP
         _idx := _idx + 1;
 

@@ -21,6 +21,7 @@ DECLARE
     _member_count integer;
     _total_share numeric := 0;
     _group_kind text;
+    _child_kind text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -61,17 +62,44 @@ BEGIN
             RAISE EXCEPTION 'Invalid group share at position %', _idx;
         END IF;
 
-        PERFORM 1
+        SELECT kind
+        INTO _child_kind
         FROM categories
         WHERE id = _child_category_ids[_idx]
           AND user_id = _user_id
-          AND kind = 'regular'
           AND is_active;
 
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'Child category % must be an active regular category owned by user %',
+        IF _child_kind IS NULL OR _child_kind = 'system' THEN
+            RAISE EXCEPTION 'Child category % must be an active regular category or group owned by user %',
                 _child_category_ids[_idx],
                 _user_id;
+        END IF;
+
+        IF _child_kind = 'group' THEN
+            PERFORM 1
+            FROM (
+                WITH RECURSIVE descendants AS (
+                    SELECT gm.child_category_id
+                    FROM group_members gm
+                    WHERE gm.group_id = _child_category_ids[_idx]
+
+                    UNION
+
+                    SELECT gm.child_category_id
+                    FROM group_members gm
+                    JOIN descendants d
+                      ON d.child_category_id = gm.group_id
+                )
+                SELECT child_category_id
+                FROM descendants
+            ) graph
+            WHERE child_category_id = _group_id;
+
+            IF FOUND THEN
+                RAISE EXCEPTION 'Group % cannot contain % because it would create a cycle',
+                    _group_id,
+                    _child_category_ids[_idx];
+            END IF;
         END IF;
 
         INSERT INTO group_members (group_id, child_category_id, share)

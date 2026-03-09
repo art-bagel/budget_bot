@@ -13,6 +13,7 @@ router = APIRouter(prefix='/api/v1/groups', tags=['groups'])
 class GroupMemberItem(BaseModel):
     child_category_id: int
     child_category_name: str
+    child_category_kind: str
     share: float
 
 

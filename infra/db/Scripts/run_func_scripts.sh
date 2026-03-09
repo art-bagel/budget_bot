@@ -19,6 +19,7 @@ FILES=(
     "get__categories.sql"
     "get__income_sources.sql"
     "get__group_members.sql"
+    "get__category_parent_groups.sql"
     "get__bank_snapshot.sql"
     "get__budget_snapshot.sql"
     "get__operations_history.sql"

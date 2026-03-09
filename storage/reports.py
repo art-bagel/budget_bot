@@ -10,6 +10,7 @@ class Reports(DataBase):
     F_GET__CATEGORIES = 'get__categories'
     F_GET__INCOME_SOURCES = 'get__income_sources'
     F_GET__GROUP_MEMBERS = 'get__group_members'
+    F_GET__CATEGORY_PARENT_GROUPS = 'get__category_parent_groups'
     F_GET__BANK_SNAPSHOT = 'get__bank_snapshot'
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
     F_GET__OPERATIONS_HISTORY = 'get__operations_history'
@@ -60,6 +61,20 @@ class Reports(DataBase):
             self._fn(self.F_GET__GROUP_MEMBERS),
             user_id,
             group_id,
+        )
+        return result if result else []
+
+    async def get__category_parent_groups(self, user_id: int, category_id: int) -> list[dict]:
+        """
+        Возвращает активные родительские группы, в которые входит категория или группа.
+        :param user_id: Идентификатор владельца категории.
+        :param category_id: Идентификатор категории или группы.
+        :return: Список словарей с родительскими группами.
+        """
+        result = await self.call_function(
+            self._fn(self.F_GET__CATEGORY_PARENT_GROUPS),
+            user_id,
+            category_id,
         )
         return result if result else []
 

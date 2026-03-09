@@ -38,6 +38,11 @@ class ArchiveCategoryResponse(BaseModel):
     is_active: bool
 
 
+class ParentGroupItem(BaseModel):
+    group_id: int
+    group_name: str
+
+
 @router.get('', response_model=List[CategoryItem])
 async def get_categories(
     user: TelegramUser = Depends(get_telegram_user),
@@ -83,3 +88,11 @@ async def archive_category(
         category_id=category_id,
     )
     return ArchiveCategoryResponse(**result)
+
+
+@router.get('/{category_id}/parent-groups', response_model=List[ParentGroupItem])
+async def get_category_parent_groups(
+    category_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> list:
+    return await reports.get__category_parent_groups(user.user_id, category_id)

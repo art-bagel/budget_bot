@@ -15,6 +15,7 @@ AS $function$
 DECLARE
     _category_kind text;
     _category_name text;
+    _parent_group_names text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -31,6 +32,19 @@ BEGIN
 
     IF _category_kind = 'system' THEN
         RAISE EXCEPTION 'System category % cannot be archived', _category_id;
+    END IF;
+
+    SELECT string_agg(parent.name, ', ' ORDER BY parent.name)
+    INTO _parent_group_names
+    FROM group_members gm
+    JOIN categories parent
+      ON parent.id = gm.group_id
+    WHERE gm.child_category_id = _category_id
+      AND parent.user_id = _user_id
+      AND parent.is_active;
+
+    IF _parent_group_names IS NOT NULL THEN
+        RAISE EXCEPTION 'Category % is still used in groups: %', _category_id, _parent_group_names;
     END IF;
 
     DELETE FROM group_members

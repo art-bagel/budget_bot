@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   archiveCategory,
+  fetchCategoryParentGroups,
   fetchCategories,
   fetchGroupMembers,
   replaceGroupMembers,
@@ -11,6 +12,7 @@ import { useModalOpen } from '../hooks/useModalOpen';
 import type {
   Category,
   DashboardBudgetCategory,
+  ParentGroup,
 } from '../types';
 
 
@@ -60,15 +62,32 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
   const [groupRows, setGroupRows] = useState<GroupDraftRow[]>([createDraftRow(1)]);
   const [initialGroupRowsSnapshot, setInitialGroupRowsSnapshot] = useState('[]');
-  const [groupRegularCategories, setGroupRegularCategories] = useState<Category[]>([]);
+  const [groupSelectableCategories, setGroupSelectableCategories] = useState<Category[]>([]);
+  const [parentGroups, setParentGroups] = useState<ParentGroup[]>([]);
   const [loadingGroupSettings, setLoadingGroupSettings] = useState(false);
-  const requestIdRef = useRef(0);
+  const groupRequestIdRef = useRef(0);
+  const parentGroupsRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const requestId = parentGroupsRequestIdRef.current + 1;
+    parentGroupsRequestIdRef.current = requestId;
+
+    void fetchCategoryParentGroups(category.category_id)
+      .then((groups) => {
+        if (parentGroupsRequestIdRef.current !== requestId) return;
+        setParentGroups(groups);
+      })
+      .catch(() => {
+        if (parentGroupsRequestIdRef.current !== requestId) return;
+        setParentGroups([]);
+      });
+  }, [category.category_id]);
 
   useEffect(() => {
     if (category.kind !== 'group') return;
 
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
+    const requestId = groupRequestIdRef.current + 1;
+    groupRequestIdRef.current = requestId;
     setLoadingGroupSettings(true);
     setError(null);
 
@@ -77,7 +96,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
       fetchGroupMembers(category.category_id),
     ])
       .then(([loadedCategories, members]) => {
-        if (requestIdRef.current !== requestId) return;
+        if (groupRequestIdRef.current !== requestId) return;
 
         const nextRows = members.length > 0
           ? members.map((member, index) => ({
@@ -87,18 +106,20 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
             }))
           : [createDraftRow(1)];
 
-        setGroupRegularCategories(
-          loadedCategories.filter((item) => item.kind === 'regular' && item.is_active),
+        setGroupSelectableCategories(
+          loadedCategories.filter(
+            (item) => item.is_active && item.kind !== 'system' && item.id !== category.category_id,
+          ),
         );
         setGroupRows(nextRows);
         setInitialGroupRowsSnapshot(serializeGroupRows(nextRows));
       })
       .catch((reason: unknown) => {
-        if (requestIdRef.current !== requestId) return;
+        if (groupRequestIdRef.current !== requestId) return;
         setError(reason instanceof Error ? reason.message : String(reason));
       })
       .finally(() => {
-        if (requestIdRef.current === requestId) {
+        if (groupRequestIdRef.current === requestId) {
           setLoadingGroupSettings(false);
         }
       });
@@ -184,6 +205,12 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
       return;
     }
 
+    if (parentGroups.length > 0) {
+      setError(`Нельзя архивировать, пока элемент входит в группы: ${parentGroups.map((group) => group.group_name).join(', ')}.`);
+      setConfirmArchive(false);
+      return;
+    }
+
     setArchiving(true);
     setError(null);
 
@@ -216,6 +243,12 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
           <div className="operations-note">
             Тут можно переименовать категорию или убрать её в архив.
           </div>
+
+          {parentGroups.length > 0 && (
+            <div className="operations-note operations-note--warning">
+              Нельзя отправить в архив, пока элемент входит в группы: {parentGroups.map((group) => group.group_name).join(', ')}.
+            </div>
+          )}
 
           <div className="form-row">
             <input
@@ -251,9 +284,9 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                     disabled={saving}
                   >
                     <option value="">Выберите категорию</option>
-                    {groupRegularCategories.map((cat) => (
+                    {groupSelectableCategories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
-                        {cat.name}
+                        {cat.kind === 'group' ? `${cat.name} · группа` : cat.name}
                       </option>
                     ))}
                   </select>

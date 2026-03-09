@@ -299,6 +299,34 @@ export default function Dashboard({ user }: { user: UserContext }) {
     acc[category.category_id] = category.balance;
     return acc;
   }, {});
+  const categoryById = overview.budget_categories.reduce<Record<number, DashboardBudgetCategory>>((acc, item) => {
+    acc[item.category_id] = item;
+    return acc;
+  }, {});
+
+  const getNestedGroupBalance = (categoryId: number, visited = new Set<number>()): number => {
+    if (visited.has(categoryId)) {
+      return 0;
+    }
+
+    const category = categoryById[categoryId];
+
+    if (!category) {
+      return 0;
+    }
+
+    if (category.kind === 'regular') {
+      return regularCategoryBalanceById[categoryId] || 0;
+    }
+
+    const nextVisited = new Set(visited);
+    nextVisited.add(categoryId);
+
+    return (groupMembersByGroupId[categoryId] || []).reduce(
+      (sum, member) => sum + getNestedGroupBalance(member.child_category_id, nextVisited),
+      0,
+    );
+  };
 
   const swipeSourceName = swipeSourceId !== null
     ? (swipeSourceId === user.unallocated_category_id
@@ -546,12 +574,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
                     const groupMembers = groupMembersByGroupId[category.category_id] || [];
                     const groupComposition = groupMembers.length > 0
                       ? groupMembers
-                          .map((member) => `${member.child_category_name} ${Number((member.share * 100).toFixed(2))}%`)
+                          .map((member) => `${member.child_category_kind === 'group' ? 'Группа ' : ''}${member.child_category_name} ${Number((member.share * 100).toFixed(2))}%`)
                           .join(' · ')
                       : 'Состав группы пока не настроен';
                     const groupBalance = groupMembers.length > 0
                       ? groupMembers.reduce(
-                          (sum, member) => sum + (regularCategoryBalanceById[member.child_category_id] || 0),
+                          (sum, member) => sum + getNestedGroupBalance(member.child_category_id, new Set([category.category_id])),
                           0,
                         )
                       : 0;

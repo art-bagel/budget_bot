@@ -32,6 +32,7 @@ BEGIN
             jsonb_build_object(
                 'child_category_id', c.id,
                 'child_category_name', c.name,
+                'child_category_kind', c.kind,
                 'share', gm.share
             )
             ORDER BY c.id

@@ -18,7 +18,13 @@ export interface Category {
 export interface GroupMember {
   child_category_id: number;
   child_category_name: string;
+  child_category_kind: string;
   share: number;
+}
+
+export interface ParentGroup {
+  group_id: number;
+  group_name: string;
 }
 
 export interface Currency {
