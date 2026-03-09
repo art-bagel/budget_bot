@@ -88,8 +88,8 @@ function applySafeAreaVars(webApp: TelegramWebApp): void {
   const safeTop = webApp.safeAreaInset?.top ?? 0;
   const safeBottom = webApp.safeAreaInset?.bottom ?? 0;
   const contentTop = webApp.contentSafeAreaInset?.top ?? 0;
-  const fallbackHeaderHeight = 56;
-  const minimumTelegramTopOffset = 72;
+  const fallbackHeaderHeight = 52;
+  const minimumTelegramTopOffset = 64;
   const resolvedContentTop = Math.max(contentTop, safeTop + fallbackHeaderHeight, minimumTelegramTopOffset);
 
   root.style.setProperty('--tg-content-safe-area-inset-top', `${resolvedContentTop}px`);

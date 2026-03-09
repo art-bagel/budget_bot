@@ -745,7 +745,7 @@ body.modal-open {
   width: min(560px, 100%);
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-l) var(--radius-l) 0 0;
+  border-radius: var(--radius-l);
   box-shadow: var(--shadow-elevated);
   /*
    * Max-height = visual viewport (shrinks when keyboard opens) minus the
