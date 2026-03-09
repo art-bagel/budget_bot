@@ -13,6 +13,7 @@ class Context(DataBase):
     F_SET__ARCHIVE_CATEGORY = 'set__archive_category'
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
     F_SET__DELETE_USER_ACCOUNT = 'set__delete_user_account'
+    F_SET__UPDATE_USER_SETTINGS = 'set__update_user_settings'
 
     async def put__register_user_context(
         self,
@@ -117,6 +118,19 @@ class Context(DataBase):
             group_id,
             child_category_ids,
             shares,
+        )
+
+    async def set__update_user_settings(self, user_id: int, hints_enabled: bool) -> dict:
+        """
+        Обновляет настройки интерфейса пользователя.
+        :param user_id: Идентификатор пользователя.
+        :param hints_enabled: Показывать ли подсказки жестов.
+        :return: Словарь с обновлёнными настройками.
+        """
+        return await self.call_function(
+            self._fn(self.F_SET__UPDATE_USER_SETTINGS),
+            user_id,
+            hints_enabled,
         )
 
     async def set__delete_user_account(self, user_id: int) -> dict:

@@ -19,6 +19,7 @@ class RegisterResponse(BaseModel):
     unallocated_category_id: int
     fx_result_category_id: int
     base_currency_code: str
+    hints_enabled: bool
 
 
 class DeleteAccountResponse(BaseModel):

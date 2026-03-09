@@ -86,7 +86,8 @@ BEGIN
         'bank_account_id', _bank_account_id,
         'unallocated_category_id', _unallocated_category_id,
         'fx_result_category_id', _fx_result_category_id,
-        'base_currency_code', _base_currency_code
+        'base_currency_code', _base_currency_code,
+        'hints_enabled', (SELECT hints_enabled FROM users WHERE id = _user_id)
     );
 END
 $function$;

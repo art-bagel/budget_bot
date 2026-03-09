@@ -5,6 +5,7 @@ export interface UserContext {
   unallocated_category_id: number;
   fx_result_category_id: number;
   base_currency_code: string;
+  hints_enabled: boolean;
 }
 
 export interface Category {

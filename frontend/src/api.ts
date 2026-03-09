@@ -190,3 +190,10 @@ export async function archiveCategory(categoryId: number): Promise<{ category_id
     method: 'POST',
   });
 }
+
+export async function updateUserSettings(hintsEnabled: boolean): Promise<{ hints_enabled: boolean }> {
+  return apiFetch<{ hints_enabled: boolean }>('/user/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({ hints_enabled: hintsEnabled }),
+  });
+}

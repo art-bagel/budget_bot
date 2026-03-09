@@ -17,12 +17,14 @@ import CategoryDialog from '../components/CategoryDialog';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
+import { useHints } from '../hooks/useHints';
 
 
 export default function Dashboard({ user }: { user: UserContext }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { hintsEnabled } = useHints();
 
   const [showBankDetail, setShowBankDetail] = useState(false);
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
@@ -335,26 +337,21 @@ export default function Dashboard({ user }: { user: UserContext }) {
     <>
       <h1 className="page-title">Обзор</h1>
 
-      <section className="metrics">
-        <article
-          className="metric-card metric-card--accent metric-card--clickable"
-          role="button"
-          tabIndex={0}
-          onClick={() => setShowBankDetail(true)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
-        >
-          <span className="metric-card__label">Банк по себестоимости</span>
-          <strong className="metric-card__value">
-            {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
-          </strong>
-        </article>
-        <article className="metric-card">
-          <span className="metric-card__label">Бюджет по категориям</span>
-          <strong className="metric-card__value">
-            {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
-          </strong>
-        </article>
-      </section>
+      <article
+        className="hero-card hero-card--clickable"
+        role="button"
+        tabIndex={0}
+        onClick={() => setShowBankDetail(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+      >
+        <span className="hero-card__label">Банк по себестоимости</span>
+        <strong className="hero-card__value">
+          {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
+        </strong>
+        <span className="hero-card__sub">
+          Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
+        </span>
+      </article>
 
       <section className="section">
         <div className="section__header">
@@ -364,9 +361,6 @@ export default function Dashboard({ user }: { user: UserContext }) {
           </div>
         </div>
         <div className="panel">
-          <div className="transfer-banner">
-            <span>Свайп влево сразу открывает перевод бюджета. Свайп вправо по категории — расход.</span>
-          </div>
           <div className="dashboard-transfer-source">
             <div
               className={[
@@ -416,9 +410,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
               </strong>
               <div className="balance-card__sub">
-                {fxResultSummary || 'Свайпни влево для перевода. Сюда тоже можно вернуть из категории.'}
+                {fxResultSummary || (hintsEnabled ? 'Свайпни влево для перевода. Сюда тоже можно вернуть из категории.' : null)}
               </div>
-              {fxResultSummary ? (
+              {fxResultSummary && hintsEnabled ? (
                 <div className="balance-card__hint">
                   Свайпни влево для перевода. Сюда тоже можно вернуть из категории.
                 </div>
@@ -514,7 +508,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           <div className="list-row__sub">
                             {isValidTarget
                               ? 'Нажми, чтобы перевести сюда'
-                              : '← перевод · → расход · нажми для редактирования'}
+                              : hintsEnabled ? '← перевести · редактировать · потратить → ' : null}
                           </div>
                         </div>
                         <div className="dashboard-budget-row__side">

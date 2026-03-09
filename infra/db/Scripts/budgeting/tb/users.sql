@@ -6,5 +6,6 @@ CREATE TABLE IF NOT EXISTS budgeting.users (
     username varchar(100),
     first_name varchar(100),
     last_name varchar(100),
+    hints_enabled boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT current_timestamp
 );

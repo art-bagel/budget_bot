@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
+import { useHints } from '../hooks/useHints';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
 import { deleteAccount } from '../api';
 
@@ -16,6 +17,7 @@ import type { UserContext } from '../types';
 
 export default function Settings({ user }: { user: UserContext }) {
   const { theme, setTheme } = useTheme();
+  const { hintsEnabled, toggle: toggleHints } = useHints();
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -60,6 +62,19 @@ export default function Settings({ user }: { user: UserContext }) {
                 {opt.label}
               </button>
             ))}
+          </div>
+          <div className="settings-row settings-row--first">
+            <div>
+              <div className="settings-row__title">Подсказки жестов</div>
+              <div className="settings-row__sub">Показывать подсказки по свайпам в категориях</div>
+            </div>
+            <button
+              className={`toggle${hintsEnabled ? ' toggle--on' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={hintsEnabled}
+              onClick={toggleHints}
+            />
           </div>
         </div>
       </section>

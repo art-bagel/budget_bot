@@ -25,6 +25,12 @@ export default function App() {
 
   useEffect(() => bindTelegramBackButton(page !== 'dashboard', () => setPage('dashboard')), [page]);
 
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('budget_hints_enabled', String(user.hints_enabled));
+    }
+  }, [user]);
+
   if (loading) {
     return (
       <div className="status-screen">

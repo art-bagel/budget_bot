@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import settings
-from backend.app.routers import auth, categories, currencies, dashboard, groups, income_sources, operations
+from backend.app.routers import auth, categories, currencies, dashboard, groups, income_sources, operations, user_settings
 from backend.app import storage as app_storage
 
 
@@ -38,6 +38,7 @@ app.include_router(dashboard.router)
 app.include_router(groups.router)
 app.include_router(income_sources.router)
 app.include_router(operations.router)
+app.include_router(user_settings.router)
 
 
 @app.get('/health')
