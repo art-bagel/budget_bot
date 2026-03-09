@@ -56,10 +56,25 @@ export default function TransferDialog({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const selectedSource = sources.find((item) => String(item.category_id) === sourceId) || null;
-  const canSubmit = !submitting && !!selectedSource && parseFloat(amount) > 0;
+  const amountValue = parseFloat(amount);
+  const hasPositiveBalance = (selectedSource?.balance || 0) > 0;
+  const exceedsSourceBalance = !!selectedSource && amountValue > selectedSource.balance;
+  const validationMessage = !selectedSource
+    ? null
+    : !hasPositiveBalance
+      ? 'В выбранной категории нет денег для перевода.'
+      : exceedsSourceBalance
+        ? `Нельзя перевести больше, чем есть в источнике: ${formatAmount(selectedSource.balance, selectedSource.currency_code)}.`
+        : null;
+  const canSubmit = !submitting && !!selectedSource && amountValue > 0 && !validationMessage;
 
   const handleSubmit = async () => {
-    if (!selectedSource || parseFloat(amount) <= 0) return;
+    if (!selectedSource || amountValue <= 0) return;
+
+    if (validationMessage) {
+      setError(validationMessage);
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
@@ -105,6 +120,12 @@ export default function TransferDialog({
           <div className="operations-note">
             Выбери источник и сумму для перевода в <strong>{target.name}</strong>.
           </div>
+
+          {validationMessage && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 14 }}>
+              {validationMessage}
+            </p>
+          )}
 
           <div className="form-row">
             <select

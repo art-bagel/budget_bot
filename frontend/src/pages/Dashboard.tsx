@@ -51,7 +51,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     startX: number;
     startY: number;
     sourceId: number;
-    kind: 'regular' | 'free_budget';
+    kind: 'regular' | 'group' | 'free_budget';
     category: DashboardBudgetCategory | null;
     decided: boolean;
     isHorizontal: boolean;
@@ -60,7 +60,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   const handleSwipeStart = (
     sourceId: number,
-    kind: 'regular' | 'free_budget',
+    kind: 'regular' | 'group' | 'free_budget',
     category: DashboardBudgetCategory | null,
     e: React.TouchEvent,
   ) => {
@@ -90,7 +90,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     }
 
     if (s.isHorizontal) {
-      // free_budget: only left swipe; regular: both directions
+      // free_budget/group: only left swipe; regular: both directions
       const minOffset = -80;
       const maxOffset = s.kind === 'regular' ? 80 : 0;
       const offset = Math.min(maxOffset, Math.max(minOffset, dx));
@@ -569,6 +569,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           'list-row',
                           'list-row--interactive',
                           'list-row--group',
+                          'swipeable',
                           isDropTarget ? 'list-row--drop-target' : '',
                           isValidTarget ? 'list-row--valid-target' : '',
                         ].join(' ').trim()}
@@ -576,6 +577,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         role="button"
                         tabIndex={0}
                         onDragEnd={handleDragEnd}
+                        onTouchStart={(e) => handleSwipeStart(category.category_id, 'group', category, e)}
+                        onTouchMove={handleSwipeMove}
+                        onTouchEnd={handleSwipeEnd}
                         onClick={() => {
                           if (activeSourceId !== null && activeSourceId !== category.category_id) {
                             openTransferDialog({
