@@ -18,7 +18,6 @@ const HISTORY_TYPE_OPTIONS = [
   { value: 'allocate', label: 'Распределение по категории' },
   { value: 'group_allocate', label: 'Распределение по группе' },
   { value: 'exchange', label: 'Обмен валют' },
-  { value: 'reversal', label: 'Отмена операции' },
 ];
 
 
@@ -47,7 +46,6 @@ function getOperationTitle(item: OperationHistoryItem): string {
   if (item.type === 'allocate') return 'Распределение по категории';
   if (item.type === 'group_allocate') return 'Распределение по группе';
   if (item.type === 'exchange') return 'Обмен валют';
-  if (item.type === 'reversal') return 'Отмена операции';
   return item.type;
 }
 
@@ -164,12 +162,16 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                       item.type === 'income' ? 'list-row--history-income' : '',
                       item.type === 'expense' ? 'list-row--history-expense' : '',
                       item.type === 'exchange' ? 'list-row--history-exchange' : '',
-                      item.type === 'reversal' ? 'list-row--history-reversal' : '',
                     ].filter(Boolean).join(' ')}
                     key={'history-' + item.operation_id}
                   >
                     <div>
-                      <div className="list-row__title">{getOperationTitle(item)}</div>
+                      <div className="list-row__title">
+                        {getOperationTitle(item)}
+                        {item.has_reversal && (
+                          <span className="tag tag--neutral history-status-tag">Отменена</span>
+                        )}
+                      </div>
                       <div className="list-row__sub">
                         {item.comment || formatDateTime(item.created_at)}
                       </div>
@@ -183,7 +185,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     </div>
                     <div className="history-side">
                       <span className="tag tag--neutral">{formatDateTime(item.created_at)}</span>
-                      {item.type !== 'reversal' && !item.has_reversal && (
+                      {!item.has_reversal && (
                         <button
                           className="btn"
                           type="button"

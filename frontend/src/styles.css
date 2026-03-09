@@ -682,11 +682,6 @@ p { margin: 0; }
   filter: brightness(1.15);
 }
 
-.list-row--history-reversal {
-  border-left-color: transparent;
-  opacity: 0.5;
-}
-
 .history-side {
   display: flex;
   flex-direction: column;
@@ -709,6 +704,10 @@ p { margin: 0; }
 .history-line {
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.history-status-tag {
+  margin-left: 8px;
 }
 
 /* When modal is open, darken html+body so keyboard rounded corners

@@ -61,6 +61,7 @@ BEGIN
         LEFT JOIN income_sources ins
           ON ins.id = o.income_source_id
         WHERE o.user_id = _user_id
+          AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
           AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
         ORDER BY o.created_at DESC, o.id DESC
         LIMIT _limit OFFSET _offset
@@ -128,6 +129,7 @@ BEGIN
             SELECT count(*)
             FROM operations o
             WHERE o.user_id = _user_id
+              AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
               AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
         ),
         'limit', _limit,
