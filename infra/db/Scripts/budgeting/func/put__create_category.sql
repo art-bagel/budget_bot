@@ -16,6 +16,8 @@ LANGUAGE plpgsql
 AS $function$
 DECLARE
     _category_id bigint;
+    _archived_category_id bigint;
+    _archive_suffix text;
     _normalized_name text := btrim(_name);
 BEGIN
     SET search_path TO budgeting;
@@ -34,6 +36,22 @@ BEGIN
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Unknown user id: %', _user_id;
+    END IF;
+
+    SELECT id
+    INTO _archived_category_id
+    FROM categories
+    WHERE user_id = _user_id
+      AND name = _normalized_name
+      AND NOT is_active
+    LIMIT 1;
+
+    IF _archived_category_id IS NOT NULL THEN
+        _archive_suffix := ' [archived ' || _archived_category_id || ']';
+
+        UPDATE categories
+        SET name = left(name, 100 - length(_archive_suffix)) || _archive_suffix
+        WHERE id = _archived_category_id;
     END IF;
 
     INSERT INTO categories (user_id, name, kind)

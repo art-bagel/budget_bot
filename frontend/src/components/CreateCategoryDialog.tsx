@@ -1,7 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { createCategory } from '../api';
+import { createCategory, fetchCategories, replaceGroupMembers } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
+import type { Category } from '../types';
+
+
+interface GroupDraftRow {
+  key: string;
+  child_category_id: string;
+  share_percent: string;
+}
+
+
+function createDraftRow(index: number): GroupDraftRow {
+  return {
+    key: 'draft-' + index,
+    child_category_id: '',
+    share_percent: '',
+  };
+}
 
 
 interface Props {
@@ -16,15 +33,92 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [groupSelectableCategories, setGroupSelectableCategories] = useState<Category[]>([]);
+  const [groupRows, setGroupRows] = useState<GroupDraftRow[]>([createDraftRow(1)]);
+  const [loadingGroupOptions, setLoadingGroupOptions] = useState(false);
+
+  useEffect(() => {
+    if (kind !== 'group') {
+      setGroupSelectableCategories([]);
+      setGroupRows([createDraftRow(1)]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingGroupOptions(true);
+
+    void fetchCategories()
+      .then((categories) => {
+        if (cancelled) return;
+        setGroupSelectableCategories(
+          categories.filter((item) => item.is_active && item.kind !== 'system'),
+        );
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setError(reason instanceof Error ? reason.message : String(reason));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingGroupOptions(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [kind]);
+
+  const handleGroupRowChange = (
+    rowKey: string,
+    field: 'child_category_id' | 'share_percent',
+    value: string,
+  ) => {
+    setGroupRows((prev) => prev.map((row) => (row.key === rowKey ? { ...row, [field]: value } : row)));
+  };
+
+  const addGroupRow = () => {
+    setGroupRows((prev) => [...prev, createDraftRow(prev.length + 1)]);
+  };
+
+  const removeGroupRow = (rowKey: string) => {
+    setGroupRows((prev) => {
+      const nextRows = prev.filter((row) => row.key !== rowKey);
+      return nextRows.length > 0 ? nextRows : [createDraftRow(1)];
+    });
+  };
+
+  const validGroupRows = groupRows.filter(
+    (row) => row.child_category_id && row.share_percent && Number(row.share_percent) > 0,
+  );
+  const hasGroupDraftInput = groupRows.some((row) => row.child_category_id || row.share_percent);
+  const totalSharePercent = validGroupRows.reduce((acc, row) => acc + Number(row.share_percent || 0), 0);
+  const canSaveGroupMembers =
+    validGroupRows.length > 0 &&
+    Math.abs(totalSharePercent - 100) < 0.001;
 
   const handleCreate = async () => {
     if (!name.trim()) return;
+
+    if (kind === 'group' && hasGroupDraftInput && !canSaveGroupMembers) {
+      setError('Если заполняешь состав группы, нужна хотя бы одна строка и сумма долей должна быть ровно 100%.');
+      return;
+    }
 
     setCreating(true);
     setError(null);
 
     try {
-      await createCategory(name.trim(), kind);
+      const result = await createCategory(name.trim(), kind);
+
+      if (kind === 'group' && validGroupRows.length > 0) {
+        await replaceGroupMembers(
+          result.id,
+          validGroupRows.map((row) => Number(row.child_category_id)),
+          validGroupRows.map((row) => Number(row.share_percent) / 100),
+        );
+      }
+
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -50,7 +144,7 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
         <div className="modal-body">
           <div className="operations-note">
             {kind === 'group'
-              ? 'Создай группу, затем нажми на неё, чтобы настроить состав и доли.'
+              ? 'Можно сразу задать состав группы и доли распределения. Если оставить поля пустыми, группа создастся без состава.'
               : 'Добавь новую категорию, чтобы потом распределять по ней бюджет.'}
           </div>
 
@@ -65,6 +159,69 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
               style={{ flex: 1 }}
             />
           </div>
+
+          {kind === 'group' && (
+            <>
+              <div className="operations-note">
+                Выбери категории или группы и задай доли. Сумма долей должна быть 100%.
+              </div>
+
+              <div className="form-row">
+                <span className="tag tag--neutral">
+                  Сумма долей: {totalSharePercent.toFixed(2)}%
+                </span>
+                {loadingGroupOptions ? <span className="tag tag--neutral">Загружаем варианты...</span> : null}
+              </div>
+
+              {!loadingGroupOptions && groupRows.map((row) => (
+                <div className="form-row form-row--group-editor" key={row.key}>
+                  <select
+                    className="input"
+                    value={row.child_category_id}
+                    onChange={(event) => handleGroupRowChange(row.key, 'child_category_id', event.target.value)}
+                    disabled={creating}
+                  >
+                    <option value="">Выберите элемент</option>
+                    {groupSelectableCategories.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.kind === 'group' ? `${item.name} · группа` : item.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Доля, %"
+                    value={row.share_percent}
+                    onChange={(event) => handleGroupRowChange(row.key, 'share_percent', event.target.value)}
+                    disabled={creating}
+                  />
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => removeGroupRow(row.key)}
+                    disabled={creating}
+                  >
+                    Убрать
+                  </button>
+                </div>
+              ))}
+
+              {!loadingGroupOptions && (
+                <div className="form-row">
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={addGroupRow}
+                    disabled={creating}
+                  >
+                    Добавить элемент
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
           {error && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>

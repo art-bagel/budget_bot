@@ -200,14 +200,15 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
   };
 
   const handleArchive = async () => {
-    if (!confirmArchive) {
-      setConfirmArchive(true);
-      return;
-    }
-
     if (parentGroups.length > 0) {
       setError(`Нельзя архивировать, пока элемент входит в группы: ${parentGroups.map((group) => group.group_name).join(', ')}.`);
       setConfirmArchive(false);
+      return;
+    }
+
+    if (!confirmArchive) {
+      setError(null);
+      setConfirmArchive(true);
       return;
     }
 
@@ -243,12 +244,6 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
           <div className="operations-note">
             Тут можно переименовать категорию или убрать её в архив.
           </div>
-
-          {parentGroups.length > 0 && (
-            <div className="operations-note operations-note--warning">
-              Нельзя отправить в архив, пока элемент входит в группы: {parentGroups.map((group) => group.group_name).join(', ')}.
-            </div>
-          )}
 
           <div className="form-row">
             <input

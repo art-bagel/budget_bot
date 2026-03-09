@@ -377,10 +377,6 @@ p { margin: 0; }
   margin-bottom: 14px;
 }
 
-.operations-note--warning {
-  color: var(--tag-out-fg);
-}
-
 .transfer-banner {
   display: flex;
   align-items: center;
@@ -395,12 +391,6 @@ p { margin: 0; }
   line-height: 1.4;
   color: var(--text-secondary);
   transition: background 0.2s, border-color 0.2s, color 0.15s;
-}
-
-.transfer-banner--active {
-  background: var(--tag-in-bg);
-  border-color: var(--text-accent);
-  color: var(--text-primary);
 }
 
 .operations-hint {
@@ -913,12 +903,6 @@ select.input option {
   border-radius: 999px;
   font-size: 1.15rem;
   line-height: 1;
-}
-
-.btn--small {
-  padding: 4px 12px;
-  font-size: 0.8rem;
-  white-space: nowrap;
 }
 
 .btn--danger {

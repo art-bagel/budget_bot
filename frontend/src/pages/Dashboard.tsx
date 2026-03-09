@@ -35,16 +35,15 @@ export default function Dashboard({ user }: { user: UserContext }) {
   }, [showBankDetail]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
-  const [swipeSourceId, setSwipeSourceId] = useState<number | null>(null);
   const [expenseCategory, setExpenseCategory] = useState<DashboardBudgetCategory | null>(null);
-  const [transferSource, setTransferSource] = useState<TransferSource | null>(null);
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null);
+  const [transferInitialSourceId, setTransferInitialSourceId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
   const suppressClickUntilRef = useRef(0);
   const [groupMembersByGroupId, setGroupMembersByGroupId] = useState<Record<number, GroupMember[]>>({});
   const [createDialogKind, setCreateDialogKind] = useState<'regular' | 'group' | null>(null);
 
-  const activeSourceId = draggedCategoryId ?? swipeSourceId;
+  const activeSourceId = draggedCategoryId;
 
   /* ── swipe tracking ─────────────────────────────── */
 
@@ -116,8 +115,22 @@ export default function Dashboard({ user }: { user: UserContext }) {
       suppressClickUntilRef.current = Date.now() + 300;
       const dx = e.changedTouches[0].clientX - s.startX;
       if (dx < -50) {
-        // Left swipe → transfer source
-        setSwipeSourceId(s.sourceId);
+        const swipeTarget: TransferTarget = s.kind === 'free_budget'
+          ? {
+              category_id: user.unallocated_category_id,
+              name: 'Свободный остаток',
+              kind: 'free_budget',
+              currency_code: overview?.base_currency_code || user.base_currency_code,
+            }
+          : {
+              category_id: s.sourceId,
+              name: s.category?.name || '',
+              kind: s.category?.kind || 'regular',
+              currency_code: s.category?.currency_code || (overview?.base_currency_code || user.base_currency_code),
+            };
+
+        setTransferTarget(swipeTarget);
+        setTransferInitialSourceId(s.kind === 'free_budget' ? null : user.unallocated_category_id);
         navigator.vibrate?.(20);
       } else if (dx > 50 && s.kind === 'regular' && s.category) {
         // Right swipe → expense
@@ -205,33 +218,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   /* ── shared transfer logic ─────────────────────── */
 
-  const completeTransfer = (sourceId: number, target: TransferTarget) => {
-    if (!overview) return;
-
-    const source: TransferSource | null = sourceId === user.unallocated_category_id
-      ? {
-          category_id: user.unallocated_category_id,
-          name: 'Свободный остаток',
-          kind: 'free_budget',
-          balance: overview.free_budget_in_base,
-          currency_code: overview.base_currency_code,
-        }
-      : overview.budget_categories.find(
-          (category) => category.category_id === sourceId && category.kind === 'regular',
-        ) || null;
-
-    if (!source || target.kind === 'system' || sourceId === target.category_id) {
-      setDraggedCategoryId(null);
-      setDropTargetCategoryId(null);
-      setSwipeSourceId(null);
-      return;
-    }
-
-    setTransferSource(source);
+  const openTransferDialog = (target: TransferTarget, initialSourceId: number | null) => {
     setTransferTarget(target);
+    setTransferInitialSourceId(initialSourceId);
     setDraggedCategoryId(null);
     setDropTargetCategoryId(null);
-    setSwipeSourceId(null);
   };
 
   const handleDropOnCategory = (target: TransferTarget) => {
@@ -239,7 +230,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
       handleDragEnd();
       return;
     }
-    completeTransfer(draggedCategoryId, target);
+    if (target.kind === 'system' || draggedCategoryId === target.category_id) {
+      handleDragEnd();
+      return;
+    }
+    openTransferDialog(target, draggedCategoryId);
   };
 
   const openCategoryDialog = (category: DashboardBudgetCategory) => {
@@ -248,11 +243,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
   };
 
   const handleDialogSuccess = async () => {
-    setTransferSource(null);
     setTransferTarget(null);
+    setTransferInitialSourceId(null);
     setSelectedCategory(null);
     setCreateDialogKind(null);
-    setSwipeSourceId(null);
     setExpenseCategory(null);
     await loadOverview();
   };
@@ -292,6 +286,16 @@ export default function Dashboard({ user }: { user: UserContext }) {
   };
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
+  const transferSources: TransferSource[] = [
+    freeBudgetSource,
+    ...regularBudgetCategories.map((category) => ({
+      category_id: category.category_id,
+      name: category.name,
+      kind: category.kind,
+      balance: category.balance,
+      currency_code: category.currency_code,
+    })),
+  ];
   const fxResultSummary = overview.fx_result_in_base === 0
     ? null
     : `Включая курсовую разницу ${formatAmount(overview.fx_result_in_base, overview.base_currency_code)}`;
@@ -327,13 +331,6 @@ export default function Dashboard({ user }: { user: UserContext }) {
       0,
     );
   };
-
-  const swipeSourceName = swipeSourceId !== null
-    ? (swipeSourceId === user.unallocated_category_id
-        ? 'Свободный остаток'
-        : overview.budget_categories.find((c) => c.category_id === swipeSourceId)?.name || '')
-    : '';
-
   return (
     <>
       <h1 className="page-title">Обзор</h1>
@@ -367,23 +364,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
           </div>
         </div>
         <div className="panel">
-          <div className={`transfer-banner${swipeSourceId !== null ? ' transfer-banner--active' : ''}`}>
-            {swipeSourceId !== null ? (
-              <>
-                <span>
-                  Из <strong>{swipeSourceName}</strong> — нажми куда перевести
-                </span>
-                <button
-                  className="btn btn--small"
-                  type="button"
-                  onClick={() => setSwipeSourceId(null)}
-                >
-                  Отмена
-                </button>
-              </>
-            ) : (
-              <span>Свайп влево — перевод бюджета. Свайп вправо по категории — расход.</span>
-            )}
+          <div className="transfer-banner">
+            <span>Свайп влево сразу открывает перевод бюджета. Свайп вправо по категории — расход.</span>
           </div>
           <div className="dashboard-transfer-source">
             <div
@@ -422,10 +404,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
               onTouchEnd={handleSwipeEnd}
               onClick={() => {
                 if (Date.now() < suppressClickUntilRef.current) return;
-                if (swipeSourceId === freeBudgetSource.category_id) {
-                  setSwipeSourceId(null);
-                } else if (activeSourceId !== null) {
-                  completeTransfer(activeSourceId, freeBudgetTarget);
+                if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id) {
+                  openTransferDialog(freeBudgetTarget, activeSourceId);
                 }
               }}
             >
@@ -492,15 +472,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         onTouchEnd={handleSwipeEnd}
                         onClick={() => {
                           if (Date.now() < suppressClickUntilRef.current) return;
-                          if (swipeSourceId === category.category_id) {
-                            setSwipeSourceId(null);
-                          } else if (activeSourceId !== null) {
-                            completeTransfer(activeSourceId, {
+                          if (activeSourceId !== null && activeSourceId !== category.category_id) {
+                            openTransferDialog({
                               category_id: category.category_id,
                               name: category.name,
                               kind: category.kind,
                               currency_code: category.currency_code,
-                            });
+                            }, activeSourceId);
                           } else {
                             openCategoryDialog(category);
                           }
@@ -599,13 +577,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         tabIndex={0}
                         onDragEnd={handleDragEnd}
                         onClick={() => {
-                          if (activeSourceId !== null) {
-                            completeTransfer(activeSourceId, {
+                          if (activeSourceId !== null && activeSourceId !== category.category_id) {
+                            openTransferDialog({
                               category_id: category.category_id,
                               name: category.name,
                               kind: category.kind,
                               currency_code: category.currency_code,
-                            });
+                            }, activeSourceId);
                           } else {
                             openCategoryDialog(category);
                           }
@@ -660,12 +638,17 @@ export default function Dashboard({ user }: { user: UserContext }) {
         </div>
       </section>
 
-      {transferSource && transferTarget && (
+      {transferTarget && (
         <TransferDialog
-          source={transferSource}
+          sources={transferSources.filter((source) => source.category_id !== transferTarget.category_id)}
+          initialSourceId={
+            transferInitialSourceId !== null && transferInitialSourceId !== transferTarget.category_id
+              ? transferInitialSourceId
+              : null
+          }
           target={transferTarget}
           baseCurrencyCode={overview.base_currency_code}
-          onClose={() => { setTransferSource(null); setTransferTarget(null); }}
+          onClose={() => { setTransferTarget(null); setTransferInitialSourceId(null); }}
           onSuccess={() => void handleDialogSuccess()}
         />
       )}

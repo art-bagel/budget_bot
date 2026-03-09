@@ -32,7 +32,8 @@ export interface TransferTarget {
 
 
 interface Props {
-  source: TransferSource;
+  sources: TransferSource[];
+  initialSourceId: number | null;
   target: TransferTarget;
   baseCurrencyCode: string;
   onClose: () => void;
@@ -40,15 +41,25 @@ interface Props {
 }
 
 
-export default function TransferDialog({ source, target, baseCurrencyCode, onClose, onSuccess }: Props) {
+export default function TransferDialog({
+  sources,
+  initialSourceId,
+  target,
+  baseCurrencyCode,
+  onClose,
+  onSuccess,
+}: Props) {
   useModalOpen();
+  const [sourceId, setSourceId] = useState(initialSourceId !== null ? String(initialSourceId) : '');
   const [amount, setAmount] = useState('');
   const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const selectedSource = sources.find((item) => String(item.category_id) === sourceId) || null;
+  const canSubmit = !submitting && !!selectedSource && parseFloat(amount) > 0;
 
   const handleSubmit = async () => {
-    if (parseFloat(amount) <= 0) return;
+    if (!selectedSource || parseFloat(amount) <= 0) return;
 
     setSubmitting(true);
     setError(null);
@@ -56,14 +67,14 @@ export default function TransferDialog({ source, target, baseCurrencyCode, onClo
     try {
       if (target.kind === 'group') {
         await allocateGroupBudget({
-          from_category_id: source.category_id,
+          from_category_id: selectedSource.category_id,
           group_id: target.category_id,
           amount_in_base: parseFloat(amount),
           comment: comment.trim() || undefined,
         } as AllocateGroupBudgetRequest);
       } else {
         await allocateBudget({
-          from_category_id: source.category_id,
+          from_category_id: selectedSource.category_id,
           to_category_id: target.category_id,
           amount_in_base: parseFloat(amount),
           comment: comment.trim() || undefined,
@@ -92,12 +103,29 @@ export default function TransferDialog({ source, target, baseCurrencyCode, onClo
 
         <div className="modal-body">
           <div className="operations-note">
-            Из <strong>{source.name}</strong> ({formatAmount(source.balance, source.currency_code)}) в <strong>{target.name}</strong>.
+            Выбери источник и сумму для перевода в <strong>{target.name}</strong>.
           </div>
 
           <div className="form-row">
-            <div className="input input--read-only">Из: {source.name}</div>
-            <div className="input input--read-only">В: {target.name}</div>
+            <select
+              className="input"
+              value={sourceId}
+              onChange={(event) => setSourceId(event.target.value)}
+              disabled={submitting}
+            >
+              <option value="">Откуда перевести</option>
+              {sources.map((item) => (
+                <option key={item.category_id} value={item.category_id}>
+                  {item.name} · {formatAmount(item.balance, item.currency_code)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-row">
+            <div className="input input--read-only" style={{ flex: 1 }}>
+              Куда: {target.name}
+            </div>
           </div>
 
           <div className="form-row">
@@ -137,7 +165,7 @@ export default function TransferDialog({ source, target, baseCurrencyCode, onClo
           <button
             className="btn btn--primary"
             type="button"
-            disabled={submitting || !(parseFloat(amount) > 0)}
+            disabled={!canSubmit}
             onClick={handleSubmit}
           >
             {submitting ? '...' : 'Перевести'}

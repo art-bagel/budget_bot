@@ -105,7 +105,7 @@ BEGIN
     WITH RECURSIVE expanded_members AS (
         SELECT
             gm.child_category_id AS category_id,
-            gm.share AS effective_share,
+            gm.share::numeric AS effective_share,
             ARRAY[_group_id, gm.child_category_id]::bigint[] AS path
         FROM group_members gm
         JOIN categories c
@@ -118,7 +118,7 @@ BEGIN
 
         SELECT
             gm.child_category_id,
-            em.effective_share * gm.share,
+            (em.effective_share * gm.share::numeric)::numeric,
             em.path || gm.child_category_id
         FROM expanded_members em
         JOIN categories parent
@@ -160,7 +160,7 @@ BEGIN
         WITH RECURSIVE expanded_members AS (
             SELECT
                 gm.child_category_id AS category_id,
-                gm.share AS effective_share,
+                gm.share::numeric AS effective_share,
                 ARRAY[_group_id, gm.child_category_id]::bigint[] AS path
             FROM group_members gm
             JOIN categories c
@@ -173,7 +173,7 @@ BEGIN
 
             SELECT
                 gm.child_category_id,
-                em.effective_share * gm.share,
+                (em.effective_share * gm.share::numeric)::numeric,
                 em.path || gm.child_category_id
             FROM expanded_members em
             JOIN categories parent
