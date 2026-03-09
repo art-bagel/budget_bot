@@ -436,7 +436,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
               {regularBudgetCategories.length === 0 ? (
                 <p className="list-row__sub">Обычных категорий пока нет.</p>
               ) : (
-                <ul>
+                <ul className="cat-grid">
                   {regularBudgetCategories.map((category) => {
                     const isDropTarget = dropTargetCategoryId === category.category_id;
                     const isActiveSource = activeSourceId === category.category_id;
@@ -445,15 +445,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
                     return (
                       <li
                         className={[
-                          'dashboard-budget-row',
-                          'list-row',
-                          'list-row--interactive',
-                          'list-row--draggable',
+                          'cat-card',
                           'swipeable',
-                          draggedCategoryId === category.category_id ? 'list-row--dragging' : '',
-                          isActiveSource ? 'list-row--active-source' : '',
-                          isDropTarget ? 'list-row--drop-target' : '',
-                          isValidTarget ? 'list-row--valid-target' : '',
+                          draggedCategoryId === category.category_id ? 'cat-card--dragging' : '',
+                          isActiveSource ? 'cat-card--active-source' : '',
+                          isDropTarget ? 'cat-card--drop-target' : '',
+                          isValidTarget ? 'cat-card--valid-target' : '',
                         ].join(' ').trim()}
                         key={category.category_id}
                         draggable
@@ -503,19 +500,15 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           });
                         }}
                       >
-                        <div className="dashboard-budget-row__main">
-                          <div className="list-row__title">{category.name}</div>
-                          <div className="list-row__sub">
-                            {isValidTarget
-                              ? 'Нажми, чтобы перевести сюда'
-                              : hintsEnabled ? '← перевести · редактировать · потратить → ' : null}
-                          </div>
-                        </div>
-                        <div className="dashboard-budget-row__side">
-                          <div className="list-row__value">
-                            {formatAmount(category.balance, category.currency_code)}
-                          </div>
-                        </div>
+                        <span className="cat-card__name">
+                          {isValidTarget ? 'Перевести сюда' : category.name}
+                        </span>
+                        <strong className="cat-card__amount">
+                          {formatAmount(category.balance, category.currency_code)}
+                        </strong>
+                        {hintsEnabled && !isValidTarget && (
+                          <span className="cat-card__hint">← перевод · расход →</span>
+                        )}
                       </li>
                     );
                   })}
