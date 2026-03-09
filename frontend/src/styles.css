@@ -177,7 +177,7 @@ p { margin: 0; }
 .main {
   flex: 1;
   min-width: 0;
-  padding: calc(var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)) + 16px) 20px calc(var(--nav-height) + 24px);
+  padding: calc(var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px))) + 16px) 20px calc(var(--nav-height) + 24px);
   max-width: 960px;
   margin: 0 auto;
   width: 100%;
@@ -736,7 +736,7 @@ body.modal-open {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: calc(var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)) + 16px) 16px 0;
+  padding: calc(var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px))) + 16px) 16px 0;
   z-index: 150;
   overflow: hidden;
 }
@@ -754,7 +754,7 @@ body.modal-open {
    */
   max-height: calc(
     var(--visual-viewport-height, 100svh)
-    - var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px))
+    - var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)))
     - 32px
   );
   display: flex;
