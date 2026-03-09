@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { ComponentType } from 'react';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
-import type { UserContext } from './types';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
 import Exchange from './pages/Exchange';
@@ -11,19 +9,19 @@ import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 import { bindTelegramBackButton } from './telegram';
 
-const PAGES: Record<Page, ComponentType<{ user: UserContext }>> = {
-  dashboard: Dashboard,
-  operations: Operations,
-  exchange: Exchange,
-  settings: Settings,
-};
+const PAGE_IDS: Page[] = ['dashboard', 'operations', 'exchange', 'settings'];
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
+  const [visited, setVisited] = useState<Set<Page>>(new Set(['dashboard']));
   const { user, loading, error } = useAuth();
-  const PageComponent = PAGES[page];
 
-  useEffect(() => bindTelegramBackButton(page !== 'dashboard', () => setPage('dashboard')), [page]);
+  const handleNavigate = (p: Page) => {
+    setVisited(prev => new Set(prev).add(p));
+    setPage(p);
+  };
+
+  useEffect(() => bindTelegramBackButton(page !== 'dashboard', () => handleNavigate('dashboard')), [page]);
 
   useEffect(() => {
     if (user) {
@@ -50,10 +48,17 @@ export default function App() {
   }
 
   return (
-    <Layout page={page} onNavigate={setPage}>
-      <ErrorBoundary>
-        <PageComponent user={user} />
-      </ErrorBoundary>
+    <Layout page={page} onNavigate={handleNavigate}>
+      {PAGE_IDS.map((id) => visited.has(id) ? (
+        <div key={id} style={id !== page ? { display: 'none' } : undefined}>
+          <ErrorBoundary>
+            {id === 'dashboard' && <Dashboard user={user} />}
+            {id === 'operations' && <Operations user={user} />}
+            {id === 'exchange' && <Exchange user={user} />}
+            {id === 'settings' && <Settings user={user} />}
+          </ErrorBoundary>
+        </div>
+      ) : null)}
     </Layout>
   );
 }
