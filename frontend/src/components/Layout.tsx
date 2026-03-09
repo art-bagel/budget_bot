@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
   IconDashboard,
@@ -5,6 +6,7 @@ import {
   IconExchange,
   IconSettings,
 } from './Icons';
+import { usePageSwipe } from '../hooks/usePageSwipe';
 
 export type Page = 'dashboard' | 'operations' | 'exchange' | 'settings';
 
@@ -22,6 +24,9 @@ const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
 ];
 
 export default function Layout({ page, onNavigate, children }: Props) {
+  const mainRef = useRef<HTMLElement>(null);
+  usePageSwipe(mainRef, page, onNavigate);
+
   return (
     <div className="app">
       {/* Desktop sidebar */}
@@ -42,7 +47,7 @@ export default function Layout({ page, onNavigate, children }: Props) {
       </aside>
 
       {/* Page content */}
-      <main className="main">{children}</main>
+      <main ref={mainRef} className="main">{children}</main>
 
       {/* Mobile bottom nav */}
       <nav className="bottom-nav">
