@@ -531,6 +531,12 @@ p { margin: 0; }
   color: var(--text-tertiary);
 }
 
+.balance-card__hint {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
 /* ── Pills & Tags ────────────────────────────────── */
 
 .pill {
@@ -1004,6 +1010,19 @@ select.input option {
   color: var(--text-tertiary);
 }
 
+.settings-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-danger__error {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--tag-out-fg);
+}
+
 /* ── Placeholder pages ───────────────────────────── */
 
 .placeholder-page {
@@ -1085,5 +1104,12 @@ select.input option {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-danger {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

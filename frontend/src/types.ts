@@ -47,6 +47,7 @@ export interface DashboardOverview {
   total_bank_historical_in_base: number;
   total_budget_in_base: number;
   free_budget_in_base: number;
+  fx_result_in_base: number;
   bank_balances: DashboardBankBalance[];
   budget_categories: DashboardBudgetCategory[];
 }

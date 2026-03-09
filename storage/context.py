@@ -12,6 +12,7 @@ class Context(DataBase):
     F_SET__UPDATE_CATEGORY = 'set__update_category'
     F_SET__ARCHIVE_CATEGORY = 'set__archive_category'
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
+    F_SET__DELETE_USER_ACCOUNT = 'set__delete_user_account'
 
     async def put__register_user_context(
         self,
@@ -116,4 +117,15 @@ class Context(DataBase):
             group_id,
             child_category_ids,
             shares,
+        )
+
+    async def set__delete_user_account(self, user_id: int) -> dict:
+        """
+        Полностью удаляет пользователя и все связанные данные.
+        :param user_id: Идентификатор удаляемого пользователя.
+        :return: Словарь со статусом удаления и идентификатором пользователя.
+        """
+        return await self.call_function(
+            self._fn(self.F_SET__DELETE_USER_ACCOUNT),
+            user_id,
         )

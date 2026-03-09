@@ -292,6 +292,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
   };
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
+  const fxResultSummary = overview.fx_result_in_base === 0
+    ? null
+    : `Включая курсовую разницу ${formatAmount(overview.fx_result_in_base, overview.base_currency_code)}`;
   const regularCategoryBalanceById = regularBudgetCategories.reduce<Record<number, number>>((acc, category) => {
     acc[category.category_id] = category.balance;
     return acc;
@@ -405,8 +408,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
               </strong>
               <div className="balance-card__sub">
-                Свайпни влево для перевода. Сюда тоже можно вернуть из категории.
+                {fxResultSummary || 'Свайпни влево для перевода. Сюда тоже можно вернуть из категории.'}
               </div>
+              {fxResultSummary ? (
+                <div className="balance-card__hint">
+                  Свайпни влево для перевода. Сюда тоже можно вернуть из категории.
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="dashboard-budget-sections">

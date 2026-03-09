@@ -1,8 +1,10 @@
 import type { ComponentType } from 'react';
+import { useState } from 'react';
 
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
+import { deleteAccount } from '../api';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
@@ -14,6 +16,29 @@ import type { UserContext } from '../types';
 
 export default function Settings({ user }: { user: UserContext }) {
   const { theme, setTheme } = useTheme();
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+    const isConfirmed = window.confirm(
+      'Удалить аккаунт и все данные? Это действие необратимо: будут удалены категории, операции, группы, банк и история обменов.',
+    );
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    setDeleteInProgress(true);
+    setDeleteError(null);
+
+    try {
+      await deleteAccount();
+      window.location.reload();
+    } catch (reason: unknown) {
+      setDeleteError(reason instanceof Error ? reason.message : String(reason));
+      setDeleteInProgress(false);
+    }
+  };
 
   return (
     <>
@@ -82,6 +107,31 @@ export default function Settings({ user }: { user: UserContext }) {
               <span className="tag tag--neutral">CBR</span>
             </li>
           </ul>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section__title">Опасная зона</h2>
+        <div className="panel">
+          <div className="settings-danger">
+            <div>
+              <div className="settings-row__title">Удалить аккаунт</div>
+              <div className="settings-row__sub">
+                Полностью очистить все данные пользователя: банк, операции, категории, группы и историю обменов.
+              </div>
+              {deleteError ? (
+                <div className="settings-danger__error">{deleteError}</div>
+              ) : null}
+            </div>
+            <button
+              className="btn btn--danger"
+              type="button"
+              onClick={handleDeleteAccount}
+              disabled={deleteInProgress}
+            >
+              {deleteInProgress ? 'Удаляем...' : 'Удалить аккаунт'}
+            </button>
+          </div>
         </div>
       </section>
     </>

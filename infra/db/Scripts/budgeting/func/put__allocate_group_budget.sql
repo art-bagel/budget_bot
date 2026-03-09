@@ -21,6 +21,7 @@ AS $function$
 DECLARE
     _base_currency_code char(3);
     _source_kind text;
+    _source_name text;
     _group_kind text;
     _from_balance numeric(20, 2);
     _operation_id bigint;
@@ -45,8 +46,8 @@ BEGIN
         RAISE EXCEPTION 'Unknown user id: %', _user_id;
     END IF;
 
-    SELECT kind
-    INTO _source_kind
+    SELECT kind, name
+    INTO _source_kind, _source_name
     FROM categories
     WHERE id = _from_category_id
       AND user_id = _user_id
@@ -58,6 +59,10 @@ BEGIN
 
     IF _source_kind = 'group' THEN
         RAISE EXCEPTION 'Source category % cannot be of kind %', _from_category_id, _source_kind;
+    END IF;
+
+    IF _source_kind = 'system' AND _source_name <> 'Unallocated' THEN
+        RAISE EXCEPTION 'Source system category % is not supported', _from_category_id;
     END IF;
 
     SELECT kind
@@ -75,11 +80,23 @@ BEGIN
         RAISE EXCEPTION 'Category % is not a group', _group_id;
     END IF;
 
-    SELECT COALESCE(sum(amount), 0)
-    INTO _from_balance
-    FROM budget_entries
-    WHERE category_id = _from_category_id
-      AND currency_code = _base_currency_code;
+    IF _source_kind = 'system' THEN
+        SELECT COALESCE(sum(be.amount), 0)
+        INTO _from_balance
+        FROM categories c
+        LEFT JOIN budget_entries be
+          ON be.category_id = c.id
+         AND be.currency_code = _base_currency_code
+        WHERE c.user_id = _user_id
+          AND c.kind = 'system'
+          AND c.is_active;
+    ELSE
+        SELECT COALESCE(sum(amount), 0)
+        INTO _from_balance
+        FROM budget_entries
+        WHERE category_id = _from_category_id
+          AND currency_code = _base_currency_code;
+    END IF;
 
     IF _from_balance < round(_amount_in_base, 2) THEN
         RAISE EXCEPTION 'Insufficient budget in category %', _from_category_id;

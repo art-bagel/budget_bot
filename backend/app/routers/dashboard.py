@@ -30,6 +30,7 @@ class DashboardOverviewResponse(BaseModel):
     total_bank_historical_in_base: float
     total_budget_in_base: float
     free_budget_in_base: float
+    fx_result_in_base: float
     bank_balances: List[BankBalanceItem]
     budget_categories: List[BudgetBalanceItem]
 
@@ -61,7 +62,15 @@ async def get_dashboard_overview(
         sum(
             float(item['balance'])
             for item in budget_categories
-            if item['kind'] == 'system' and item['name'] == 'Unallocated'
+            if item['kind'] == 'system'
+        ),
+        2,
+    )
+    fx_result_in_base = round(
+        sum(
+            float(item['balance'])
+            for item in budget_categories
+            if item['kind'] == 'system' and item['name'] == 'FX Result'
         ),
         2,
     )
@@ -76,6 +85,7 @@ async def get_dashboard_overview(
         total_bank_historical_in_base=total_bank_historical_in_base,
         total_budget_in_base=total_budget_in_base,
         free_budget_in_base=free_budget_in_base,
+        fx_result_in_base=fx_result_in_base,
         bank_balances=bank_balances,
         budget_categories=visible_budget_categories,
     )

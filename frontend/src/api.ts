@@ -57,6 +57,12 @@ export async function register(baseCurrencyCode: string): Promise<UserContext> {
   });
 }
 
+export async function deleteAccount(): Promise<{ status: string; user_id: number }> {
+  return apiFetch<{ status: string; user_id: number }>('/auth/account', {
+    method: 'DELETE',
+  });
+}
+
 export async function fetchCurrencies(): Promise<Currency[]> {
   return apiFetch<Currency[]>('/currencies');
 }

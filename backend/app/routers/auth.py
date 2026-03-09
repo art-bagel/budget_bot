@@ -21,6 +21,11 @@ class RegisterResponse(BaseModel):
     base_currency_code: str
 
 
+class DeleteAccountResponse(BaseModel):
+    status: str
+    user_id: int
+
+
 @router.post('/register', response_model=RegisterResponse)
 async def register(
     body: RegisterRequest,
@@ -34,3 +39,11 @@ async def register(
         last_name=user.last_name,
     )
     return RegisterResponse(**result)
+
+
+@router.delete('/account', response_model=DeleteAccountResponse)
+async def delete_account(
+    user: TelegramUser = Depends(get_telegram_user),
+) -> DeleteAccountResponse:
+    result = await context.set__delete_user_account(user.user_id)
+    return DeleteAccountResponse(**result)
