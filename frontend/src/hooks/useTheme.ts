@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getTelegramColorScheme, getTelegramWebApp, subscribeTelegramThemeChanged } from '../telegram';
+import { updateUserSettings } from '../api';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -55,7 +56,10 @@ export function useTheme() {
     };
   }, [theme]);
 
-  const setTheme = useCallback((t: Theme) => setThemeRaw(t), []);
+  const setTheme = useCallback((t: Theme) => {
+    setThemeRaw(t);
+    void updateUserSettings({ theme: t });
+  }, []);
 
   return { theme, resolved, setTheme };
 }

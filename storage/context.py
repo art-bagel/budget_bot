@@ -120,17 +120,24 @@ class Context(DataBase):
             shares,
         )
 
-    async def set__update_user_settings(self, user_id: int, hints_enabled: bool) -> dict:
+    async def set__update_user_settings(
+        self,
+        user_id: int,
+        hints_enabled: Optional[bool] = None,
+        theme: Optional[str] = None,
+    ) -> dict:
         """
         Обновляет настройки интерфейса пользователя.
         :param user_id: Идентификатор пользователя.
-        :param hints_enabled: Показывать ли подсказки жестов.
+        :param hints_enabled: Показывать ли подсказки жестов (None = не менять).
+        :param theme: Тема интерфейса: 'light', 'dark', 'system' (None = не менять).
         :return: Словарь с обновлёнными настройками.
         """
         return await self.call_function(
             self._fn(self.F_SET__UPDATE_USER_SETTINGS),
             user_id,
             hints_enabled,
+            theme,
         )
 
     async def set__delete_user_account(self, user_id: int) -> dict:

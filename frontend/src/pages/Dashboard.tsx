@@ -532,7 +532,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
               {groupBudgetCategories.length === 0 ? (
                 <p className="list-row__sub">Групп пока нет.</p>
               ) : (
-                <ul>
+                <ul className="groups-list">
                   {groupBudgetCategories.map((category) => {
                     const isDropTarget = dropTargetCategoryId === category.category_id;
                     const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;

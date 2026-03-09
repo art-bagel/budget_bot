@@ -479,6 +479,12 @@ p { margin: 0; }
   border-top: 1px solid var(--border);
 }
 
+.groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ── Category card grid ──────────────────────────── */
 
 .cat-grid {
@@ -655,6 +661,9 @@ p { margin: 0; }
 .list-row--group {
   background: var(--bg-inset);
   border-radius: var(--radius-s);
+  padding-left: 16px;
+  padding-right: 16px;
+  border-top: none;
 }
 
 .list-row--drop-target {

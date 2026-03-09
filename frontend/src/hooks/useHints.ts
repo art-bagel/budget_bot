@@ -13,7 +13,7 @@ export function useHints() {
     const newValue = !hintsEnabled;
     localStorage.setItem(KEY, String(newValue));
     setHintsEnabled(newValue);
-    void updateUserSettings(newValue);
+    void updateUserSettings({ hintsEnabled: newValue });
   };
 
   return { hintsEnabled, toggle };

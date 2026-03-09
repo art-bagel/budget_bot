@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -9,11 +11,13 @@ router = APIRouter(prefix='/api/v1/user', tags=['user'])
 
 
 class UpdateSettingsRequest(BaseModel):
-    hints_enabled: bool
+    hints_enabled: Optional[bool] = None
+    theme: Optional[str] = None
 
 
 class UpdateSettingsResponse(BaseModel):
     hints_enabled: bool
+    theme: str
 
 
 @router.patch('/settings', response_model=UpdateSettingsResponse)
@@ -24,5 +28,6 @@ async def update_settings(
     result = await context.set__update_user_settings(
         user_id=user.user_id,
         hints_enabled=body.hints_enabled,
+        theme=body.theme,
     )
     return UpdateSettingsResponse(**result)

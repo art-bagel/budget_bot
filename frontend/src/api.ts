@@ -191,9 +191,14 @@ export async function archiveCategory(categoryId: number): Promise<{ category_id
   });
 }
 
-export async function updateUserSettings(hintsEnabled: boolean): Promise<{ hints_enabled: boolean }> {
-  return apiFetch<{ hints_enabled: boolean }>('/user/settings', {
+export async function updateUserSettings(
+  params: { hintsEnabled?: boolean; theme?: string },
+): Promise<{ hints_enabled: boolean; theme: string }> {
+  const body: Record<string, unknown> = {};
+  if (params.hintsEnabled !== undefined) body.hints_enabled = params.hintsEnabled;
+  if (params.theme !== undefined) body.theme = params.theme;
+  return apiFetch<{ hints_enabled: boolean; theme: string }>('/user/settings', {
     method: 'PATCH',
-    body: JSON.stringify({ hints_enabled: hintsEnabled }),
+    body: JSON.stringify(body),
   });
 }
