@@ -108,114 +108,118 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="section__header">
-          <div>
-            <div className="section__eyebrow">Банк</div>
-            <h2 className="section__title">Записать доход</h2>
+        <div className="modal-header">
+          <div className="section__header">
+            <div>
+              <div className="section__eyebrow">Банк</div>
+              <h2 className="section__title">Записать доход</h2>
+            </div>
           </div>
         </div>
 
-        {loading ? (
-          <p className="list-row__sub">Загрузка...</p>
-        ) : (
-          <>
-            <div className="operations-note">
-              Источник дохода → банк → нераспределённый бюджет.
-            </div>
+        <div className="modal-body">
+          {loading ? (
+            <p className="list-row__sub">Загрузка...</p>
+          ) : (
+            <>
+              <div className="operations-note">
+                Источник дохода → банк → нераспределённый бюджет.
+              </div>
 
-            <div className="form-row">
-              <select
-                className="input"
-                value={incomeSourceId}
-                onChange={(e) => setIncomeSourceId(e.target.value)}
-                disabled={incomeSources.length === 0}
-              >
-                {incomeSources.length === 0 ? (
-                  <option value="">Сначала создайте источник</option>
-                ) : (
-                  incomeSources.map((source) => (
-                    <option key={source.id} value={source.id}>
-                      {source.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={incomeSourceId}
+                  onChange={(e) => setIncomeSourceId(e.target.value)}
+                  disabled={incomeSources.length === 0}
+                >
+                  {incomeSources.length === 0 ? (
+                    <option value="">Сначала создайте источник</option>
+                  ) : (
+                    incomeSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
 
-            <div className="form-row">
-              <input
-                className="input"
-                type="text"
-                placeholder="Новый источник дохода"
-                value={newIncomeSourceName}
-                onChange={(e) => setNewIncomeSourceName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
-              />
-              <button
-                className="btn"
-                type="button"
-                disabled={creatingSource || newIncomeSourceName.trim().length === 0}
-                onClick={handleCreateSource}
-              >
-                {creatingSource ? '...' : 'Добавить'}
-              </button>
-            </div>
+              <div className="form-row">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Новый источник дохода"
+                  value={newIncomeSourceName}
+                  onChange={(e) => setNewIncomeSourceName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
+                />
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={creatingSource || newIncomeSourceName.trim().length === 0}
+                  onClick={handleCreateSource}
+                >
+                  {creatingSource ? '...' : 'Добавить'}
+                </button>
+              </div>
 
-            <div className="form-row">
-              <input
-                className="input"
-                type="text"
-                inputMode="decimal"
-                placeholder="Сумма"
-                value={incomeAmount}
-                onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value))}
-              />
-              <select
-                className="input"
-                value={incomeCurrencyCode}
-                onChange={(e) => setIncomeCurrencyCode(e.target.value)}
-              >
-                {currencies.map((currency) => (
-                  <option key={currency.code} value={currency.code}>
-                    {currency.code}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {isNonBase && (
               <div className="form-row">
                 <input
                   className="input"
                   type="text"
                   inputMode="decimal"
-                  placeholder={`Стоимость в ${user.base_currency_code}`}
-                  value={incomeBudgetAmountInBase}
-                  onChange={(e) => setIncomeBudgetAmountInBase(sanitizeDecimalInput(e.target.value))}
+                  placeholder="Сумма"
+                  value={incomeAmount}
+                  onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value))}
+                />
+                <select
+                  className="input"
+                  value={incomeCurrencyCode}
+                  onChange={(e) => setIncomeCurrencyCode(e.target.value)}
+                >
+                  {currencies.map((currency) => (
+                    <option key={currency.code} value={currency.code}>
+                      {currency.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {isNonBase && (
+                <div className="form-row">
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder={`Стоимость в ${user.base_currency_code}`}
+                    value={incomeBudgetAmountInBase}
+                    onChange={(e) => setIncomeBudgetAmountInBase(sanitizeDecimalInput(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              )}
+
+              <div className="form-row">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Комментарий (необязательно)"
+                  value={incomeComment}
+                  onChange={(e) => setIncomeComment(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
                   style={{ flex: 1 }}
                 />
               </div>
-            )}
 
-            <div className="form-row">
-              <input
-                className="input"
-                type="text"
-                placeholder="Комментарий (необязательно)"
-                value={incomeComment}
-                onChange={(e) => setIncomeComment(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
-                style={{ flex: 1 }}
-              />
-            </div>
-
-            {error && (
-              <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-                {error}
-              </p>
-            )}
-          </>
-        )}
+              {error && (
+                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+                  {error}
+                </p>
+              )}
+            </>
+          )}
+        </div>
 
         <div className="modal-actions">
           <button className="btn" type="button" onClick={onClose} disabled={submitting}>

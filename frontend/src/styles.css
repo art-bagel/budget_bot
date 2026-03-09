@@ -722,7 +722,7 @@ body.modal-open {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  /* Extend 300px below viewport so keyboard corner areas are also covered */
+  /* Extend below viewport so keyboard rounded-corner areas are covered */
   bottom: -300px;
   background: rgba(12, 16, 20, 0.72);
   backdrop-filter: blur(10px);
@@ -730,35 +730,58 @@ body.modal-open {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  /*
-   * --tg-content-safe-area-inset-top: injected by Telegram Mini App client,
-   * covers status bar + Telegram header (the "Закрыть / ↓ / ..." bar).
-   * Falls back to env(safe-area-inset-top) for non-Telegram or older clients.
-   */
-  padding: calc(var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)) + 16px) 16px calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 16px);
+  padding: calc(var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)) + 16px) 16px 0;
   z-index: 150;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .modal-card {
   width: min(560px, 100%);
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-l) var(--radius-l) 0 0;
   box-shadow: var(--shadow-elevated);
-  padding: 20px;
+  /*
+   * Max-height = visual viewport (shrinks when keyboard opens) minus the
+   * top padding (Telegram header) minus a small top gap (16px).
+   * This guarantees the modal never extends behind the keyboard.
+   */
+  max-height: calc(
+    var(--visual-viewport-height, 100svh)
+    - var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px))
+    - 32px
+  );
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal-card--compact {
   width: min(460px, 100%);
 }
 
+/* Scrollable body — wraps all content between header and actions */
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 20px 16px;
+}
+
+/* Static header — always visible at top of card */
+.modal-header {
+  flex-shrink: 0;
+  padding: 20px 20px 0;
+}
+
 .modal-actions {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 14px;
+  padding: 14px 20px 20px;
   flex-wrap: wrap;
+  border-top: 1px solid var(--border);
 }
 
 .modal-actions--split {

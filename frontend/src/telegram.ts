@@ -72,6 +72,15 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp || null;
 }
 
+export function initVisualViewportVar(): void {
+  function update() {
+    const height = window.visualViewport?.height ?? window.innerHeight;
+    document.documentElement.style.setProperty('--visual-viewport-height', `${height}px`);
+  }
+  update();
+  window.visualViewport?.addEventListener('resize', update);
+}
+
 function applySafeAreaVars(webApp: TelegramWebApp): void {
   const root = document.documentElement;
 

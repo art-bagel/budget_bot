@@ -81,54 +81,54 @@ export default function TransferDialog({ source, target, baseCurrencyCode, onClo
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="section__header">
-          <div>
-            <div className="section__eyebrow">Перевод бюджета</div>
-            <h2 className="section__title">Перенос между категориями</h2>
+        <div className="modal-header">
+          <div className="section__header">
+            <div>
+              <div className="section__eyebrow">Перевод бюджета</div>
+              <h2 className="section__title">Перенос между категориями</h2>
+            </div>
           </div>
         </div>
 
-        <div className="operations-note">
-          Из <strong>{source.name}</strong> ({formatAmount(source.balance, source.currency_code)}) в <strong>{target.name}</strong>.
-        </div>
-
-        <div className="form-row">
-          <div className="input input--read-only">
-            Из: {source.name}
+        <div className="modal-body">
+          <div className="operations-note">
+            Из <strong>{source.name}</strong> ({formatAmount(source.balance, source.currency_code)}) в <strong>{target.name}</strong>.
           </div>
-          <div className="input input--read-only">
-            В: {target.name}
+
+          <div className="form-row">
+            <div className="input input--read-only">Из: {source.name}</div>
+            <div className="input input--read-only">В: {target.name}</div>
           </div>
-        </div>
 
-        <div className="form-row">
-          <input
-            className="input"
-            type="text"
-            inputMode="decimal"
-            placeholder={`Сумма в ${baseCurrencyCode}`}
-            value={amount}
-            onChange={(event) => setAmount(sanitizeDecimalInput(event.target.value))}
-          />
-        </div>
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              inputMode="decimal"
+              placeholder={`Сумма в ${baseCurrencyCode}`}
+              value={amount}
+              onChange={(event) => setAmount(sanitizeDecimalInput(event.target.value))}
+            />
+          </div>
 
-        <div className="form-row">
-          <input
-            className="input"
-            type="text"
-            placeholder="Комментарий (необязательно)"
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && !submitting && handleSubmit()}
-            style={{ flex: 1 }}
-          />
-        </div>
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              placeholder="Комментарий (необязательно)"
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && !submitting && handleSubmit()}
+              style={{ flex: 1 }}
+            />
+          </div>
 
-        {error && (
-          <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-            {error}
-          </p>
-        )}
+          {error && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+              {error}
+            </p>
+          )}
+        </div>
 
         <div className="modal-actions">
           <button className="btn" type="button" onClick={onClose} disabled={submitting}>

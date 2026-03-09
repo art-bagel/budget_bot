@@ -670,27 +670,31 @@ export default function Dashboard({ user }: { user: UserContext }) {
       {showBankDetail && (
         <div className="modal-backdrop" onClick={() => setShowBankDetail(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="section__header">
-              <div>
-                <div className="section__eyebrow">Банк</div>
-                <h2 className="section__title">Сколько денег лежит по валютам</h2>
+            <div className="modal-header">
+              <div className="section__header">
+                <div>
+                  <div className="section__eyebrow">Банк</div>
+                  <h2 className="section__title">Сколько денег лежит по валютам</h2>
+                </div>
               </div>
             </div>
-            <ul className="bank-detail-list">
-              {overview.bank_balances.map((balance) => (
-                <li className="bank-detail-row" key={balance.currency_code}>
-                  <div className="bank-detail-row__main">
-                    <span className="pill">{balance.currency_code}</span>
-                    <strong className="bank-detail-row__amount">
-                      {formatAmount(balance.amount, balance.currency_code)}
-                    </strong>
-                  </div>
-                  <div className="bank-detail-row__sub">
-                    Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="modal-body">
+              <ul className="bank-detail-list">
+                {overview.bank_balances.map((balance) => (
+                  <li className="bank-detail-row" key={balance.currency_code}>
+                    <div className="bank-detail-row__main">
+                      <span className="pill">{balance.currency_code}</span>
+                      <strong className="bank-detail-row__amount">
+                        {formatAmount(balance.amount, balance.currency_code)}
+                      </strong>
+                    </div>
+                    <div className="bank-detail-row__sub">
+                      Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <div className="modal-actions modal-actions--split">
               <button className="btn" type="button" onClick={() => setShowBankDetail(false)}>
                 Закрыть

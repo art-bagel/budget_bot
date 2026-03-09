@@ -202,98 +202,102 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
   return (
     <div className="modal-backdrop" onClick={() => !isBusy && onClose()}>
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="section__header">
-          <div>
-            <div className="section__eyebrow">Категория</div>
-            <h2 className="section__title">Редактирование категории</h2>
+        <div className="modal-header">
+          <div className="section__header">
+            <div>
+              <div className="section__eyebrow">Категория</div>
+              <h2 className="section__title">Редактирование категории</h2>
+            </div>
+            <span className="pill">{category.kind}</span>
           </div>
-          <span className="pill">{category.kind}</span>
         </div>
 
-        <div className="operations-note">
-          Тут можно переименовать категорию или убрать её в архив.
-        </div>
+        <div className="modal-body">
+          <div className="operations-note">
+            Тут можно переименовать категорию или убрать её в архив.
+          </div>
 
-        <div className="form-row">
-          <input
-            className="input"
-            type="text"
-            placeholder="Название категории"
-            value={nameDraft}
-            onChange={(event) => setNameDraft(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && !saving && handleSubmit()}
-            style={{ flex: 1 }}
-          />
-        </div>
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              placeholder="Название категории"
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && !saving && handleSubmit()}
+              style={{ flex: 1 }}
+            />
+          </div>
 
-        {category.kind === 'group' && (
-          <>
-            <div className="operations-note">
-              Для группы можно менять состав и доли распределения. Сумма долей должна быть ровно 100%.
-            </div>
-
-            <div className="form-row">
-              <span className="tag tag--neutral">
-                Сумма долей: {totalSharePercent.toFixed(2)}%
-              </span>
-              {loadingGroupSettings && <span className="tag tag--neutral">Загружаем состав группы...</span>}
-            </div>
-
-            {!loadingGroupSettings && groupRows.map((row) => (
-              <div className="form-row form-row--group-editor" key={row.key}>
-                <select
-                  className="input"
-                  value={row.child_category_id}
-                  onChange={(event) => handleGroupRowChange(row.key, 'child_category_id', event.target.value)}
-                  disabled={saving}
-                >
-                  <option value="">Выберите категорию</option>
-                  {groupRegularCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Доля, %"
-                  value={row.share_percent}
-                  onChange={(event) => handleGroupRowChange(row.key, 'share_percent', event.target.value)}
-                  disabled={saving}
-                />
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => removeGroupRow(row.key)}
-                  disabled={saving}
-                >
-                  Убрать
-                </button>
+          {category.kind === 'group' && (
+            <>
+              <div className="operations-note">
+                Для группы можно менять состав и доли распределения. Сумма долей должна быть ровно 100%.
               </div>
-            ))}
 
-            {!loadingGroupSettings && (
               <div className="form-row">
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={addGroupRow}
-                  disabled={saving}
-                >
-                  Добавить категорию
-                </button>
+                <span className="tag tag--neutral">
+                  Сумма долей: {totalSharePercent.toFixed(2)}%
+                </span>
+                {loadingGroupSettings && <span className="tag tag--neutral">Загружаем состав группы...</span>}
               </div>
-            )}
-          </>
-        )}
 
-        {error && (
-          <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-            {error}
-          </p>
-        )}
+              {!loadingGroupSettings && groupRows.map((row) => (
+                <div className="form-row form-row--group-editor" key={row.key}>
+                  <select
+                    className="input"
+                    value={row.child_category_id}
+                    onChange={(event) => handleGroupRowChange(row.key, 'child_category_id', event.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="">Выберите категорию</option>
+                    {groupRegularCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Доля, %"
+                    value={row.share_percent}
+                    onChange={(event) => handleGroupRowChange(row.key, 'share_percent', event.target.value)}
+                    disabled={saving}
+                  />
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => removeGroupRow(row.key)}
+                    disabled={saving}
+                  >
+                    Убрать
+                  </button>
+                </div>
+              ))}
+
+              {!loadingGroupSettings && (
+                <div className="form-row">
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={addGroupRow}
+                    disabled={saving}
+                  >
+                    Добавить категорию
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {error && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+              {error}
+            </p>
+          )}
+        </div>
 
         <div className="modal-actions modal-actions--split">
           <button
@@ -305,12 +309,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
             {archiving ? '...' : confirmArchive ? 'Точно в архив?' : 'В архив'}
           </button>
           <div className="modal-actions-group">
-            <button
-              className="btn"
-              type="button"
-              onClick={onClose}
-              disabled={isBusy}
-            >
+            <button className="btn" type="button" onClick={onClose} disabled={isBusy}>
               Отмена
             </button>
             <button

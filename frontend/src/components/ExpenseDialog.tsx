@@ -55,59 +55,63 @@ export default function ExpenseDialog({ category, user, onClose, onSuccess }: Pr
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="section__header">
-          <div>
-            <div className="section__eyebrow">Расход</div>
-            <h2 className="section__title">Записать расход</h2>
+        <div className="modal-header">
+          <div className="section__header">
+            <div>
+              <div className="section__eyebrow">Расход</div>
+              <h2 className="section__title">Записать расход</h2>
+            </div>
           </div>
         </div>
 
-        <div className="operations-note">
-          Списать из <strong>{category.name}</strong> ({formatAmount(category.balance, category.currency_code)}).
-        </div>
+        <div className="modal-body">
+          <div className="operations-note">
+            Списать из <strong>{category.name}</strong> ({formatAmount(category.balance, category.currency_code)}).
+          </div>
 
-        <div className="form-row">
-          <div className="input input--read-only">Категория: {category.name}</div>
-        </div>
+          <div className="form-row">
+            <div className="input input--read-only">Категория: {category.name}</div>
+          </div>
 
-        <div className="form-row">
-          <input
-            className="input"
-            type="text"
-            inputMode="decimal"
-            placeholder="Сумма"
-            value={amount}
-            onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))}
-            autoFocus
-          />
-          <select
-            className="input"
-            value={currencyCode}
-            onChange={(e) => setCurrencyCode(e.target.value)}
-          >
-            {currencies.map((c) => (
-              <option key={c.code} value={c.code}>{c.code}</option>
-            ))}
-          </select>
-        </div>
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              inputMode="decimal"
+              placeholder="Сумма"
+              value={amount}
+              onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))}
+              autoFocus
+            />
+            <select
+              className="input"
+              value={currencyCode}
+              onChange={(e) => setCurrencyCode(e.target.value)}
+            >
+              {currencies.map((c) => (
+                <option key={c.code} value={c.code}>{c.code}</option>
+              ))}
+            </select>
+          </div>
 
-        <div className="form-row">
-          <input
-            className="input"
-            type="text"
-            placeholder="Комментарий (необязательно)"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            style={{ flex: 1 }}
-          />
-        </div>
+          <div className="form-row">
+            <input
+              className="input"
+              type="text"
+              placeholder="Комментарий (необязательно)"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              style={{ flex: 1 }}
+            />
+          </div>
 
-        {error && (
-          <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-            {error}
-          </p>
-        )}
+          {error && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+              {error}
+            </p>
+          )}
+        </div>
 
         <div className="modal-actions">
           <button className="btn" type="button" onClick={onClose} disabled={submitting}>
