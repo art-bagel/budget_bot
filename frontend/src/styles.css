@@ -751,10 +751,13 @@ body.modal-open {
   border-radius: var(--radius-l);
   box-shadow: var(--shadow-elevated);
   min-height: 0;
-  height: calc(
-    var(--visual-viewport-height, 100svh)
-    - var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)))
-    - 24px
+  height: min(
+    calc(var(--visual-viewport-height, 100svh) * 0.66),
+    calc(
+      var(--visual-viewport-height, 100svh)
+      - var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)))
+      - 24px
+    )
   );
   max-height: calc(
     var(--visual-viewport-height, 100svh)
