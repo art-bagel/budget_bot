@@ -89,3 +89,4 @@ async def get_dashboard_overview(
         bank_balances=bank_balances,
         budget_categories=visible_budget_categories,
     )
+
