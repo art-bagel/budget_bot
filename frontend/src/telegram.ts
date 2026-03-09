@@ -84,13 +84,14 @@ export function initVisualViewportVar(): void {
 function applySafeAreaVars(webApp: TelegramWebApp): void {
   const root = document.documentElement;
 
-  // contentSafeAreaInset.top = system status bar + Telegram header bar
-  const contentTop = webApp.contentSafeAreaInset?.top ?? 0;
   // safeAreaInset.top = system status bar only (notch / Dynamic Island)
   const safeTop = webApp.safeAreaInset?.top ?? 0;
   const safeBottom = webApp.safeAreaInset?.bottom ?? 0;
+  const contentTop = webApp.contentSafeAreaInset?.top ?? 0;
+  const fallbackHeaderHeight = 48;
+  const resolvedContentTop = Math.max(contentTop, safeTop + fallbackHeaderHeight);
 
-  root.style.setProperty('--tg-content-safe-area-inset-top', `${contentTop}px`);
+  root.style.setProperty('--tg-content-safe-area-inset-top', `${resolvedContentTop}px`);
   root.style.setProperty('--tg-safe-area-inset-top', `${safeTop}px`);
   root.style.setProperty('--tg-safe-area-inset-bottom', `${safeBottom}px`);
 }

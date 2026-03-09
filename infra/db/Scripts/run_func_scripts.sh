@@ -8,10 +8,6 @@ FILES=(
     "put__register_user_context.sql"
     "put__create_category.sql"
     "put__create_income_source.sql"
-    "set__update_category.sql"
-    "set__archive_category.sql"
-    "set__replace_group_members.sql"
-    "set__delete_user_account.sql"
     "put__record_fx_rate_snapshot.sql"
     "put__record_income.sql"
     "put__allocate_budget.sql"
@@ -27,6 +23,10 @@ FILES=(
     "get__budget_snapshot.sql"
     "get__operations_history.sql"
     "get__portfolio_valuation.sql"
+    "set__update_category.sql"
+    "set__archive_category.sql"
+    "set__replace_group_members.sql"
+    "set__delete_user_account.sql"
 )
 
 for file_name in "${FILES[@]}"; do
