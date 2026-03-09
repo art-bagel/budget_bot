@@ -20,6 +20,11 @@ const HISTORY_TYPE_OPTIONS = [
   { value: 'exchange', label: 'Обмен валют' },
 ];
 
+type OperationLine = {
+  label: string;
+  amount?: string;
+};
+
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('ru-RU', {
@@ -50,19 +55,25 @@ function getOperationTitle(item: OperationHistoryItem): string {
 }
 
 
-function getOperationLines(item: OperationHistoryItem): string[] {
-  const lines: string[] = [];
+function getOperationLines(item: OperationHistoryItem): OperationLine[] {
+  const lines: OperationLine[] = [];
 
   item.bank_entries.forEach((entry) => {
-    lines.push(formatSignedAmount(entry.amount, entry.currency_code));
+    lines.push({
+      label: 'Банк · ' + entry.currency_code,
+      amount: formatSignedAmount(entry.amount, entry.currency_code),
+    });
   });
 
   item.budget_entries.forEach((entry) => {
-    lines.push(entry.category_name + ': ' + formatSignedAmount(entry.amount, entry.currency_code));
+    lines.push({
+      label: entry.category_name,
+      amount: formatSignedAmount(entry.amount, entry.currency_code),
+    });
   });
 
   if (item.reversal_of_operation_id) {
-    lines.push('Отмена операции #' + item.reversal_of_operation_id);
+    lines.push({ label: 'Отмена операции #' + item.reversal_of_operation_id });
   }
 
   return lines;
@@ -165,7 +176,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     ].filter(Boolean).join(' ')}
                     key={'history-' + item.operation_id}
                   >
-                    <div>
+                    <div className="history-main">
                       <div className="list-row__title">
                         {getOperationTitle(item)}
                         {item.has_reversal && (
@@ -177,8 +188,17 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                       </div>
                       <div className="history-lines">
                         {getOperationLines(item).map((line, index) => (
-                          <div className="history-line" key={item.operation_id + '-line-' + index}>
-                            {line}
+                          <div
+                            className={[
+                              'history-line',
+                              line.amount ? '' : 'history-line--note',
+                            ].filter(Boolean).join(' ')}
+                            key={item.operation_id + '-line-' + index}
+                          >
+                            <span className="history-line__label">{line.label}</span>
+                            {line.amount && (
+                              <span className="history-line__amount">{line.amount}</span>
+                            )}
                           </div>
                         ))}
                       </div>

@@ -750,6 +750,12 @@ p { margin: 0; }
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.history-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .history-list {
@@ -760,13 +766,32 @@ p { margin: 0; }
 
 .history-lines {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin-top: 10px;
 }
 
 .history-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
   font-size: 0.8rem;
+}
+
+.history-line--note {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.history-line__label {
   color: var(--text-secondary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-line__amount {
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .history-status-tag {
