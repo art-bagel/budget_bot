@@ -19,7 +19,7 @@ export function usePullToRefresh(
 
     const onStart = (e: TouchEvent) => {
       // Only activate when scrolled to the very top
-      if (el.scrollTop > 0) {
+      if (window.scrollY > 0) {
         stateRef.current = null;
         return;
       }
