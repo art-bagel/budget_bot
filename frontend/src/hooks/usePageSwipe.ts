@@ -6,6 +6,7 @@ const PAGE_ORDER: Page[] = ['dashboard', 'operations', 'exchange', 'settings'];
 
 const MIN_DISTANCE = 72;   // px — minimum horizontal travel
 const MAX_ANGLE = 0.5;     // tan(angle) — keeps gesture mostly horizontal
+const EDGE_ZONE = 44;      // px — touch must start within this distance from screen edge
 
 export function usePageSwipe(
   ref: RefObject<HTMLElement | null>,
@@ -23,14 +24,24 @@ export function usePageSwipe(
     if (!el) return;
 
     const onStart = (e: TouchEvent) => {
+      const x = e.touches[0].clientX;
+      const screenWidth = window.innerWidth;
+
+      // Only allow swipe from screen edges
+      if (x > EDGE_ZONE && x < screenWidth - EDGE_ZONE) {
+        stateRef.current = null;
+        return;
+      }
+
       // Ignore if touch starts on a swipeable element (category cards, free budget)
       const target = e.target as Element;
       if (target.closest('.swipeable')) {
         stateRef.current = null;
         return;
       }
+
       stateRef.current = {
-        startX: e.touches[0].clientX,
+        startX: x,
         startY: e.touches[0].clientY,
         blocked: false,
       };

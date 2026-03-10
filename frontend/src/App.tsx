@@ -22,6 +22,7 @@ export default function App() {
   const handleNavigate = (p: Page) => {
     setVisited(prev => new Set(prev).add(p));
     setPage(p);
+    setRefreshKeys(prev => ({ ...prev, [p]: prev[p] + 1 }));
   };
 
   const handleRefresh = () => {
