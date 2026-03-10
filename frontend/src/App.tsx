@@ -14,11 +14,18 @@ const PAGE_IDS: Page[] = ['dashboard', 'operations', 'exchange', 'settings'];
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const [visited, setVisited] = useState<Set<Page>>(new Set(['dashboard']));
+  const [refreshKeys, setRefreshKeys] = useState<Record<Page, number>>({
+    dashboard: 0, operations: 0, exchange: 0, settings: 0,
+  });
   const { user, loading, error } = useAuth();
 
   const handleNavigate = (p: Page) => {
     setVisited(prev => new Set(prev).add(p));
     setPage(p);
+  };
+
+  const handleRefresh = () => {
+    setRefreshKeys(prev => ({ ...prev, [page]: prev[page] + 1 }));
   };
 
   useEffect(() => bindTelegramBackButton(page !== 'dashboard', () => handleNavigate('dashboard')), [page]);
@@ -48,10 +55,10 @@ export default function App() {
   }
 
   return (
-    <Layout page={page} onNavigate={handleNavigate}>
+    <Layout page={page} onNavigate={handleNavigate} onRefresh={handleRefresh}>
       {PAGE_IDS.map((id) => visited.has(id) ? (
         <div key={id} style={id !== page ? { display: 'none' } : undefined}>
-          <ErrorBoundary>
+          <ErrorBoundary key={refreshKeys[id]}>
             {id === 'dashboard' && <Dashboard user={user} />}
             {id === 'operations' && <Operations user={user} />}
             {id === 'exchange' && <Exchange user={user} />}

@@ -7,12 +7,14 @@ import {
   IconSettings,
 } from './Icons';
 import { usePageSwipe } from '../hooks/usePageSwipe';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 
 export type Page = 'dashboard' | 'operations' | 'exchange' | 'settings';
 
 interface Props {
   page: Page;
   onNavigate: (page: Page) => void;
+  onRefresh: () => void;
   children: ReactNode;
 }
 
@@ -23,9 +25,10 @@ const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
   { id: 'settings', label: 'Настройки', icon: IconSettings },
 ];
 
-export default function Layout({ page, onNavigate, children }: Props) {
+export default function Layout({ page, onNavigate, onRefresh, children }: Props) {
   const mainRef = useRef<HTMLElement>(null);
   usePageSwipe(mainRef, page, onNavigate);
+  usePullToRefresh(mainRef, onRefresh);
 
   return (
     <div className="app">
