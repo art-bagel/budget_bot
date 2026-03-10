@@ -71,11 +71,14 @@ BEGIN
         RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
     END IF;
 
-    SELECT COALESCE(sum(amount), 0)
+    SELECT COALESCE((
+        SELECT amount
+        FROM current_bank_balances
+        WHERE bank_account_id = _bank_account_id
+          AND currency_code = _from_currency_code
+    ), 0)
     INTO _bank_balance
-    FROM bank_entries
-    WHERE bank_account_id = _bank_account_id
-      AND currency_code = _from_currency_code;
+    ;
 
     IF _bank_balance < _from_amount THEN
         RAISE EXCEPTION 'Insufficient bank balance in currency %', _from_currency_code;
@@ -183,8 +186,34 @@ BEGIN
         IF _realized_fx_result <> 0 THEN
             INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
             VALUES (_operation_id, _fx_result_category_id, _base_currency_code, _realized_fx_result);
+
+            PERFORM budgeting.put__apply_current_budget_delta(
+                _fx_result_category_id,
+                _base_currency_code,
+                _realized_fx_result
+            );
         END IF;
     END IF;
+
+    PERFORM budgeting.put__apply_current_bank_delta(
+        _bank_account_id,
+        _from_currency_code,
+        -_from_amount,
+        CASE
+            WHEN _from_currency_code = _base_currency_code THEN -round(_from_amount, 2)
+            ELSE -_consumed_cost_base
+        END
+    );
+
+    PERFORM budgeting.put__apply_current_bank_delta(
+        _bank_account_id,
+        _to_currency_code,
+        _to_amount,
+        CASE
+            WHEN _to_currency_code = _base_currency_code THEN round(_to_amount, 2)
+            ELSE _new_lot_cost_base
+        END
+    );
 
     RETURN jsonb_build_object(
         'operation_id', _operation_id,

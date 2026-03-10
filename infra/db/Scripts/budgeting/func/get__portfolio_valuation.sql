@@ -44,11 +44,10 @@ BEGIN
     END IF;
 
     FOR _balance IN
-        SELECT currency_code, sum(amount) AS amount
-        FROM bank_entries
+        SELECT currency_code, amount
+        FROM current_bank_balances
         WHERE bank_account_id = _bank_account_id
-        GROUP BY currency_code
-        HAVING sum(amount) <> 0
+          AND amount <> 0
         ORDER BY currency_code
     LOOP
         IF _balance.currency_code = _target_currency_code THEN

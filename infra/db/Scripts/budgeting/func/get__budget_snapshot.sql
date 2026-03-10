@@ -34,12 +34,11 @@ BEGIN
           AND (_is_active IS NULL OR c.is_active = _is_active)
     ),
     balances AS (
-        SELECT be.category_id, sum(be.amount) AS amount
-        FROM budget_entries be
+        SELECT cbb.category_id, cbb.amount
+        FROM current_budget_balances cbb
         JOIN user_categories uc
-          ON uc.id = be.category_id
-        WHERE be.currency_code = _base_currency_code
-        GROUP BY be.category_id
+          ON uc.id = cbb.category_id
+        WHERE cbb.currency_code = _base_currency_code
     )
     SELECT COALESCE(
         jsonb_agg(

@@ -69,11 +69,14 @@ BEGIN
         WHERE operation_id = _operation_id
     LOOP
         IF -_bank_entry.amount < 0 THEN
-            SELECT COALESCE(sum(amount), 0)
+            SELECT COALESCE((
+                SELECT amount
+                FROM current_bank_balances
+                WHERE bank_account_id = _bank_entry.bank_account_id
+                  AND currency_code = _bank_entry.currency_code
+            ), 0)
             INTO _current_balance
-            FROM bank_entries
-            WHERE bank_account_id = _bank_entry.bank_account_id
-              AND currency_code = _bank_entry.currency_code;
+            ;
 
             IF _current_balance < abs(_bank_entry.amount) THEN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient bank balance in currency %',
@@ -89,11 +92,14 @@ BEGIN
         WHERE operation_id = _operation_id
     LOOP
         IF -_budget_entry.amount < 0 THEN
-            SELECT COALESCE(sum(amount), 0)
+            SELECT COALESCE((
+                SELECT amount
+                FROM current_budget_balances
+                WHERE category_id = _budget_entry.category_id
+                  AND currency_code = _budget_entry.currency_code
+            ), 0)
             INTO _current_budget
-            FROM budget_entries
-            WHERE category_id = _budget_entry.category_id
-              AND currency_code = _budget_entry.currency_code;
+            ;
 
             IF _current_budget < abs(_budget_entry.amount) THEN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient budget in category %',
@@ -136,6 +142,8 @@ BEGIN
     SET amount_remaining = 0,
         cost_base_remaining = 0
     WHERE opened_by_operation_id = _operation_id;
+
+    PERFORM budgeting.rebuild_current_balances(_user_id);
 
     RETURN jsonb_build_object(
         'reversal_operation_id', _reversal_operation_id,

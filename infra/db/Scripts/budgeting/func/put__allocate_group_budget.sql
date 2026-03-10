@@ -81,21 +81,24 @@ BEGIN
     END IF;
 
     IF _source_kind = 'system' THEN
-        SELECT COALESCE(sum(be.amount), 0)
+        SELECT COALESCE(sum(cbb.amount), 0)
         INTO _from_balance
         FROM categories c
-        LEFT JOIN budget_entries be
-          ON be.category_id = c.id
-         AND be.currency_code = _base_currency_code
+        LEFT JOIN current_budget_balances cbb
+          ON cbb.category_id = c.id
+         AND cbb.currency_code = _base_currency_code
         WHERE c.user_id = _user_id
           AND c.kind = 'system'
           AND c.is_active;
     ELSE
-        SELECT COALESCE(sum(amount), 0)
+        SELECT COALESCE((
+            SELECT amount
+            FROM current_budget_balances
+            WHERE category_id = _from_category_id
+              AND currency_code = _base_currency_code
+        ), 0)
         INTO _from_balance
-        FROM budget_entries
-        WHERE category_id = _from_category_id
-          AND currency_code = _base_currency_code;
+        ;
     END IF;
 
     IF _from_balance < round(_amount_in_base, 2) THEN
@@ -156,6 +159,12 @@ BEGIN
     INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
     VALUES (_operation_id, _from_category_id, _base_currency_code, -round(_amount_in_base, 2));
 
+    PERFORM budgeting.put__apply_current_budget_delta(
+        _from_category_id,
+        _base_currency_code,
+        -round(_amount_in_base, 2)
+    );
+
     FOR _member IN
         WITH RECURSIVE expanded_members AS (
             SELECT
@@ -208,6 +217,12 @@ BEGIN
 
         INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
         VALUES (_operation_id, _member.child_category_id, _base_currency_code, _line_amount);
+
+        PERFORM budgeting.put__apply_current_budget_delta(
+            _member.child_category_id,
+            _base_currency_code,
+            _line_amount
+        );
     END LOOP;
 
     RETURN jsonb_build_object(

@@ -78,11 +78,14 @@ BEGIN
         RAISE EXCEPTION 'Expense category % must be of kind regular', _category_id;
     END IF;
 
-    SELECT COALESCE(sum(amount), 0)
+    SELECT COALESCE((
+        SELECT amount
+        FROM current_bank_balances
+        WHERE bank_account_id = _bank_account_id
+          AND currency_code = _currency_code
+    ), 0)
     INTO _bank_balance
-    FROM bank_entries
-    WHERE bank_account_id = _bank_account_id
-      AND currency_code = _currency_code;
+    ;
 
     IF _bank_balance < _amount THEN
         RAISE EXCEPTION 'Insufficient bank balance in currency %', _currency_code;
@@ -123,11 +126,14 @@ BEGIN
         END IF;
     END IF;
 
-    SELECT COALESCE(sum(amount), 0)
+    SELECT COALESCE((
+        SELECT amount
+        FROM current_budget_balances
+        WHERE category_id = _category_id
+          AND currency_code = _base_currency_code
+    ), 0)
     INTO _category_balance
-    FROM budget_entries
-    WHERE category_id = _category_id
-      AND currency_code = _base_currency_code;
+    ;
 
     IF _category_balance < _expense_cost_base THEN
         RAISE EXCEPTION 'Insufficient budget in category %', _category_id;
@@ -155,6 +161,19 @@ BEGIN
 
     INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
     VALUES (_operation_id, _category_id, _base_currency_code, -_expense_cost_base);
+
+    PERFORM budgeting.put__apply_current_bank_delta(
+        _bank_account_id,
+        _currency_code,
+        -_amount,
+        -_expense_cost_base
+    );
+
+    PERFORM budgeting.put__apply_current_budget_delta(
+        _category_id,
+        _base_currency_code,
+        -_expense_cost_base
+    );
 
     RETURN jsonb_build_object(
         'operation_id', _operation_id,

@@ -104,6 +104,19 @@ BEGIN
     INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
     VALUES (_operation_id, _unallocated_category_id, _base_currency_code, _effective_budget_amount_in_base);
 
+    PERFORM budgeting.put__apply_current_bank_delta(
+        _bank_account_id,
+        _currency_code,
+        _amount,
+        _effective_budget_amount_in_base
+    );
+
+    PERFORM budgeting.put__apply_current_budget_delta(
+        _unallocated_category_id,
+        _base_currency_code,
+        _effective_budget_amount_in_base
+    );
+
     IF _currency_code <> _base_currency_code THEN
         INSERT INTO fx_lots (
             bank_account_id,

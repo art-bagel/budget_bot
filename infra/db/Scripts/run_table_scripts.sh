@@ -14,6 +14,8 @@ FILES=(
     "operations.sql"
     "bank_entries.sql"
     "budget_entries.sql"
+    "current_bank_balances.sql"
+    "current_budget_balances.sql"
     "fx_lots.sql"
     "lot_consumptions.sql"
     "fx_rate_snapshots.sql"
