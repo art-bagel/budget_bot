@@ -7,3 +7,9 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_entries (
     currency_code char(3) NOT NULL REFERENCES budgeting.currencies(code),
     amount numeric(20, 8) NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_bank_entries_operation_id
+    ON budgeting.bank_entries (operation_id);
+
+CREATE INDEX IF NOT EXISTS idx_bank_entries_account_currency
+    ON budgeting.bank_entries (bank_account_id, currency_code);

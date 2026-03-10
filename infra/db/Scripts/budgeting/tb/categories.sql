@@ -9,3 +9,9 @@ CREATE TABLE IF NOT EXISTS budgeting.categories (
     created_at timestamptz NOT NULL DEFAULT current_timestamp,
     CONSTRAINT uq_categories_user_name UNIQUE (user_id, name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_categories_user_active_id
+    ON budgeting.categories (user_id, is_active, id);
+
+CREATE INDEX IF NOT EXISTS idx_categories_user_kind_active_id
+    ON budgeting.categories (user_id, kind, is_active, id);

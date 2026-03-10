@@ -12,3 +12,10 @@ CREATE TABLE IF NOT EXISTS budgeting.fx_lots (
     opened_by_operation_id bigint NOT NULL REFERENCES budgeting.operations(id),
     created_at timestamptz NOT NULL DEFAULT current_timestamp
 );
+
+CREATE INDEX IF NOT EXISTS idx_fx_lots_opened_by_operation_id
+    ON budgeting.fx_lots (opened_by_operation_id);
+
+CREATE INDEX IF NOT EXISTS idx_fx_lots_open_fifo
+    ON budgeting.fx_lots (bank_account_id, currency_code, created_at, id)
+    WHERE amount_remaining > 0;

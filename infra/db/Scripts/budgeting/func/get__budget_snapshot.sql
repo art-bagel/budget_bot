@@ -27,31 +27,37 @@ BEGIN
         RAISE EXCEPTION 'Unknown user id: %', _user_id;
     END IF;
 
-    WITH balances AS (
+    WITH user_categories AS (
+        SELECT c.id, c.name, c.kind, c.is_active
+        FROM categories c
+        WHERE c.user_id = _user_id
+          AND (_is_active IS NULL OR c.is_active = _is_active)
+    ),
+    balances AS (
         SELECT be.category_id, sum(be.amount) AS amount
         FROM budget_entries be
+        JOIN user_categories uc
+          ON uc.id = be.category_id
         WHERE be.currency_code = _base_currency_code
         GROUP BY be.category_id
     )
     SELECT COALESCE(
         jsonb_agg(
             jsonb_build_object(
-                'category_id', c.id,
-                'name', c.name,
-                'kind', c.kind,
+                'category_id', uc.id,
+                'name', uc.name,
+                'kind', uc.kind,
                 'balance', COALESCE(b.amount, 0),
                 'currency_code', _base_currency_code
             )
-            ORDER BY c.id
+            ORDER BY uc.id
         ),
         '[]'::jsonb
     )
     INTO _result
-    FROM categories c
+    FROM user_categories uc
     LEFT JOIN balances b
-      ON b.category_id = c.id
-    WHERE c.user_id = _user_id
-      AND (_is_active IS NULL OR c.is_active = _is_active);
+      ON b.category_id = uc.id;
 
     RETURN _result;
 END

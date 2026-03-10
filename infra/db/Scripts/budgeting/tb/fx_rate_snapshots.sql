@@ -9,3 +9,6 @@ CREATE TABLE IF NOT EXISTS budgeting.fx_rate_snapshots (
     source text,
     CONSTRAINT uq_fx_rate_pair_time UNIQUE (base_currency_code, quote_currency_code, fetched_at)
 );
+
+CREATE INDEX IF NOT EXISTS idx_fx_rate_snapshots_pair_fetched_at_desc
+    ON budgeting.fx_rate_snapshots (base_currency_code, quote_currency_code, fetched_at DESC);

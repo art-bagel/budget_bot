@@ -9,3 +9,12 @@ CREATE TABLE IF NOT EXISTS budgeting.operations (
     comment text,
     created_at timestamptz NOT NULL DEFAULT current_timestamp
 );
+
+CREATE INDEX IF NOT EXISTS idx_operations_user_created_at_id
+    ON budgeting.operations (user_id, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_operations_user_type_created_at_id
+    ON budgeting.operations (user_id, type, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_operations_reversal_of_operation_id
+    ON budgeting.operations (reversal_of_operation_id);
