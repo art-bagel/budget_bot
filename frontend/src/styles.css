@@ -699,6 +699,9 @@ p { margin: 0; }
 }
 
 .list-row__sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 0.8rem;
   color: var(--text-tertiary);
 }
@@ -772,19 +775,24 @@ p { margin: 0; }
 
 .history-line {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
   font-size: 0.8rem;
 }
 
 .history-line__label {
+  flex: 1;
+  min-width: 0;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
 .history-line__amount {
+  flex-shrink: 0;
   color: var(--text-secondary);
   font-weight: 600;
+  text-align: right;
 }
 
 .history-status-tag {

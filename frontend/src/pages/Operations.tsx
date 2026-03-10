@@ -184,15 +184,13 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                         )}
                       </div>
                       <div className="list-row__sub">
-                        {item.comment || formatDateTime(item.created_at)}
+                        {item.comment && <span>{item.comment}</span>}
+                        <span>{formatDateTime(item.created_at)}</span>
                       </div>
                       <div className="history-lines">
                         {getOperationLines(item).map((line, index) => (
                           <div
-                            className={[
-                              'history-line',
-                              line.amount ? '' : 'history-line--note',
-                            ].filter(Boolean).join(' ')}
+                            className="history-line"
                             key={item.operation_id + '-line-' + index}
                           >
                             <span className="history-line__label">{line.label}</span>
@@ -204,7 +202,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                       </div>
                     </div>
                     <div className="history-side">
-                      <span className="tag tag--neutral">{formatDateTime(item.created_at)}</span>
                       {!item.has_reversal && (
                         <button
                           className="btn"
