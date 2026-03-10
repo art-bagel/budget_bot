@@ -771,27 +771,20 @@ p { margin: 0; }
 }
 
 .history-line {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 0.8rem;
-}
-
-.history-line--note {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .history-line__label {
   color: var(--text-secondary);
-  min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .history-line__amount {
   color: var(--text-secondary);
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .history-status-tag {
