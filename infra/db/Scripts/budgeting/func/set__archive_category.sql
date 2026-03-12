@@ -1,10 +1,5 @@
 -- Description:
---   Archives a user category or group and removes its group bindings.
--- Parameters:
---   _user_id bigint - Category owner.
---   _category_id bigint - Category identifier to archive.
--- Returns:
---   jsonb - Archived category identifier and kind.
+--   Archives an accessible category or group and removes its group bindings.
 CREATE OR REPLACE FUNCTION budgeting.set__archive_category(
     _user_id bigint,
     _category_id bigint
@@ -22,18 +17,24 @@ DECLARE
     _operation_id bigint;
     _archive_suffix text;
     _archived_name text;
+    _owner_type text;
+    _owner_user_id bigint;
+    _owner_family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    SELECT kind, name
-    INTO _category_kind, _category_name
+    SELECT kind, name, owner_type, owner_user_id, owner_family_id
+    INTO _category_kind, _category_name, _owner_type, _owner_user_id, _owner_family_id
     FROM categories
     WHERE id = _category_id
-      AND user_id = _user_id
       AND is_active;
 
     IF _category_kind IS NULL THEN
-        RAISE EXCEPTION 'Unknown active category % for user %', _category_id, _user_id;
+        RAISE EXCEPTION 'Unknown active category %', _category_id;
+    END IF;
+
+    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+        RAISE EXCEPTION 'Access denied to category %', _category_id;
     END IF;
 
     IF _category_kind = 'system' THEN
@@ -46,43 +47,54 @@ BEGIN
     JOIN categories parent
       ON parent.id = gm.group_id
     WHERE gm.child_category_id = _category_id
-      AND parent.user_id = _user_id
       AND parent.is_active;
 
     IF _parent_group_names IS NOT NULL THEN
         RAISE EXCEPTION 'Category % is still used in groups: %', _category_id, _parent_group_names;
     END IF;
 
-    SELECT base_currency_code
-    INTO _base_currency_code
-    FROM users
-    WHERE id = _user_id;
+    _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
     IF _base_currency_code IS NULL THEN
-        RAISE EXCEPTION 'Unknown user id: %', _user_id;
+        RAISE EXCEPTION 'Base currency is missing for category owner %', _category_id;
     END IF;
 
-    SELECT id
-    INTO _unallocated_category_id
-    FROM categories
-    WHERE user_id = _user_id
-      AND name = 'Unallocated'
-      AND kind = 'system'
-      AND is_active;
+    _unallocated_category_id := budgeting.get__owner_system_category_id(
+        _owner_type,
+        _owner_user_id,
+        _owner_family_id,
+        'Unallocated'
+    );
 
     IF _unallocated_category_id IS NULL THEN
-        RAISE EXCEPTION 'System category Unallocated is missing for user %', _user_id;
+        RAISE EXCEPTION 'System category Unallocated is missing for category owner %', _category_id;
     END IF;
 
-    SELECT COALESCE(sum(amount), 0)
-    INTO _category_balance
-    FROM budget_entries
-    WHERE category_id = _category_id
-      AND currency_code = _base_currency_code;
+    SELECT COALESCE((
+        SELECT amount
+        FROM current_budget_balances
+        WHERE category_id = _category_id
+          AND currency_code = _base_currency_code
+    ), 0)
+    INTO _category_balance;
 
     IF _category_balance <> 0 THEN
-        INSERT INTO operations (user_id, type, comment)
-        VALUES (_user_id, 'allocate', format('Archive category "%s"', _category_name))
+        INSERT INTO operations (
+            actor_user_id,
+            owner_type,
+            owner_user_id,
+            owner_family_id,
+            type,
+            comment
+        )
+        VALUES (
+            _user_id,
+            _owner_type,
+            _owner_user_id,
+            _owner_family_id,
+            'allocate',
+            format('Archive category "%s"', _category_name)
+        )
         RETURNING id
         INTO _operation_id;
 
@@ -90,6 +102,18 @@ BEGIN
         VALUES
             (_operation_id, _category_id, _base_currency_code, -_category_balance),
             (_operation_id, _unallocated_category_id, _base_currency_code, _category_balance);
+
+        PERFORM budgeting.put__apply_current_budget_delta(
+            _category_id,
+            _base_currency_code,
+            -_category_balance
+        );
+
+        PERFORM budgeting.put__apply_current_budget_delta(
+            _unallocated_category_id,
+            _base_currency_code,
+            _category_balance
+        );
     END IF;
 
     DELETE FROM group_members
@@ -108,6 +132,9 @@ BEGIN
         'category_id', _category_id,
         'kind', _category_kind,
         'name', _category_name,
+        'owner_type', _owner_type,
+        'owner_user_id', _owner_user_id,
+        'owner_family_id', _owner_family_id,
         'is_active', false
     );
 END

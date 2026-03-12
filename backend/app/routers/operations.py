@@ -91,6 +91,7 @@ class ReverseOperationResponse(BaseModel):
 
 
 class OperationBankEntry(BaseModel):
+    bank_account_id: int
     currency_code: str
     amount: float
 
@@ -99,6 +100,7 @@ class OperationBudgetEntry(BaseModel):
     category_id: int
     category_name: str
     category_kind: str
+    category_owner_type: str
     currency_code: str
     amount: float
 
@@ -110,6 +112,11 @@ class OperationHistoryItem(BaseModel):
     created_at: str
     reversal_of_operation_id: Optional[int] = None
     has_reversal: bool = False
+    actor_user_id: int
+    actor_username: Optional[str] = None
+    owner_type: str
+    owner_user_id: Optional[int] = None
+    owner_family_id: Optional[int] = None
     income_source_name: Optional[str] = None
     bank_entries: List[OperationBankEntry]
     budget_entries: List[OperationBudgetEntry]

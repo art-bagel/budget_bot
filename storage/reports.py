@@ -7,6 +7,10 @@ class Reports(DataBase):
     SCHEMA = 'budgeting'
 
     F_GET__CURRENCIES = 'get__currencies'
+    F_GET__BANK_ACCOUNTS = 'get__bank_accounts'
+    F_GET__MY_FAMILY = 'get__my_family'
+    F_GET__FAMILY_MEMBERS = 'get__family_members'
+    F_GET__FAMILY_INVITATIONS = 'get__family_invitations'
     F_GET__CATEGORIES = 'get__categories'
     F_GET__INCOME_SOURCES = 'get__income_sources'
     F_GET__GROUP_MEMBERS = 'get__group_members'
@@ -19,6 +23,34 @@ class Reports(DataBase):
     async def get__currencies(self) -> list[dict]:
         result = await self.call_function(
             self._fn(self.F_GET__CURRENCIES),
+        )
+        return result if result else []
+
+    async def get__bank_accounts(self, user_id: int, is_active: Optional[bool] = True) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__BANK_ACCOUNTS),
+            user_id,
+            is_active,
+        )
+        return result if result else []
+
+    async def get__my_family(self, user_id: int) -> Optional[dict]:
+        return await self.call_function(
+            self._fn(self.F_GET__MY_FAMILY),
+            user_id,
+        )
+
+    async def get__family_members(self, user_id: int) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__FAMILY_MEMBERS),
+            user_id,
+        )
+        return result if result else []
+
+    async def get__family_invitations(self, user_id: int) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__FAMILY_INVITATIONS),
+            user_id,
         )
         return result if result else []
 

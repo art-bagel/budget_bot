@@ -1,12 +1,5 @@
 -- Description:
---   Replaces the full membership definition of a budget group.
--- Parameters:
---   _user_id bigint - Group owner.
---   _group_id bigint - Category identifier of the group.
---   _child_category_ids bigint[] - Child regular categories.
---   _shares numeric[] - Allocation shares in the same order as child categories.
--- Returns:
---   jsonb - Group identifier and number of configured members.
+--   Replaces the full membership definition of an accessible budget group.
 CREATE OR REPLACE FUNCTION budgeting.set__replace_group_members(
     _user_id bigint,
     _group_id bigint,
@@ -22,6 +15,12 @@ DECLARE
     _total_share numeric := 0;
     _group_kind text;
     _child_kind text;
+    _owner_type text;
+    _owner_user_id bigint;
+    _owner_family_id bigint;
+    _child_owner_type text;
+    _child_owner_user_id bigint;
+    _child_owner_family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
@@ -35,15 +34,18 @@ BEGIN
         RAISE EXCEPTION 'Child categories and shares arrays must have the same length';
     END IF;
 
-    SELECT kind
-    INTO _group_kind
+    SELECT kind, owner_type, owner_user_id, owner_family_id
+    INTO _group_kind, _owner_type, _owner_user_id, _owner_family_id
     FROM categories
     WHERE id = _group_id
-      AND user_id = _user_id
       AND is_active;
 
     IF _group_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown group category id: %', _group_id;
+    END IF;
+
+    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+        RAISE EXCEPTION 'Access denied to group category %', _group_id;
     END IF;
 
     IF _group_kind <> 'group' THEN
@@ -62,17 +64,23 @@ BEGIN
             RAISE EXCEPTION 'Invalid group share at position %', _idx;
         END IF;
 
-        SELECT kind
-        INTO _child_kind
+        SELECT kind, owner_type, owner_user_id, owner_family_id
+        INTO _child_kind, _child_owner_type, _child_owner_user_id, _child_owner_family_id
         FROM categories
         WHERE id = _child_category_ids[_idx]
-          AND user_id = _user_id
           AND is_active;
 
         IF _child_kind IS NULL OR _child_kind = 'system' THEN
-            RAISE EXCEPTION 'Child category % must be an active regular category or group owned by user %',
+            RAISE EXCEPTION 'Child category % must be an active regular category or group',
+                _child_category_ids[_idx];
+        END IF;
+
+        IF _child_owner_type <> _owner_type
+           OR COALESCE(_child_owner_user_id, 0) <> COALESCE(_owner_user_id, 0)
+           OR COALESCE(_child_owner_family_id, 0) <> COALESCE(_owner_family_id, 0) THEN
+            RAISE EXCEPTION 'Group child category % must have the same owner as group %',
                 _child_category_ids[_idx],
-                _user_id;
+                _group_id;
         END IF;
 
         IF _child_kind = 'group' THEN

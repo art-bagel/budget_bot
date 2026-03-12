@@ -1,16 +1,3 @@
--- Description:
---   Records an income operation by increasing the bank balance and the unallocated budget.
---   For non-base currency income a new FX lot is created with the provided historical cost.
--- Parameters:
---   _user_id bigint - Operation owner.
---   _bank_account_id bigint - Bank account that receives the funds.
---   _amount numeric - Amount received in the bank currency.
---   _currency_code char(3) - Currency of the received amount.
---   _income_source_id bigint - Optional income source for analytics.
---   _budget_amount_in_base numeric - Historical cost of the received amount in the user's base currency.
---   _comment text - Optional comment.
--- Returns:
---   jsonb - Operation identifier and booked amount in base currency.
 CREATE OR REPLACE FUNCTION budgeting.put__record_income(
     _user_id bigint,
     _bank_account_id bigint,
@@ -25,6 +12,9 @@ LANGUAGE plpgsql
 AS $function$
 DECLARE
     _operation_id bigint;
+    _owner_type text;
+    _owner_user_id bigint;
+    _owner_family_id bigint;
     _base_currency_code char(3);
     _unallocated_category_id bigint;
     _effective_budget_amount_in_base numeric(20, 2);
@@ -36,23 +26,24 @@ BEGIN
         RAISE EXCEPTION 'Income amount must be positive';
     END IF;
 
-    SELECT base_currency_code
-    INTO _base_currency_code
-    FROM users
-    WHERE id = _user_id;
-
-    IF _base_currency_code IS NULL THEN
-        RAISE EXCEPTION 'Unknown user id: %', _user_id;
-    END IF;
-
-    PERFORM 1
+    SELECT owner_type, owner_user_id, owner_family_id
+    INTO _owner_type, _owner_user_id, _owner_family_id
     FROM bank_accounts
     WHERE id = _bank_account_id
-      AND user_id = _user_id
       AND is_active;
 
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
+    IF _owner_type IS NULL THEN
+        RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
+    END IF;
+
+    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+        RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
+    END IF;
+
+    _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
+
+    IF _base_currency_code IS NULL THEN
+        RAISE EXCEPTION 'Base currency is missing for bank account owner %', _bank_account_id;
     END IF;
 
     IF _income_source_id IS NOT NULL THEN
@@ -71,16 +62,15 @@ BEGIN
         END IF;
     END IF;
 
-    SELECT id
-    INTO _unallocated_category_id
-    FROM categories
-    WHERE user_id = _user_id
-      AND name = 'Unallocated'
-      AND kind = 'system'
-      AND is_active;
+    _unallocated_category_id := budgeting.get__owner_system_category_id(
+        _owner_type,
+        _owner_user_id,
+        _owner_family_id,
+        'Unallocated'
+    );
 
     IF _unallocated_category_id IS NULL THEN
-        RAISE EXCEPTION 'System category Unallocated is missing for user %', _user_id;
+        RAISE EXCEPTION 'System category Unallocated is missing for bank account owner %', _bank_account_id;
     END IF;
 
     IF _currency_code = _base_currency_code THEN
@@ -93,8 +83,24 @@ BEGIN
         _effective_budget_amount_in_base := round(_budget_amount_in_base, 2);
     END IF;
 
-    INSERT INTO operations (user_id, income_source_id, type, comment)
-    VALUES (_user_id, _income_source_id, 'income', _comment)
+    INSERT INTO operations (
+        actor_user_id,
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        income_source_id,
+        type,
+        comment
+    )
+    VALUES (
+        _user_id,
+        _owner_type,
+        _owner_user_id,
+        _owner_family_id,
+        _income_source_id,
+        'income',
+        _comment
+    )
     RETURNING id
     INTO _operation_id;
 

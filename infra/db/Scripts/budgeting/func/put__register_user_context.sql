@@ -1,14 +1,6 @@
 -- Description:
---   Registers a user in the new bank/budget model, creates the primary bank account
---   and the required system categories.
--- Parameters:
---   _user_id bigint - User identifier.
---   _base_currency_code char(3) - User base currency.
---   _username text - Optional username.
---   _first_name text - Optional first name.
---   _last_name text - Optional last name.
--- Returns:
---   jsonb - Registration status and identifiers of the created or reused context objects.
+--   Registers a user in the budgeting model, creates the personal primary bank account
+--   and the required personal system categories.
 CREATE OR REPLACE FUNCTION budgeting.put__register_user_context(
     _user_id bigint,
     _base_currency_code char(3),
@@ -58,27 +50,63 @@ BEGIN
         WHERE id = _user_id;
     END IF;
 
-    INSERT INTO bank_accounts (user_id, name, is_primary, is_active)
-    VALUES (_user_id, 'Main', true, true)
-    ON CONFLICT (user_id, name) DO UPDATE
-    SET is_primary = true,
-        is_active = true
-    RETURNING id
-    INTO _bank_account_id;
+    SELECT id
+    INTO _bank_account_id
+    FROM bank_accounts
+    WHERE owner_type = 'user'
+      AND owner_user_id = _user_id
+      AND name = 'Main'
+    LIMIT 1;
 
-    INSERT INTO categories (user_id, name, kind, is_active)
-    VALUES (_user_id, 'Unallocated', 'system', true)
-    ON CONFLICT (user_id, name) DO UPDATE
-    SET is_active = true
-    RETURNING id
-    INTO _unallocated_category_id;
+    IF _bank_account_id IS NULL THEN
+        INSERT INTO bank_accounts (owner_type, owner_user_id, name, is_primary, is_active)
+        VALUES ('user', _user_id, 'Main', true, true)
+        RETURNING id
+        INTO _bank_account_id;
+    ELSE
+        UPDATE bank_accounts
+        SET is_primary = true,
+            is_active = true
+        WHERE id = _bank_account_id;
+    END IF;
 
-    INSERT INTO categories (user_id, name, kind, is_active)
-    VALUES (_user_id, 'FX Result', 'system', true)
-    ON CONFLICT (user_id, name) DO UPDATE
-    SET is_active = true
-    RETURNING id
-    INTO _fx_result_category_id;
+    SELECT id
+    INTO _unallocated_category_id
+    FROM categories
+    WHERE owner_type = 'user'
+      AND owner_user_id = _user_id
+      AND name = 'Unallocated'
+    LIMIT 1;
+
+    IF _unallocated_category_id IS NULL THEN
+        INSERT INTO categories (owner_type, owner_user_id, name, kind, is_active)
+        VALUES ('user', _user_id, 'Unallocated', 'system', true)
+        RETURNING id
+        INTO _unallocated_category_id;
+    ELSE
+        UPDATE categories
+        SET is_active = true
+        WHERE id = _unallocated_category_id;
+    END IF;
+
+    SELECT id
+    INTO _fx_result_category_id
+    FROM categories
+    WHERE owner_type = 'user'
+      AND owner_user_id = _user_id
+      AND name = 'FX Result'
+    LIMIT 1;
+
+    IF _fx_result_category_id IS NULL THEN
+        INSERT INTO categories (owner_type, owner_user_id, name, kind, is_active)
+        VALUES ('user', _user_id, 'FX Result', 'system', true)
+        RETURNING id
+        INTO _fx_result_category_id;
+    ELSE
+        UPDATE categories
+        SET is_active = true
+        WHERE id = _fx_result_category_id;
+    END IF;
 
     RETURN jsonb_build_object(
         'status', _status,

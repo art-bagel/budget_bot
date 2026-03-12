@@ -14,6 +14,10 @@ class CategoryItem(BaseModel):
     id: int
     name: str
     kind: str
+    owner_type: str
+    owner_user_id: Optional[int] = None
+    owner_family_id: Optional[int] = None
+    owner_name: Optional[str] = None
     is_active: bool
     created_at: str
 
@@ -21,6 +25,7 @@ class CategoryItem(BaseModel):
 class CreateCategoryRequest(BaseModel):
     name: str
     kind: Literal['regular', 'group']
+    owner_type: Literal['user', 'family'] = 'user'
 
 
 class CreateCategoryResponse(BaseModel):
@@ -60,6 +65,7 @@ async def create_category(
         user_id=user.user_id,
         name=body.name,
         kind=body.kind,
+        owner_type=body.owner_type,
     )
     return CreateCategoryResponse(id=category_id)
 

@@ -1,16 +1,3 @@
--- Description:
---   Records an expense from the shared bank and books its historical cost to a budget category.
---   For non-base currency expenses the function consumes FX lots by FIFO and uses their
---   historical cost as the budget amount.
--- Parameters:
---   _user_id bigint - Operation owner.
---   _bank_account_id bigint - Bank account that funds the expense.
---   _category_id bigint - Budget category affected by the expense.
---   _amount numeric - Expense amount in the bank currency.
---   _currency_code char(3) - Currency of the expense.
---   _comment text - Optional comment.
--- Returns:
---   jsonb - Operation identifier and booked budget amount in base currency.
 CREATE OR REPLACE FUNCTION budgeting.put__record_expense(
     _user_id bigint,
     _bank_account_id bigint,
@@ -37,6 +24,12 @@ DECLARE
     _consume_amount numeric(20, 8);
     _consume_cost numeric(20, 2);
     _lot record;
+    _category_owner_type text;
+    _category_owner_user_id bigint;
+    _category_owner_family_id bigint;
+    _bank_owner_type text;
+    _bank_owner_user_id bigint;
+    _bank_owner_family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
@@ -44,48 +37,70 @@ BEGIN
         RAISE EXCEPTION 'Expense amount must be positive';
     END IF;
 
-    SELECT base_currency_code
-    INTO _base_currency_code
-    FROM users
-    WHERE id = _user_id;
-
-    IF _base_currency_code IS NULL THEN
-        RAISE EXCEPTION 'Unknown user id: %', _user_id;
-    END IF;
-
-    PERFORM 1
-    FROM bank_accounts
-    WHERE id = _bank_account_id
-      AND user_id = _user_id
-      AND is_active;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
-    END IF;
-
-    SELECT kind
-    INTO _category_kind
+    SELECT kind, owner_type, owner_user_id, owner_family_id
+    INTO _category_kind, _category_owner_type, _category_owner_user_id, _category_owner_family_id
     FROM categories
     WHERE id = _category_id
-      AND user_id = _user_id
       AND is_active;
 
     IF _category_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active category %', _category_id;
     END IF;
 
+    IF NOT budgeting.has__owner_access(
+        _user_id,
+        _category_owner_type,
+        _category_owner_user_id,
+        _category_owner_family_id
+    ) THEN
+        RAISE EXCEPTION 'Access denied to category %', _category_id;
+    END IF;
+
     IF _category_kind <> 'regular' THEN
         RAISE EXCEPTION 'Expense category % must be of kind regular', _category_id;
     END IF;
 
-    SELECT COALESCE((
-        SELECT amount
-        FROM current_bank_balances
-        WHERE bank_account_id = _bank_account_id
-          AND currency_code = _currency_code
-    ), 0)
-    INTO _bank_balance
-    ;
+    SELECT owner_type, owner_user_id, owner_family_id
+    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id
+    FROM bank_accounts
+    WHERE id = _bank_account_id
+      AND is_active;
+
+    IF _bank_owner_type IS NULL THEN
+        RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
+    END IF;
+
+    IF NOT budgeting.has__owner_access(
+        _user_id,
+        _bank_owner_type,
+        _bank_owner_user_id,
+        _bank_owner_family_id
+    ) THEN
+        RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
+    END IF;
+
+    IF _category_owner_type <> _bank_owner_type
+       OR COALESCE(_category_owner_user_id, 0) <> COALESCE(_bank_owner_user_id, 0)
+       OR COALESCE(_category_owner_family_id, 0) <> COALESCE(_bank_owner_family_id, 0) THEN
+        RAISE EXCEPTION 'Expense category and bank account must have the same owner';
+    END IF;
+
+    _base_currency_code := budgeting.get__owner_base_currency(
+        _category_owner_type,
+        _category_owner_user_id,
+        _category_owner_family_id
+    );
+
+    -- Lock the balance row so concurrent deductions cannot both pass the check.
+    PERFORM 1 FROM current_bank_balances
+    WHERE bank_account_id = _bank_account_id
+      AND currency_code = _currency_code
+    FOR UPDATE;
+
+    SELECT COALESCE(amount, 0) INTO _bank_balance
+    FROM current_bank_balances
+    WHERE bank_account_id = _bank_account_id
+      AND currency_code = _currency_code;
 
     IF _bank_balance < _amount THEN
         RAISE EXCEPTION 'Insufficient bank balance in currency %', _currency_code;
@@ -126,21 +141,37 @@ BEGIN
         END IF;
     END IF;
 
-    SELECT COALESCE((
-        SELECT amount
-        FROM current_budget_balances
-        WHERE category_id = _category_id
-          AND currency_code = _base_currency_code
-    ), 0)
-    INTO _category_balance
-    ;
+    -- Lock the budget row so concurrent expenses cannot both pass the check.
+    PERFORM 1 FROM current_budget_balances
+    WHERE category_id = _category_id
+      AND currency_code = _base_currency_code
+    FOR UPDATE;
+
+    SELECT COALESCE(amount, 0) INTO _category_balance
+    FROM current_budget_balances
+    WHERE category_id = _category_id
+      AND currency_code = _base_currency_code;
 
     IF _category_balance < _expense_cost_base THEN
         RAISE EXCEPTION 'Insufficient budget in category %', _category_id;
     END IF;
 
-    INSERT INTO operations (user_id, type, comment)
-    VALUES (_user_id, 'expense', _comment)
+    INSERT INTO operations (
+        actor_user_id,
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        type,
+        comment
+    )
+    VALUES (
+        _user_id,
+        _category_owner_type,
+        _category_owner_user_id,
+        _category_owner_family_id,
+        'expense',
+        _comment
+    )
     RETURNING id
     INTO _operation_id;
 

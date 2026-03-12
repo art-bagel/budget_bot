@@ -1,12 +1,3 @@
--- Description:
---   Returns the user's operations history in reverse chronological order with bank and budget lines.
--- Parameters:
---   _user_id bigint - Operation owner.
---   _limit integer - Number of operations to return.
---   _offset integer - Number of operations to skip.
---   _operation_type text - Optional operation type filter.
--- Returns:
---   jsonb - Paginated operations history with total count.
 CREATE OR REPLACE FUNCTION budgeting.get__operations_history(
     _user_id bigint,
     _limit integer DEFAULT 20,
@@ -19,9 +10,11 @@ AS $function$
 DECLARE
     _result jsonb;
     _normalized_operation_type text;
+    _family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
+    _family_id := budgeting.get__user_family_id(_user_id);
     _normalized_operation_type := nullif(trim(_operation_type), '');
 
     IF _limit IS NULL OR _limit <= 0 THEN
@@ -44,6 +37,8 @@ BEGIN
         RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
     END IF;
 
+    -- total_count is computed once via a window function to avoid a second
+    -- full-scan query for pagination metadata.
     WITH selected_operations AS (
         SELECT
             o.id,
@@ -51,16 +46,28 @@ BEGIN
             o.comment,
             o.created_at,
             o.reversal_of_operation_id,
+            o.actor_user_id,
+            actor.username AS actor_username,
+            o.owner_type,
+            o.owner_user_id,
+            o.owner_family_id,
             EXISTS (
                 SELECT 1
                 FROM operations ro
                 WHERE ro.reversal_of_operation_id = o.id
             ) AS has_reversal,
-            ins.name AS income_source_name
+            ins.name AS income_source_name,
+            count(*) OVER () AS total_count
         FROM operations o
+        LEFT JOIN users actor
+          ON actor.id = o.actor_user_id
         LEFT JOIN income_sources ins
           ON ins.id = o.income_source_id
-        WHERE o.user_id = _user_id
+        WHERE (
+                (o.owner_type = 'user' AND o.owner_user_id = _user_id)
+                OR
+                (o.owner_type = 'family' AND o.owner_family_id = _family_id)
+              )
           AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
           AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
         ORDER BY o.created_at DESC, o.id DESC
@@ -71,6 +78,7 @@ BEGIN
             be.operation_id,
             jsonb_agg(
                 jsonb_build_object(
+                    'bank_account_id', be.bank_account_id,
                     'currency_code', be.currency_code,
                     'amount', be.amount
                 )
@@ -92,6 +100,7 @@ BEGIN
                         ELSE c.name
                     END,
                     'category_kind', c.kind,
+                    'category_owner_type', c.owner_type,
                     'currency_code', bue.currency_code,
                     'amount', bue.amount
                 )
@@ -105,17 +114,24 @@ BEGIN
         GROUP BY bue.operation_id
     ),
     items AS (
-        SELECT jsonb_build_object(
-            'operation_id', so.id,
-            'type', so.type,
-            'comment', so.comment,
-            'created_at', so.created_at,
-            'reversal_of_operation_id', so.reversal_of_operation_id,
-            'has_reversal', so.has_reversal,
-            'income_source_name', so.income_source_name,
-            'bank_entries', COALESCE(ba.bank_entries, '[]'::jsonb),
-            'budget_entries', COALESCE(bga.budget_entries, '[]'::jsonb)
-        ) AS item
+        SELECT
+            jsonb_build_object(
+                'operation_id', so.id,
+                'type', so.type,
+                'comment', so.comment,
+                'created_at', so.created_at,
+                'reversal_of_operation_id', so.reversal_of_operation_id,
+                'has_reversal', so.has_reversal,
+                'actor_user_id', so.actor_user_id,
+                'actor_username', so.actor_username,
+                'owner_type', so.owner_type,
+                'owner_user_id', so.owner_user_id,
+                'owner_family_id', so.owner_family_id,
+                'income_source_name', so.income_source_name,
+                'bank_entries', COALESCE(ba.bank_entries, '[]'::jsonb),
+                'budget_entries', COALESCE(bga.budget_entries, '[]'::jsonb)
+            ) AS item,
+            so.total_count
         FROM selected_operations so
         LEFT JOIN bank_agg ba
           ON ba.operation_id = so.id
@@ -124,16 +140,10 @@ BEGIN
         ORDER BY so.created_at DESC, so.id DESC
     )
     SELECT jsonb_build_object(
-        'items', COALESCE((SELECT jsonb_agg(item) FROM items), '[]'::jsonb),
-        'total_count', (
-            SELECT count(*)
-            FROM operations o
-            WHERE o.user_id = _user_id
-              AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
-              AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
-        ),
-        'limit', _limit,
-        'offset', _offset
+        'items',       COALESCE((SELECT jsonb_agg(item) FROM items), '[]'::jsonb),
+        'total_count', COALESCE((SELECT total_count FROM items LIMIT 1), 0),
+        'limit',       _limit,
+        'offset',      _offset
     )
     INTO _result;
 

@@ -9,3 +9,7 @@ CREATE TABLE IF NOT EXISTS budgeting.users (
     hints_enabled boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT current_timestamp
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower
+    ON budgeting.users (lower(username))
+    WHERE username IS NOT NULL;

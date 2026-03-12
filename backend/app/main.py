@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import settings
-from backend.app.routers import auth, categories, currencies, dashboard, groups, income_sources, operations, user_settings
+from backend.app.routers import auth, bank_accounts, categories, currencies, dashboard, families, groups, income_sources, operations, user_settings
 from backend.app import storage as app_storage
 
 
@@ -32,9 +32,11 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(bank_accounts.router)
 app.include_router(categories.router)
 app.include_router(currencies.router)
 app.include_router(dashboard.router)
+app.include_router(families.router)
 app.include_router(groups.router)
 app.include_router(income_sources.router)
 app.include_router(operations.router)

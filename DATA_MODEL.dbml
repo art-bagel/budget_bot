@@ -1,0 +1,235 @@
+Project budget_bot {
+  database_type: "PostgreSQL"
+  Note: "Current PostgreSQL schema for the ledger-based budgeting app with personal and family owners, shared family accounts, FX lots, and current-state projections."
+}
+
+Table currencies {
+  code char(3) [pk, not null]
+  name varchar(100) [not null]
+  scale smallint [not null, default: 2]
+}
+
+Table users {
+  id bigint [pk, not null]
+  base_currency_code char(3) [not null, ref: > currencies.code]
+  username varchar(100)
+  first_name varchar(100)
+  last_name varchar(100)
+  hints_enabled boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table families {
+  id bigint [pk, not null, increment]
+  name varchar(100) [not null]
+  base_currency_code char(3) [not null, ref: > currencies.code]
+  created_by_user_id bigint [not null, ref: > users.id]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table family_members {
+  family_id bigint [not null, ref: > families.id]
+  user_id bigint [not null, ref: > users.id]
+  role varchar(20) [not null, note: "owner | member"]
+  joined_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (family_id, user_id) [pk]
+    (user_id) [unique, name: "uq_family_members_user"]
+  }
+}
+
+Table family_invitations {
+  id bigint [pk, not null, increment]
+  family_id bigint [not null, ref: > families.id]
+  invited_user_id bigint [not null, ref: > users.id]
+  invited_by_user_id bigint [not null, ref: > users.id]
+  status varchar(20) [not null, note: "pending | accepted | declined | cancelled"]
+  created_at timestamptz [not null, default: `now()`]
+  responded_at timestamptz
+
+  indexes {
+    (family_id, invited_user_id, status) [unique, name: "uq_family_invitation_pending"]
+  }
+}
+
+Table income_sources {
+  id bigint [pk, not null, increment]
+  user_id bigint [not null, ref: > users.id]
+  name varchar(100) [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, name) [unique, name: "uq_income_sources_user_name"]
+  }
+}
+
+Table bank_accounts {
+  id bigint [pk, not null, increment]
+  owner_type varchar(20) [not null, note: "user | family"]
+  owner_user_id bigint [ref: > users.id]
+  owner_family_id bigint [ref: > families.id]
+  name varchar(100) [not null]
+  is_primary boolean [not null, default: false]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: "Exactly one owner must be set. Unique names are enforced separately for user-owned and family-owned accounts."
+
+  indexes {
+    (owner_user_id, name) [unique, name: "uq_bank_accounts_user_name", note: "Applies when owner_type = user"]
+    (owner_family_id, name) [unique, name: "uq_bank_accounts_family_name", note: "Applies when owner_type = family"]
+    (owner_user_id, is_active, id) [name: "idx_bank_accounts_user_active", note: "Applies when owner_type = user"]
+    (owner_family_id, is_active, id) [name: "idx_bank_accounts_family_active", note: "Applies when owner_type = family"]
+  }
+}
+
+Table categories {
+  id bigint [pk, not null, increment]
+  owner_type varchar(20) [not null, note: "user | family"]
+  owner_user_id bigint [ref: > users.id]
+  owner_family_id bigint [ref: > families.id]
+  name varchar(100) [not null]
+  kind varchar(20) [not null, note: "regular | group | system"]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: "Exactly one owner must be set. Unique names are enforced separately for user-owned and family-owned categories."
+
+  indexes {
+    (owner_user_id, name) [unique, name: "uq_categories_user_name", note: "Applies when owner_type = user"]
+    (owner_family_id, name) [unique, name: "uq_categories_family_name", note: "Applies when owner_type = family"]
+    (owner_user_id, is_active, id) [name: "idx_categories_user_active_id", note: "Applies when owner_type = user"]
+    (owner_user_id, kind, is_active, id) [name: "idx_categories_user_kind_active_id", note: "Applies when owner_type = user"]
+    (owner_family_id, is_active, id) [name: "idx_categories_family_active_id", note: "Applies when owner_type = family"]
+    (owner_family_id, kind, is_active, id) [name: "idx_categories_family_kind_active_id", note: "Applies when owner_type = family"]
+  }
+}
+
+Table group_members {
+  group_id bigint [not null, ref: > categories.id]
+  child_category_id bigint [not null, ref: > categories.id]
+  share numeric(7,6) [not null, note: "0 < share <= 1"]
+
+  indexes {
+    (group_id, child_category_id) [pk]
+  }
+}
+
+Table operations {
+  id bigint [pk, not null, increment]
+  actor_user_id bigint [not null, ref: > users.id]
+  owner_type varchar(20) [not null, note: "user | family"]
+  owner_user_id bigint [ref: > users.id]
+  owner_family_id bigint [ref: > families.id]
+  income_source_id bigint [ref: > income_sources.id]
+  type varchar(30) [not null, note: "income | allocate | group_allocate | exchange | expense | reversal"]
+  reversal_of_operation_id bigint [ref: > operations.id]
+  comment text
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: "Exactly one owner must be set."
+
+  indexes {
+    (actor_user_id, created_at, id) [name: "idx_operations_actor_created_at_id", note: "Stored as DESC in SQL"]
+    (owner_user_id, type, created_at, id) [name: "idx_operations_user_owner_type_created_at_id", note: "Applies when owner_type = user; stored as DESC in SQL"]
+    (owner_family_id, type, created_at, id) [name: "idx_operations_family_owner_type_created_at_id", note: "Applies when owner_type = family; stored as DESC in SQL"]
+    (reversal_of_operation_id) [name: "idx_operations_reversal_of_operation_id"]
+  }
+}
+
+Table bank_entries {
+  id bigint [pk, not null, increment]
+  operation_id bigint [not null, ref: > operations.id]
+  bank_account_id bigint [not null, ref: > bank_accounts.id]
+  currency_code char(3) [not null, ref: > currencies.code]
+  amount numeric(20,8) [not null, note: "Signed bank delta"]
+
+  indexes {
+    (operation_id) [name: "idx_bank_entries_operation_id"]
+    (bank_account_id, currency_code) [name: "idx_bank_entries_account_currency"]
+  }
+}
+
+Table budget_entries {
+  id bigint [pk, not null, increment]
+  operation_id bigint [not null, ref: > operations.id]
+  category_id bigint [not null, ref: > categories.id]
+  currency_code char(3) [not null, ref: > currencies.code]
+  amount numeric(20,2) [not null, note: "Signed budget delta in owner base currency"]
+
+  indexes {
+    (operation_id) [name: "idx_budget_entries_operation_id"]
+    (category_id, currency_code) [name: "idx_budget_entries_category_currency"]
+  }
+}
+
+Table fx_lots {
+  id bigint [pk, not null, increment]
+  bank_account_id bigint [not null, ref: > bank_accounts.id]
+  currency_code char(3) [not null, ref: > currencies.code]
+  amount_initial numeric(20,8) [not null]
+  amount_remaining numeric(20,8) [not null]
+  buy_rate_in_base numeric(20,8) [not null]
+  cost_base_initial numeric(20,2) [not null]
+  cost_base_remaining numeric(20,2) [not null]
+  opened_by_operation_id bigint [not null, ref: > operations.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (opened_by_operation_id) [name: "idx_fx_lots_opened_by_operation_id"]
+    (bank_account_id, currency_code, created_at, id) [name: "idx_fx_lots_open_fifo", note: "Applies when amount_remaining > 0"]
+  }
+}
+
+Table lot_consumptions {
+  id bigint [pk, not null, increment]
+  operation_id bigint [not null, ref: > operations.id]
+  lot_id bigint [not null, ref: > fx_lots.id]
+  amount numeric(20,8) [not null]
+  cost_base numeric(20,2) [not null]
+
+  indexes {
+    (operation_id) [name: "idx_lot_consumptions_operation_id"]
+    (lot_id) [name: "idx_lot_consumptions_lot_id"]
+  }
+}
+
+Table fx_rate_snapshots {
+  id bigint [pk, not null, increment]
+  base_currency_code char(3) [not null, ref: > currencies.code]
+  quote_currency_code char(3) [not null, ref: > currencies.code]
+  rate numeric(20,8) [not null]
+  fetched_at timestamptz [not null]
+  source text
+
+  indexes {
+    (base_currency_code, quote_currency_code, fetched_at) [unique, name: "uq_fx_rate_pair_time"]
+    (base_currency_code, quote_currency_code, fetched_at) [name: "idx_fx_rate_snapshots_pair_fetched_at_desc", note: "Stored as DESC in SQL"]
+  }
+}
+
+Table current_bank_balances {
+  bank_account_id bigint [not null, ref: > bank_accounts.id]
+  currency_code char(3) [not null, ref: > currencies.code]
+  amount numeric(20,8) [not null]
+  historical_cost_in_base numeric(20,2) [not null]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (bank_account_id, currency_code) [pk]
+  }
+}
+
+Table current_budget_balances {
+  category_id bigint [not null, ref: > categories.id]
+  currency_code char(3) [not null, ref: > currencies.code]
+  amount numeric(20,2) [not null]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (category_id, currency_code) [pk]
+  }
+}

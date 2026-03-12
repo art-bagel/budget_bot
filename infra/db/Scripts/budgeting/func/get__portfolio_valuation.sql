@@ -1,12 +1,3 @@
--- Description:
---   Returns the current analytical valuation of bank balances in the requested target currency.
--- Parameters:
---   _user_id bigint - Bank owner.
---   _bank_account_id bigint - Bank account identifier.
---   _target_currency_code char(3) - Currency for the valuation report.
---   _as_of timestamptz - Optional upper bound for FX rates.
--- Returns:
---   jsonb - Valuation line items and the total amount in the target currency.
 CREATE OR REPLACE FUNCTION budgeting.get__portfolio_valuation(
     _user_id bigint,
     _bank_account_id bigint,
@@ -22,17 +13,24 @@ DECLARE
     _line_value numeric(20, 2);
     _rate numeric(20, 8);
     _balance record;
+    _owner_type text;
+    _owner_user_id bigint;
+    _owner_family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    PERFORM 1
+    SELECT owner_type, owner_user_id, owner_family_id
+    INTO _owner_type, _owner_user_id, _owner_family_id
     FROM bank_accounts
     WHERE id = _bank_account_id
-      AND user_id = _user_id
       AND is_active;
 
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
+    IF _owner_type IS NULL THEN
+        RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
+    END IF;
+
+    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+        RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
     END IF;
 
     PERFORM 1

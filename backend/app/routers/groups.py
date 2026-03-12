@@ -14,6 +14,7 @@ class GroupMemberItem(BaseModel):
     child_category_id: int
     child_category_name: str
     child_category_kind: str
+    child_owner_type: str
     share: float
 
 

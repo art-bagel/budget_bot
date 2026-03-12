@@ -7,10 +7,13 @@ class Context(DataBase):
     SCHEMA = 'budgeting'
 
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
+    F_PUT__CREATE_FAMILY = 'put__create_family'
+    F_PUT__INVITE_FAMILY_MEMBER = 'put__invite_family_member'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
     F_SET__UPDATE_CATEGORY = 'set__update_category'
     F_SET__ARCHIVE_CATEGORY = 'set__archive_category'
+    F_SET__RESPOND_FAMILY_INVITATION = 'set__respond_family_invitation'
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
     F_SET__DELETE_USER_ACCOUNT = 'set__delete_user_account'
     F_SET__UPDATE_USER_SETTINGS = 'set__update_user_settings'
@@ -41,12 +44,33 @@ class Context(DataBase):
             last_name,
         )
 
-    async def put__create_category(self, user_id: int, name: str, kind: str) -> int:
+    async def put__create_family(self, user_id: int, name: str) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_FAMILY),
+            user_id,
+            name,
+        )
+
+    async def put__invite_family_member(self, user_id: int, username: str) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__INVITE_FAMILY_MEMBER),
+            user_id,
+            username,
+        )
+
+    async def put__create_category(
+        self,
+        user_id: int,
+        name: str,
+        kind: str,
+        owner_type: str = 'user',
+    ) -> int:
         """
         Создает категорию.
         :param user_id: Идентификатор владельца категории.
         :param name: Имя категории.
         :param kind: Тип категории.
+        :param owner_type: Владелец категории: user или family.
         :return: Идентификатор созданной категории.
         """
         return await self.call_function(
@@ -54,6 +78,7 @@ class Context(DataBase):
             user_id,
             name,
             kind,
+            owner_type,
         )
 
     async def put__create_income_source(self, user_id: int, name: str) -> int:
@@ -95,6 +120,14 @@ class Context(DataBase):
             self._fn(self.F_SET__ARCHIVE_CATEGORY),
             user_id,
             category_id,
+        )
+
+    async def set__respond_family_invitation(self, user_id: int, invitation_id: int, accept: bool) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__RESPOND_FAMILY_INVITATION),
+            user_id,
+            invitation_id,
+            accept,
         )
 
     async def set__replace_group_members(

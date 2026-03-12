@@ -1,10 +1,3 @@
--- Description:
---   Returns bank balances by currency together with historical cost in the user's base currency.
--- Parameters:
---   _user_id bigint - Bank owner.
---   _bank_account_id bigint - Bank account identifier.
--- Returns:
---   jsonb - Array of currency balances.
 CREATE OR REPLACE FUNCTION budgeting.get__bank_snapshot(
     _user_id bigint,
     _bank_account_id bigint
@@ -13,23 +6,29 @@ RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _owner_type text;
+    _owner_user_id bigint;
+    _owner_family_id bigint;
     _base_currency_code char(3);
     _result jsonb;
 BEGIN
     SET search_path TO budgeting;
 
-    SELECT u.base_currency_code
-    INTO _base_currency_code
-    FROM users u
-    JOIN bank_accounts ba
-      ON ba.user_id = u.id
-    WHERE u.id = _user_id
-      AND ba.id = _bank_account_id
-      AND ba.is_active;
+    SELECT owner_type, owner_user_id, owner_family_id
+    INTO _owner_type, _owner_user_id, _owner_family_id
+    FROM bank_accounts
+    WHERE id = _bank_account_id
+      AND is_active;
 
-    IF _base_currency_code IS NULL THEN
-        RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
+    IF _owner_type IS NULL THEN
+        RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
     END IF;
+
+    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+        RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
+    END IF;
+
+    _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
     SELECT COALESCE(
         jsonb_agg(

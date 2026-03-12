@@ -21,6 +21,9 @@ class BudgetBalanceItem(BaseModel):
     category_id: int
     name: str
     kind: str
+    owner_type: str
+    owner_user_id: int | None = None
+    owner_family_id: int | None = None
     balance: float
     currency_code: str
 

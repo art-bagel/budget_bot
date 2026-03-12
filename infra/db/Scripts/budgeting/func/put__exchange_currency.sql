@@ -1,18 +1,3 @@
--- Description:
---   Exchanges one currency into another inside a bank account.
---   The function consumes existing FX lots when the sold currency is not the base currency,
---   creates a new lot when the bought currency is not the base currency and books realized
---   FX result into the system category when a foreign currency is sold back to the base currency.
--- Parameters:
---   _user_id bigint - Operation owner.
---   _bank_account_id bigint - Bank account used for the exchange.
---   _from_currency_code char(3) - Currency sold.
---   _from_amount numeric - Amount sold.
---   _to_currency_code char(3) - Currency bought.
---   _to_amount numeric - Amount bought.
---   _comment text - Optional comment.
--- Returns:
---   jsonb - Operation identifier, effective rate and realized FX result in base currency.
 CREATE OR REPLACE FUNCTION budgeting.put__exchange_currency(
     _user_id bigint,
     _bank_account_id bigint,
@@ -41,6 +26,9 @@ DECLARE
     _consume_amount numeric(20, 8);
     _consume_cost numeric(20, 2);
     _lot record;
+    _owner_type text;
+    _owner_user_id bigint;
+    _owner_family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
@@ -52,24 +40,21 @@ BEGIN
         RAISE EXCEPTION 'Exchange amounts must be positive';
     END IF;
 
-    SELECT base_currency_code
-    INTO _base_currency_code
-    FROM users
-    WHERE id = _user_id;
-
-    IF _base_currency_code IS NULL THEN
-        RAISE EXCEPTION 'Unknown user id: %', _user_id;
-    END IF;
-
-    PERFORM 1
+    SELECT owner_type, owner_user_id, owner_family_id
+    INTO _owner_type, _owner_user_id, _owner_family_id
     FROM bank_accounts
     WHERE id = _bank_account_id
-      AND user_id = _user_id
       AND is_active;
 
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Unknown active bank account % for user %', _bank_account_id, _user_id;
+    IF _owner_type IS NULL THEN
+        RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
     END IF;
+
+    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+        RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
+    END IF;
+
+    _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
     SELECT COALESCE((
         SELECT amount
@@ -77,8 +62,7 @@ BEGIN
         WHERE bank_account_id = _bank_account_id
           AND currency_code = _from_currency_code
     ), 0)
-    INTO _bank_balance
-    ;
+    INTO _bank_balance;
 
     IF _bank_balance < _from_amount THEN
         RAISE EXCEPTION 'Insufficient bank balance in currency %', _from_currency_code;
@@ -119,8 +103,22 @@ BEGIN
         END IF;
     END IF;
 
-    INSERT INTO operations (user_id, type, comment)
-    VALUES (_user_id, 'exchange', _comment)
+    INSERT INTO operations (
+        actor_user_id,
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        type,
+        comment
+    )
+    VALUES (
+        _user_id,
+        _owner_type,
+        _owner_user_id,
+        _owner_family_id,
+        'exchange',
+        _comment
+    )
     RETURNING id
     INTO _operation_id;
 
@@ -169,16 +167,15 @@ BEGIN
             _operation_id
         );
     ELSIF _from_currency_code <> _base_currency_code THEN
-        SELECT id
-        INTO _fx_result_category_id
-        FROM categories
-        WHERE user_id = _user_id
-          AND name = 'FX Result'
-          AND kind = 'system'
-          AND is_active;
+        _fx_result_category_id := budgeting.get__owner_system_category_id(
+            _owner_type,
+            _owner_user_id,
+            _owner_family_id,
+            'FX Result'
+        );
 
         IF _fx_result_category_id IS NULL THEN
-            RAISE EXCEPTION 'System category FX Result is missing for user %', _user_id;
+            RAISE EXCEPTION 'System category FX Result is missing for bank account owner %', _bank_account_id;
         END IF;
 
         _realized_fx_result := round(_to_amount, 2) - _consumed_cost_base;
