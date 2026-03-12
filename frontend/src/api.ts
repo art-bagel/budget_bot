@@ -244,3 +244,11 @@ export async function acceptInvitation(invitationId: number): Promise<{ invitati
 export async function declineInvitation(invitationId: number): Promise<{ invitation_id: number; family_id: number; status: string }> {
   return apiFetch(`/family/invitations/${invitationId}/decline`, { method: 'POST' });
 }
+
+export async function leaveFamily(): Promise<{ status: string; user_id: number; family_id: number }> {
+  return apiFetch('/family/leave', { method: 'POST' });
+}
+
+export async function dissolveFamily(): Promise<{ status: string; family_id: number; dissolved_by_user_id: number }> {
+  return apiFetch('/family/dissolve', { method: 'POST' });
+}

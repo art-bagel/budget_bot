@@ -8,7 +8,14 @@ import {
   inviteToFamily,
   acceptInvitation,
   declineInvitation,
+  leaveFamily,
+  dissolveFamily,
 } from '../api';
+
+interface Props {
+  user: UserContext;
+  onBadgeUpdate: (count: number) => void;
+}
 
 function memberDisplayName(m: FamilyMember): string {
   const full = [m.first_name, m.last_name].filter(Boolean).join(' ');
@@ -17,7 +24,7 @@ function memberDisplayName(m: FamilyMember): string {
   return `ID ${m.user_id}`;
 }
 
-export default function Family({ user }: { user: UserContext }) {
+export default function Family({ user, onBadgeUpdate }: Props) {
   const [loading, setLoading] = useState(true);
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
@@ -35,6 +42,11 @@ export default function Family({ user }: { user: UserContext }) {
 
   const [respondingId, setRespondingId] = useState<number | null>(null);
 
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [dissolving, setDissolving] = useState(false);
+  const [dissolveError, setDissolveError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -51,12 +63,14 @@ export default function Family({ user }: { user: UserContext }) {
       } else {
         setMembers([]);
       }
+      const pending = invitationsData.filter(inv => inv.status === 'pending').length;
+      onBadgeUpdate(pending);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onBadgeUpdate]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -108,11 +122,46 @@ export default function Family({ user }: { user: UserContext }) {
     setRespondingId(id);
     try {
       await declineInvitation(id);
-      setInvitations(prev => prev.filter(inv => inv.invitation_id !== id));
+      setInvitations(prev => {
+        const updated = prev.filter(inv => inv.invitation_id !== id);
+        const pending = updated.filter(inv => inv.status === 'pending').length;
+        onBadgeUpdate(pending);
+        return updated;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRespondingId(null);
+    }
+  };
+
+  const handleLeave = async () => {
+    if (!window.confirm('Покинуть семью? Ваши личные данные не пострадают.')) return;
+    setLeaving(true);
+    setLeaveError(null);
+    try {
+      await leaveFamily();
+      await load();
+    } catch (e) {
+      setLeaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  const handleDissolve = async () => {
+    if (!window.confirm(
+      'Распустить семью? Все семейные счета, категории и история операций будут удалены. Личные данные участников не пострадают.',
+    )) return;
+    setDissolving(true);
+    setDissolveError(null);
+    try {
+      await dissolveFamily();
+      await load();
+    } catch (e) {
+      setDissolveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDissolving(false);
     }
   };
 
@@ -312,6 +361,54 @@ export default function Family({ user }: { user: UserContext }) {
               </div>
             </section>
           )}
+
+          <section className="settings-section">
+            <h2 className="settings-section__title">Опасная зона</h2>
+            <div className="panel">
+              {!isOwner && (
+                <div className="settings-danger">
+                  <div>
+                    <div className="settings-row__title">Покинуть семью</div>
+                    <div className="settings-row__sub">
+                      Вы выйдете из семьи. Ваши личные счета и данные останутся нетронутыми.
+                    </div>
+                    {leaveError && (
+                      <div className="settings-danger__error">{leaveError}</div>
+                    )}
+                  </div>
+                  <button
+                    className="btn btn--danger"
+                    type="button"
+                    disabled={leaving}
+                    onClick={handleLeave}
+                  >
+                    {leaving ? 'Выходим...' : 'Покинуть'}
+                  </button>
+                </div>
+              )}
+              {isOwner && (
+                <div className="settings-danger">
+                  <div>
+                    <div className="settings-row__title">Распустить семью</div>
+                    <div className="settings-row__sub">
+                      Все семейные счета, категории и история операций будут удалены безвозвратно. Личные данные участников не пострадают.
+                    </div>
+                    {dissolveError && (
+                      <div className="settings-danger__error">{dissolveError}</div>
+                    )}
+                  </div>
+                  <button
+                    className="btn btn--danger"
+                    type="button"
+                    disabled={dissolving}
+                    onClick={handleDissolve}
+                  >
+                    {dissolving ? 'Удаляем...' : 'Распустить'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
         </>
       )}
     </>

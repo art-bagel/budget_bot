@@ -68,6 +68,18 @@ class RespondFamilyInvitationResponse(BaseModel):
     status: str
 
 
+class LeaveFamilyResponse(BaseModel):
+    status: str
+    user_id: int
+    family_id: int
+
+
+class DissolveFamilyResponse(BaseModel):
+    status: str
+    family_id: int
+    dissolved_by_user_id: int
+
+
 @router.get('/me', response_model=Optional[FamilyInfo])
 async def get_my_family(
     user: TelegramUser = Depends(get_telegram_user),
@@ -124,3 +136,19 @@ async def decline_family_invitation(
 ) -> RespondFamilyInvitationResponse:
     result = await context.set__respond_family_invitation(user.user_id, invitation_id, False)
     return RespondFamilyInvitationResponse(**result)
+
+
+@router.post('/leave', response_model=LeaveFamilyResponse)
+async def leave_family(
+    user: TelegramUser = Depends(get_telegram_user),
+) -> LeaveFamilyResponse:
+    result = await context.set__leave_family(user.user_id)
+    return LeaveFamilyResponse(**result)
+
+
+@router.post('/dissolve', response_model=DissolveFamilyResponse)
+async def dissolve_family(
+    user: TelegramUser = Depends(get_telegram_user),
+) -> DissolveFamilyResponse:
+    result = await context.set__dissolve_family(user.user_id)
+    return DissolveFamilyResponse(**result)

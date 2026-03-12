@@ -16,6 +16,7 @@ interface Props {
   page: Page;
   onNavigate: (page: Page) => void;
   onRefresh: () => void;
+  badges?: Partial<Record<Page, number>>;
   children: ReactNode;
 }
 
@@ -27,7 +28,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
   { id: 'settings', label: 'Настройки', icon: IconSettings },
 ];
 
-export default function Layout({ page, onNavigate, onRefresh, children }: Props) {
+export default function Layout({ page, onNavigate, onRefresh, badges, children }: Props) {
   const mainRef = useRef<HTMLElement>(null);
   usePageSwipe(mainRef, page, onNavigate);
   usePullToRefresh(mainRef, onRefresh);
@@ -44,7 +45,10 @@ export default function Layout({ page, onNavigate, onRefresh, children }: Props)
               className={`nav-item${page === item.id ? ' nav-item--active' : ''}`}
               onClick={() => onNavigate(item.id)}
             >
-              <span className="nav-icon">{item.icon()}</span>
+              <span className="nav-icon-wrap">
+                <span className="nav-icon">{item.icon()}</span>
+                {badges?.[item.id] ? <span className="nav-badge" /> : null}
+              </span>
               {item.label}
             </button>
           ))}
@@ -62,7 +66,10 @@ export default function Layout({ page, onNavigate, onRefresh, children }: Props)
             className={`bottom-nav__item${page === item.id ? ' bottom-nav__item--active' : ''}`}
             onClick={() => onNavigate(item.id)}
           >
-            <span className="bottom-nav__icon">{item.icon()}</span>
+            <span className="nav-icon-wrap">
+              <span className="bottom-nav__icon">{item.icon()}</span>
+              {badges?.[item.id] ? <span className="nav-badge" /> : null}
+            </span>
             {item.label}
           </button>
         ))}

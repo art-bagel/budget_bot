@@ -17,6 +17,8 @@ class Context(DataBase):
     F_SET__REPLACE_GROUP_MEMBERS = 'set__replace_group_members'
     F_SET__DELETE_USER_ACCOUNT = 'set__delete_user_account'
     F_SET__UPDATE_USER_SETTINGS = 'set__update_user_settings'
+    F_SET__LEAVE_FAMILY = 'set__leave_family'
+    F_SET__DISSOLVE_FAMILY = 'set__dissolve_family'
 
     async def put__register_user_context(
         self,
@@ -171,6 +173,18 @@ class Context(DataBase):
             user_id,
             hints_enabled,
             theme,
+        )
+
+    async def set__leave_family(self, user_id: int) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__LEAVE_FAMILY),
+            user_id,
+        )
+
+    async def set__dissolve_family(self, user_id: int) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__DISSOLVE_FAMILY),
+            user_id,
         )
 
     async def set__delete_user_account(self, user_id: int) -> dict:

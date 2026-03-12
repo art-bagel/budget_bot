@@ -18,6 +18,7 @@ export default function App() {
   const [refreshKeys, setRefreshKeys] = useState<Record<Page, number>>({
     dashboard: 0, operations: 0, exchange: 0, family: 0, settings: 0,
   });
+  const [familyBadge, setFamilyBadge] = useState(0);
   const { user, loading, error } = useAuth();
 
   const handleNavigate = (p: Page) => {
@@ -57,14 +58,14 @@ export default function App() {
   }
 
   return (
-    <Layout page={page} onNavigate={handleNavigate} onRefresh={handleRefresh}>
+    <Layout page={page} onNavigate={handleNavigate} onRefresh={handleRefresh} badges={{ family: familyBadge }}>
       {PAGE_IDS.map((id) => visited.has(id) ? (
         <div key={id} style={id !== page ? { display: 'none' } : undefined}>
           <ErrorBoundary key={refreshKeys[id]}>
             {id === 'dashboard' && <Dashboard user={user} />}
             {id === 'operations' && <Operations user={user} />}
             {id === 'exchange' && <Exchange user={user} />}
-            {id === 'family' && <Family user={user} />}
+            {id === 'family' && <Family user={user} onBadgeUpdate={setFamilyBadge} />}
             {id === 'settings' && <Settings user={user} />}
           </ErrorBoundary>
         </div>
