@@ -5,17 +5,18 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
 import Exchange from './pages/Exchange';
+import Family from './pages/Family';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 import { bindTelegramBackButton } from './telegram';
 
-const PAGE_IDS: Page[] = ['dashboard', 'operations', 'exchange', 'settings'];
+const PAGE_IDS: Page[] = ['dashboard', 'operations', 'exchange', 'family', 'settings'];
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const [visited, setVisited] = useState<Set<Page>>(new Set(['dashboard']));
   const [refreshKeys, setRefreshKeys] = useState<Record<Page, number>>({
-    dashboard: 0, operations: 0, exchange: 0, settings: 0,
+    dashboard: 0, operations: 0, exchange: 0, family: 0, settings: 0,
   });
   const { user, loading, error } = useAuth();
 
@@ -63,6 +64,7 @@ export default function App() {
             {id === 'dashboard' && <Dashboard user={user} />}
             {id === 'operations' && <Operations user={user} />}
             {id === 'exchange' && <Exchange user={user} />}
+            {id === 'family' && <Family user={user} />}
             {id === 'settings' && <Settings user={user} />}
           </ErrorBoundary>
         </div>

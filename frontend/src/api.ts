@@ -19,6 +19,10 @@ import type {
   RecordIncomeResponse,
   ReverseOperationRequest,
   ReverseOperationResponse,
+  FamilyInfo,
+  FamilyMember,
+  FamilyInvitation,
+  CreateFamilyResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -201,4 +205,42 @@ export async function updateUserSettings(
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+}
+
+export async function fetchMyFamily(): Promise<FamilyInfo | null> {
+  try {
+    return await apiFetch<FamilyInfo | null>('/family/me');
+  } catch {
+    return null;
+  }
+}
+
+export async function createFamily(name: string): Promise<CreateFamilyResponse> {
+  return apiFetch<CreateFamilyResponse>('/family', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function fetchFamilyMembers(): Promise<FamilyMember[]> {
+  return apiFetch<FamilyMember[]>('/family/members');
+}
+
+export async function fetchFamilyInvitations(): Promise<FamilyInvitation[]> {
+  return apiFetch<FamilyInvitation[]>('/family/invitations');
+}
+
+export async function inviteToFamily(username: string): Promise<{ invitation_id: number; family_id: number; invited_user_id: number; status: string }> {
+  return apiFetch('/family/invite', {
+    method: 'POST',
+    body: JSON.stringify({ username }),
+  });
+}
+
+export async function acceptInvitation(invitationId: number): Promise<{ invitation_id: number; family_id: number; status: string }> {
+  return apiFetch(`/family/invitations/${invitationId}/accept`, { method: 'POST' });
+}
+
+export async function declineInvitation(invitationId: number): Promise<{ invitation_id: number; family_id: number; status: string }> {
+  return apiFetch(`/family/invitations/${invitationId}/decline`, { method: 'POST' });
 }

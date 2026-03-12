@@ -175,3 +175,40 @@ export interface ReverseOperationResponse {
   reversal_operation_id: number;
   reversed_operation_id: number;
 }
+
+export interface FamilyInfo {
+  family_id: number;
+  name: string;
+  base_currency_code: string;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface FamilyMember {
+  user_id: number;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  role: 'owner' | 'member';
+  joined_at: string;
+}
+
+export interface FamilyInvitation {
+  invitation_id: number;
+  family_id: number;
+  family_name: string;
+  invited_by_user_id: number;
+  invited_by_username?: string | null;
+  status: string;
+  created_at: string;
+  responded_at?: string | null;
+}
+
+export interface CreateFamilyResponse {
+  family_id: number;
+  name: string;
+  base_currency_code: string;
+  bank_account_id: number;
+  unallocated_category_id: number;
+  fx_result_category_id: number;
+}
