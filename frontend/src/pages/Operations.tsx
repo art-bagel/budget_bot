@@ -77,8 +77,19 @@ function toIsoDate(value: Date): string {
 }
 
 
-function fromIsoDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
+function fromIsoDate(value?: string | null): Date {
+  if (!value || typeof value !== 'string') {
+    return new Date();
+  }
+
+  const normalizedValue = value.slice(0, 10);
+  const parts = normalizedValue.split('-').map(Number);
+
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+    return new Date();
+  }
+
+  const [year, month, day] = parts;
   return new Date(year, month - 1, day);
 }
 
