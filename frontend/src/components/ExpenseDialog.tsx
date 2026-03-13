@@ -10,12 +10,13 @@ import { sanitizeDecimalInput } from '../utils/validation';
 interface Props {
   category: DashboardBudgetCategory;
   user: UserContext;
+  familyBankAccountId?: number | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 
-export default function ExpenseDialog({ category, user, onClose, onSuccess }: Props) {
+export default function ExpenseDialog({ category, user, familyBankAccountId = null, onClose, onSuccess }: Props) {
   useModalOpen();
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [amount, setAmount] = useState('');
@@ -24,11 +25,18 @@ export default function ExpenseDialog({ category, user, onClose, onSuccess }: Pr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const effectiveBankAccountId = category.owner_type === 'family'
+    ? familyBankAccountId
+    : user.bank_account_id;
+  const effectiveBankAccountLabel = category.owner_type === 'family'
+    ? 'Семейный счет'
+    : 'Личный счет';
+
   useEffect(() => {
     fetchCurrencies().then(setCurrencies).catch(() => {});
   }, []);
 
-  const canSubmit = !submitting && parseFloat(amount) > 0;
+  const canSubmit = !submitting && parseFloat(amount) > 0 && effectiveBankAccountId !== null;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -38,7 +46,7 @@ export default function ExpenseDialog({ category, user, onClose, onSuccess }: Pr
 
     try {
       await recordExpense({
-        bank_account_id: user.bank_account_id,
+        bank_account_id: effectiveBankAccountId,
         category_id: category.category_id,
         amount: parseFloat(amount),
         currency_code: currencyCode,
@@ -71,6 +79,13 @@ export default function ExpenseDialog({ category, user, onClose, onSuccess }: Pr
 
           <div className="form-row">
             <div className="input input--read-only">Категория: {category.name}</div>
+          </div>
+
+          <div className="form-row">
+            <div className="input input--read-only">
+              Счет: {effectiveBankAccountLabel}
+              {effectiveBankAccountId !== null ? ` #${effectiveBankAccountId}` : ' не найден'}
+            </div>
           </div>
 
           <div className="form-row">
@@ -109,6 +124,12 @@ export default function ExpenseDialog({ category, user, onClose, onSuccess }: Pr
           {error && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
               {error}
+            </p>
+          )}
+
+          {effectiveBankAccountId === null && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+              Для этой категории не найден подходящий счет.
             </p>
           )}
         </div>

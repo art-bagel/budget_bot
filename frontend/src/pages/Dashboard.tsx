@@ -822,6 +822,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
         <ExpenseDialog
           category={expenseCategory}
           user={user}
+          familyBankAccountId={overview.family_bank_account_id}
           onClose={() => setExpenseCategory(null)}
           onSuccess={() => void handleDialogSuccess()}
         />
