@@ -506,8 +506,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         <strong className="cat-card__amount">
                           {formatAmount(category.balance, category.currency_code)}
                         </strong>
-                        {hintsEnabled && !isValidTarget && (
-                          <span className="cat-card__hint">← перевод · расход →</span>
+                        {!isValidTarget && (category.owner_type === 'family' || hintsEnabled) && (
+                          <span className="cat-card__hint">
+                            {[
+                              category.owner_type === 'family' ? 'семья' : null,
+                              hintsEnabled ? '← перевод · расход →' : null,
+                            ].filter(Boolean).join(' · ')}
+                          </span>
                         )}
                       </li>
                     );
@@ -606,7 +611,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         }}
                       >
                         <div className="dashboard-budget-row__main">
-                          <div className="list-row__title">{category.name}</div>
+                          <div className="list-row__title">
+                            {category.name}
+                            {category.owner_type === 'family' && (
+                              <span className="tag tag--neutral" style={{ marginLeft: 8, fontSize: '0.72em', verticalAlign: 'middle' }}>семья</span>
+                            )}
+                          </div>
                           <div className="list-row__sub">
                             {isValidTarget
                               ? 'Нажми, чтобы перевести сюда'

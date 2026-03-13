@@ -12,6 +12,8 @@ export interface Category {
   id: number;
   name: string;
   kind: string;
+  owner_type: string;
+  owner_name?: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -45,6 +47,9 @@ export interface DashboardBudgetCategory {
   category_id: number;
   name: string;
   kind: string;
+  owner_type: string;
+  owner_user_id?: number | null;
+  owner_family_id?: number | null;
   balance: number;
   currency_code: string;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { createCategory, fetchCategories, replaceGroupMembers } from '../api';
+import { createCategory, fetchCategories, fetchMyFamily, replaceGroupMembers } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { Category } from '../types';
 
@@ -33,9 +33,17 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [ownerType, setOwnerType] = useState<'user' | 'family'>('user');
+  const [inFamily, setInFamily] = useState(false);
   const [groupSelectableCategories, setGroupSelectableCategories] = useState<Category[]>([]);
   const [groupRows, setGroupRows] = useState<GroupDraftRow[]>([createDraftRow(1)]);
   const [loadingGroupOptions, setLoadingGroupOptions] = useState(false);
+
+  useEffect(() => {
+    fetchMyFamily()
+      .then((f) => setInFamily(!!f))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (kind !== 'group') {
@@ -109,7 +117,7 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
     setError(null);
 
     try {
-      const result = await createCategory(name.trim(), kind);
+      const result = await createCategory(name.trim(), kind, ownerType);
 
       if (kind === 'group' && validGroupRows.length > 0) {
         await replaceGroupMembers(
@@ -159,6 +167,27 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
               style={{ flex: 1 }}
             />
           </div>
+
+          {inFamily && (
+            <div className="form-row">
+              <button
+                className={`btn${ownerType === 'user' ? ' btn--primary' : ''}`}
+                type="button"
+                onClick={() => setOwnerType('user')}
+                disabled={creating}
+              >
+                Личная
+              </button>
+              <button
+                className={`btn${ownerType === 'family' ? ' btn--primary' : ''}`}
+                type="button"
+                onClick={() => setOwnerType('family')}
+                disabled={creating}
+              >
+                Семейная
+              </button>
+            </div>
+          )}
 
           {kind === 'group' && (
             <>

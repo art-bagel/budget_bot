@@ -80,10 +80,10 @@ export async function fetchDashboardOverview(bankAccountId: number): Promise<Das
   return apiFetch<DashboardOverview>(`/dashboard/overview?bank_account_id=${bankAccountId}`);
 }
 
-export async function createCategory(name: string, kind: string): Promise<{ id: number }> {
+export async function createCategory(name: string, kind: string, ownerType: 'user' | 'family' = 'user'): Promise<{ id: number }> {
   return apiFetch<{ id: number }>('/categories', {
     method: 'POST',
-    body: JSON.stringify({ name, kind }),
+    body: JSON.stringify({ name, kind, owner_type: ownerType }),
   });
 }
 
