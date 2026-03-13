@@ -708,17 +708,21 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     ))}
                   </select>
                 </div>
-                <select
-                  className="analytics-scope-select"
-                  value={analyticsOwnerScope}
-                  onChange={(event) => setAnalyticsOwnerScope(event.target.value as 'all' | 'user' | 'family')}
-                >
+                <div className="analytics-toolbar__row">
                   {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <button
+                      key={option.value}
+                      className={[
+                        'analytics-chip',
+                        analyticsOwnerScope === option.value ? 'analytics-chip--active' : '',
+                      ].filter(Boolean).join(' ')}
+                      type="button"
+                      onClick={() => setAnalyticsOwnerScope(option.value)}
+                    >
                       {option.label}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               {analyticsError && (
