@@ -375,7 +375,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
         <div className="section__header">
           <h2 className="section__title">История и аналитика</h2>
         </div>
-        <div className="panel">
+        <div className={['panel', viewMode === 'analytics' ? 'panel--analytics' : ''].filter(Boolean).join(' ')}>
           <div className="operations-mode-switch">
             <button
               className={[
@@ -553,102 +553,97 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                 <p className="list-row__sub">Собираем аналитику...</p>
               ) : analyticsData ? (
                 <>
-                  <div className="analytics-summary">
-                    <div>
-                      <div className="section__eyebrow">
-                        {analyticsTypeFilter === 'expense' ? 'Структура расходов' : 'Структура доходов'}
-                      </div>
-                      <div className="analytics-summary__title">{formatMonthLong(analyticsData.period)}</div>
-                    </div>
-                    <div className="analytics-summary__meta">
-                      <strong>{formatAmount(analyticsData.total_amount, analyticsData.base_currency_code)}</strong>
-                      <span>{analyticsData.total_operations} операций</span>
-                    </div>
-                  </div>
-
                   {analyticsData.total_amount <= 0 ? (
                     <p className="list-row__sub">
                       За выбранный месяц пока нет данных для аналитики.
                     </p>
                   ) : (
                     <>
-                      <div className="analytics-grid">
-                        <section className="analytics-card">
-                          <div className="analytics-card__title">
-                            {analyticsTypeFilter === 'expense' ? 'Пирог по категориям' : 'Пирог по источникам'}
-                          </div>
+                      <div className="analytics-hero">
+                        <div className="analytics-hero__eyebrow">
+                          {formatMonthLong(analyticsData.period)}
+                        </div>
+                        <div className="analytics-hero__amount">
+                          {formatAmount(analyticsData.total_amount, analyticsData.base_currency_code)}
+                        </div>
+                        <div className="analytics-hero__label">
+                          {analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}
+                        </div>
+                        <div className="analytics-hero__meta">
+                          <span>{analyticsData.total_operations} операций</span>
+                          <span>{analyticsOwnerScope === 'family' ? 'Семейный срез' : analyticsOwnerScope === 'user' ? 'Личный срез' : 'Все счета'}</span>
+                        </div>
+                      </div>
+
+                      <section className="analytics-showcase">
+                        <div className="analytics-showcase__chart">
                           <div className="analytics-donut-wrap">
-                            <div className="analytics-donut" style={{ backgroundImage: donutGradient }}>
+                            <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: donutGradient }}>
                               <div className="analytics-donut__inner">
-                                <span className="analytics-donut__label">Всего</span>
-                                <strong>{formatAmount(analyticsData.total_amount, analyticsData.base_currency_code)}</strong>
+                                <span className="analytics-donut__label">Структура</span>
+                                <strong>{chartSegments[0] ? formatPercent(chartSegments[0].share) : '0%'}</strong>
                               </div>
                             </div>
                           </div>
-                          <div className="analytics-legend">
-                            {chartSegments.map((segment) => (
-                              <div className="analytics-legend__item" key={segment.entryKey}>
-                                <span
-                                  className="analytics-legend__swatch"
-                                  style={{ backgroundColor: segment.color }}
-                                />
-                                <div className="analytics-legend__content">
-                                  <div className="analytics-legend__title-row">
-                                    <span className="analytics-legend__title">{segment.label}</span>
-                                    <span className="analytics-legend__amount">
-                                      {formatAmount(segment.amount, analyticsData.base_currency_code)}
-                                    </span>
-                                  </div>
-                                  <div className="analytics-legend__meta">
-                                    <span>{getOwnerLabel(segment.ownerType)}</span>
-                                    <span>{formatPercent(segment.share)}</span>
-                                    <span>{segment.operationsCount} оп.</span>
-                                  </div>
+                        </div>
+
+                        <div className="analytics-pill-grid">
+                          {chartSegments.map((segment) => (
+                            <div className="analytics-pill" key={segment.entryKey}>
+                              <span
+                                className="analytics-pill__dot"
+                                style={{ backgroundColor: segment.color }}
+                              />
+                              <div className="analytics-pill__content">
+                                <div className="analytics-pill__title">{segment.label}</div>
+                                <div className="analytics-pill__meta">
+                                  <span>{formatAmount(segment.amount, analyticsData.base_currency_code)}</span>
+                                  <span>{formatPercent(segment.share)}</span>
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        </section>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
 
-                        <section className="analytics-card">
-                          <div className="analytics-card__title">По месяцам</div>
-                          <div className="analytics-months">
-                            {analyticsData.months.map((month) => {
-                              const heightPercent = maxMonthlyAmount > 0
-                                ? Math.max(10, Math.round(month.amount / maxMonthlyAmount * 100))
-                                : 10;
+                      <section className="analytics-card analytics-card--full">
+                        <div className="analytics-card__title">По месяцам</div>
+                        <div className="analytics-months">
+                          {analyticsData.months.map((month) => {
+                            const heightPercent = maxMonthlyAmount > 0
+                              ? Math.max(10, Math.round(month.amount / maxMonthlyAmount * 100))
+                              : 10;
 
-                              return (
-                                <button
-                                  className={[
-                                    'analytics-month',
-                                    month.month === analyticsPeriod ? 'analytics-month--active' : '',
-                                  ].filter(Boolean).join(' ')}
-                                  key={month.month}
-                                  type="button"
-                                  onClick={() => setAnalyticsPeriod(month.month)}
-                                >
-                                  <span className="analytics-month__value">
-                                    {formatCompactAmount(month.amount)}
-                                  </span>
-                                  <span className="analytics-month__bar-track">
-                                    <span
-                                      className="analytics-month__bar"
-                                      style={{ height: `${heightPercent}%` }}
-                                    />
-                                  </span>
-                                  <span className="analytics-month__label">
-                                    {formatMonthShort(month.month)}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <p className="operations-hint">
-                            Нажми на месяц, чтобы пересобрать структуру за этот период.
-                          </p>
-                        </section>
-                      </div>
+                            return (
+                              <button
+                                className={[
+                                  'analytics-month',
+                                  month.month === analyticsPeriod ? 'analytics-month--active' : '',
+                                ].filter(Boolean).join(' ')}
+                                key={month.month}
+                                type="button"
+                                onClick={() => setAnalyticsPeriod(month.month)}
+                              >
+                                <span className="analytics-month__value">
+                                  {formatCompactAmount(month.amount)}
+                                </span>
+                                <span className="analytics-month__bar-track">
+                                  <span
+                                    className="analytics-month__bar"
+                                    style={{ height: `${heightPercent}%` }}
+                                  />
+                                </span>
+                                <span className="analytics-month__label">
+                                  {formatMonthShort(month.month)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="operations-hint">
+                          Нажми на месяц, чтобы пересобрать структуру за этот период.
+                        </p>
+                      </section>
 
                       <section className="analytics-card analytics-card--full">
                         <div className="analytics-card__title">
@@ -668,7 +663,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                                       {index + 1}. {item.label}
                                     </div>
                                     <div className="analytics-ranking__meta">
-                                      {item.owner_type === 'family' ? 'Семейное' : 'Личное'} · {item.operations_count} операций
+                                      {getOwnerLabel(item.owner_type)} · {item.operations_count} операций
                                     </div>
                                   </div>
                                   <div className="analytics-ranking__amount">
