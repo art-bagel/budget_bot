@@ -827,6 +827,7 @@ p { margin: 0; }
 .history-line__label {
   min-width: 0;
   color: var(--text-secondary);
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 

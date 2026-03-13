@@ -64,12 +64,18 @@ function getBankEntryLabel(
   const resolvedName = accountName || (bankAccountId ? `Счет #${bankAccountId}` : 'Счет');
 
   if (ownerType === 'family') {
-    return 'Семейный счет · ' + resolvedName;
+    return 'Семейный · ' + resolvedName;
   }
   if (ownerType === 'user') {
-    return 'Личный счет · ' + resolvedName;
+    return 'Личный · ' + resolvedName;
   }
   return resolvedName;
+}
+
+function getBudgetEntryLabel(name: string): string {
+  if (name === 'Личный свободный остаток') return 'Личный остаток';
+  if (name === 'Семейный свободный остаток') return 'Семейный остаток';
+  return name;
 }
 
 
@@ -89,7 +95,7 @@ function getOperationLines(item: OperationHistoryItem): OperationLine[] {
 
   item.budget_entries.forEach((entry) => {
     lines.push({
-      label: entry.category_name,
+      label: getBudgetEntryLabel(entry.category_name),
       amount: formatSignedAmount(entry.amount, entry.currency_code),
     });
   });
