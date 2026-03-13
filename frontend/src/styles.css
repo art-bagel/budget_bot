@@ -924,6 +924,23 @@ p { margin: 0; }
   color: var(--text-on-accent);
 }
 
+.analytics-period-select {
+  min-width: 132px;
+  height: 42px;
+  padding: 10px 38px 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background-color: rgba(255, 255, 255, 0.06);
+  color: rgba(232, 236, 240, 0.92);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.analytics-period-select:focus {
+  border-color: rgba(61, 189, 168, 0.72);
+}
+
 .analytics-hero {
   margin-bottom: 18px;
 }
