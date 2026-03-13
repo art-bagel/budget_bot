@@ -175,6 +175,11 @@ export function hapticLight(): void {
   navigator.vibrate?.(10);
 }
 
+export function hapticRigid(): void {
+  getTelegramWebApp()?.HapticFeedback?.impactOccurred('rigid');
+  navigator.vibrate?.(16);
+}
+
 export function subscribeTelegramThemeChanged(callback: () => void): () => void {
   const webApp = getTelegramWebApp();
 

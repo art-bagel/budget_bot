@@ -19,7 +19,7 @@ import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import { useHints } from '../hooks/useHints';
-import { hapticLight } from '../telegram';
+import { hapticRigid } from '../telegram';
 
 
 export default function Dashboard({ user }: { user: UserContext }) {
@@ -70,6 +70,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
     startY: number;
     decided: boolean;
     isHorizontal: boolean;
+    actionTriggered: boolean;
+    element: HTMLElement | null;
   } | null>(null);
 
   const handleHeroSwipeStart = (e: React.TouchEvent) => {
@@ -78,28 +80,57 @@ export default function Dashboard({ user }: { user: UserContext }) {
       startY: e.touches[0].clientY,
       decided: false,
       isHorizontal: false,
+      actionTriggered: false,
+      element: e.currentTarget as HTMLElement,
     };
   };
 
   const handleHeroSwipeMove = (e: React.TouchEvent) => {
     const s = heroSwipeRef.current;
     if (!s) return;
+    if (s.actionTriggered) return;
+
     const dx = e.touches[0].clientX - s.startX;
     const dy = e.touches[0].clientY - s.startY;
+
     if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
       s.decided = true;
       s.isHorizontal = Math.abs(dx) > Math.abs(dy);
+    }
+
+    if (s.isHorizontal && s.element) {
+      const offset = Math.max(-96, Math.min(0, dx));
+      s.element.style.transform = `translateX(${offset}px)`;
+      s.element.style.transition = 'none';
+
+      const actionThreshold = getSwipeActionThreshold(s.element);
+
+      if (dx <= -actionThreshold) {
+        s.actionTriggered = true;
+        suppressClickUntilRef.current = Date.now() + 300;
+        resetSwipeElement(s.element);
+        hapticRigid();
+        setShowAccountTransfer(true);
+      }
     }
   };
 
   const handleHeroSwipeEnd = (e: React.TouchEvent) => {
     const s = heroSwipeRef.current;
     heroSwipeRef.current = null;
+    if (!s) return;
+
+    resetSwipeElement(s.element);
+
+    if (s.actionTriggered) {
+      return;
+    }
+
     if (!s || !s.decided || !s.isHorizontal) return;
     const dx = e.changedTouches[0].clientX - s.startX;
     if (dx < -50) {
       suppressClickUntilRef.current = Date.now() + 300;
-      hapticLight();
+      hapticRigid();
       setShowAccountTransfer(true);
     }
   };
@@ -165,7 +196,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
     setTransferTarget(swipeTarget);
     setTransferInitialSourceId(swipeInitialSource);
-    hapticLight();
+    hapticRigid();
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
@@ -220,7 +251,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
       } else if (dx > 50 && s.kind === 'regular' && s.category) {
         // Right swipe → expense
         setExpenseCategory(s.category);
-        hapticLight();
+        hapticRigid();
       }
     }
   };
