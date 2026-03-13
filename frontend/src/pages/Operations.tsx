@@ -18,6 +18,7 @@ const HISTORY_TYPE_OPTIONS = [
   { value: 'allocate', label: 'Распределение по категории' },
   { value: 'group_allocate', label: 'Распределение по группе' },
   { value: 'exchange', label: 'Обмен валют' },
+  { value: 'account_transfer', label: 'Перевод между счетами' },
 ];
 
 type OperationLine = {
@@ -51,7 +52,15 @@ function getOperationTitle(item: OperationHistoryItem): string {
   if (item.type === 'allocate') return 'Распределение по категории';
   if (item.type === 'group_allocate') return 'Распределение по группе';
   if (item.type === 'exchange') return 'Обмен валют';
+  if (item.type === 'account_transfer') return 'Перевод между счетами';
   return item.type;
+}
+
+function getBankEntryLabel(ownerType: string, accountName: string): string {
+  if (ownerType === 'family') {
+    return 'Семейный счет · ' + accountName;
+  }
+  return 'Личный счет · ' + accountName;
 }
 
 
@@ -60,7 +69,7 @@ function getOperationLines(item: OperationHistoryItem): OperationLine[] {
 
   item.bank_entries.forEach((entry) => {
     lines.push({
-      label: 'Банк · ' + entry.currency_code,
+      label: getBankEntryLabel(entry.bank_account_owner_type, entry.bank_account_name),
       amount: formatSignedAmount(entry.amount, entry.currency_code),
     });
   });

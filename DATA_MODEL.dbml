@@ -125,7 +125,7 @@ Table operations {
   owner_user_id bigint [ref: > users.id]
   owner_family_id bigint [ref: > families.id]
   income_source_id bigint [ref: > income_sources.id]
-  type varchar(30) [not null, note: "income | allocate | group_allocate | exchange | expense | reversal"]
+  type varchar(30) [not null, note: "income | allocate | group_allocate | exchange | expense | account_transfer | reversal"]
   reversal_of_operation_id bigint [ref: > operations.id]
   comment text
   created_at timestamptz [not null, default: `now()`]

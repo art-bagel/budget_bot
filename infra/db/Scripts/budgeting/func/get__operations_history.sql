@@ -32,6 +32,7 @@ BEGIN
            'group_allocate',
            'exchange',
            'expense',
+           'account_transfer',
            'reversal'
        ) THEN
         RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
@@ -79,12 +80,16 @@ BEGIN
             jsonb_agg(
                 jsonb_build_object(
                     'bank_account_id', be.bank_account_id,
+                    'bank_account_name', ba.name,
+                    'bank_account_owner_type', ba.owner_type,
                     'currency_code', be.currency_code,
                     'amount', be.amount
                 )
                 ORDER BY be.id
             ) AS bank_entries
         FROM bank_entries be
+        JOIN bank_accounts ba
+          ON ba.id = be.bank_account_id
         JOIN selected_operations so
           ON so.id = be.operation_id
         GROUP BY be.operation_id
@@ -96,7 +101,8 @@ BEGIN
                 jsonb_build_object(
                     'category_id', c.id,
                     'category_name', CASE
-                        WHEN c.kind = 'system' AND c.name = 'Unallocated' THEN 'Свободный остаток'
+                        WHEN c.kind = 'system' AND c.name = 'Unallocated' AND c.owner_type = 'user' THEN 'Личный свободный остаток'
+                        WHEN c.kind = 'system' AND c.name = 'Unallocated' AND c.owner_type = 'family' THEN 'Семейный свободный остаток'
                         ELSE c.name
                     END,
                     'category_kind', c.kind,
