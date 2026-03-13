@@ -198,13 +198,27 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     ].filter(Boolean).join(' ')}
                     key={'history-' + item.operation_id}
                   >
-                    <div className="history-main">
+                    <div className="history-header">
                       <div className="list-row__title">
                         {getOperationTitle(item)}
                         {item.has_reversal && (
                           <span className="tag tag--neutral history-status-tag">Отменена</span>
                         )}
                       </div>
+                      <div className="history-side">
+                        {!item.has_reversal && (
+                          <button
+                            className="btn"
+                            type="button"
+                            disabled={reversingOperationId === item.operation_id}
+                            onClick={() => handleReverseOperation(item.operation_id)}
+                          >
+                            {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="history-main">
                       <div className="list-row__sub">
                         {item.comment && <span>{item.comment}</span>}
                         <span>{formatDateTime(item.created_at)}</span>
@@ -222,18 +236,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                           </div>
                         ))}
                       </div>
-                    </div>
-                    <div className="history-side">
-                      {!item.has_reversal && (
-                        <button
-                          className="btn"
-                          type="button"
-                          disabled={reversingOperationId === item.operation_id}
-                          onClick={() => handleReverseOperation(item.operation_id)}
-                        >
-                          {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
-                        </button>
-                      )}
                     </div>
                   </li>
                 ))}
