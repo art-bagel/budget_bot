@@ -522,7 +522,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
 
   const handleAnalyticsPeriodModeChange = (periodMode: AnalyticsPeriodMode) => {
     setAnalyticsPeriodMode(periodMode);
-    setAnalyticsAnchorDate((prev) => normalizeAnchorDate(prev, periodMode));
+    setAnalyticsAnchorDate(getCurrentAnchorDate(periodMode));
   };
 
   return (
