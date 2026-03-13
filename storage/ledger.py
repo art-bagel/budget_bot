@@ -185,6 +185,37 @@ class Ledger(DataBase):
             comment,
         )
 
+    F_PUT__TRANSFER_BETWEEN_ACCOUNTS = 'put__transfer_between_accounts'
+
+    async def put__transfer_between_accounts(
+        self,
+        user_id: int,
+        from_account_id: int,
+        to_account_id: int,
+        currency_code: str,
+        amount: float,
+        comment: Optional[str] = None,
+    ) -> dict:
+        """
+        Переводит деньги между банковскими счетами с сохранением исторической стоимости.
+        :param user_id: Идентификатор пользователя, выполняющего перевод.
+        :param from_account_id: Идентификатор счета-источника.
+        :param to_account_id: Идентификатор счета-получателя.
+        :param currency_code: Код валюты перевода.
+        :param amount: Сумма перевода.
+        :param comment: Комментарий к операции.
+        :return: Словарь с идентификатором операции и суммой в базовой валюте.
+        """
+        return await self.call_function(
+            self._fn(self.F_PUT__TRANSFER_BETWEEN_ACCOUNTS),
+            user_id,
+            from_account_id,
+            to_account_id,
+            currency_code,
+            amount,
+            comment,
+        )
+
     async def put__reverse_operation(self, user_id: int, operation_id: int, comment: Optional[str] = None) -> dict:
         """
         Создает reversal для операции.

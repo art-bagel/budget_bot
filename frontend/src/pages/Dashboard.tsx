@@ -13,6 +13,7 @@ import type {
 import { formatAmount } from '../utils/format';
 import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
+import AccountTransferDialog from '../components/AccountTransferDialog';
 import CategoryDialog from '../components/CategoryDialog';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
@@ -28,6 +29,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   const [showBankDetail, setShowBankDetail] = useState(false);
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
+  const [showAccountTransfer, setShowAccountTransfer] = useState(false);
 
   useEffect(() => {
     if (showBankDetail) {
@@ -60,6 +62,45 @@ export default function Dashboard({ user }: { user: UserContext }) {
     isHorizontal: boolean;
     element: HTMLElement | null;
   } | null>(null);
+
+  const heroSwipeRef = useRef<{
+    startX: number;
+    startY: number;
+    decided: boolean;
+    isHorizontal: boolean;
+  } | null>(null);
+
+  const handleHeroSwipeStart = (e: React.TouchEvent) => {
+    heroSwipeRef.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      decided: false,
+      isHorizontal: false,
+    };
+  };
+
+  const handleHeroSwipeMove = (e: React.TouchEvent) => {
+    const s = heroSwipeRef.current;
+    if (!s) return;
+    const dx = e.touches[0].clientX - s.startX;
+    const dy = e.touches[0].clientY - s.startY;
+    if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      s.decided = true;
+      s.isHorizontal = Math.abs(dx) > Math.abs(dy);
+    }
+  };
+
+  const handleHeroSwipeEnd = (e: React.TouchEvent) => {
+    const s = heroSwipeRef.current;
+    heroSwipeRef.current = null;
+    if (!s || !s.decided || !s.isHorizontal) return;
+    const dx = e.changedTouches[0].clientX - s.startX;
+    if (dx < -50) {
+      suppressClickUntilRef.current = Date.now() + 300;
+      navigator.vibrate?.(20);
+      setShowAccountTransfer(true);
+    }
+  };
 
   const handleSwipeStart = (
     sourceId: number,
@@ -401,18 +442,26 @@ export default function Dashboard({ user }: { user: UserContext }) {
         className="hero-card hero-card--clickable"
         role="button"
         tabIndex={0}
-        onClick={() => setShowBankDetail(true)}
+        onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+        onTouchStart={hasFamily ? handleHeroSwipeStart : undefined}
+        onTouchMove={hasFamily ? handleHeroSwipeMove : undefined}
+        onTouchEnd={hasFamily ? handleHeroSwipeEnd : undefined}
       >
         <span className="hero-card__label">Банк по себестоимости</span>
         <strong className="hero-card__value">
           {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
         </strong>
         {hasFamily ? (
-          <div className="hero-card__breakdown">
-            <span>Личные: {formatAmount(personalBudgetTotal, overview.base_currency_code)}</span>
-            <span>Семейные: {formatAmount(familyBudgetTotal, overview.base_currency_code)}</span>
-          </div>
+          <>
+            <div className="hero-card__breakdown">
+              <span>Личные: {formatAmount(personalBudgetTotal, overview.base_currency_code)}</span>
+              <span>Семейные: {formatAmount(familyBudgetTotal, overview.base_currency_code)}</span>
+            </div>
+            {hintsEnabled && (
+              <span className="hero-card__sub">← свайп для перевода между счетами</span>
+            )}
+          </>
         ) : (
           <span className="hero-card__sub">
             Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
@@ -791,6 +840,18 @@ export default function Dashboard({ user }: { user: UserContext }) {
           user={user}
           onClose={() => setShowIncomeDialog(false)}
           onSuccess={() => { setShowIncomeDialog(false); void loadOverview(); }}
+        />
+      )}
+
+      {showAccountTransfer && hasFamily && overview.family_bank_account_id && (
+        <AccountTransferDialog
+          personalAccountId={user.bank_account_id}
+          familyAccountId={overview.family_bank_account_id}
+          personalBalances={overview.bank_balances}
+          familyBalances={overview.family_bank_balances}
+          baseCurrencyCode={overview.base_currency_code}
+          onClose={() => setShowAccountTransfer(false)}
+          onSuccess={() => { setShowAccountTransfer(false); void loadOverview(); }}
         />
       )}
 

@@ -80,6 +80,20 @@ class AllocateGroupBudgetResponse(BaseModel):
     members_count: int
 
 
+class AccountTransferRequest(BaseModel):
+    from_account_id: int
+    to_account_id: int
+    currency_code: str
+    amount: float
+    comment: Optional[str] = None
+
+
+class AccountTransferResponse(BaseModel):
+    operation_id: int
+    amount_in_base: float
+    base_currency_code: str
+
+
 class ReverseOperationRequest(BaseModel):
     operation_id: int
     comment: Optional[str] = None
@@ -207,6 +221,22 @@ async def allocate_group_budget(
         comment=body.comment,
     )
     return AllocateGroupBudgetResponse(**result)
+
+
+@router.post('/account-transfer', response_model=AccountTransferResponse)
+async def transfer_between_accounts(
+    body: AccountTransferRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> AccountTransferResponse:
+    result = await ledger.put__transfer_between_accounts(
+        user_id=user.user_id,
+        from_account_id=body.from_account_id,
+        to_account_id=body.to_account_id,
+        currency_code=body.currency_code,
+        amount=body.amount,
+        comment=body.comment,
+    )
+    return AccountTransferResponse(**result)
 
 
 @router.post('/reverse', response_model=ReverseOperationResponse)

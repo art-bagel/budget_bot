@@ -66,6 +66,22 @@ export interface DashboardOverview {
   personal_free_budget_in_base: number;
   family_free_budget_in_base: number;
   family_unallocated_category_id: number | null;
+  family_bank_account_id: number | null;
+  family_bank_balances: DashboardBankBalance[];
+}
+
+export interface AccountTransferRequest {
+  from_account_id: number;
+  to_account_id: number;
+  currency_code: string;
+  amount: number;
+  comment?: string;
+}
+
+export interface AccountTransferResponse {
+  operation_id: number;
+  amount_in_base: number;
+  base_currency_code: string;
 }
 
 export interface IncomeSource {

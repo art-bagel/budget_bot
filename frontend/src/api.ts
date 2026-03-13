@@ -23,6 +23,8 @@ import type {
   FamilyMember,
   FamilyInvitation,
   CreateFamilyResponse,
+  AccountTransferRequest,
+  AccountTransferResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -251,4 +253,11 @@ export async function leaveFamily(): Promise<{ status: string; user_id: number; 
 
 export async function dissolveFamily(): Promise<{ status: string; family_id: number; dissolved_by_user_id: number }> {
   return apiFetch('/family/dissolve', { method: 'POST' });
+}
+
+export async function transferBetweenAccounts(data: AccountTransferRequest): Promise<AccountTransferResponse> {
+  return apiFetch<AccountTransferResponse>('/operations/account-transfer', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }

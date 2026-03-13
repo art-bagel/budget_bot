@@ -40,6 +40,8 @@ class DashboardOverviewResponse(BaseModel):
     personal_free_budget_in_base: float
     family_free_budget_in_base: float
     family_unallocated_category_id: int | None
+    family_bank_account_id: int | None
+    family_bank_balances: List[BankBalanceItem]
 
 
 @router.get('/overview', response_model=DashboardOverviewResponse)
@@ -49,6 +51,18 @@ async def get_dashboard_overview(
 ) -> DashboardOverviewResponse:
     bank_balances = await reports.get__bank_snapshot(user.user_id, bank_account_id)
     budget_categories = await reports.get__budget_snapshot(user.user_id, True)
+
+    all_bank_accounts = await reports.get__bank_accounts(user.user_id)
+    family_account = next(
+        (acc for acc in all_bank_accounts if acc.get('owner_type') == 'family'),
+        None,
+    )
+    family_bank_account_id = int(family_account['id']) if family_account else None
+    family_bank_balances = (
+        await reports.get__bank_snapshot(user.user_id, family_bank_account_id)
+        if family_bank_account_id
+        else []
+    )
 
     base_currency_code = ''
 
@@ -115,4 +129,6 @@ async def get_dashboard_overview(
         personal_free_budget_in_base=personal_free_budget_in_base,
         family_free_budget_in_base=family_free_budget_in_base,
         family_unallocated_category_id=family_unallocated_category_id,
+        family_bank_account_id=family_bank_account_id,
+        family_bank_balances=family_bank_balances,
     )
