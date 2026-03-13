@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
 
+import asyncpg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 from backend.app.config import settings
 from backend.app.routers import auth, bank_accounts, categories, currencies, dashboard, families, groups, income_sources, operations, user_settings
@@ -41,6 +44,11 @@ app.include_router(groups.router)
 app.include_router(income_sources.router)
 app.include_router(operations.router)
 app.include_router(user_settings.router)
+
+
+@app.exception_handler(asyncpg.PostgresError)
+async def postgres_exception_handler(_request: Request, exc: asyncpg.PostgresError) -> PlainTextResponse:
+    return PlainTextResponse(str(exc), status_code=400)
 
 
 @app.get('/health')

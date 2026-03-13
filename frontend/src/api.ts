@@ -83,7 +83,18 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(normalizeApiErrorMessage(text, response.status));
+    let errorText = text;
+
+    try {
+      const parsed = JSON.parse(text) as { detail?: unknown };
+      if (typeof parsed.detail === 'string') {
+        errorText = parsed.detail;
+      }
+    } catch {
+      // Plain text error response is also valid.
+    }
+
+    throw new Error(normalizeApiErrorMessage(errorText, response.status));
   }
   return response.json();
 }
