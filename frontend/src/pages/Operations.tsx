@@ -389,6 +389,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
   const [analyticsPeriodMode, setAnalyticsPeriodMode] = useState<AnalyticsPeriodMode>('month');
   const [analyticsAnchorDate, setAnalyticsAnchorDate] = useState(getCurrentAnchorDate('month'));
   const analyticsSwipeRef = useRef<{ startX: number; startY: number } | null>(null);
+  const periodSelectRef = useRef<HTMLSelectElement>(null);
 
   const { hintsEnabled } = useHints();
   const analyticsHasFamily = analyticsData?.has_family ?? true;
@@ -469,6 +470,18 @@ export default function Operations({ user: _user }: { user: UserContext }) {
       setAnalyticsOwnerScope('all');
     }
   }, [analyticsHasFamily, analyticsOwnerScope]);
+
+  useEffect(() => {
+    const el = periodSelectRef.current;
+    if (!el) return;
+    const text = el.options[el.selectedIndex]?.text ?? '';
+    const span = document.createElement('span');
+    span.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;font:600 0.8rem/1 system-ui;padding:0 12px;white-space:nowrap;';
+    span.textContent = text;
+    document.body.appendChild(span);
+    el.style.width = `${span.offsetWidth + 2}px`;
+    document.body.removeChild(span);
+  }, [analyticsAnchorDate, analyticsPeriodMode]);
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
 
@@ -690,6 +703,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     </button>
                   ))}
                   <select
+                    ref={periodSelectRef}
                     className="analytics-period-select"
                     value={analyticsAnchorDate}
                     onChange={(event) => setAnalyticsAnchorDate(event.target.value)}
