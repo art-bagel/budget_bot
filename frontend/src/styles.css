@@ -924,7 +924,7 @@ p { margin: 0; }
   flex: 1;
   min-width: 0;
   height: 34px;
-  padding: 6px 28px 6px 12px;
+  padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background-color: rgba(255, 255, 255, 0.06);
@@ -932,10 +932,9 @@ p { margin: 0; }
   font-size: 0.8rem;
   font-weight: 600;
   line-height: 1;
-}
-
-.analytics-period-select:focus {
-  border-color: rgba(61, 189, 168, 0.72);
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
 }
 
 .analytics-scope-select {
