@@ -666,7 +666,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
               onTouchEnd={handleAnalyticsTouchEnd}
             >
               <div className="analytics-toolbar">
-                <div className="analytics-toolbar__group">
+                <div className="analytics-toolbar__row">
                   {ANALYTICS_TYPE_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -681,7 +681,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     </button>
                   ))}
                 </div>
-                <div className="analytics-toolbar__group analytics-toolbar__group--filters">
+                <div className="analytics-toolbar__row">
                   {ANALYTICS_PERIOD_MODE_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -697,7 +697,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     </button>
                   ))}
                   <select
-                    className="input input--compact analytics-period-select"
+                    className="analytics-period-select"
                     value={analyticsAnchorDate}
                     onChange={(event) => setAnalyticsAnchorDate(event.target.value)}
                   >
@@ -707,18 +707,18 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                       </option>
                     ))}
                   </select>
-                  <select
-                    className="input input--compact"
-                    value={analyticsOwnerScope}
-                    onChange={(event) => setAnalyticsOwnerScope(event.target.value as 'all' | 'user' | 'family')}
-                  >
-                    {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
                 </div>
+                <select
+                  className="analytics-scope-select"
+                  value={analyticsOwnerScope}
+                  onChange={(event) => setAnalyticsOwnerScope(event.target.value as 'all' | 'user' | 'family')}
+                >
+                  {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {analyticsError && (
