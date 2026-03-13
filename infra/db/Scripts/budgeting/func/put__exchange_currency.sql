@@ -65,7 +65,7 @@ BEGIN
     INTO _bank_balance;
 
     IF _bank_balance < _from_amount THEN
-        RAISE EXCEPTION 'Insufficient bank balance in currency %', _from_currency_code;
+        RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
     IF _from_currency_code = _base_currency_code THEN
@@ -99,7 +99,7 @@ BEGIN
         END LOOP;
 
         IF _remaining_to_consume > 0 THEN
-            RAISE EXCEPTION 'Insufficient FX lots in currency %', _from_currency_code;
+            RAISE EXCEPTION 'Сумма превышает остаток';
         END IF;
     END IF;
 

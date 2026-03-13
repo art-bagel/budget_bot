@@ -30,6 +30,37 @@ import { getTelegramInitData, getTelegramUserId } from './telegram';
 
 const API_BASE = '/api/v1';
 
+function normalizeApiErrorMessage(rawText: string, status: number): string {
+  const text = rawText.trim().replace(/^"(.*)"$/s, '$1');
+
+  if (
+    text.includes('Сумма превышает остаток')
+    || text.includes('Insufficient bank balance')
+    || text.includes('Insufficient balance')
+    || text.includes('Insufficient FX lots')
+  ) {
+    return 'Недостаточно денег';
+  }
+
+  if (text.includes('Insufficient budget in category')) {
+    return 'Недостаточно бюджета в категории';
+  }
+
+  if (text.includes('Expense category and bank account must have the same owner')) {
+    return 'Выбран неподходящий счет для этой категории';
+  }
+
+  if (text.includes('Budget allocation across different owners is not supported')) {
+    return 'Нельзя переводить между личными и семейными категориями';
+  }
+
+  if (text) {
+    return text;
+  }
+
+  return `Ошибка API: ${status}`;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const telegramInitData = getTelegramInitData();
   const telegramUserId = getTelegramUserId();
@@ -52,7 +83,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `API error: ${response.status}`);
+    throw new Error(normalizeApiErrorMessage(text, response.status));
   }
   return response.json();
 }

@@ -103,7 +103,7 @@ BEGIN
       AND currency_code = _currency_code;
 
     IF _bank_balance < _amount THEN
-        RAISE EXCEPTION 'Insufficient bank balance in currency %', _currency_code;
+        RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
     IF _currency_code = _base_currency_code THEN
@@ -137,7 +137,7 @@ BEGIN
         END LOOP;
 
         IF _remaining_to_consume > 0 THEN
-            RAISE EXCEPTION 'Insufficient FX lots in currency %', _currency_code;
+            RAISE EXCEPTION 'Сумма превышает остаток';
         END IF;
     END IF;
 
@@ -153,7 +153,7 @@ BEGIN
       AND currency_code = _base_currency_code;
 
     IF _category_balance < _expense_cost_base THEN
-        RAISE EXCEPTION 'Insufficient budget in category %', _category_id;
+        RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
     INSERT INTO operations (

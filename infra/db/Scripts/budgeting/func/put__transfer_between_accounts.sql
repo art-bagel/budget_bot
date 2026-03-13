@@ -96,7 +96,7 @@ BEGIN
     ), 0) INTO _bank_balance;
 
     IF _bank_balance < _amount THEN
-        RAISE EXCEPTION 'Insufficient balance in % on source account', _currency_code;
+        RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
     -- Calculate historical cost in base currency
@@ -130,7 +130,7 @@ BEGIN
         END LOOP;
 
         IF _remaining > 0 THEN
-            RAISE EXCEPTION 'Insufficient FX lots in % on source account', _currency_code;
+            RAISE EXCEPTION 'Сумма превышает остаток';
         END IF;
     END IF;
 
