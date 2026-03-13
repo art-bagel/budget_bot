@@ -203,13 +203,14 @@ export interface OperationAnalyticsItem {
 }
 
 export interface OperationAnalyticsMonth {
-  month: string;
+  period_start: string;
   amount: number;
   is_selected: boolean;
 }
 
 export interface OperationAnalyticsResponse {
-  period: string;
+  period_start: string;
+  period_mode: 'week' | 'month' | 'year';
   operation_type: 'expense' | 'income';
   owner_scope: 'all' | 'user' | 'family';
   base_currency_code: string;
@@ -217,7 +218,7 @@ export interface OperationAnalyticsResponse {
   total_amount: number;
   total_operations: number;
   items: OperationAnalyticsItem[];
-  months: OperationAnalyticsMonth[];
+  periods: OperationAnalyticsMonth[];
 }
 
 export interface ReverseOperationRequest {

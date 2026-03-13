@@ -172,30 +172,34 @@ class Reports(DataBase):
     async def get__operations_analytics(
         self,
         user_id: int,
-        period_start: Optional[date] = None,
+        anchor_date: Optional[date] = None,
+        period_mode: str = 'month',
         operation_type: str = 'expense',
         owner_scope: str = 'all',
-        months: int = 6,
+        periods: int = 6,
     ) -> dict:
         """
         Возвращает аналитику операций по выбранному месяцу и динамику по месяцам.
         :param user_id: Идентификатор владельца операций.
-        :param period_start: Первый день месяца в ISO-формате YYYY-MM-DD.
+        :param anchor_date: Дата внутри выбранного периода.
+        :param period_mode: Режим периода: week, month, year.
         :param operation_type: Тип аналитики: income или expense.
         :param owner_scope: Область владельца: all, user, family.
-        :param months: Количество месяцев в динамике, включая выбранный.
+        :param periods: Количество периодов в динамике, включая выбранный.
         :return: Словарь с разбивкой по категориям/источникам и помесячной серией.
         """
         result = await self.call_function(
             self._fn(self.F_GET__OPERATIONS_ANALYTICS),
             user_id,
-            period_start,
+            anchor_date,
+            period_mode,
             operation_type,
             owner_scope,
-            months,
+            periods,
         )
         return result if result else {
-            'period': period_start,
+            'period_start': anchor_date,
+            'period_mode': period_mode,
             'operation_type': operation_type,
             'owner_scope': owner_scope,
             'base_currency_code': '',
@@ -203,7 +207,7 @@ class Reports(DataBase):
             'total_amount': 0,
             'total_operations': 0,
             'items': [],
-            'months': [],
+            'periods': [],
         }
 
     async def get__portfolio_valuation(

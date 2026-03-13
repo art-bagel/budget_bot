@@ -1,9 +1,10 @@
 CREATE OR REPLACE FUNCTION budgeting.get__operations_analytics(
     _user_id bigint,
-    _period_start date DEFAULT NULL,
+    _anchor_date date DEFAULT NULL,
+    _period_mode text DEFAULT 'month',
     _operation_type text DEFAULT 'expense',
     _owner_scope text DEFAULT 'all',
-    _months integer DEFAULT 6
+    _periods integer DEFAULT 6
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -11,18 +12,27 @@ AS $function$
 DECLARE
     _result jsonb;
     _family_id bigint;
-    _month_start date;
-    _series_start date;
     _normalized_operation_type text;
     _normalized_owner_scope text;
+    _normalized_period_mode text;
+    _effective_anchor_date date;
+    _selected_period_start date;
+    _selected_period_end date;
+    _series_start date;
+    _series_step interval;
     _base_currency_code char(3);
 BEGIN
     SET search_path TO budgeting;
 
     _family_id := budgeting.get__user_family_id(_user_id);
-    _month_start := date_trunc('month', COALESCE(_period_start, current_date))::date;
+    _effective_anchor_date := COALESCE(_anchor_date, current_date);
+    _normalized_period_mode := COALESCE(nullif(trim(_period_mode), ''), 'month');
     _normalized_operation_type := COALESCE(nullif(trim(_operation_type), ''), 'expense');
     _normalized_owner_scope := COALESCE(nullif(trim(_owner_scope), ''), 'all');
+
+    IF _normalized_period_mode NOT IN ('week', 'month', 'year') THEN
+        RAISE EXCEPTION 'Unsupported analytics period mode: %', _normalized_period_mode;
+    END IF;
 
     IF _normalized_operation_type NOT IN ('expense', 'income') THEN
         RAISE EXCEPTION 'Unsupported analytics operation type: %', _normalized_operation_type;
@@ -32,11 +42,26 @@ BEGIN
         RAISE EXCEPTION 'Unsupported analytics owner scope: %', _normalized_owner_scope;
     END IF;
 
-    IF _months IS NULL OR _months <= 0 OR _months > 24 THEN
-        RAISE EXCEPTION 'Analytics months count must be between 1 and 24';
+    IF _periods IS NULL OR _periods <= 0 OR _periods > 24 THEN
+        RAISE EXCEPTION 'Analytics periods count must be between 1 and 24';
     END IF;
 
-    _series_start := (_month_start - make_interval(months => _months - 1))::date;
+    IF _normalized_period_mode = 'week' THEN
+        _selected_period_start := date_trunc('week', _effective_anchor_date)::date;
+        _selected_period_end := (_selected_period_start + 7);
+        _series_start := (_selected_period_start - ((_periods - 1) * 7));
+        _series_step := INTERVAL '1 week';
+    ELSIF _normalized_period_mode = 'month' THEN
+        _selected_period_start := date_trunc('month', _effective_anchor_date)::date;
+        _selected_period_end := (_selected_period_start + INTERVAL '1 month')::date;
+        _series_start := (_selected_period_start - make_interval(months => _periods - 1))::date;
+        _series_step := INTERVAL '1 month';
+    ELSE
+        _selected_period_start := date_trunc('year', _effective_anchor_date)::date;
+        _selected_period_end := (_selected_period_start + INTERVAL '1 year')::date;
+        _series_start := (_selected_period_start - make_interval(years => _periods - 1))::date;
+        _series_step := INTERVAL '1 year';
+    END IF;
 
     SELECT u.base_currency_code
     INTO _base_currency_code
@@ -56,7 +81,7 @@ BEGIN
         FROM operations o
         WHERE o.type = _normalized_operation_type
           AND o.created_at >= _series_start
-          AND o.created_at < (_month_start + INTERVAL '1 month')
+          AND o.created_at < _selected_period_end
           AND (
               (_normalized_owner_scope = 'all' AND (
                   (o.owner_type = 'user' AND o.owner_user_id = _user_id)
@@ -79,8 +104,8 @@ BEGIN
         JOIN categories c
           ON c.id = bue.category_id
         WHERE _normalized_operation_type = 'expense'
-          AND fo.created_at >= _month_start
-          AND fo.created_at < (_month_start + INTERVAL '1 month')
+          AND fo.created_at >= _selected_period_start
+          AND fo.created_at < _selected_period_end
           AND c.kind = 'regular'
           AND bue.amount < 0
         GROUP BY c.id, c.name, c.owner_type
@@ -100,8 +125,8 @@ BEGIN
         LEFT JOIN income_sources ins
           ON ins.id = fo.income_source_id
         WHERE _normalized_operation_type = 'income'
-          AND fo.created_at >= _month_start
-          AND fo.created_at < (_month_start + INTERVAL '1 month')
+          AND fo.created_at >= _selected_period_start
+          AND fo.created_at < _selected_period_end
           AND c.kind = 'system'
           AND c.name = 'Unallocated'
           AND bue.amount > 0
@@ -118,9 +143,13 @@ BEGIN
             COALESCE(sum(pb.operations_count), 0) AS total_operations
         FROM period_breakdown pb
     ),
-    monthly_source_expense AS (
+    series_source_expense AS (
         SELECT
-            date_trunc('month', fo.created_at)::date AS month_start,
+            CASE
+                WHEN _normalized_period_mode = 'week' THEN date_trunc('week', fo.created_at)::date
+                WHEN _normalized_period_mode = 'month' THEN date_trunc('month', fo.created_at)::date
+                ELSE date_trunc('year', fo.created_at)::date
+            END AS period_start,
             abs(bue.amount) AS amount
         FROM filtered_operations fo
         JOIN budget_entries bue
@@ -131,9 +160,13 @@ BEGIN
           AND c.kind = 'regular'
           AND bue.amount < 0
     ),
-    monthly_source_income AS (
+    series_source_income AS (
         SELECT
-            date_trunc('month', fo.created_at)::date AS month_start,
+            CASE
+                WHEN _normalized_period_mode = 'week' THEN date_trunc('week', fo.created_at)::date
+                WHEN _normalized_period_mode = 'month' THEN date_trunc('month', fo.created_at)::date
+                ELSE date_trunc('year', fo.created_at)::date
+            END AS period_start,
             bue.amount AS amount
         FROM filtered_operations fo
         JOIN budget_entries bue
@@ -145,31 +178,35 @@ BEGIN
           AND c.name = 'Unallocated'
           AND bue.amount > 0
     ),
-    monthly_source AS (
-        SELECT * FROM monthly_source_expense
+    series_source AS (
+        SELECT * FROM series_source_expense
         UNION ALL
-        SELECT * FROM monthly_source_income
+        SELECT * FROM series_source_income
     ),
-    monthly_totals AS (
+    series_totals AS (
         SELECT
-            ms.month_start,
-            round(sum(ms.amount), 2) AS amount
-        FROM monthly_source ms
-        GROUP BY ms.month_start
+            ss.period_start,
+            round(sum(ss.amount), 2) AS amount
+        FROM series_source ss
+        GROUP BY ss.period_start
     ),
-    month_series AS (
-        SELECT generate_series(_series_start, _month_start, INTERVAL '1 month')::date AS month_start
+    period_series AS (
+        SELECT generate_series(
+            _series_start::timestamp,
+            _selected_period_start::timestamp,
+            _series_step
+        )::date AS period_start
     ),
-    monthly_items AS (
+    period_items AS (
         SELECT jsonb_build_object(
-            'month', to_char(ms.month_start, 'YYYY-MM'),
-            'amount', COALESCE(mt.amount, 0),
-            'is_selected', ms.month_start = _month_start
+            'period_start', ps.period_start,
+            'amount', COALESCE(st.amount, 0),
+            'is_selected', ps.period_start = _selected_period_start
         ) AS item
-        FROM month_series ms
-        LEFT JOIN monthly_totals mt
-          ON mt.month_start = ms.month_start
-        ORDER BY ms.month_start
+        FROM period_series ps
+        LEFT JOIN series_totals st
+          ON st.period_start = ps.period_start
+        ORDER BY ps.period_start
     ),
     breakdown_items AS (
         SELECT jsonb_build_object(
@@ -183,7 +220,8 @@ BEGIN
         ORDER BY pb.amount DESC, pb.label
     )
     SELECT jsonb_build_object(
-        'period', to_char(_month_start, 'YYYY-MM'),
+        'period_start', _selected_period_start,
+        'period_mode', _normalized_period_mode,
         'operation_type', _normalized_operation_type,
         'owner_scope', _normalized_owner_scope,
         'base_currency_code', _base_currency_code,
@@ -191,7 +229,7 @@ BEGIN
         'total_amount', (SELECT pt.total_amount FROM period_totals pt),
         'total_operations', (SELECT pt.total_operations FROM period_totals pt),
         'items', COALESCE((SELECT jsonb_agg(bi.item) FROM breakdown_items bi), '[]'::jsonb),
-        'months', COALESCE((SELECT jsonb_agg(mi.item) FROM monthly_items mi), '[]'::jsonb)
+        'periods', COALESCE((SELECT jsonb_agg(pi.item) FROM period_items pi), '[]'::jsonb)
     )
     INTO _result;
 

@@ -228,16 +228,18 @@ export async function fetchOperationsHistory(
 }
 
 export async function fetchOperationsAnalytics(
-  period: string,
+  anchorDate: string,
+  periodMode: 'week' | 'month' | 'year',
   operationType: 'expense' | 'income',
   ownerScope: 'all' | 'user' | 'family',
-  months = 6,
+  periods = 6,
 ): Promise<OperationAnalyticsResponse> {
   const params = new URLSearchParams({
-    period,
+    anchor_date: anchorDate,
+    period_mode: periodMode,
     operation_type: operationType,
     owner_scope: ownerScope,
-    months: String(months),
+    periods: String(periods),
   });
 
   return apiFetch<OperationAnalyticsResponse>(`/operations/analytics?${params.toString()}`);
