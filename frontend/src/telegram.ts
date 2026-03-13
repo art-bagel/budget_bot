@@ -27,6 +27,12 @@ interface TelegramSafeAreaInset {
   right: number;
 }
 
+interface TelegramHapticFeedback {
+  impactOccurred(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'): TelegramHapticFeedback;
+  notificationOccurred(type: 'error' | 'success' | 'warning'): TelegramHapticFeedback;
+  selectionChanged(): TelegramHapticFeedback;
+}
+
 interface TelegramWebApp {
   initData: string;
   initDataUnsafe?: {
@@ -46,6 +52,7 @@ interface TelegramWebApp {
   setBackgroundColor?: (color: string) => void;
   onEvent?: (eventType: string, callback: () => void) => void;
   offEvent?: (eventType: string, callback: () => void) => void;
+  HapticFeedback?: TelegramHapticFeedback;
 }
 
 declare global {
@@ -161,6 +168,11 @@ export function hasTelegramContext(): boolean {
 
 export function getTelegramColorScheme(): 'light' | 'dark' | null {
   return getTelegramWebApp()?.colorScheme || null;
+}
+
+export function hapticLight(): void {
+  getTelegramWebApp()?.HapticFeedback?.impactOccurred('light');
+  navigator.vibrate?.(10);
 }
 
 export function subscribeTelegramThemeChanged(callback: () => void): () => void {

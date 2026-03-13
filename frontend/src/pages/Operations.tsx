@@ -6,6 +6,7 @@ import {
   fetchOperationsHistory,
   reverseOperation,
 } from '../api';
+import { hapticLight } from '../telegram';
 import { useHints } from '../hooks/useHints';
 import type {
   OperationAnalyticsItem,
@@ -504,7 +505,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
 
   const shiftAnalyticsPeriod = (direction: -1 | 1) => {
     setAnalyticsAnchorDate((prev) => shiftAnchorDate(prev, analyticsPeriodMode, direction));
-    navigator.vibrate?.(10);
+    hapticLight();
   };
 
   const handleAnalyticsTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
