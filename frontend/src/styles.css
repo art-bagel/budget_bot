@@ -1012,6 +1012,28 @@ p { margin: 0; }
   font-weight: 600;
 }
 
+.analytics-donut-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.analytics-donut-nav__arrow {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 2rem;
+  line-height: 1;
+  padding: 0 6px;
+  opacity: 0.6;
+}
+
+.analytics-donut-nav__arrow:hover {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
 .analytics-showcase {
   display: grid;
   gap: 16px;

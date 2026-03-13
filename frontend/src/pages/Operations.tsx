@@ -770,6 +770,8 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     <>
                       <section className="analytics-showcase">
                         <div className="analytics-showcase__chart">
+                          <div className="analytics-donut-nav">
+                            <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(-1)}>‹</button>
                           <div className="analytics-donut-wrap">
                             <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: donutGradient }}>
                               <div className="analytics-donut__inner">
@@ -777,6 +779,8 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                                 <strong>{chartSegments[0] ? formatPercent(chartSegments[0].share) : '0%'}</strong>
                               </div>
                             </div>
+                          </div>
+                            <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(1)}>›</button>
                           </div>
                         </div>
 
