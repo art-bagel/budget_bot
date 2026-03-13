@@ -464,40 +464,18 @@ export default function Dashboard({ user }: { user: UserContext }) {
               </div>
               {hasFamily ? (
                 <div className="balance-card__split">
-                  <div
-                    className="balance-card__split-row balance-card__split-row--interactive"
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (Date.now() < suppressClickUntilRef.current) return;
-                      openTransferDialog(freeBudgetTarget, null);
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransferDialog(freeBudgetTarget, null); } }}
-                  >
+                  <div className="balance-card__split-row">
                     <span className="balance-card__split-label">Личный</span>
                     <strong className="balance-card__split-amount">
                       {formatAmount(overview.personal_free_budget_in_base, overview.base_currency_code)}
                     </strong>
                   </div>
-                  {familyFreeBudgetTarget && (
-                    <div
-                      className="balance-card__split-row balance-card__split-row--interactive"
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (Date.now() < suppressClickUntilRef.current) return;
-                        openTransferDialog(familyFreeBudgetTarget, null);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransferDialog(familyFreeBudgetTarget, null); } }}
-                    >
-                      <span className="balance-card__split-label">Семейный</span>
-                      <strong className="balance-card__split-amount">
-                        {formatAmount(overview.family_free_budget_in_base, overview.base_currency_code)}
-                      </strong>
-                    </div>
-                  )}
+                  <div className="balance-card__split-row">
+                    <span className="balance-card__split-label">Семейный</span>
+                    <strong className="balance-card__split-amount">
+                      {formatAmount(overview.family_free_budget_in_base, overview.base_currency_code)}
+                    </strong>
+                  </div>
                 </div>
               ) : (
                 <strong className="balance-card__amount">
@@ -750,7 +728,16 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
       {transferTarget && (
         <TransferDialog
-          sources={getSourcesFor(transferTarget)}
+          sources={
+            transferTarget.kind === 'free_budget' && hasFamily
+              ? [...personalSources, ...familySources].filter((s) => s.kind !== 'free_budget')
+              : getSourcesFor(transferTarget)
+          }
+          extraTargets={
+            transferTarget.kind === 'free_budget' && hasFamily && familyFreeBudgetTarget
+              ? [familyFreeBudgetTarget]
+              : undefined
+          }
           initialSourceId={
             transferInitialSourceId !== null && transferInitialSourceId !== transferTarget.category_id
               ? transferInitialSourceId

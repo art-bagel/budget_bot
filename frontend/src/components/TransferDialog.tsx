@@ -37,6 +37,7 @@ interface Props {
   sources: TransferSource[];
   initialSourceId: number | null;
   target: TransferTarget;
+  extraTargets?: TransferTarget[];
   baseCurrencyCode: string;
   onClose: () => void;
   onSuccess: () => void;
@@ -47,17 +48,36 @@ export default function TransferDialog({
   sources,
   initialSourceId,
   target,
+  extraTargets,
   baseCurrencyCode,
   onClose,
   onSuccess,
 }: Props) {
   useModalOpen();
+  const allTargets = extraTargets && extraTargets.length > 0 ? [target, ...extraTargets] : null;
+  const [selectedTargetId, setSelectedTargetId] = useState(target.category_id);
+  const activeTarget = allTargets?.find((t) => t.category_id === selectedTargetId) ?? target;
+  const visibleSources = activeTarget.owner_type
+    ? sources.filter((s) => !s.owner_type || s.owner_type === activeTarget.owner_type)
+    : sources;
   const [sourceId, setSourceId] = useState(initialSourceId !== null ? String(initialSourceId) : '');
   const [amount, setAmount] = useState('');
   const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const selectedSource = sources.find((item) => String(item.category_id) === sourceId) || null;
+
+  const handleTargetChange = (targetId: number) => {
+    setSelectedTargetId(targetId);
+    const newTarget = allTargets?.find((t) => t.category_id === targetId);
+    if (newTarget?.owner_type && sourceId) {
+      const stillValid = sources.some(
+        (s) => String(s.category_id) === sourceId && (!s.owner_type || s.owner_type === newTarget.owner_type),
+      );
+      if (!stillValid) setSourceId('');
+    }
+  };
+
+  const selectedSource = visibleSources.find((item) => String(item.category_id) === sourceId) || null;
   const amountValue = parseFloat(amount);
   const hasPositiveBalance = (selectedSource?.balance || 0) > 0;
   const exceedsSourceBalance = !!selectedSource && amountValue > selectedSource.balance;
@@ -82,17 +102,17 @@ export default function TransferDialog({
     setError(null);
 
     try {
-      if (target.kind === 'group') {
+      if (activeTarget.kind === 'group') {
         await allocateGroupBudget({
           from_category_id: selectedSource.category_id,
-          group_id: target.category_id,
+          group_id: activeTarget.category_id,
           amount_in_base: parseFloat(amount),
           comment: comment.trim() || undefined,
         } as AllocateGroupBudgetRequest);
       } else {
         await allocateBudget({
           from_category_id: selectedSource.category_id,
-          to_category_id: target.category_id,
+          to_category_id: activeTarget.category_id,
           amount_in_base: parseFloat(amount),
           comment: comment.trim() || undefined,
         } as AllocateBudgetRequest);
@@ -120,8 +140,24 @@ export default function TransferDialog({
 
         <div className="modal-body">
           <div className="operations-note">
-            Выбери источник и сумму для перевода в <strong>{target.name}</strong>.
+            Выбери источник и сумму для перевода.
           </div>
+
+          {allTargets && (
+            <div className="form-row">
+              {allTargets.map((t) => (
+                <button
+                  key={t.category_id}
+                  className={`btn${selectedTargetId === t.category_id ? ' btn--primary' : ''}`}
+                  type="button"
+                  onClick={() => handleTargetChange(t.category_id)}
+                  disabled={submitting}
+                >
+                  {t.owner_type === 'family' ? 'Семейный' : 'Личный'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {validationMessage && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 14 }}>
@@ -137,7 +173,7 @@ export default function TransferDialog({
               disabled={submitting}
             >
               <option value="">Откуда перевести</option>
-              {sources.map((item) => (
+              {visibleSources.map((item) => (
                 <option key={item.category_id} value={item.category_id}>
                   {item.name} · {formatAmount(item.balance, item.currency_code)}
                 </option>
@@ -147,7 +183,7 @@ export default function TransferDialog({
 
           <div className="form-row">
             <div className="input input--read-only" style={{ flex: 1 }}>
-              Куда: {target.name}
+              Куда: {activeTarget.name}
             </div>
           </div>
 
