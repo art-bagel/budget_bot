@@ -6,6 +6,7 @@ import type { Theme } from '../hooks/useTheme';
 import { useHints } from '../hooks/useHints';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
 import { deleteAccount } from '../api';
+import Family from './Family';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
@@ -15,7 +16,13 @@ const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
 
 import type { UserContext } from '../types';
 
-export default function Settings({ user }: { user: UserContext }) {
+export default function Settings({
+  user,
+  onFamilyBadgeUpdate,
+}: {
+  user: UserContext;
+  onFamilyBadgeUpdate: (count: number) => void;
+}) {
   const { theme, setTheme } = useTheme();
   const { hintsEnabled, toggle: toggleHints } = useHints();
   const [deleteInProgress, setDeleteInProgress] = useState(false);
@@ -123,6 +130,11 @@ export default function Settings({ user }: { user: UserContext }) {
             </li>
           </ul>
         </div>
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section__title">Семья</h2>
+        <Family user={user} onBadgeUpdate={onFamilyBadgeUpdate} embedded />
       </section>
 
       <section className="settings-section">

@@ -15,6 +15,7 @@ import {
 interface Props {
   user: UserContext;
   onBadgeUpdate: (count: number) => void;
+  embedded?: boolean;
 }
 
 function memberDisplayName(m: FamilyMember): string {
@@ -24,7 +25,7 @@ function memberDisplayName(m: FamilyMember): string {
   return `ID ${m.user_id}`;
 }
 
-export default function Family({ user, onBadgeUpdate }: Props) {
+export default function Family({ user, onBadgeUpdate, embedded = false }: Props) {
   const [loading, setLoading] = useState(true);
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
@@ -171,7 +172,7 @@ export default function Family({ user, onBadgeUpdate }: Props) {
   if (loading) {
     return (
       <>
-        <h1 className="page-title">Семья</h1>
+        {!embedded ? <h1 className="page-title">Семья</h1> : null}
         <p style={{ color: 'var(--text-secondary)', padding: '8px 0' }}>Загрузка...</p>
       </>
     );
@@ -179,7 +180,7 @@ export default function Family({ user, onBadgeUpdate }: Props) {
 
   return (
     <>
-      <h1 className="page-title">Семья</h1>
+      {!embedded ? <h1 className="page-title">Семья</h1> : null}
 
       {error && (
         <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 16 }}>{error}</p>
