@@ -61,6 +61,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     category: DashboardBudgetCategory | null;
     decided: boolean;
     isHorizontal: boolean;
+    actionTriggered: boolean;
     element: HTMLElement | null;
   } | null>(null);
 
@@ -117,13 +118,60 @@ export default function Dashboard({ user }: { user: UserContext }) {
       category,
       decided: false,
       isHorizontal: false,
+      actionTriggered: false,
       element: e.currentTarget as HTMLElement,
     };
+  };
+
+  const resetSwipeElement = (element: HTMLElement | null) => {
+    if (!element) return;
+    element.style.transition = 'transform 0.2s ease';
+    element.style.transform = '';
+    window.setTimeout(() => { element.style.transition = ''; }, 200);
+  };
+
+  const getSwipeActionThreshold = (element: HTMLElement | null) => {
+    const width = element?.offsetWidth ?? 0;
+    return Math.max(48, Math.min(80, width * 0.2));
+  };
+
+  const openTransferFromSwipe = (
+    sourceId: number,
+    kind: 'regular' | 'group' | 'free_budget',
+    category: DashboardBudgetCategory | null,
+  ) => {
+    const categoryOwnerType = category?.owner_type || 'user';
+    const swipeTarget: TransferTarget = kind === 'free_budget'
+      ? {
+          category_id: user.unallocated_category_id,
+          name: overview?.has_family ? 'Свободный остаток (личный)' : 'Свободный остаток',
+          kind: 'free_budget',
+          owner_type: 'user',
+          currency_code: overview?.base_currency_code || user.base_currency_code,
+        }
+      : {
+          category_id: sourceId,
+          name: category?.name || '',
+          kind: category?.kind || 'regular',
+          owner_type: categoryOwnerType,
+          currency_code: category?.currency_code || (overview?.base_currency_code || user.base_currency_code),
+        };
+
+    const swipeInitialSource = kind === 'free_budget'
+      ? null
+      : categoryOwnerType === 'family' && overview?.family_unallocated_category_id
+        ? overview.family_unallocated_category_id
+        : user.unallocated_category_id;
+
+    setTransferTarget(swipeTarget);
+    setTransferInitialSourceId(swipeInitialSource);
+    hapticLight();
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
     const s = swipeRef.current;
     if (!s || !s.element) return;
+    if (s.actionTriggered) return;
 
     const touch = e.touches[0];
     const dx = touch.clientX - s.startX;
@@ -141,6 +189,15 @@ export default function Dashboard({ user }: { user: UserContext }) {
       const offset = Math.min(maxOffset, Math.max(minOffset, dx));
       s.element.style.transform = `translateX(${offset}px)`;
       s.element.style.transition = 'none';
+
+      const actionThreshold = getSwipeActionThreshold(s.element);
+
+      if (dx <= -actionThreshold) {
+        s.actionTriggered = true;
+        suppressClickUntilRef.current = Date.now() + 300;
+        resetSwipeElement(s.element);
+        openTransferFromSwipe(s.sourceId, s.kind, s.category);
+      }
     }
   };
 
@@ -149,43 +206,17 @@ export default function Dashboard({ user }: { user: UserContext }) {
     swipeRef.current = null;
     if (!s) return;
 
-    if (s.element) {
-      s.element.style.transition = 'transform 0.2s ease';
-      s.element.style.transform = '';
-      const el = s.element;
-      setTimeout(() => { el.style.transition = ''; }, 200);
+    resetSwipeElement(s.element);
+
+    if (s.actionTriggered) {
+      return;
     }
 
     if (s.decided && s.isHorizontal) {
       suppressClickUntilRef.current = Date.now() + 300;
       const dx = e.changedTouches[0].clientX - s.startX;
       if (dx < -50) {
-        const categoryOwnerType = s.category?.owner_type || 'user';
-        const swipeTarget: TransferTarget = s.kind === 'free_budget'
-          ? {
-              category_id: user.unallocated_category_id,
-              name: overview?.has_family ? 'Свободный остаток (личный)' : 'Свободный остаток',
-              kind: 'free_budget',
-              owner_type: 'user',
-              currency_code: overview?.base_currency_code || user.base_currency_code,
-            }
-          : {
-              category_id: s.sourceId,
-              name: s.category?.name || '',
-              kind: s.category?.kind || 'regular',
-              owner_type: categoryOwnerType,
-              currency_code: s.category?.currency_code || (overview?.base_currency_code || user.base_currency_code),
-            };
-
-        const swipeInitialSource = s.kind === 'free_budget'
-          ? null
-          : categoryOwnerType === 'family' && overview?.family_unallocated_category_id
-            ? overview.family_unallocated_category_id
-            : user.unallocated_category_id;
-
-        setTransferTarget(swipeTarget);
-        setTransferInitialSourceId(swipeInitialSource);
-        hapticLight();
+        openTransferFromSwipe(s.sourceId, s.kind, s.category);
       } else if (dx > 50 && s.kind === 'regular' && s.category) {
         // Right swipe → expense
         setExpenseCategory(s.category);
