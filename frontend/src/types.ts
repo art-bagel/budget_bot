@@ -161,8 +161,8 @@ export interface AllocateGroupBudgetResponse {
 
 export interface OperationHistoryBankEntry {
   bank_account_id: number;
-  bank_account_name: string;
-  bank_account_owner_type: string;
+  bank_account_name?: string | null;
+  bank_account_owner_type?: string | null;
   currency_code: string;
   amount: number;
 }

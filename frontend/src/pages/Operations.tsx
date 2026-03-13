@@ -56,11 +56,20 @@ function getOperationTitle(item: OperationHistoryItem): string {
   return item.type;
 }
 
-function getBankEntryLabel(ownerType: string, accountName: string): string {
+function getBankEntryLabel(
+  ownerType?: string | null,
+  accountName?: string | null,
+  bankAccountId?: number,
+): string {
+  const resolvedName = accountName || (bankAccountId ? `Счет #${bankAccountId}` : 'Счет');
+
   if (ownerType === 'family') {
-    return 'Семейный счет · ' + accountName;
+    return 'Семейный счет · ' + resolvedName;
   }
-  return 'Личный счет · ' + accountName;
+  if (ownerType === 'user') {
+    return 'Личный счет · ' + resolvedName;
+  }
+  return resolvedName;
 }
 
 
@@ -69,7 +78,11 @@ function getOperationLines(item: OperationHistoryItem): OperationLine[] {
 
   item.bank_entries.forEach((entry) => {
     lines.push({
-      label: getBankEntryLabel(entry.bank_account_owner_type, entry.bank_account_name),
+      label: getBankEntryLabel(
+        entry.bank_account_owner_type,
+        entry.bank_account_name,
+        entry.bank_account_id,
+      ),
       amount: formatSignedAmount(entry.amount, entry.currency_code),
     });
   });

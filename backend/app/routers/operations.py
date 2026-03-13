@@ -106,8 +106,8 @@ class ReverseOperationResponse(BaseModel):
 
 class OperationBankEntry(BaseModel):
     bank_account_id: int
-    bank_account_name: str
-    bank_account_owner_type: str
+    bank_account_name: Optional[str] = None
+    bank_account_owner_type: Optional[str] = None
     currency_code: str
     amount: float
 
