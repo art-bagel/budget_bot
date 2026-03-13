@@ -19,6 +19,7 @@ import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import { useHints } from '../hooks/useHints';
+import { hapticLight } from '../telegram';
 
 
 export default function Dashboard({ user }: { user: UserContext }) {
@@ -97,7 +98,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     const dx = e.changedTouches[0].clientX - s.startX;
     if (dx < -50) {
       suppressClickUntilRef.current = Date.now() + 300;
-      navigator.vibrate?.(20);
+      hapticLight();
       setShowAccountTransfer(true);
     }
   };
@@ -184,11 +185,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
         setTransferTarget(swipeTarget);
         setTransferInitialSourceId(swipeInitialSource);
-        navigator.vibrate?.(20);
+        hapticLight();
       } else if (dx > 50 && s.kind === 'regular' && s.category) {
         // Right swipe → expense
         setExpenseCategory(s.category);
-        navigator.vibrate?.(20);
+        hapticLight();
       }
     }
   };
