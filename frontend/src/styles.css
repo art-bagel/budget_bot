@@ -291,10 +291,23 @@ p { margin: 0; }
 
 .hero-card__breakdown {
   display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
   font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.65);
+  margin-top: 8px;
+}
+
+.hero-card__breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hero-card__breakdown-row strong {
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 600;
 }
 
 /* ── Bank detail modal list ──────────────────────── */
@@ -790,6 +803,9 @@ p { margin: 0; }
   max-height: 560px;
   overflow-y: auto;
   padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 .history-lines {

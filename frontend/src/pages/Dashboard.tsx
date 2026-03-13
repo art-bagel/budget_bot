@@ -332,6 +332,14 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
   const hasFamily = overview.has_family;
   const familyUnallocatedId = overview.family_unallocated_category_id;
+  const personalBankTotal = overview.bank_balances.reduce(
+    (sum, balance) => sum + balance.historical_cost_in_base,
+    0,
+  );
+  const familyBankTotal = overview.family_bank_balances.reduce(
+    (sum, balance) => sum + balance.historical_cost_in_base,
+    0,
+  );
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
@@ -452,11 +460,18 @@ export default function Dashboard({ user }: { user: UserContext }) {
         <strong className="hero-card__value">
           {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
         </strong>
+        <span className="hero-card__sub">Общая сумма на всех счетах</span>
         {hasFamily ? (
           <>
             <div className="hero-card__breakdown">
-              <span>Личные: {formatAmount(personalBudgetTotal, overview.base_currency_code)}</span>
-              <span>Семейные: {formatAmount(familyBudgetTotal, overview.base_currency_code)}</span>
+              <div className="hero-card__breakdown-row">
+                <span>Личный счет</span>
+                <strong>{formatAmount(personalBankTotal, overview.base_currency_code)}</strong>
+              </div>
+              <div className="hero-card__breakdown-row">
+                <span>Семейный счет</span>
+                <strong>{formatAmount(familyBankTotal, overview.base_currency_code)}</strong>
+              </div>
             </div>
             {hintsEnabled && (
               <span className="hero-card__sub">← свайп для перевода между счетами</span>
@@ -868,21 +883,59 @@ export default function Dashboard({ user }: { user: UserContext }) {
               </div>
             </div>
             <div className="modal-body">
-              <ul className="bank-detail-list">
-                {overview.bank_balances.map((balance) => (
-                  <li className="bank-detail-row" key={balance.currency_code}>
-                    <div className="bank-detail-row__main">
-                      <span className="pill">{balance.currency_code}</span>
-                      <strong className="bank-detail-row__amount">
-                        {formatAmount(balance.amount, balance.currency_code)}
-                      </strong>
+              <div className="dashboard-budget-sections">
+                <div className="dashboard-budget-section">
+                  <div className="dashboard-budget-section__header">
+                    <div className="section__eyebrow">Личный счет</div>
+                  </div>
+                  {overview.bank_balances.length === 0 ? (
+                    <p className="list-row__sub">На личном счете пока нет валютных остатков.</p>
+                  ) : (
+                    <ul className="bank-detail-list">
+                      {overview.bank_balances.map((balance) => (
+                        <li className="bank-detail-row" key={'personal-' + balance.currency_code}>
+                          <div className="bank-detail-row__main">
+                            <span className="pill">{balance.currency_code}</span>
+                            <strong className="bank-detail-row__amount">
+                              {formatAmount(balance.amount, balance.currency_code)}
+                            </strong>
+                          </div>
+                          <div className="bank-detail-row__sub">
+                            Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {hasFamily && (
+                  <div className="dashboard-budget-section">
+                    <div className="dashboard-budget-section__header">
+                      <div className="section__eyebrow">Семейный счет</div>
                     </div>
-                    <div className="bank-detail-row__sub">
-                      Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    {overview.family_bank_balances.length === 0 ? (
+                      <p className="list-row__sub">На семейном счете пока нет валютных остатков.</p>
+                    ) : (
+                      <ul className="bank-detail-list">
+                        {overview.family_bank_balances.map((balance) => (
+                          <li className="bank-detail-row" key={'family-' + balance.currency_code}>
+                            <div className="bank-detail-row__main">
+                              <span className="pill">{balance.currency_code}</span>
+                              <strong className="bank-detail-row__amount">
+                                {formatAmount(balance.amount, balance.currency_code)}
+                              </strong>
+                            </div>
+                            <div className="bank-detail-row__sub">
+                              Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="modal-actions modal-actions--split">
               <button className="btn" type="button" onClick={() => setShowBankDetail(false)}>
