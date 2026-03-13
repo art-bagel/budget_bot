@@ -800,11 +800,7 @@ p { margin: 0; }
 }
 
 .history-list {
-  max-height: 560px;
-  overflow-y: auto;
   padding-right: 4px;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
 }
 
 .history-lines {
