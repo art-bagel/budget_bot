@@ -320,7 +320,7 @@ async def get_operations_analytics(
     period_start = parse_period_start(period)
     result = await reports.get__operations_analytics(
         user_id=user.user_id,
-        period_start=period_start.isoformat() if period_start else None,
+        period_start=period_start,
         operation_type=operation_type,
         owner_scope=owner_scope,
         months=months,

@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 
 from storage.databases import DataBase
@@ -171,7 +172,7 @@ class Reports(DataBase):
     async def get__operations_analytics(
         self,
         user_id: int,
-        period_start: Optional[str] = None,
+        period_start: Optional[date] = None,
         operation_type: str = 'expense',
         owner_scope: str = 'all',
         months: int = 6,
