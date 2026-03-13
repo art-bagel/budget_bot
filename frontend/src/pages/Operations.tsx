@@ -19,12 +19,12 @@ import { formatAmount } from '../utils/format';
 const HISTORY_PAGE_SIZE = 20;
 const ANALYTICS_PERIOD_WINDOW = 6;
 const ANALYTICS_COLOR_PALETTE = [
-  '#48ccee',
-  '#71d9c8',
-  '#6b63ff',
-  '#b491f7',
-  '#7fc0d9',
-  '#8b97a4',
+  '#3ec9eb',
+  '#52d4a8',
+  '#8878ff',
+  '#c49df9',
+  '#5aafd6',
+  '#9baab6',
 ];
 const HISTORY_TYPE_OPTIONS = [
   { value: '', label: 'Все типы' },
@@ -368,13 +368,6 @@ function buildDonutGradient(segments: AnalyticsSegment[]): string {
   });
 
   return `conic-gradient(${parts.join(', ')})`;
-}
-
-
-function getOwnerLabel(ownerType: 'user' | 'family' | 'mixed'): string {
-  if (ownerType === 'family') return 'Семейное';
-  if (ownerType === 'mixed') return 'Сводно';
-  return 'Личное';
 }
 
 
@@ -789,43 +782,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                               </div>
                             </div>
                           ))}
-                        </div>
-                      </section>
-                      <section className="analytics-card analytics-card--full">
-                        <div className="analytics-card__title">
-                          {analyticsTypeFilter === 'expense' ? 'Детализация категорий' : 'Детализация источников'}
-                        </div>
-                        <div className="analytics-ranking">
-                          {analyticsData.items.map((item, index) => {
-                            const share = analyticsData.total_amount > 0
-                              ? item.amount / analyticsData.total_amount
-                              : 0;
-
-                            return (
-                              <div className="analytics-ranking__item" key={item.entry_key + '-' + item.owner_type}>
-                                <div className="analytics-ranking__head">
-                                  <div>
-                                    <div className="analytics-ranking__title">
-                                      {index + 1}. {item.label}
-                                    </div>
-                                    <div className="analytics-ranking__meta">
-                                      {getOwnerLabel(item.owner_type)} · {item.operations_count} операций
-                                    </div>
-                                  </div>
-                                  <div className="analytics-ranking__amount">
-                                    {formatAmount(item.amount, analyticsData.base_currency_code)}
-                                  </div>
-                                </div>
-                                <div className="analytics-ranking__bar">
-                                  <div
-                                    className="analytics-ranking__bar-fill"
-                                    style={{ width: `${Math.max(share * 100, 4)}%` }}
-                                  />
-                                </div>
-                                <div className="analytics-ranking__share">{formatPercent(share)}</div>
-                              </div>
-                            );
-                          })}
                         </div>
                       </section>
                     </>
