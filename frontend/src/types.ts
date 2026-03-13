@@ -62,6 +62,9 @@ export interface DashboardOverview {
   fx_result_in_base: number;
   bank_balances: DashboardBankBalance[];
   budget_categories: DashboardBudgetCategory[];
+  has_family: boolean;
+  personal_free_budget_in_base: number;
+  family_free_budget_in_base: number;
 }
 
 export interface IncomeSource {

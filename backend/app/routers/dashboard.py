@@ -36,6 +36,9 @@ class DashboardOverviewResponse(BaseModel):
     fx_result_in_base: float
     bank_balances: List[BankBalanceItem]
     budget_categories: List[BudgetBalanceItem]
+    has_family: bool
+    personal_free_budget_in_base: float
+    family_free_budget_in_base: float
 
 
 @router.get('/overview', response_model=DashboardOverviewResponse)
@@ -61,14 +64,24 @@ async def get_dashboard_overview(
         sum(float(item['balance']) for item in budget_categories),
         2,
     )
-    free_budget_in_base = round(
+    has_family = any(item['owner_type'] == 'family' for item in budget_categories)
+    personal_free_budget_in_base = round(
         sum(
             float(item['balance'])
             for item in budget_categories
-            if item['kind'] == 'system'
+            if item['kind'] == 'system' and item['owner_type'] == 'user'
         ),
         2,
     )
+    family_free_budget_in_base = round(
+        sum(
+            float(item['balance'])
+            for item in budget_categories
+            if item['kind'] == 'system' and item['owner_type'] == 'family'
+        ),
+        2,
+    )
+    free_budget_in_base = round(personal_free_budget_in_base + family_free_budget_in_base, 2)
     fx_result_in_base = round(
         sum(
             float(item['balance'])
@@ -91,4 +104,7 @@ async def get_dashboard_overview(
         fx_result_in_base=fx_result_in_base,
         bank_balances=bank_balances,
         budget_categories=visible_budget_categories,
+        has_family=has_family,
+        personal_free_budget_in_base=personal_free_budget_in_base,
+        family_free_budget_in_base=family_free_budget_in_base,
     )

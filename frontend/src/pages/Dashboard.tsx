@@ -286,8 +286,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
     kind: 'free_budget',
     currency_code: overview.base_currency_code,
   };
+  const hasFamily = overview.has_family;
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
+  const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
+  const familyRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'family') : [];
+  const personalGroups = hasFamily ? groupBudgetCategories.filter((c) => c.owner_type === 'user') : groupBudgetCategories;
+  const familyGroups = hasFamily ? groupBudgetCategories.filter((c) => c.owner_type === 'family') : [];
   const transferSources: TransferSource[] = [
     freeBudgetSource,
     ...regularBudgetCategories.map((category) => ({
@@ -406,9 +411,26 @@ export default function Dashboard({ user }: { user: UserContext }) {
               <div className="balance-card__head">
                 <span className="pill">Свободный остаток</span>
               </div>
-              <strong className="balance-card__amount">
-                {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
-              </strong>
+              {hasFamily ? (
+                <div className="balance-card__split">
+                  <div className="balance-card__split-row">
+                    <span className="balance-card__split-label">Личный</span>
+                    <strong className="balance-card__split-amount">
+                      {formatAmount(overview.personal_free_budget_in_base, overview.base_currency_code)}
+                    </strong>
+                  </div>
+                  <div className="balance-card__split-row">
+                    <span className="balance-card__split-label">Семейный</span>
+                    <strong className="balance-card__split-amount">
+                      {formatAmount(overview.family_free_budget_in_base, overview.base_currency_code)}
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <strong className="balance-card__amount">
+                  {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
+                </strong>
+              )}
               <div className="balance-card__sub">
                 {fxResultSummary || (hintsEnabled ? 'Свайпни влево для перевода. Сюда тоже можно вернуть из категории.' : null)}
               </div>
@@ -437,7 +459,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <p className="list-row__sub">Обычных категорий пока нет.</p>
               ) : (
                 <ul className="cat-grid">
-                  {regularBudgetCategories.map((category) => {
+                  {personalRegular.map((category) => {
                     const isDropTarget = dropTargetCategoryId === category.category_id;
                     const isActiveSource = activeSourceId === category.category_id;
                     const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
@@ -506,13 +528,89 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         <strong className="cat-card__amount">
                           {formatAmount(category.balance, category.currency_code)}
                         </strong>
-                        {!isValidTarget && (category.owner_type === 'family' || hintsEnabled) && (
-                          <span className="cat-card__hint">
-                            {[
-                              category.owner_type === 'family' ? 'семья' : null,
-                              hintsEnabled ? '← перевод · расход →' : null,
-                            ].filter(Boolean).join(' · ')}
-                          </span>
+                        {!isValidTarget && hintsEnabled && (
+                          <span className="cat-card__hint">← перевод · расход →</span>
+                        )}
+                      </li>
+                    );
+                  })}
+
+                  {hasFamily && familyRegular.length > 0 && personalRegular.length > 0 && (
+                    <li className="cat-grid__divider" aria-hidden="true">Семейные</li>
+                  )}
+
+                  {familyRegular.map((category) => {
+                    const isDropTarget = dropTargetCategoryId === category.category_id;
+                    const isActiveSource = activeSourceId === category.category_id;
+                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
+
+                    return (
+                      <li
+                        className={[
+                          'cat-card',
+                          'cat-card--family',
+                          'swipeable',
+                          draggedCategoryId === category.category_id ? 'cat-card--dragging' : '',
+                          isActiveSource ? 'cat-card--active-source' : '',
+                          isDropTarget ? 'cat-card--drop-target' : '',
+                          isValidTarget ? 'cat-card--valid-target' : '',
+                        ].join(' ').trim()}
+                        key={category.category_id}
+                        draggable
+                        role="button"
+                        tabIndex={0}
+                        onDragStart={(e) => handleDragStart(category, e)}
+                        onDragEnd={handleDragEnd}
+                        onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
+                        onTouchMove={handleSwipeMove}
+                        onTouchEnd={handleSwipeEnd}
+                        onClick={() => {
+                          if (Date.now() < suppressClickUntilRef.current) return;
+                          if (activeSourceId !== null && activeSourceId !== category.category_id) {
+                            openTransferDialog({
+                              category_id: category.category_id,
+                              name: category.name,
+                              kind: category.kind,
+                              currency_code: category.currency_code,
+                            }, activeSourceId);
+                          } else {
+                            openCategoryDialog(category);
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openCategoryDialog(category);
+                          }
+                        }}
+                        onDragOver={(event) => {
+                          if (activeSourceId === null || activeSourceId === category.category_id) return;
+                          event.preventDefault();
+                          setDropTargetCategoryId(category.category_id);
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetCategoryId === category.category_id) {
+                            setDropTargetCategoryId(null);
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          handleDropOnCategory({
+                            category_id: category.category_id,
+                            name: category.name,
+                            kind: category.kind,
+                            currency_code: category.currency_code,
+                          });
+                        }}
+                      >
+                        <span className="cat-card__name">
+                          {isValidTarget ? 'Перевести сюда' : category.name}
+                        </span>
+                        <strong className="cat-card__amount">
+                          {formatAmount(category.balance, category.currency_code)}
+                        </strong>
+                        {!isValidTarget && hintsEnabled && (
+                          <span className="cat-card__hint">← перевод · расход →</span>
                         )}
                       </li>
                     );
@@ -538,7 +636,20 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <p className="list-row__sub">Групп пока нет.</p>
               ) : (
                 <ul className="groups-list">
-                  {groupBudgetCategories.map((category) => {
+                  {[
+                    ...personalGroups,
+                    ...(hasFamily && familyGroups.length > 0 && personalGroups.length > 0 ? [null] : []),
+                    ...familyGroups,
+                  ].map((category) => {
+                    if (category === null) {
+                      return (
+                        <li className="groups-list__divider" key="family-divider" aria-hidden="true">
+                          Семейные
+                        </li>
+                      );
+                    }
+
+                    const isFamily = category.owner_type === 'family';
                     const isDropTarget = dropTargetCategoryId === category.category_id;
                     const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
                     const groupMembers = groupMembersByGroupId[category.category_id] || [];
@@ -562,6 +673,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           'list-row--interactive',
                           'list-row--group',
                           'swipeable',
+                          isFamily ? 'list-row--family' : '',
                           isDropTarget ? 'list-row--drop-target' : '',
                           isValidTarget ? 'list-row--valid-target' : '',
                         ].join(' ').trim()}
@@ -611,12 +723,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         }}
                       >
                         <div className="dashboard-budget-row__main">
-                          <div className="list-row__title">
-                            {category.name}
-                            {category.owner_type === 'family' && (
-                              <span className="tag tag--neutral" style={{ marginLeft: 8, fontSize: '0.72em', verticalAlign: 'middle' }}>семья</span>
-                            )}
-                          </div>
+                          <div className="list-row__title">{category.name}</div>
                           <div className="list-row__sub">
                             {isValidTarget
                               ? 'Нажми, чтобы перевести сюда'

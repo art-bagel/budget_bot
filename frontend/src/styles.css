@@ -1257,3 +1257,96 @@ select.input option {
     flex-direction: column;
   }
 }
+
+/* ── Family category styles ─────────────────────── */
+
+.cat-card--family {
+  border-left: 3px solid var(--text-accent);
+  background: var(--tag-in-bg);
+}
+
+.cat-card--family:hover {
+  background: rgba(15, 120, 104, 0.18);
+}
+
+[data-theme="dark"] .cat-card--family:hover,
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cat-card--family:hover {
+    background: rgba(61, 189, 168, 0.2);
+  }
+}
+
+.list-row--family {
+  border-left: 3px solid var(--text-accent);
+  background: var(--tag-in-bg);
+}
+
+.list-row--family:hover {
+  background: rgba(15, 120, 104, 0.18);
+}
+
+/* ── Section divider (personal / family split) ── */
+
+.cat-grid__divider {
+  grid-column: 1 / -1;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  padding: 4px 0;
+}
+
+.cat-grid__divider::before,
+.cat-grid__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.groups-list__divider {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  padding: 4px 0;
+}
+
+.groups-list__divider::before,
+.groups-list__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Free budget split (personal / family) ─────── */
+
+.balance-card__split {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.balance-card__split-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.balance-card__split-label {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.balance-card__split-amount {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
