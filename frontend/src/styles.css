@@ -766,6 +766,7 @@ p { margin: 0; }
 }
 
 .list-row--history {
+  display: block;
   border-left: 3px solid transparent;
   padding-left: 12px;
 }
