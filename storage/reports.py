@@ -18,6 +18,7 @@ class Reports(DataBase):
     F_GET__BANK_SNAPSHOT = 'get__bank_snapshot'
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
     F_GET__OPERATIONS_HISTORY = 'get__operations_history'
+    F_GET__OPERATIONS_ANALYTICS = 'get__operations_analytics'
     F_GET__PORTFOLIO_VALUATION = 'get__portfolio_valuation'
 
     async def get__currencies(self) -> list[dict]:
@@ -165,6 +166,43 @@ class Reports(DataBase):
             'total_count': 0,
             'limit': limit,
             'offset': offset,
+        }
+
+    async def get__operations_analytics(
+        self,
+        user_id: int,
+        period_start: Optional[str] = None,
+        operation_type: str = 'expense',
+        owner_scope: str = 'all',
+        months: int = 6,
+    ) -> dict:
+        """
+        Возвращает аналитику операций по выбранному месяцу и динамику по месяцам.
+        :param user_id: Идентификатор владельца операций.
+        :param period_start: Первый день месяца в ISO-формате YYYY-MM-DD.
+        :param operation_type: Тип аналитики: income или expense.
+        :param owner_scope: Область владельца: all, user, family.
+        :param months: Количество месяцев в динамике, включая выбранный.
+        :return: Словарь с разбивкой по категориям/источникам и помесячной серией.
+        """
+        result = await self.call_function(
+            self._fn(self.F_GET__OPERATIONS_ANALYTICS),
+            user_id,
+            period_start,
+            operation_type,
+            owner_scope,
+            months,
+        )
+        return result if result else {
+            'period': period_start,
+            'operation_type': operation_type,
+            'owner_scope': owner_scope,
+            'base_currency_code': '',
+            'has_family': False,
+            'total_amount': 0,
+            'total_operations': 0,
+            'items': [],
+            'months': [],
         }
 
     async def get__portfolio_valuation(

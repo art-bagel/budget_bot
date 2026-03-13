@@ -1,8 +1,7 @@
-from typing import Optional
+from datetime import date
+from typing import List, Literal, Optional
 
-from typing import List
-
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
@@ -145,6 +144,46 @@ class OperationHistoryResponse(BaseModel):
     offset: int
 
 
+class OperationAnalyticsItem(BaseModel):
+    entry_key: str
+    label: str
+    owner_type: Literal['user', 'family']
+    amount: float
+    operations_count: int
+
+
+class OperationAnalyticsMonth(BaseModel):
+    month: str
+    amount: float
+    is_selected: bool
+
+
+class OperationAnalyticsResponse(BaseModel):
+    period: str
+    operation_type: Literal['expense', 'income']
+    owner_scope: Literal['all', 'user', 'family']
+    base_currency_code: str
+    has_family: bool
+    total_amount: float
+    total_operations: int
+    items: List[OperationAnalyticsItem]
+    months: List[OperationAnalyticsMonth]
+
+
+def parse_period_start(period: Optional[str]) -> Optional[date]:
+    if period is None:
+        return None
+
+    value = period.strip()
+    if not value:
+        return None
+
+    try:
+        return date.fromisoformat(value + '-01')
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='Неверный формат месяца. Используй YYYY-MM.') from exc
+
+
 @router.post('/income', response_model=RecordIncomeResponse)
 async def record_income(
     body: RecordIncomeRequest,
@@ -268,3 +307,22 @@ async def get_operations_history(
         operation_type=operation_type,
     )
     return OperationHistoryResponse(**result)
+
+
+@router.get('/analytics', response_model=OperationAnalyticsResponse)
+async def get_operations_analytics(
+    period: Optional[str] = Query(None, description='Месяц в формате YYYY-MM'),
+    operation_type: Literal['expense', 'income'] = Query('expense'),
+    owner_scope: Literal['all', 'user', 'family'] = Query('all'),
+    months: int = Query(6, ge=1, le=24),
+    user: TelegramUser = Depends(get_telegram_user),
+) -> OperationAnalyticsResponse:
+    period_start = parse_period_start(period)
+    result = await reports.get__operations_analytics(
+        user_id=user.user_id,
+        period_start=period_start.isoformat() if period_start else None,
+        operation_type=operation_type,
+        owner_scope=owner_scope,
+        months=months,
+    )
+    return OperationAnalyticsResponse(**result)

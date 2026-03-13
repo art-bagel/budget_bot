@@ -194,6 +194,32 @@ export interface OperationHistoryResponse {
   offset: number;
 }
 
+export interface OperationAnalyticsItem {
+  entry_key: string;
+  label: string;
+  owner_type: 'user' | 'family';
+  amount: number;
+  operations_count: number;
+}
+
+export interface OperationAnalyticsMonth {
+  month: string;
+  amount: number;
+  is_selected: boolean;
+}
+
+export interface OperationAnalyticsResponse {
+  period: string;
+  operation_type: 'expense' | 'income';
+  owner_scope: 'all' | 'user' | 'family';
+  base_currency_code: string;
+  has_family: boolean;
+  total_amount: number;
+  total_operations: number;
+  items: OperationAnalyticsItem[];
+  months: OperationAnalyticsMonth[];
+}
+
 export interface ReverseOperationRequest {
   operation_id: number;
   comment?: string;

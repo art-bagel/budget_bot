@@ -38,6 +38,7 @@ FILES=(
     "get__bank_snapshot.sql"
     "get__budget_snapshot.sql"
     "get__operations_history.sql"
+    "get__operations_analytics.sql"
     "get__portfolio_valuation.sql"
     "set__update_category.sql"
     "set__archive_category.sql"
