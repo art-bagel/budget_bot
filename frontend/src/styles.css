@@ -1260,30 +1260,6 @@ select.input option {
 
 /* ── Family category styles ─────────────────────── */
 
-.cat-card--family {
-  border-left: 3px solid var(--text-accent);
-  background: var(--tag-in-bg);
-}
-
-.cat-card--family:hover {
-  background: rgba(15, 120, 104, 0.18);
-}
-
-[data-theme="dark"] .cat-card--family:hover,
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cat-card--family:hover {
-    background: rgba(61, 189, 168, 0.2);
-  }
-}
-
-.list-row--family {
-  border-left: 3px solid var(--text-accent);
-  background: var(--tag-in-bg);
-}
-
-.list-row--family:hover {
-  background: rgba(15, 120, 104, 0.18);
-}
 
 /* ── Section divider (personal / family split) ── */
 
@@ -1349,4 +1325,16 @@ select.input option {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.balance-card__split-row--interactive {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s;
+}
+
+.balance-card__split-row--interactive:hover {
+  background: rgba(255, 255, 255, 0.15);
 }

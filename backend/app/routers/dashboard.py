@@ -39,6 +39,7 @@ class DashboardOverviewResponse(BaseModel):
     has_family: bool
     personal_free_budget_in_base: float
     family_free_budget_in_base: float
+    family_unallocated_category_id: int | None
 
 
 @router.get('/overview', response_model=DashboardOverviewResponse)
@@ -82,6 +83,12 @@ async def get_dashboard_overview(
         2,
     )
     free_budget_in_base = round(personal_free_budget_in_base + family_free_budget_in_base, 2)
+    family_unallocated = next(
+        (item for item in budget_categories
+         if item['kind'] == 'system' and item['owner_type'] == 'family' and item['name'] == 'Unallocated'),
+        None,
+    )
+    family_unallocated_category_id = int(family_unallocated['category_id']) if family_unallocated else None
     fx_result_in_base = round(
         sum(
             float(item['balance'])
@@ -107,4 +114,5 @@ async def get_dashboard_overview(
         has_family=has_family,
         personal_free_budget_in_base=personal_free_budget_in_base,
         family_free_budget_in_base=family_free_budget_in_base,
+        family_unallocated_category_id=family_unallocated_category_id,
     )

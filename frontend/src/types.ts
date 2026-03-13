@@ -65,6 +65,7 @@ export interface DashboardOverview {
   has_family: boolean;
   personal_free_budget_in_base: number;
   family_free_budget_in_base: number;
+  family_unallocated_category_id: number | null;
 }
 
 export interface IncomeSource {

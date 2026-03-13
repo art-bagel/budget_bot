@@ -20,6 +20,7 @@ export interface TransferSource {
   kind: string;
   balance: number;
   currency_code: string;
+  owner_type?: string;
 }
 
 
@@ -28,6 +29,7 @@ export interface TransferTarget {
   name: string;
   kind: string;
   currency_code: string;
+  owner_type?: string;
 }
 
 

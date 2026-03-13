@@ -36,6 +36,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     }
   }, [showBankDetail]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
+  const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
   const [expenseCategory, setExpenseCategory] = useState<DashboardBudgetCategory | null>(null);
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null);
@@ -117,22 +118,31 @@ export default function Dashboard({ user }: { user: UserContext }) {
       suppressClickUntilRef.current = Date.now() + 300;
       const dx = e.changedTouches[0].clientX - s.startX;
       if (dx < -50) {
+        const categoryOwnerType = s.category?.owner_type || 'user';
         const swipeTarget: TransferTarget = s.kind === 'free_budget'
           ? {
               category_id: user.unallocated_category_id,
-              name: 'Свободный остаток',
+              name: overview?.has_family ? 'Свободный остаток (личный)' : 'Свободный остаток',
               kind: 'free_budget',
+              owner_type: 'user',
               currency_code: overview?.base_currency_code || user.base_currency_code,
             }
           : {
               category_id: s.sourceId,
               name: s.category?.name || '',
               kind: s.category?.kind || 'regular',
+              owner_type: categoryOwnerType,
               currency_code: s.category?.currency_code || (overview?.base_currency_code || user.base_currency_code),
             };
 
+        const swipeInitialSource = s.kind === 'free_budget'
+          ? null
+          : categoryOwnerType === 'family' && overview?.family_unallocated_category_id
+            ? overview.family_unallocated_category_id
+            : user.unallocated_category_id;
+
         setTransferTarget(swipeTarget);
-        setTransferInitialSourceId(s.kind === 'free_budget' ? null : user.unallocated_category_id);
+        setTransferInitialSourceId(swipeInitialSource);
         navigator.vibrate?.(20);
       } else if (dx > 50 && s.kind === 'regular' && s.category) {
         // Right swipe → expense
@@ -211,11 +221,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
     event.dataTransfer.effectAllowed = 'move';
     suppressClickUntilRef.current = Date.now() + 250;
     setDraggedCategoryId(source.category_id);
+    setDraggedOwnerType((source.owner_type ?? 'user') as 'user' | 'family');
   };
 
   const handleDragEnd = () => {
     setDraggedCategoryId(null);
     setDropTargetCategoryId(null);
+    setDraggedOwnerType(null);
   };
 
   /* ── shared transfer logic ─────────────────────── */
@@ -233,6 +245,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
       return;
     }
     if (target.kind === 'system' || draggedCategoryId === target.category_id) {
+      handleDragEnd();
+      return;
+    }
+    if (draggedOwnerType && target.owner_type && draggedOwnerType !== target.owner_type) {
       handleDragEnd();
       return;
     }
@@ -273,36 +289,71 @@ export default function Dashboard({ user }: { user: UserContext }) {
     );
   }
 
-  const freeBudgetSource: TransferSource = {
-    category_id: user.unallocated_category_id,
-    name: 'Свободный остаток',
-    kind: 'free_budget',
-    balance: overview.free_budget_in_base,
-    currency_code: overview.base_currency_code,
-  };
-  const freeBudgetTarget: TransferTarget = {
-    category_id: user.unallocated_category_id,
-    name: 'Свободный остаток',
-    kind: 'free_budget',
-    currency_code: overview.base_currency_code,
-  };
   const hasFamily = overview.has_family;
+  const familyUnallocatedId = overview.family_unallocated_category_id;
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
   const familyRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'family') : [];
   const personalGroups = hasFamily ? groupBudgetCategories.filter((c) => c.owner_type === 'user') : groupBudgetCategories;
   const familyGroups = hasFamily ? groupBudgetCategories.filter((c) => c.owner_type === 'family') : [];
-  const transferSources: TransferSource[] = [
-    freeBudgetSource,
-    ...regularBudgetCategories.map((category) => ({
-      category_id: category.category_id,
-      name: category.name,
-      kind: category.kind,
-      balance: category.balance,
-      currency_code: category.currency_code,
+
+  const personalFreeBudgetSource: TransferSource = {
+    category_id: user.unallocated_category_id,
+    name: hasFamily ? 'Свободный остаток (личный)' : 'Свободный остаток',
+    kind: 'free_budget',
+    owner_type: 'user',
+    balance: hasFamily ? overview.personal_free_budget_in_base : overview.free_budget_in_base,
+    currency_code: overview.base_currency_code,
+  };
+  const familyFreeBudgetSource: TransferSource | null = hasFamily && familyUnallocatedId ? {
+    category_id: familyUnallocatedId,
+    name: 'Свободный остаток (семейный)',
+    kind: 'free_budget',
+    owner_type: 'family',
+    balance: overview.family_free_budget_in_base,
+    currency_code: overview.base_currency_code,
+  } : null;
+  const freeBudgetTarget: TransferTarget = {
+    category_id: user.unallocated_category_id,
+    name: hasFamily ? 'Свободный остаток (личный)' : 'Свободный остаток',
+    kind: 'free_budget',
+    owner_type: 'user',
+    currency_code: overview.base_currency_code,
+  };
+  const familyFreeBudgetTarget: TransferTarget | null = hasFamily && familyUnallocatedId ? {
+    category_id: familyUnallocatedId,
+    name: 'Свободный остаток (семейный)',
+    kind: 'free_budget',
+    owner_type: 'family',
+    currency_code: overview.base_currency_code,
+  } : null;
+  const personalSources: TransferSource[] = [
+    personalFreeBudgetSource,
+    ...personalRegular.map((c) => ({
+      category_id: c.category_id,
+      name: c.name,
+      kind: c.kind,
+      owner_type: 'user' as const,
+      balance: c.balance,
+      currency_code: c.currency_code,
     })),
   ];
+  const familySources: TransferSource[] = familyFreeBudgetSource ? [
+    familyFreeBudgetSource,
+    ...familyRegular.map((c) => ({
+      category_id: c.category_id,
+      name: c.name,
+      kind: c.kind,
+      owner_type: 'family' as const,
+      balance: c.balance,
+      currency_code: c.currency_code,
+    })),
+  ] : [];
+  const getSourcesFor = (target: TransferTarget): TransferSource[] => {
+    const pool = target.owner_type === 'family' ? familySources : personalSources;
+    return pool.filter((s) => s.category_id !== target.category_id);
+  };
   const fxResultSummary = overview.fx_result_in_base === 0
     ? null
     : `Включая курсовую разницу ${formatAmount(overview.fx_result_in_base, overview.base_currency_code)}`;
@@ -372,20 +423,20 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 'balance-card',
                 'balance-card--draggable',
                 'swipeable',
-                activeSourceId !== null && activeSourceId !== freeBudgetSource.category_id
+                activeSourceId !== null && activeSourceId !== personalFreeBudgetSource.category_id && draggedOwnerType === 'user'
                   ? 'balance-card--valid-target'
                   : '',
-                activeSourceId === freeBudgetSource.category_id ? 'balance-card--active-source' : '',
-                draggedCategoryId === freeBudgetSource.category_id ? 'balance-card--dragging' : '',
+                activeSourceId === personalFreeBudgetSource.category_id ? 'balance-card--active-source' : '',
+                draggedCategoryId === personalFreeBudgetSource.category_id ? 'balance-card--dragging' : '',
                 dropTargetCategoryId === freeBudgetTarget.category_id ? 'balance-card--drop-target' : '',
               ].join(' ').trim()}
-              draggable={overview.free_budget_in_base > 0}
+              draggable={personalFreeBudgetSource.balance > 0}
               onDragStart={(e) => {
-                if (overview.free_budget_in_base > 0) handleDragStart(freeBudgetSource, e);
+                if (personalFreeBudgetSource.balance > 0) handleDragStart(personalFreeBudgetSource, e);
               }}
               onDragEnd={handleDragEnd}
               onDragOver={(event) => {
-                if (activeSourceId === null || activeSourceId === freeBudgetTarget.category_id) return;
+                if (activeSourceId === null || activeSourceId === freeBudgetTarget.category_id || draggedOwnerType !== 'user') return;
                 event.preventDefault();
                 setDropTargetCategoryId(freeBudgetTarget.category_id);
               }}
@@ -398,12 +449,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 event.preventDefault();
                 handleDropOnCategory(freeBudgetTarget);
               }}
-              onTouchStart={(e) => handleSwipeStart(freeBudgetSource.category_id, 'free_budget', null, e)}
+              onTouchStart={(e) => handleSwipeStart(personalFreeBudgetSource.category_id, 'free_budget', null, e)}
               onTouchMove={handleSwipeMove}
               onTouchEnd={handleSwipeEnd}
               onClick={() => {
                 if (Date.now() < suppressClickUntilRef.current) return;
-                if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id) {
+                if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
                   openTransferDialog(freeBudgetTarget, activeSourceId);
                 }
               }}
@@ -413,18 +464,40 @@ export default function Dashboard({ user }: { user: UserContext }) {
               </div>
               {hasFamily ? (
                 <div className="balance-card__split">
-                  <div className="balance-card__split-row">
+                  <div
+                    className="balance-card__split-row balance-card__split-row--interactive"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (Date.now() < suppressClickUntilRef.current) return;
+                      openTransferDialog(freeBudgetTarget, null);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransferDialog(freeBudgetTarget, null); } }}
+                  >
                     <span className="balance-card__split-label">Личный</span>
                     <strong className="balance-card__split-amount">
                       {formatAmount(overview.personal_free_budget_in_base, overview.base_currency_code)}
                     </strong>
                   </div>
-                  <div className="balance-card__split-row">
-                    <span className="balance-card__split-label">Семейный</span>
-                    <strong className="balance-card__split-amount">
-                      {formatAmount(overview.family_free_budget_in_base, overview.base_currency_code)}
-                    </strong>
-                  </div>
+                  {familyFreeBudgetTarget && (
+                    <div
+                      className="balance-card__split-row balance-card__split-row--interactive"
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (Date.now() < suppressClickUntilRef.current) return;
+                        openTransferDialog(familyFreeBudgetTarget, null);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransferDialog(familyFreeBudgetTarget, null); } }}
+                    >
+                      <span className="balance-card__split-label">Семейный</span>
+                      <strong className="balance-card__split-amount">
+                        {formatAmount(overview.family_free_budget_in_base, overview.base_currency_code)}
+                      </strong>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <strong className="balance-card__amount">
@@ -459,10 +532,19 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <p className="list-row__sub">Обычных категорий пока нет.</p>
               ) : (
                 <ul className="cat-grid">
-                  {personalRegular.map((category) => {
+                  {[
+                    ...personalRegular,
+                    ...(hasFamily && familyRegular.length > 0 && personalRegular.length > 0 ? [null] : []),
+                    ...familyRegular,
+                  ].map((category) => {
+                    if (category === null) {
+                      return <li className="cat-grid__divider" key="cat-family-divider" aria-hidden="true">Семейные</li>;
+                    }
+
                     const isDropTarget = dropTargetCategoryId === category.category_id;
                     const isActiveSource = activeSourceId === category.category_id;
-                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
+                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
+                      && (!hasFamily || draggedOwnerType === category.owner_type);
 
                     return (
                       <li
@@ -478,7 +560,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         draggable
                         role="button"
                         tabIndex={0}
-                        onDragStart={(e) => handleDragStart(category, e)}
+                        onDragStart={(e) => handleDragStart({ ...category, owner_type: category.owner_type }, e)}
                         onDragEnd={handleDragEnd}
                         onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
                         onTouchMove={handleSwipeMove}
@@ -490,6 +572,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                               category_id: category.category_id,
                               name: category.name,
                               kind: category.kind,
+                              owner_type: category.owner_type,
                               currency_code: category.currency_code,
                             }, activeSourceId);
                           } else {
@@ -504,13 +587,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         }}
                         onDragOver={(event) => {
                           if (activeSourceId === null || activeSourceId === category.category_id) return;
+                          if (hasFamily && draggedOwnerType !== category.owner_type) return;
                           event.preventDefault();
                           setDropTargetCategoryId(category.category_id);
                         }}
                         onDragLeave={() => {
-                          if (dropTargetCategoryId === category.category_id) {
-                            setDropTargetCategoryId(null);
-                          }
+                          if (dropTargetCategoryId === category.category_id) setDropTargetCategoryId(null);
                         }}
                         onDrop={(event) => {
                           event.preventDefault();
@@ -518,87 +600,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                             category_id: category.category_id,
                             name: category.name,
                             kind: category.kind,
-                            currency_code: category.currency_code,
-                          });
-                        }}
-                      >
-                        <span className="cat-card__name">
-                          {isValidTarget ? 'Перевести сюда' : category.name}
-                        </span>
-                        <strong className="cat-card__amount">
-                          {formatAmount(category.balance, category.currency_code)}
-                        </strong>
-                        {!isValidTarget && hintsEnabled && (
-                          <span className="cat-card__hint">← перевод · расход →</span>
-                        )}
-                      </li>
-                    );
-                  })}
-
-                  {hasFamily && familyRegular.length > 0 && personalRegular.length > 0 && (
-                    <li className="cat-grid__divider" aria-hidden="true">Семейные</li>
-                  )}
-
-                  {familyRegular.map((category) => {
-                    const isDropTarget = dropTargetCategoryId === category.category_id;
-                    const isActiveSource = activeSourceId === category.category_id;
-                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
-
-                    return (
-                      <li
-                        className={[
-                          'cat-card',
-                          'cat-card--family',
-                          'swipeable',
-                          draggedCategoryId === category.category_id ? 'cat-card--dragging' : '',
-                          isActiveSource ? 'cat-card--active-source' : '',
-                          isDropTarget ? 'cat-card--drop-target' : '',
-                          isValidTarget ? 'cat-card--valid-target' : '',
-                        ].join(' ').trim()}
-                        key={category.category_id}
-                        draggable
-                        role="button"
-                        tabIndex={0}
-                        onDragStart={(e) => handleDragStart(category, e)}
-                        onDragEnd={handleDragEnd}
-                        onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
-                        onTouchMove={handleSwipeMove}
-                        onTouchEnd={handleSwipeEnd}
-                        onClick={() => {
-                          if (Date.now() < suppressClickUntilRef.current) return;
-                          if (activeSourceId !== null && activeSourceId !== category.category_id) {
-                            openTransferDialog({
-                              category_id: category.category_id,
-                              name: category.name,
-                              kind: category.kind,
-                              currency_code: category.currency_code,
-                            }, activeSourceId);
-                          } else {
-                            openCategoryDialog(category);
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            openCategoryDialog(category);
-                          }
-                        }}
-                        onDragOver={(event) => {
-                          if (activeSourceId === null || activeSourceId === category.category_id) return;
-                          event.preventDefault();
-                          setDropTargetCategoryId(category.category_id);
-                        }}
-                        onDragLeave={() => {
-                          if (dropTargetCategoryId === category.category_id) {
-                            setDropTargetCategoryId(null);
-                          }
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          handleDropOnCategory({
-                            category_id: category.category_id,
-                            name: category.name,
-                            kind: category.kind,
+                            owner_type: category.owner_type,
                             currency_code: category.currency_code,
                           });
                         }}
@@ -649,9 +651,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
                       );
                     }
 
-                    const isFamily = category.owner_type === 'family';
                     const isDropTarget = dropTargetCategoryId === category.category_id;
-                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id;
+                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
+                      && (!hasFamily || draggedOwnerType === category.owner_type);
                     const groupMembers = groupMembersByGroupId[category.category_id] || [];
                     const groupComposition = groupMembers.length > 0
                       ? groupMembers
@@ -673,7 +675,6 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           'list-row--interactive',
                           'list-row--group',
                           'swipeable',
-                          isFamily ? 'list-row--family' : '',
                           isDropTarget ? 'list-row--drop-target' : '',
                           isValidTarget ? 'list-row--valid-target' : '',
                         ].join(' ').trim()}
@@ -690,6 +691,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                               category_id: category.category_id,
                               name: category.name,
                               kind: category.kind,
+                              owner_type: category.owner_type,
                               currency_code: category.currency_code,
                             }, activeSourceId);
                           } else {
@@ -704,13 +706,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         }}
                         onDragOver={(event) => {
                           if (activeSourceId === null || activeSourceId === category.category_id) return;
+                          if (hasFamily && draggedOwnerType !== category.owner_type) return;
                           event.preventDefault();
                           setDropTargetCategoryId(category.category_id);
                         }}
                         onDragLeave={() => {
-                          if (dropTargetCategoryId === category.category_id) {
-                            setDropTargetCategoryId(null);
-                          }
+                          if (dropTargetCategoryId === category.category_id) setDropTargetCategoryId(null);
                         }}
                         onDrop={(event) => {
                           event.preventDefault();
@@ -718,6 +719,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                             category_id: category.category_id,
                             name: category.name,
                             kind: category.kind,
+                            owner_type: category.owner_type,
                             currency_code: category.currency_code,
                           });
                         }}
@@ -748,7 +750,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
 
       {transferTarget && (
         <TransferDialog
-          sources={transferSources.filter((source) => source.category_id !== transferTarget.category_id)}
+          sources={getSourcesFor(transferTarget)}
           initialSourceId={
             transferInitialSourceId !== null && transferInitialSourceId !== transferTarget.category_id
               ? transferInitialSourceId
