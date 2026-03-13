@@ -460,7 +460,6 @@ export default function Dashboard({ user }: { user: UserContext }) {
         <strong className="hero-card__value">
           {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
         </strong>
-        <span className="hero-card__sub">Общая сумма на всех счетах</span>
         {hasFamily ? (
           <>
             <div className="hero-card__breakdown">

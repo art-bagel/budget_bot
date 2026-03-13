@@ -792,6 +792,7 @@ p { margin: 0; }
   align-items: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  width: 120px;
 }
 
 .history-main {
@@ -813,7 +814,6 @@ p { margin: 0; }
   display: flex;
   flex-direction: row;
   align-items: baseline;
-  gap: 8px;
   font-size: 0.8rem;
 }
 
@@ -824,11 +824,28 @@ p { margin: 0; }
   overflow-wrap: anywhere;
 }
 
+.history-amounts {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.history-amount {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 19px;
+}
+
 .history-line__amount {
-  flex-shrink: 0;
+  display: inline-block;
   color: var(--text-secondary);
   font-weight: 600;
   text-align: right;
+  width: 100%;
+}
+
+.history-line__amount--empty {
+  visibility: hidden;
 }
 
 .history-status-tag {
