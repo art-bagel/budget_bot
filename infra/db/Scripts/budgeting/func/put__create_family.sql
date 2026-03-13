@@ -6,18 +6,15 @@ RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _default_name text := 'Моя семья';
     _family_id bigint;
     _base_currency_code char(3);
     _bank_account_id bigint;
     _unallocated_category_id bigint;
     _fx_result_category_id bigint;
-    _normalized_name text := btrim(_name);
+    _normalized_name text := COALESCE(NULLIF(btrim(_name), ''), _default_name);
 BEGIN
     SET search_path TO budgeting;
-
-    IF _normalized_name = '' THEN
-        RAISE EXCEPTION 'Family name cannot be empty';
-    END IF;
 
     IF budgeting.get__user_family_id(_user_id) IS NOT NULL THEN
         RAISE EXCEPTION 'User % already belongs to a family', _user_id;

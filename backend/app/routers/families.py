@@ -19,7 +19,7 @@ class FamilyInfo(BaseModel):
 
 
 class CreateFamilyRequest(BaseModel):
-    name: str
+    name: Optional[str] = None
 
 
 class CreateFamilyResponse(BaseModel):

@@ -16,6 +16,7 @@ interface Props {
   user: UserContext;
   onBadgeUpdate: (count: number) => void;
   embedded?: boolean;
+  onFamilyChange?: (family: FamilyInfo | null) => void;
 }
 
 function memberDisplayName(m: FamilyMember): string {
@@ -25,14 +26,13 @@ function memberDisplayName(m: FamilyMember): string {
   return `ID ${m.user_id}`;
 }
 
-export default function Family({ user, onBadgeUpdate, embedded = false }: Props) {
+export default function Family({ user, onBadgeUpdate, embedded = false, onFamilyChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [invitations, setInvitations] = useState<FamilyInvitation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [createName, setCreateName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -57,6 +57,7 @@ export default function Family({ user, onBadgeUpdate, embedded = false }: Props)
         fetchFamilyInvitations(),
       ]);
       setFamily(familyData);
+      onFamilyChange?.(familyData);
       setInvitations(invitationsData);
       if (familyData) {
         const membersData = await fetchFamilyMembers();
@@ -71,18 +72,15 @@ export default function Family({ user, onBadgeUpdate, embedded = false }: Props)
     } finally {
       setLoading(false);
     }
-  }, [onBadgeUpdate]);
+  }, [onBadgeUpdate, onFamilyChange]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {
-    const name = createName.trim();
-    if (!name) return;
     setCreating(true);
     setCreateError(null);
     try {
-      await createFamily(name);
-      setCreateName('');
+      await createFamily();
       await load();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : String(e));
@@ -235,20 +233,14 @@ export default function Family({ user, onBadgeUpdate, embedded = false }: Props)
               <p className="settings-label">
                 Создайте семейную группу, чтобы вести совместный бюджет с другими участниками.
               </p>
+              <p className="settings-label" style={{ marginTop: 8 }}>
+                Имя создаётся автоматически как «Моя семья».
+              </p>
               <div className="form-row" style={{ marginTop: 12 }}>
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Название семьи"
-                  value={createName}
-                  maxLength={64}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                />
                 <button
                   className="btn btn--primary"
                   type="button"
-                  disabled={creating || !createName.trim()}
+                  disabled={creating}
                   onClick={handleCreate}
                 >
                   {creating ? '...' : 'Создать'}
@@ -272,35 +264,6 @@ export default function Family({ user, onBadgeUpdate, embedded = false }: Props)
       {/* ── Has family ────────────────────────────── */}
       {family && (
         <>
-          <section className="settings-section">
-            <h2 className="settings-section__title">Ваша семья</h2>
-            <div className="panel">
-              <ul>
-                <li className="settings-row">
-                  <div>
-                    <div className="settings-row__title">{family.name}</div>
-                    <div className="settings-row__sub">Название семейной группы</div>
-                  </div>
-                </li>
-                <li className="settings-row">
-                  <div>
-                    <div className="settings-row__title">Базовая валюта</div>
-                    <div className="settings-row__sub">Валюта семейного бюджета</div>
-                  </div>
-                  <span className="pill">{family.base_currency_code}</span>
-                </li>
-                <li className="settings-row">
-                  <div>
-                    <div className="settings-row__title">Ваша роль</div>
-                  </div>
-                  <span className={`tag ${isOwner ? 'tag--in' : 'tag--neutral'}`}>
-                    {isOwner ? 'Владелец' : 'Участник'}
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </section>
-
           <section className="settings-section">
             <h2 className="settings-section__title">Участники</h2>
             <div className="panel">

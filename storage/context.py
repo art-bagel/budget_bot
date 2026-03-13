@@ -46,7 +46,7 @@ class Context(DataBase):
             last_name,
         )
 
-    async def put__create_family(self, user_id: int, name: str) -> dict:
+    async def put__create_family(self, user_id: int, name: Optional[str] = None) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_FAMILY),
             user_id,

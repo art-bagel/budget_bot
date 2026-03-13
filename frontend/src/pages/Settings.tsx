@@ -1,21 +1,19 @@
 import type { ComponentType } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { useHints } from '../hooks/useHints';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
-import { deleteAccount } from '../api';
+import { deleteAccount, fetchMyFamily } from '../api';
 import Family from './Family';
+import type { FamilyInfo, UserContext } from '../types';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
   { value: 'light', label: 'Светлая', icon: IconSun },
   { value: 'dark', label: 'Тёмная', icon: IconMoon },
 ];
-
-import type { UserContext } from '../types';
-
 export default function Settings({
   user,
   onFamilyBadgeUpdate,
@@ -25,8 +23,15 @@ export default function Settings({
 }) {
   const { theme, setTheme } = useTheme();
   const { hintsEnabled, toggle: toggleHints } = useHints();
+  const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchMyFamily()
+      .then((result) => setFamily(result))
+      .catch(() => setFamily(null));
+  }, []);
 
   const handleDeleteAccount = async () => {
     const isConfirmed = window.confirm(
@@ -93,11 +98,29 @@ export default function Settings({
           <ul>
             <li className="settings-row">
               <div>
-                <div className="settings-row__title">Базовая валюта</div>
-                <div className="settings-row__sub">Все бюджетные категории ведутся в этой валюте</div>
+                <div className="settings-row__title">Личная базовая валюта</div>
+                <div className="settings-row__sub">Все личные категории ведутся в этой валюте</div>
               </div>
               <span className="pill">{user.base_currency_code}</span>
             </li>
+            {family && (
+              <>
+                <li className="settings-row">
+                  <div>
+                    <div className="settings-row__title">Семья</div>
+                    <div className="settings-row__sub">Семейный бюджет подключён</div>
+                  </div>
+                  <span className="tag tag--neutral">{family.name}</span>
+                </li>
+                <li className="settings-row">
+                  <div>
+                    <div className="settings-row__title">Семейная базовая валюта</div>
+                    <div className="settings-row__sub">Все семейные категории ведутся в этой валюте</div>
+                  </div>
+                  <span className="pill">{family.base_currency_code}</span>
+                </li>
+              </>
+            )}
             <li className="settings-row">
               <div>
                 <div className="settings-row__title">Банковский счёт</div>
@@ -134,7 +157,7 @@ export default function Settings({
 
       <section className="settings-section">
         <h2 className="settings-section__title">Семья</h2>
-        <Family user={user} onBadgeUpdate={onFamilyBadgeUpdate} embedded />
+        <Family user={user} onBadgeUpdate={onFamilyBadgeUpdate} onFamilyChange={setFamily} embedded />
       </section>
 
       <section className="settings-section">

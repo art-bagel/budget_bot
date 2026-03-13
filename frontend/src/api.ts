@@ -278,10 +278,10 @@ export async function fetchMyFamily(): Promise<FamilyInfo | null> {
   }
 }
 
-export async function createFamily(name: string): Promise<CreateFamilyResponse> {
+export async function createFamily(): Promise<CreateFamilyResponse> {
   return apiFetch<CreateFamilyResponse>('/family', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({}),
   });
 }
 
