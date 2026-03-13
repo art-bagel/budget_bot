@@ -804,7 +804,6 @@ p { margin: 0; }
   overflow-y: auto;
   padding-right: 4px;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
   touch-action: pan-y;
 }
 

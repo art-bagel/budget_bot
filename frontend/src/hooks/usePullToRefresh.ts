@@ -17,7 +17,35 @@ export function usePullToRefresh(
 
     const stateRef = { current: null as { startX: number; startY: number; blocked: boolean } | null };
 
+    const findNestedScrollable = (target: EventTarget | null): HTMLElement | null => {
+      if (!(target instanceof HTMLElement)) {
+        return null;
+      }
+
+      let current: HTMLElement | null = target;
+
+      while (current && current !== el) {
+        const style = window.getComputedStyle(current);
+        const canScrollY =
+          (style.overflowY === 'auto' || style.overflowY === 'scroll')
+          && current.scrollHeight > current.clientHeight;
+
+        if (canScrollY) {
+          return current;
+        }
+
+        current = current.parentElement;
+      }
+
+      return null;
+    };
+
     const onStart = (e: TouchEvent) => {
+      if (findNestedScrollable(e.target)) {
+        stateRef.current = null;
+        return;
+      }
+
       // Only activate when scrolled to the very top
       if (window.scrollY > 0) {
         stateRef.current = null;
