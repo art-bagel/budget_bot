@@ -297,6 +297,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const familyRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'family') : [];
   const personalGroups = hasFamily ? groupBudgetCategories.filter((c) => c.owner_type === 'user') : groupBudgetCategories;
   const familyGroups = hasFamily ? groupBudgetCategories.filter((c) => c.owner_type === 'family') : [];
+  const personalBudgetTotal = personalRegular.reduce((sum, c) => sum + c.balance, 0) + overview.personal_free_budget_in_base;
+  const familyBudgetTotal = hasFamily
+    ? familyRegular.reduce((sum, c) => sum + c.balance, 0) + overview.family_free_budget_in_base
+    : 0;
 
   const personalFreeBudgetSource: TransferSource = {
     category_id: user.unallocated_category_id,
@@ -404,9 +408,16 @@ export default function Dashboard({ user }: { user: UserContext }) {
         <strong className="hero-card__value">
           {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
         </strong>
-        <span className="hero-card__sub">
-          Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
-        </span>
+        {hasFamily ? (
+          <div className="hero-card__breakdown">
+            <span>Личные: {formatAmount(personalBudgetTotal, overview.base_currency_code)}</span>
+            <span>Семейные: {formatAmount(familyBudgetTotal, overview.base_currency_code)}</span>
+          </div>
+        ) : (
+          <span className="hero-card__sub">
+            Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
+          </span>
+        )}
       </article>
 
       <section className="section">
