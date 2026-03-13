@@ -890,7 +890,6 @@ p { margin: 0; }
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
-  overflow: hidden;
 }
 
 .analytics-view {
