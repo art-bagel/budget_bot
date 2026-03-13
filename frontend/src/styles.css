@@ -896,6 +896,7 @@ p { margin: 0; }
 
 .analytics-toolbar__group--filters {
   justify-content: flex-end;
+  flex-wrap: nowrap;
 }
 
 .analytics-view {

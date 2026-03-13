@@ -6,6 +6,7 @@ import {
   fetchOperationsHistory,
   reverseOperation,
 } from '../api';
+import { useHints } from '../hooks/useHints';
 import type {
   OperationAnalyticsItem,
   OperationAnalyticsResponse,
@@ -396,6 +397,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
   const [analyticsAnchorDate, setAnalyticsAnchorDate] = useState(getCurrentAnchorDate('month'));
   const analyticsSwipeRef = useRef<{ startX: number; startY: number } | null>(null);
 
+  const { hintsEnabled } = useHints();
   const analyticsHasFamily = analyticsData?.has_family ?? true;
   const effectivePeriodMode = analyticsData?.period_mode ?? analyticsPeriodMode;
   const effectivePeriodStart = analyticsData?.period_start ?? analyticsAnchorDate;
@@ -730,9 +732,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
               ) : analyticsData ? (
                 <>
                   <div className="analytics-hero">
-                    <div className="analytics-hero__eyebrow">
-                      {formatPeriodRange(effectivePeriodStart, effectivePeriodMode)}
-                    </div>
                     <div className="analytics-hero__amount">
                       {formatAmount(analyticsData.total_amount, analyticsData.base_currency_code)}
                     </div>
@@ -748,7 +747,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                             ? 'Личный срез'
                             : 'Все счета'}
                       </span>
-                      <span>{getPeriodHint(effectivePeriodMode)}</span>
+                      {hintsEnabled && <span>{getPeriodHint(effectivePeriodMode)}</span>}
                     </div>
                   </div>
 
