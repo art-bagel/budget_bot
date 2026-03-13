@@ -49,20 +49,22 @@ async def get_dashboard_overview(
     bank_account_id: int = Query(...),
     user: TelegramUser = Depends(get_telegram_user),
 ) -> DashboardOverviewResponse:
-    bank_balances = await reports.get__bank_snapshot(user.user_id, bank_account_id)
+    all_bank_accounts = await reports.get__bank_accounts(user.user_id)
+    account_snapshots: dict[int, list[dict]] = {}
+
+    for account in all_bank_accounts:
+        account_id = int(account['id'])
+        account_snapshots[account_id] = await reports.get__bank_snapshot(user.user_id, account_id)
+
+    bank_balances = account_snapshots.get(bank_account_id, [])
     budget_categories = await reports.get__budget_snapshot(user.user_id, True)
 
-    all_bank_accounts = await reports.get__bank_accounts(user.user_id)
     family_account = next(
         (acc for acc in all_bank_accounts if acc.get('owner_type') == 'family'),
         None,
     )
     family_bank_account_id = int(family_account['id']) if family_account else None
-    family_bank_balances = (
-        await reports.get__bank_snapshot(user.user_id, family_bank_account_id)
-        if family_bank_account_id
-        else []
-    )
+    family_bank_balances = account_snapshots.get(family_bank_account_id, []) if family_bank_account_id else []
 
     base_currency_code = ''
 
@@ -72,7 +74,11 @@ async def get_dashboard_overview(
         base_currency_code = budget_categories[0]['currency_code']
 
     total_bank_historical_in_base = round(
-        sum(float(item['historical_cost_in_base']) for item in bank_balances),
+        sum(
+            float(item['historical_cost_in_base'])
+            for snapshot in account_snapshots.values()
+            for item in snapshot
+        ),
         2,
     )
     total_budget_in_base = round(

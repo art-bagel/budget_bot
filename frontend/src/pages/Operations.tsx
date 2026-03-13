@@ -216,6 +216,9 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                             key={item.operation_id + '-line-' + index}
                           >
                             <span className="history-line__label">{line.label}</span>
+                            {line.amount && (
+                              <span className="history-line__amount">{line.amount}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -231,22 +234,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                           {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
                         </button>
                       )}
-                      <div className="history-amounts">
-                        {getOperationLines(item).map((line, index) => (
-                          <div
-                            className="history-amount"
-                            key={item.operation_id + '-amount-' + index}
-                          >
-                            {line.amount ? (
-                              <span className="history-line__amount">{line.amount}</span>
-                            ) : (
-                              <span className="history-line__amount history-line__amount--empty" aria-hidden="true">
-                                &nbsp;
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   </li>
                 ))}
