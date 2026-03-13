@@ -762,48 +762,51 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     </div>
                   </div>
 
-                  {analyticsData.total_amount <= 0 ? (
-                    <p className="list-row__sub">
-                      За выбранный период пока нет данных для аналитики.
-                    </p>
-                  ) : (
-                    <>
-                      <section className="analytics-showcase">
-                        <div className="analytics-showcase__chart">
-                          <div className="analytics-donut-nav">
-                            <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(-1)}>‹</button>
-                          <div className="analytics-donut-wrap">
-                            <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: donutGradient }}>
-                              <div className="analytics-donut__inner">
-                                <span className="analytics-donut__label">Структура</span>
-                                <strong>{chartSegments[0] ? formatPercent(chartSegments[0].share) : '0%'}</strong>
-                              </div>
+                  <section className="analytics-showcase">
+                    <div className="analytics-showcase__chart">
+                      <div className="analytics-donut-nav">
+                        <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(-1)}>‹</button>
+                        <div className="analytics-donut-wrap">
+                          <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: donutGradient }}>
+                            <div className="analytics-donut__inner">
+                              {analyticsData.total_amount <= 0 ? (
+                                <>
+                                  <span className="analytics-donut__label">Нет операций</span>
+                                  <strong>—</strong>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="analytics-donut__label">Структура</span>
+                                  <strong>{chartSegments[0] ? formatPercent(chartSegments[0].share) : '0%'}</strong>
+                                </>
+                              )}
                             </div>
                           </div>
-                            <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(1)}>›</button>
-                          </div>
                         </div>
+                        <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(1)}>›</button>
+                      </div>
+                    </div>
 
-                        <div className="analytics-pill-grid">
-                          {chartSegments.map((segment) => (
-                            <div className="analytics-pill" key={segment.entryKey}>
-                              <span
-                                className="analytics-pill__dot"
-                                style={{ backgroundColor: segment.color, color: segment.color }}
-                              />
-                              <div className="analytics-pill__content">
-                                <div className="analytics-pill__title">{segment.label}</div>
-                                <div className="analytics-pill__meta">
-                                  <span>{formatAmount(segment.amount, analyticsData.base_currency_code)}</span>
-                                  <span>{formatPercent(segment.share)}</span>
-                                </div>
+                    {chartSegments.length > 0 && (
+                      <div className="analytics-pill-grid">
+                        {chartSegments.map((segment) => (
+                          <div className="analytics-pill" key={segment.entryKey}>
+                            <span
+                              className="analytics-pill__dot"
+                              style={{ backgroundColor: segment.color, color: segment.color }}
+                            />
+                            <div className="analytics-pill__content">
+                              <div className="analytics-pill__title">{segment.label}</div>
+                              <div className="analytics-pill__meta">
+                                <span>{formatAmount(segment.amount, analyticsData.base_currency_code)}</span>
+                                <span>{formatPercent(segment.share)}</span>
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      </section>
-                    </>
-                  )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 </>
               ) : (
                 <p className="list-row__sub">Аналитика пока не загружена.</p>
