@@ -189,28 +189,6 @@ function formatPeriodRange(periodStart: string, periodMode: AnalyticsPeriodMode)
 }
 
 
-function formatPeriodShort(periodStart: string, periodMode: AnalyticsPeriodMode): string {
-  const date = fromIsoDate(periodStart);
-
-  if (periodMode === 'year') {
-    return String(date.getFullYear());
-  }
-
-  if (periodMode === 'month') {
-    return new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(date).replace('.', '');
-  }
-
-  return `${date.getDate()} ${new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(date).replace('.', '')}`;
-}
-
-
-function getPeriodsTitle(periodMode: AnalyticsPeriodMode): string {
-  if (periodMode === 'week') return 'По неделям';
-  if (periodMode === 'year') return 'По годам';
-  return 'По месяцам';
-}
-
-
 function getPeriodHint(periodMode: AnalyticsPeriodMode): string {
   if (periodMode === 'week') return 'Нажми на неделю или свайпни влево/вправо для смены периода.';
   if (periodMode === 'year') return 'Нажми на год или свайпни влево/вправо для смены периода.';
@@ -218,11 +196,41 @@ function getPeriodHint(periodMode: AnalyticsPeriodMode): string {
 }
 
 
-function formatCompactAmount(amount: number): string {
-  return new Intl.NumberFormat('ru-RU', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(amount);
+function getPeriodSelectOptions(periodMode: AnalyticsPeriodMode, anchorDate: string): { value: string; label: string }[] {
+  const baseDate = fromIsoDate(anchorDate);
+  const options: { value: string; label: string }[] = [];
+
+  if (periodMode === 'year') {
+    for (let offset = -8; offset <= 2; offset += 1) {
+      const value = normalizeAnchorDate(toIsoDate(addYears(baseDate, offset)), 'year');
+      options.push({
+        value,
+        label: String(fromIsoDate(value).getFullYear()),
+      });
+    }
+    return options.sort((left, right) => right.value.localeCompare(left.value));
+  }
+
+  if (periodMode === 'month') {
+    for (let offset = -10; offset <= 1; offset += 1) {
+      const value = normalizeAnchorDate(toIsoDate(addMonths(baseDate, offset)), 'month');
+      options.push({
+        value,
+        label: new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(fromIsoDate(value)),
+      });
+    }
+    return options.sort((left, right) => right.value.localeCompare(left.value));
+  }
+
+  for (let offset = -10; offset <= 1; offset += 1) {
+    const value = normalizeAnchorDate(toIsoDate(addDays(baseDate, offset * 7)), 'week');
+    options.push({
+      value,
+      label: formatPeriodRange(value, 'week'),
+    });
+  }
+
+  return options.sort((left, right) => right.value.localeCompare(left.value));
 }
 
 
@@ -397,9 +405,9 @@ export default function Operations({ user: _user }: { user: UserContext }) {
     [analyticsData],
   );
   const donutGradient = useMemo(() => buildDonutGradient(chartSegments), [chartSegments]);
-  const maxPeriodAmount = useMemo(
-    () => Math.max(...(analyticsData?.periods ?? []).map((period) => period.amount), 0),
-    [analyticsData],
+  const periodSelectOptions = useMemo(
+    () => getPeriodSelectOptions(analyticsPeriodMode, analyticsAnchorDate),
+    [analyticsPeriodMode, analyticsAnchorDate],
   );
 
   const loadHistory = async (
@@ -687,6 +695,17 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     </button>
                   ))}
                   <select
+                    className="input input--compact analytics-period-select"
+                    value={analyticsAnchorDate}
+                    onChange={(event) => setAnalyticsAnchorDate(event.target.value)}
+                  >
+                    {periodSelectOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
                     className="input input--compact"
                     value={analyticsOwnerScope}
                     onChange={(event) => setAnalyticsOwnerScope(event.target.value as 'all' | 'user' | 'family')}
@@ -729,14 +748,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                             ? 'Личный срез'
                             : 'Все счета'}
                       </span>
-                    </div>
-                    <div className="analytics-period-nav">
-                      <button className="analytics-period-nav__btn" type="button" onClick={() => shiftAnalyticsPeriod(-1)}>
-                        Назад
-                      </button>
-                      <button className="analytics-period-nav__btn" type="button" onClick={() => shiftAnalyticsPeriod(1)}>
-                        Вперед
-                      </button>
+                      <span>{getPeriodHint(effectivePeriodMode)}</span>
                     </div>
                   </div>
 
@@ -776,44 +788,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                           ))}
                         </div>
                       </section>
-
-                      <section className="analytics-card analytics-card--full">
-                        <div className="analytics-card__title">{getPeriodsTitle(effectivePeriodMode)}</div>
-                        <div className="analytics-months">
-                          {analyticsData.periods.map((period) => {
-                            const heightPercent = maxPeriodAmount > 0
-                              ? Math.max(10, Math.round(period.amount / maxPeriodAmount * 100))
-                              : 10;
-
-                            return (
-                              <button
-                                className={[
-                                  'analytics-month',
-                                  period.period_start === effectivePeriodStart ? 'analytics-month--active' : '',
-                                ].filter(Boolean).join(' ')}
-                                key={period.period_start}
-                                type="button"
-                                onClick={() => setAnalyticsAnchorDate(period.period_start)}
-                              >
-                                <span className="analytics-month__value">
-                                  {formatCompactAmount(period.amount)}
-                                </span>
-                                <span className="analytics-month__bar-track">
-                                  <span
-                                    className="analytics-month__bar"
-                                    style={{ height: `${heightPercent}%` }}
-                                  />
-                                </span>
-                                <span className="analytics-month__label">
-                                  {formatPeriodShort(period.period_start, effectivePeriodMode)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <p className="operations-hint">{getPeriodHint(effectivePeriodMode)}</p>
-                      </section>
-
                       <section className="analytics-card analytics-card--full">
                         <div className="analytics-card__title">
                           {analyticsTypeFilter === 'expense' ? 'Детализация категорий' : 'Детализация источников'}
