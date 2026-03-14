@@ -5,7 +5,7 @@ import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { useHints } from '../hooks/useHints';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
-import { deleteAccount, fetchMyFamily } from '../api';
+import { deleteAccount, dissolveFamily, fetchMyFamily, leaveFamily } from '../api';
 import Family from './Family';
 import type { FamilyInfo, UserContext } from '../types';
 
@@ -24,8 +24,13 @@ export default function Settings({
   const { theme, setTheme } = useTheme();
   const { hintsEnabled, toggle: toggleHints } = useHints();
   const [family, setFamily] = useState<FamilyInfo | null>(null);
+  const [familyRefreshKey, setFamilyRefreshKey] = useState(0);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [leaveInProgress, setLeaveInProgress] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [dissolveInProgress, setDissolveInProgress] = useState(false);
+  const [dissolveError, setDissolveError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchMyFamily()
@@ -51,6 +56,48 @@ export default function Settings({
     } catch (reason: unknown) {
       setDeleteError(reason instanceof Error ? reason.message : String(reason));
       setDeleteInProgress(false);
+    }
+  };
+
+  const isFamilyOwner = family?.created_by_user_id === user.user_id;
+
+  const handleLeaveFamily = async () => {
+    if (!window.confirm('Покинуть семью? Ваши личные данные не пострадают.')) {
+      return;
+    }
+
+    setLeaveInProgress(true);
+    setLeaveError(null);
+
+    try {
+      await leaveFamily();
+      setFamily(null);
+      setFamilyRefreshKey((prev) => prev + 1);
+    } catch (reason: unknown) {
+      setLeaveError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setLeaveInProgress(false);
+    }
+  };
+
+  const handleDissolveFamily = async () => {
+    if (!window.confirm(
+      'Распустить семью? Все семейные счета, категории и история операций будут удалены. Личные данные участников не пострадают.',
+    )) {
+      return;
+    }
+
+    setDissolveInProgress(true);
+    setDissolveError(null);
+
+    try {
+      await dissolveFamily();
+      setFamily(null);
+      setFamilyRefreshKey((prev) => prev + 1);
+    } catch (reason: unknown) {
+      setDissolveError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDissolveInProgress(false);
     }
   };
 
@@ -132,6 +179,17 @@ export default function Settings({
         </div>
       </section>
 
+      <section className="settings-section">
+        <h2 className="settings-section__title">Семья</h2>
+        <Family
+          key={familyRefreshKey}
+          user={user}
+          onBadgeUpdate={onFamilyBadgeUpdate}
+          onFamilyChange={setFamily}
+          embedded
+        />
+      </section>
+
       {/* Data */}
       <section className="settings-section">
         <h2 className="settings-section__title">Данные</h2>
@@ -156,13 +214,38 @@ export default function Settings({
       </section>
 
       <section className="settings-section">
-        <h2 className="settings-section__title">Семья</h2>
-        <Family user={user} onBadgeUpdate={onFamilyBadgeUpdate} onFamilyChange={setFamily} embedded />
-      </section>
-
-      <section className="settings-section">
         <h2 className="settings-section__title">Опасная зона</h2>
         <div className="panel">
+          {family && (
+            <div className="settings-danger">
+              <div>
+                <div className="settings-row__title">
+                  {isFamilyOwner ? 'Распустить семью' : 'Покинуть семью'}
+                </div>
+                <div className="settings-row__sub">
+                  {isFamilyOwner
+                    ? 'Все семейные счета, категории и история операций будут удалены безвозвратно. Личные данные участников не пострадают.'
+                    : 'Вы выйдете из семьи. Ваши личные счета и данные останутся нетронутыми.'}
+                </div>
+                {isFamilyOwner && dissolveError ? (
+                  <div className="settings-danger__error">{dissolveError}</div>
+                ) : null}
+                {!isFamilyOwner && leaveError ? (
+                  <div className="settings-danger__error">{leaveError}</div>
+                ) : null}
+              </div>
+              <button
+                className="btn btn--danger"
+                type="button"
+                onClick={isFamilyOwner ? handleDissolveFamily : handleLeaveFamily}
+                disabled={leaveInProgress || dissolveInProgress}
+              >
+                {isFamilyOwner
+                  ? (dissolveInProgress ? 'Удаляем...' : 'Распустить')
+                  : (leaveInProgress ? 'Выходим...' : 'Покинуть')}
+              </button>
+            </div>
+          )}
           <div className="settings-danger">
             <div>
               <div className="settings-row__title">Удалить аккаунт</div>

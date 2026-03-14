@@ -8,8 +8,6 @@ import {
   inviteToFamily,
   acceptInvitation,
   declineInvitation,
-  leaveFamily,
-  dissolveFamily,
 } from '../api';
 
 interface Props {
@@ -42,11 +40,6 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
   const [respondingId, setRespondingId] = useState<number | null>(null);
-
-  const [leaving, setLeaving] = useState(false);
-  const [leaveError, setLeaveError] = useState<string | null>(null);
-  const [dissolving, setDissolving] = useState(false);
-  const [dissolveError, setDissolveError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -134,36 +127,6 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
     }
   };
 
-  const handleLeave = async () => {
-    if (!window.confirm('Покинуть семью? Ваши личные данные не пострадают.')) return;
-    setLeaving(true);
-    setLeaveError(null);
-    try {
-      await leaveFamily();
-      await load();
-    } catch (e) {
-      setLeaveError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLeaving(false);
-    }
-  };
-
-  const handleDissolve = async () => {
-    if (!window.confirm(
-      'Распустить семью? Все семейные счета, категории и история операций будут удалены. Личные данные участников не пострадают.',
-    )) return;
-    setDissolving(true);
-    setDissolveError(null);
-    try {
-      await dissolveFamily();
-      await load();
-    } catch (e) {
-      setDissolveError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDissolving(false);
-    }
-  };
-
   const isOwner = family ? family.created_by_user_id === user.user_id : false;
   const pendingInvitations = invitations.filter(inv => inv.status === 'pending');
 
@@ -188,112 +151,102 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
       {!family && (
         <>
           {pendingInvitations.length > 0 && (
-            <section className="settings-section">
-              <h2 className="settings-section__title">Приглашения</h2>
-              <div className="panel">
-                <ul>
-                  {pendingInvitations.map((inv) => (
-                    <li key={inv.invitation_id} className="settings-row">
-                      <div>
-                        <div className="settings-row__title">{inv.family_name}</div>
-                        <div className="settings-row__sub">
-                          {inv.invited_by_username
-                            ? `от @${inv.invited_by_username}`
-                            : `от ID ${inv.invited_by_user_id}`}
-                        </div>
+            <div className="panel">
+              <ul>
+                {pendingInvitations.map((inv) => (
+                  <li key={inv.invitation_id} className="settings-row">
+                    <div>
+                      <div className="settings-row__title">{inv.family_name}</div>
+                      <div className="settings-row__sub">
+                        {inv.invited_by_username
+                          ? `от @${inv.invited_by_username}`
+                          : `от ID ${inv.invited_by_user_id}`}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                        <button
-                          className="btn"
-                          type="button"
-                          disabled={respondingId === inv.invitation_id}
-                          onClick={() => handleDecline(inv.invitation_id)}
-                        >
-                          Отклонить
-                        </button>
-                        <button
-                          className="btn btn--primary"
-                          type="button"
-                          disabled={respondingId === inv.invitation_id}
-                          onClick={() => handleAccept(inv.invitation_id)}
-                        >
-                          {respondingId === inv.invitation_id ? '...' : 'Принять'}
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </section>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button
+                        className="btn"
+                        type="button"
+                        disabled={respondingId === inv.invitation_id}
+                        onClick={() => handleDecline(inv.invitation_id)}
+                      >
+                        Отклонить
+                      </button>
+                      <button
+                        className="btn btn--primary"
+                        type="button"
+                        disabled={respondingId === inv.invitation_id}
+                        onClick={() => handleAccept(inv.invitation_id)}
+                      >
+                        {respondingId === inv.invitation_id ? '...' : 'Принять'}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
-          <section className="settings-section">
-            <h2 className="settings-section__title">Создать семью</h2>
-            <div className="panel">
-              <p className="settings-label">
-                Создайте семейную группу, чтобы вести совместный бюджет с другими участниками.
-              </p>
-              <p className="settings-label" style={{ marginTop: 8 }}>
-                Имя создаётся автоматически как «Моя семья».
-              </p>
-              <div className="form-row" style={{ marginTop: 12 }}>
-                <button
-                  className="btn btn--primary"
-                  type="button"
-                  disabled={creating}
-                  onClick={handleCreate}
-                >
-                  {creating ? '...' : 'Создать'}
-                </button>
-              </div>
-              {createError && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>
-                  {createError}
-                </p>
-              )}
-              {pendingInvitations.length === 0 && (
-                <p className="settings-label" style={{ marginTop: 12 }}>
-                  Или дождитесь приглашения от другого участника.
-                </p>
-              )}
+          <div className="panel">
+            <p className="settings-label">
+              Создайте семейную группу, чтобы вести совместный бюджет с другими участниками.
+            </p>
+            <p className="settings-label" style={{ marginTop: 8 }}>
+              Имя создаётся автоматически как «Моя семья».
+            </p>
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <button
+                className="btn btn--primary"
+                type="button"
+                disabled={creating}
+                onClick={handleCreate}
+              >
+                {creating ? '...' : 'Создать'}
+              </button>
             </div>
-          </section>
+            {createError && (
+              <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>
+                {createError}
+              </p>
+            )}
+            {pendingInvitations.length === 0 && (
+              <p className="settings-label" style={{ marginTop: 12 }}>
+                Или дождитесь приглашения от другого участника.
+              </p>
+            )}
+          </div>
         </>
       )}
 
       {/* ── Has family ────────────────────────────── */}
       {family && (
         <>
-          <section className="settings-section">
-            <h2 className="settings-section__title">Участники</h2>
-            <div className="panel">
-              {members.length === 0 ? (
-                <p className="settings-label">Участников пока нет.</p>
-              ) : (
-                <ul>
-                  {members.map((m) => (
-                    <li key={m.user_id} className="settings-row">
-                      <div>
-                        <div className="settings-row__title">{memberDisplayName(m)}</div>
-                        {m.username && (
-                          <div className="settings-row__sub">@{m.username}</div>
-                        )}
-                      </div>
-                      <span className={`tag ${m.role === 'owner' ? 'tag--in' : 'tag--neutral'}`}>
-                        {m.role === 'owner' ? 'Владелец' : 'Участник'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
+          <div className="panel">
+            {members.length === 0 ? (
+              <p className="settings-label">Участников пока нет.</p>
+            ) : (
+              <ul>
+                {members.map((m) => (
+                  <li key={m.user_id} className="settings-row">
+                    <div>
+                      <div className="settings-row__title">{memberDisplayName(m)}</div>
+                      {m.username && (
+                        <div className="settings-row__sub">@{m.username}</div>
+                      )}
+                    </div>
+                    <span className={`tag ${m.role === 'owner' ? 'tag--in' : 'tag--neutral'}`}>
+                      {m.role === 'owner' ? 'Владелец' : 'Участник'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          {isOwner && (
-            <section className="settings-section">
-              <h2 className="settings-section__title">Пригласить участника</h2>
-              <div className="panel">
-                <p className="settings-label">Введите @username участника в Telegram.</p>
+            {isOwner && (
+              <>
+                <p className="settings-label" style={{ marginTop: members.length > 0 ? 16 : 0 }}>
+                  Введите @username участника в Telegram.
+                </p>
                 <div className="form-row" style={{ marginTop: 12 }}>
                   <input
                     className="input"
@@ -322,57 +275,9 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
                     {inviteSuccess}
                   </p>
                 )}
-              </div>
-            </section>
-          )}
-
-          <section className="settings-section">
-            <h2 className="settings-section__title">Опасная зона</h2>
-            <div className="panel">
-              {!isOwner && (
-                <div className="settings-danger">
-                  <div>
-                    <div className="settings-row__title">Покинуть семью</div>
-                    <div className="settings-row__sub">
-                      Вы выйдете из семьи. Ваши личные счета и данные останутся нетронутыми.
-                    </div>
-                    {leaveError && (
-                      <div className="settings-danger__error">{leaveError}</div>
-                    )}
-                  </div>
-                  <button
-                    className="btn btn--danger"
-                    type="button"
-                    disabled={leaving}
-                    onClick={handleLeave}
-                  >
-                    {leaving ? 'Выходим...' : 'Покинуть'}
-                  </button>
-                </div>
-              )}
-              {isOwner && (
-                <div className="settings-danger">
-                  <div>
-                    <div className="settings-row__title">Распустить семью</div>
-                    <div className="settings-row__sub">
-                      Все семейные счета, категории и история операций будут удалены безвозвратно. Личные данные участников не пострадают.
-                    </div>
-                    {dissolveError && (
-                      <div className="settings-danger__error">{dissolveError}</div>
-                    )}
-                  </div>
-                  <button
-                    className="btn btn--danger"
-                    type="button"
-                    disabled={dissolving}
-                    onClick={handleDissolve}
-                  >
-                    {dissolving ? 'Удаляем...' : 'Распустить'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
+              </>
+            )}
+          </div>
         </>
       )}
     </>
