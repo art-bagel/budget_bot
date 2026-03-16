@@ -1,20 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   archiveCategory,
   fetchCategoryParentGroups,
   fetchCategories,
+  fetchCurrencies,
   fetchGroupMembers,
   replaceGroupMembers,
   updateCategory,
-  fetchBankAccounts,
   fetchScheduledExpenses,
   createScheduledExpense,
   deleteScheduledExpense,
 } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
-  BankAccount,
+  Currency,
   Category,
   DashboardBudgetCategory,
   ParentGroup,
@@ -22,6 +22,63 @@ import type {
 } from '../types';
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+const MONTH_NAMES = [
+  'Январь','Февраль','Март','Апрель','Май','Июнь',
+  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь',
+];
+
+interface MonthDayPickerProps {
+  selected: number;
+  onChange: (day: number) => void;
+  disabled: boolean;
+}
+
+function MonthDayPicker({ selected, onChange, disabled }: MonthDayPickerProps) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate(); // 28–31
+  // getDay() returns 0=Sun…6=Sat, convert to Mon-based 0=Mon…6=Sun
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+
+  const cells: React.ReactNode[] = [];
+  for (let i = 0; i < firstWeekday; i++) {
+    cells.push(<div key={`pad-${i}`} />);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push(
+      <button
+        key={d}
+        className={`btn${selected === d ? ' btn--primary' : ''}`}
+        type="button"
+        onClick={() => onChange(d)}
+        disabled={disabled}
+        style={{ padding: '5px 0', fontSize: '0.85rem', minWidth: 0 }}
+      >
+        {d}
+      </button>,
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginBottom: 4 }}>
+        {MONTH_NAMES[month]} {year}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+        {DAY_NAMES.map((d) => (
+          <div key={d} style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-secondary, #888)', padding: '2px 0' }}>
+            {d}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+        {cells}
+      </div>
+    </div>
+  );
+}
 
 function formatScheduleLabel(s: ScheduledExpense): string {
   if (s.frequency === 'weekly' && s.day_of_week != null) {
@@ -88,47 +145,40 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
   // --- Scheduled expenses ---
   const [schedules, setSchedules] = useState<ScheduledExpense[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
 
-  const [sfBankAccountId, setSfBankAccountId] = useState('');
+  const [sfCurrencyCode, setSfCurrencyCode] = useState(category.currency_code);
   const [sfAmount, setSfAmount] = useState('');
   const [sfFrequency, setSfFrequency] = useState<'weekly' | 'monthly'>('monthly');
   const [sfDayOfWeek, setSfDayOfWeek] = useState(1);
   const [sfDayOfMonth, setSfDayOfMonth] = useState(1);
   const [sfComment, setSfComment] = useState('');
 
-  // Load schedules and bank accounts for regular categories
+  // Load schedules and currencies for regular categories
   useEffect(() => {
     if (category.kind !== 'regular') return;
 
     setLoadingSchedules(true);
     void Promise.all([
       fetchScheduledExpenses(category.category_id),
-      fetchBankAccounts(),
+      fetchCurrencies(),
     ])
-      .then(([loadedSchedules, loadedAccounts]) => {
+      .then(([loadedSchedules, loadedCurrencies]) => {
         setSchedules(loadedSchedules);
-        // Keep only accounts that match the category's owner
-        const compatible = loadedAccounts.filter((acc) => {
-          if (acc.owner_type !== category.owner_type) return false;
-          if (category.owner_type === 'user') return acc.owner_user_id === category.owner_user_id;
-          return acc.owner_family_id === category.owner_family_id;
-        });
-        setBankAccounts(compatible);
-        if (compatible.length > 0) setSfBankAccountId(String(compatible[0].id));
+        setCurrencies(loadedCurrencies);
       })
-      .catch(() => {/* non-critical, schedule section stays empty */})
+      .catch(() => {/* non-critical */})
       .finally(() => setLoadingSchedules(false));
-  }, [category.category_id, category.kind, category.owner_type, category.owner_user_id, category.owner_family_id]);
+  }, [category.category_id, category.kind]);
 
   const handleAddSchedule = async () => {
-    if (!sfBankAccountId || !sfAmount || Number(sfAmount) <= 0) {
-      setScheduleError('Укажите счёт и сумму больше нуля.');
+    if (!sfAmount || Number(sfAmount) <= 0) {
+      setScheduleError('Укажите сумму больше нуля.');
       return;
     }
     setSavingSchedule(true);
@@ -136,9 +186,8 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
     try {
       await createScheduledExpense({
         category_id: category.category_id,
-        bank_account_id: Number(sfBankAccountId),
         amount: Number(sfAmount),
-        currency_code: category.currency_code,
+        currency_code: sfCurrencyCode,
         frequency: sfFrequency,
         day_of_week: sfFrequency === 'weekly' ? sfDayOfWeek : undefined,
         day_of_month: sfFrequency === 'monthly' ? sfDayOfMonth : undefined,
@@ -149,6 +198,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
       setShowScheduleForm(false);
       setSfAmount('');
       setSfComment('');
+      setSfCurrencyCode(category.currency_code);
     } catch (reason: unknown) {
       setScheduleError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -477,31 +527,30 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
               {showScheduleForm && (
                 <>
                   <div className="form-row">
-                    <select
-                      className="input"
-                      value={sfBankAccountId}
-                      onChange={(e) => setSfBankAccountId(e.target.value)}
-                      disabled={savingSchedule}
-                      style={{ flex: 1 }}
-                    >
-                      <option value="">Выберите счёт</option>
-                      {bankAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-row">
                     <input
                       className="input"
                       type="text"
                       inputMode="decimal"
-                      placeholder={`Сумма, ${category.currency_code}`}
+                      placeholder="Сумма"
                       value={sfAmount}
                       onChange={(e) => setSfAmount(e.target.value)}
                       disabled={savingSchedule}
                       style={{ flex: 1 }}
                     />
+                    <select
+                      className="input"
+                      value={sfCurrencyCode}
+                      onChange={(e) => setSfCurrencyCode(e.target.value)}
+                      disabled={savingSchedule}
+                      style={{ width: 90 }}
+                    >
+                      {currencies.length === 0 && (
+                        <option value={category.currency_code}>{category.currency_code}</option>
+                      )}
+                      {currencies.map((c) => (
+                        <option key={c.code} value={c.code}>{c.code}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="form-row">
@@ -524,23 +573,15 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                   </div>
 
                   {sfFrequency === 'monthly' && (
-                    <div className="form-row" style={{ alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.9rem', whiteSpace: 'nowrap' }}>Число месяца:</span>
-                      <input
-                        className="input"
-                        type="number"
-                        min={1}
-                        max={28}
-                        value={sfDayOfMonth}
-                        onChange={(e) => setSfDayOfMonth(Number(e.target.value))}
-                        disabled={savingSchedule}
-                        style={{ width: 70 }}
-                      />
-                    </div>
+                    <MonthDayPicker
+                      selected={sfDayOfMonth}
+                      onChange={setSfDayOfMonth}
+                      disabled={savingSchedule}
+                    />
                   )}
 
                   {sfFrequency === 'weekly' && (
-                    <div className="form-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+                    <div className="form-row" style={{ gap: 4 }}>
                       {DAY_NAMES.map((name, i) => (
                         <button
                           key={i}
@@ -548,7 +589,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                           type="button"
                           onClick={() => setSfDayOfWeek(i + 1)}
                           disabled={savingSchedule}
-                          style={{ minWidth: 40 }}
+                          style={{ flex: 1, minWidth: 0 }}
                         >
                           {name}
                         </button>
@@ -556,7 +597,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                     </div>
                   )}
 
-                  <div className="form-row">
+                  <div className="form-row" style={{ marginTop: 4 }}>
                     <input
                       className="input"
                       type="text"
@@ -587,7 +628,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                       className="btn btn--primary"
                       type="button"
                       onClick={handleAddSchedule}
-                      disabled={savingSchedule || !sfBankAccountId || !sfAmount}
+                      disabled={savingSchedule || !sfAmount}
                     >
                       {savingSchedule ? '...' : 'Добавить'}
                     </button>

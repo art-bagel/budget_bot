@@ -1,7 +1,6 @@
 CREATE OR REPLACE FUNCTION budgeting.put__create_scheduled_expense(
     _user_id        bigint,
     _category_id    bigint,
-    _bank_account_id bigint,
     _amount         numeric,
     _currency_code  char(3),
     _frequency      varchar(10),
@@ -13,20 +12,17 @@ RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
-    _category_owner_type     text;
-    _category_owner_user_id  bigint;
+    _category_owner_type      text;
+    _category_owner_user_id   bigint;
     _category_owner_family_id bigint;
-    _category_kind           text;
-    _bank_owner_type         text;
-    _bank_owner_user_id      bigint;
-    _bank_owner_family_id    bigint;
-    _next_run_at             date;
-    _days_until              int;
-    _new_id                  bigint;
+    _category_kind            text;
+    _next_run_at              date;
+    _days_until               int;
+    _new_id                   bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    -- Validate category
+    -- Validate category access
     SELECT kind, owner_type, owner_user_id, owner_family_id
     INTO _category_kind, _category_owner_type, _category_owner_user_id, _category_owner_family_id
     FROM categories
@@ -44,24 +40,18 @@ BEGIN
         RAISE EXCEPTION 'Access denied to category %', _category_id;
     END IF;
 
-    -- Validate bank account
-    SELECT owner_type, owner_user_id, owner_family_id
-    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id
-    FROM bank_accounts
-    WHERE id = _bank_account_id AND is_active;
-
-    IF _bank_owner_type IS NULL THEN
-        RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
-    END IF;
-
-    IF NOT budgeting.has__owner_access(_user_id, _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id) THEN
-        RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
-    END IF;
-
-    IF _category_owner_type <> _bank_owner_type
-       OR COALESCE(_category_owner_user_id, 0)   <> COALESCE(_bank_owner_user_id, 0)
-       OR COALESCE(_category_owner_family_id, 0) <> COALESCE(_bank_owner_family_id, 0) THEN
-        RAISE EXCEPTION 'Expense category and bank account must have the same owner';
+    -- Verify the category's owner has a primary bank account (guard, not blocking)
+    IF NOT EXISTS (
+        SELECT 1 FROM bank_accounts ba
+        WHERE ba.owner_type = _category_owner_type
+          AND (
+              (_category_owner_type = 'user'   AND ba.owner_user_id   = _category_owner_user_id)
+           OR (_category_owner_type = 'family' AND ba.owner_family_id = _category_owner_family_id)
+          )
+          AND ba.is_primary = TRUE
+          AND ba.is_active  = TRUE
+    ) THEN
+        RAISE EXCEPTION 'No primary bank account found for the category owner';
     END IF;
 
     -- Compute next_run_at starting from tomorrow
@@ -69,18 +59,35 @@ BEGIN
         IF _day_of_week IS NULL OR _day_of_week NOT BETWEEN 1 AND 7 THEN
             RAISE EXCEPTION 'day_of_week must be 1–7 for weekly frequency';
         END IF;
-        _days_until := (_day_of_week - EXTRACT(ISODOW FROM CURRENT_DATE + 1)::int + 7) % 7;
+        _days_until  := (_day_of_week - EXTRACT(ISODOW FROM CURRENT_DATE + 1)::int + 7) % 7;
         _next_run_at := CURRENT_DATE + 1 + _days_until;
 
     ELSIF _frequency = 'monthly' THEN
-        IF _day_of_month IS NULL OR _day_of_month NOT BETWEEN 1 AND 28 THEN
-            RAISE EXCEPTION 'day_of_month must be 1–28 for monthly frequency';
+        IF _day_of_month IS NULL OR _day_of_month NOT BETWEEN 1 AND 31 THEN
+            RAISE EXCEPTION 'day_of_month must be 1–31 for monthly frequency';
         END IF;
-        IF EXTRACT(DAY FROM CURRENT_DATE)::int < _day_of_month THEN
-            _next_run_at := (date_trunc('month', CURRENT_DATE) + (_day_of_month - 1) * INTERVAL '1 day')::date;
-        ELSE
-            _next_run_at := (date_trunc('month', CURRENT_DATE + INTERVAL '1 month') + (_day_of_month - 1) * INTERVAL '1 day')::date;
-        END IF;
+        -- Clamp to actual last day of the target month so "31st" in February becomes 28/29.
+        DECLARE
+            _last_day_this  int;
+            _last_day_next  int;
+            _effective_day  int;
+        BEGIN
+            _last_day_this := EXTRACT(DAY FROM
+                date_trunc('month', CURRENT_DATE + INTERVAL '1 month') - INTERVAL '1 day'
+            )::int;
+            _effective_day := LEAST(_day_of_month, _last_day_this);
+
+            IF EXTRACT(DAY FROM CURRENT_DATE)::int < _effective_day THEN
+                _next_run_at := (date_trunc('month', CURRENT_DATE)
+                    + (_effective_day - 1) * INTERVAL '1 day')::date;
+            ELSE
+                _last_day_next := EXTRACT(DAY FROM
+                    date_trunc('month', CURRENT_DATE + INTERVAL '2 months') - INTERVAL '1 day'
+                )::int;
+                _next_run_at := (date_trunc('month', CURRENT_DATE + INTERVAL '1 month')
+                    + (LEAST(_day_of_month, _last_day_next) - 1) * INTERVAL '1 day')::date;
+            END IF;
+        END;
 
     ELSE
         RAISE EXCEPTION 'Unknown frequency: %', _frequency;
@@ -88,7 +95,6 @@ BEGIN
 
     INSERT INTO scheduled_expenses (
         category_id,
-        bank_account_id,
         owner_type,
         owner_user_id,
         owner_family_id,
@@ -103,7 +109,6 @@ BEGIN
     )
     VALUES (
         _category_id,
-        _bank_account_id,
         _category_owner_type,
         _category_owner_user_id,
         _category_owner_family_id,
@@ -119,8 +124,8 @@ BEGIN
     RETURNING id INTO _new_id;
 
     RETURN jsonb_build_object(
-        'id',           _new_id,
-        'next_run_at',  _next_run_at
+        'id',          _new_id,
+        'next_run_at', _next_run_at
     );
 END
 $function$;

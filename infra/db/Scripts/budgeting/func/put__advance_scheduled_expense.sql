@@ -27,11 +27,19 @@ BEGIN
     IF _frequency = 'weekly' THEN
         _new_next_run := _current_next_run + INTERVAL '7 days';
     ELSIF _frequency = 'monthly' THEN
-        -- Keep the same day_of_month in the next calendar month
-        _new_next_run := (
-            date_trunc('month', _current_next_run + INTERVAL '1 month')
-            + (_day_of_month - 1) * INTERVAL '1 day'
-        )::date;
+        -- Advance to the same day_of_month in the next calendar month.
+        -- Clamp to the actual last day of that month so "31st" in February becomes 28/29.
+        DECLARE
+            _last_day_next int;
+        BEGIN
+            _last_day_next := EXTRACT(DAY FROM
+                date_trunc('month', _current_next_run + INTERVAL '2 months') - INTERVAL '1 day'
+            )::int;
+            _new_next_run := (
+                date_trunc('month', _current_next_run + INTERVAL '1 month')
+                + (LEAST(_day_of_month, _last_day_next) - 1) * INTERVAL '1 day'
+            )::date;
+        END;
     END IF;
 
     UPDATE scheduled_expenses

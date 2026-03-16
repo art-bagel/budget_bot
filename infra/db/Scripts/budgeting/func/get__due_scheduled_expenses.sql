@@ -1,5 +1,7 @@
 -- Returns all active scheduled expenses whose next_run_at <= today.
--- Called by the background scheduler (no user auth required).
+-- The primary bank account for each category's owner is resolved here
+-- (personal category → personal primary account, family category → family primary account).
+-- Called by the background scheduler — no user auth required.
 CREATE OR REPLACE FUNCTION budgeting.get__due_scheduled_expenses()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -14,7 +16,7 @@ BEGIN
             jsonb_build_object(
                 'id',                   se.id,
                 'category_id',          se.category_id,
-                'bank_account_id',      se.bank_account_id,
+                'bank_account_id',      ba.id,
                 'created_by_user_id',   se.created_by_user_id,
                 'amount',               se.amount,
                 'currency_code',        se.currency_code,
@@ -29,7 +31,17 @@ BEGIN
     )
     INTO _result
     FROM scheduled_expenses se
-    WHERE se.is_active = TRUE
+    -- Resolve the primary bank account that belongs to the same owner as the category.
+    -- Personal category → user's primary account; family category → family's primary account.
+    JOIN bank_accounts ba
+      ON ba.owner_type = se.owner_type
+     AND (
+             (se.owner_type = 'user'   AND ba.owner_user_id   = se.owner_user_id)
+          OR (se.owner_type = 'family' AND ba.owner_family_id = se.owner_family_id)
+         )
+     AND ba.is_primary = TRUE
+     AND ba.is_active  = TRUE
+    WHERE se.is_active    = TRUE
       AND se.next_run_at <= CURRENT_DATE;
 
     RETURN _result;

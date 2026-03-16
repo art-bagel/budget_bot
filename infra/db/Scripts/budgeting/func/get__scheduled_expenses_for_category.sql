@@ -23,7 +23,6 @@ BEGIN
             jsonb_build_object(
                 'id',               se.id,
                 'category_id',      se.category_id,
-                'bank_account_id',  se.bank_account_id,
                 'amount',           se.amount,
                 'currency_code',    se.currency_code,
                 'comment',          se.comment,

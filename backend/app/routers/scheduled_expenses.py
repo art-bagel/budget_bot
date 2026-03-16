@@ -13,7 +13,6 @@ router = APIRouter(prefix='/api/v1/scheduled-expenses', tags=['scheduled-expense
 class ScheduledExpenseItem(BaseModel):
     id: int
     category_id: int
-    bank_account_id: int
     amount: float
     currency_code: str
     comment: Optional[str] = None
@@ -27,7 +26,6 @@ class ScheduledExpenseItem(BaseModel):
 
 class CreateScheduledExpenseRequest(BaseModel):
     category_id: int
-    bank_account_id: int
     amount: float
     currency_code: str
     frequency: Literal['weekly', 'monthly']
@@ -57,7 +55,6 @@ async def create_scheduled_expense(
     result = await ledger.put__create_scheduled_expense(
         user_id=user.user_id,
         category_id=body.category_id,
-        bank_account_id=body.bank_account_id,
         amount=body.amount,
         currency_code=body.currency_code,
         frequency=body.frequency,

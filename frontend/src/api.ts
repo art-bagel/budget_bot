@@ -2,7 +2,6 @@ import type {
   UserContext,
   Category,
   Currency,
-  BankAccount,
   DashboardOverview,
   GroupMember,
   IncomeSource,
@@ -325,10 +324,6 @@ export async function transferBetweenAccounts(data: AccountTransferRequest): Pro
     method: 'POST',
     body: JSON.stringify(data),
   });
-}
-
-export async function fetchBankAccounts(): Promise<BankAccount[]> {
-  return apiFetch<BankAccount[]>('/bank-accounts');
 }
 
 export async function fetchScheduledExpenses(categoryId: number): Promise<ScheduledExpense[]> {

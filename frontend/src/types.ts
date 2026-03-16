@@ -274,7 +274,6 @@ export interface BankAccount {
 export interface ScheduledExpense {
   id: number;
   category_id: number;
-  bank_account_id: number;
   amount: number;
   currency_code: string;
   comment: string | null;
@@ -288,7 +287,6 @@ export interface ScheduledExpense {
 
 export interface CreateScheduledExpenseRequest {
   category_id: number;
-  bank_account_id: number;
   amount: number;
   currency_code: string;
   frequency: 'weekly' | 'monthly';
