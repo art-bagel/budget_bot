@@ -12,7 +12,6 @@ import {
   createScheduledExpense,
   deleteScheduledExpense,
 } from '../api';
-import { useHints } from '../hooks/useHints';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
   AccountCurrency,
@@ -138,7 +137,6 @@ interface Props {
 
 export default function CategoryDialog({ category, onClose, onSuccess }: Props) {
   useModalOpen();
-  const { hintsEnabled } = useHints();
   const [nameDraft, setNameDraft] = useState(category.name);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -405,11 +403,9 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
         </div>
 
         <div className="modal-body">
-          {hintsEnabled && (
-            <div className="operations-note">
-              Тут можно переименовать категорию или убрать её в архив.
-            </div>
-          )}
+          <div className="operations-note">
+            Тут можно переименовать категорию или убрать её в архив.
+          </div>
 
           <div className="form-row">
             <input
@@ -425,11 +421,9 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
           {category.kind === 'group' && (
             <>
-              {hintsEnabled && (
-                <div className="operations-note">
-                  Для группы можно менять состав и доли распределения. Сумма долей должна быть ровно 100%.
-                </div>
-              )}
+              <div className="operations-note">
+                Для группы можно менять состав и доли распределения. Сумма долей должна быть ровно 100%.
+              </div>
 
               <div className="form-row">
                 <span className="tag tag--neutral">

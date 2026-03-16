@@ -844,7 +844,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           <div className="list-row__sub">
                             {isValidTarget
                               ? 'Нажми, чтобы перевести сюда'
-                              : 'Группа распределения · нажми для редактирования'}
+                              : hintsEnabled ? 'Группа распределения · нажми для редактирования' : null}
                           </div>
                           <div className="list-row__meta">{groupComposition}</div>
                         </div>
