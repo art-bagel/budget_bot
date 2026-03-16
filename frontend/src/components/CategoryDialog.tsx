@@ -606,7 +606,13 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                           type="button"
                           onClick={() => setSfDayOfWeek(i + 1)}
                           disabled={savingSchedule}
-                          style={{ flex: 1, minWidth: 0 }}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            justifyContent: 'center',
+                            border: '1px solid transparent',
+                            padding: '6px 0',
+                          }}
                         >
                           {name}
                         </button>
