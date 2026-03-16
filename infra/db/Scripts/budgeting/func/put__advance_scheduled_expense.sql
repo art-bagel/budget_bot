@@ -1,7 +1,9 @@
 -- Advances next_run_at to the next period after a run (successful or failed).
+-- _error: NULL on success, error message on failure — stored in last_error for display in UI.
 -- Called by the background scheduler so that the same record is not re-triggered every minute.
 CREATE OR REPLACE FUNCTION budgeting.put__advance_scheduled_expense(
-    _schedule_id bigint
+    _schedule_id bigint,
+    _error       text DEFAULT NULL
 )
 RETURNS date
 LANGUAGE plpgsql
@@ -44,7 +46,8 @@ BEGIN
 
     UPDATE scheduled_expenses
     SET next_run_at = _new_next_run,
-        last_run_at = CURRENT_DATE
+        last_run_at = CURRENT_DATE,
+        last_error  = _error
     WHERE id = _schedule_id;
 
     RETURN _new_next_run;

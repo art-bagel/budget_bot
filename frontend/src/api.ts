@@ -29,6 +29,7 @@ import type {
   ScheduledExpense,
   CreateScheduledExpenseRequest,
   CreateScheduledExpenseResponse,
+  AccountCurrency,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -324,6 +325,10 @@ export async function transferBetweenAccounts(data: AccountTransferRequest): Pro
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function fetchCategoryAccountCurrencies(categoryId: number): Promise<AccountCurrency[]> {
+  return apiFetch<AccountCurrency[]>(`/scheduled-expenses/category/${categoryId}/currencies`);
 }
 
 export async function fetchScheduledExpenses(categoryId: number): Promise<ScheduledExpense[]> {

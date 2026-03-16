@@ -4,17 +4,17 @@ import {
   archiveCategory,
   fetchCategoryParentGroups,
   fetchCategories,
-  fetchCurrencies,
   fetchGroupMembers,
   replaceGroupMembers,
   updateCategory,
+  fetchCategoryAccountCurrencies,
   fetchScheduledExpenses,
   createScheduledExpense,
   deleteScheduledExpense,
 } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
-  Currency,
+  AccountCurrency,
   Category,
   DashboardBudgetCategory,
   ParentGroup,
@@ -42,6 +42,14 @@ function MonthDayPicker({ selected, onChange, disabled }: MonthDayPickerProps) {
   // getDay() returns 0=Sun…6=Sat, convert to Mon-based 0=Mon…6=Sun
   const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
 
+  const cellBase: React.CSSProperties = {
+    padding: '5px 0',
+    fontSize: '0.85rem',
+    minWidth: 0,
+    justifyContent: 'center',
+    border: '1px solid transparent',
+  };
+
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < firstWeekday; i++) {
     cells.push(<div key={`pad-${i}`} />);
@@ -54,7 +62,7 @@ function MonthDayPicker({ selected, onChange, disabled }: MonthDayPickerProps) {
         type="button"
         onClick={() => onChange(d)}
         disabled={disabled}
-        style={{ padding: '5px 0', fontSize: '0.85rem', minWidth: 0 }}
+        style={cellBase}
       >
         {d}
       </button>,
@@ -145,7 +153,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
   // --- Scheduled expenses ---
   const [schedules, setSchedules] = useState<ScheduledExpense[]>([]);
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [accountCurrencies, setAccountCurrencies] = useState<AccountCurrency[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -159,18 +167,22 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
   const [sfDayOfMonth, setSfDayOfMonth] = useState(1);
   const [sfComment, setSfComment] = useState('');
 
-  // Load schedules and currencies for regular categories
+  // Load schedules and available account currencies for regular categories
   useEffect(() => {
     if (category.kind !== 'regular') return;
 
     setLoadingSchedules(true);
     void Promise.all([
       fetchScheduledExpenses(category.category_id),
-      fetchCurrencies(),
+      fetchCategoryAccountCurrencies(category.category_id),
     ])
       .then(([loadedSchedules, loadedCurrencies]) => {
         setSchedules(loadedSchedules);
-        setCurrencies(loadedCurrencies);
+        setAccountCurrencies(loadedCurrencies);
+        // Default to the first available currency (sorted by balance desc), fallback to category base
+        if (loadedCurrencies.length > 0) {
+          setSfCurrencyCode(loadedCurrencies[0].code);
+        }
       })
       .catch(() => {/* non-critical */})
       .finally(() => setLoadingSchedules(false));
@@ -499,6 +511,11 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #888)' }}>
                       Следующее: {s.next_run_at}
                     </span>
+                    {s.last_error && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--tag-out-fg)' }}>
+                        Ошибка: {s.last_error}
+                      </span>
+                    )}
                   </div>
                   <button
                     className="btn btn--danger"
@@ -541,15 +558,15 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                       className="input"
                       value={sfCurrencyCode}
                       onChange={(e) => setSfCurrencyCode(e.target.value)}
-                      disabled={savingSchedule}
+                      disabled={savingSchedule || accountCurrencies.length === 0}
                       style={{ width: 90 }}
                     >
-                      {currencies.length === 0 && (
-                        <option value={category.currency_code}>{category.currency_code}</option>
-                      )}
-                      {currencies.map((c) => (
-                        <option key={c.code} value={c.code}>{c.code}</option>
-                      ))}
+                      {accountCurrencies.length === 0
+                        ? <option value={category.currency_code}>{category.currency_code}</option>
+                        : accountCurrencies.map((c) => (
+                            <option key={c.code} value={c.code}>{c.code}</option>
+                          ))
+                      }
                     </select>
                   </div>
 

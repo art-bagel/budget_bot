@@ -282,7 +282,13 @@ export interface ScheduledExpense {
   day_of_month: number | null;
   next_run_at: string;
   last_run_at: string | null;
+  last_error: string | null;
   is_active: boolean;
+}
+
+export interface AccountCurrency {
+  code: string;
+  amount: number;
 }
 
 export interface CreateScheduledExpenseRequest {

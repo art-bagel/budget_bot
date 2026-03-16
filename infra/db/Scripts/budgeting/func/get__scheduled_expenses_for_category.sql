@@ -31,6 +31,7 @@ BEGIN
                 'day_of_month',     se.day_of_month,
                 'next_run_at',      se.next_run_at,
                 'last_run_at',      se.last_run_at,
+                'last_error',       se.last_error,
                 'is_active',        se.is_active,
                 'created_at',       se.created_at
             )

@@ -21,6 +21,7 @@ async def run_scheduled_expenses(ledger_instance: Ledger) -> None:
 
     for item in due_items:
         schedule_id = item['id']
+        run_error: str | None = None
         try:
             await ledger_instance.put__record_expense(
                 user_id=item['created_by_user_id'],
@@ -32,11 +33,13 @@ async def run_scheduled_expenses(ledger_instance: Ledger) -> None:
             )
             logger.info('Scheduler: executed scheduled expense %d', schedule_id)
         except Exception as exc:
+            run_error = str(exc)
             logger.warning('Scheduler: scheduled expense %d failed: %s', schedule_id, exc)
         finally:
             # Always advance next_run_at so the record is not re-triggered every minute.
+            # Pass the error (if any) so it is stored and shown in the UI.
             try:
-                await ledger_instance.put__advance_scheduled_expense(schedule_id)
+                await ledger_instance.put__advance_scheduled_expense(schedule_id, run_error)
             except Exception as exc:
                 logger.error('Scheduler: failed to advance scheduled expense %d: %s', schedule_id, exc)
 

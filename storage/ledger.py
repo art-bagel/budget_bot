@@ -218,6 +218,7 @@ class Ledger(DataBase):
 
     F_GET__SCHEDULED_EXPENSES_FOR_CATEGORY = 'get__scheduled_expenses_for_category'
     F_GET__DUE_SCHEDULED_EXPENSES = 'get__due_scheduled_expenses'
+    F_GET__CATEGORY_ACCOUNT_CURRENCIES = 'get__category_account_currencies'
     F_PUT__CREATE_SCHEDULED_EXPENSE = 'put__create_scheduled_expense'
     F_PUT__DELETE_SCHEDULED_EXPENSE = 'put__delete_scheduled_expense'
     F_PUT__ADVANCE_SCHEDULED_EXPENSE = 'put__advance_scheduled_expense'
@@ -225,6 +226,14 @@ class Ledger(DataBase):
     async def get__scheduled_expenses_for_category(self, user_id: int, category_id: int) -> list:
         result = await self.call_function(
             self._fn(self.F_GET__SCHEDULED_EXPENSES_FOR_CATEGORY),
+            user_id,
+            category_id,
+        )
+        return result if result else []
+
+    async def get__category_account_currencies(self, user_id: int, category_id: int) -> list:
+        result = await self.call_function(
+            self._fn(self.F_GET__CATEGORY_ACCOUNT_CURRENCIES),
             user_id,
             category_id,
         )
@@ -266,10 +275,11 @@ class Ledger(DataBase):
             schedule_id,
         )
 
-    async def put__advance_scheduled_expense(self, schedule_id: int) -> str:
+    async def put__advance_scheduled_expense(self, schedule_id: int, error: Optional[str] = None) -> str:
         return await self.call_function(
             self._fn(self.F_PUT__ADVANCE_SCHEDULED_EXPENSE),
             schedule_id,
+            error,
         )
 
     async def put__reverse_operation(self, user_id: int, operation_id: int, comment: Optional[str] = None) -> dict:

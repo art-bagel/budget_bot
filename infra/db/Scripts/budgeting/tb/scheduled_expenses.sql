@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS budgeting.scheduled_expenses (
     day_of_month        smallint        CHECK (day_of_month BETWEEN 1 AND 31),
     next_run_at         date            NOT NULL,
     last_run_at         date,
+    last_error          text,
     is_active           boolean         NOT NULL DEFAULT TRUE,
     created_at          timestamptz     NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_scheduled_expenses_owner CHECK (
