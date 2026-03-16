@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -7,13 +8,20 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
 from backend.app.config import settings
-from backend.app.routers import auth, bank_accounts, categories, currencies, dashboard, families, groups, income_sources, operations, user_settings
+from backend.app.routers import auth, bank_accounts, categories, currencies, dashboard, families, groups, income_sources, operations, user_settings, scheduled_expenses
 from backend.app import storage as app_storage
+from backend.app.scheduler import scheduler_loop
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    scheduler_task = asyncio.create_task(scheduler_loop(app_storage.ledger))
     yield
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
     await app_storage.context.close()
     await app_storage.ledger.close()
     await app_storage.reports.close()
@@ -44,6 +52,7 @@ app.include_router(groups.router)
 app.include_router(income_sources.router)
 app.include_router(operations.router)
 app.include_router(user_settings.router)
+app.include_router(scheduled_expenses.router)
 
 
 @app.exception_handler(asyncpg.PostgresError)

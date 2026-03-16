@@ -47,6 +47,11 @@ FILES=(
     "set__leave_family.sql"
     "set__dissolve_family.sql"
     "set__delete_user_account.sql"
+    "get__scheduled_expenses_for_category.sql"
+    "get__due_scheduled_expenses.sql"
+    "put__create_scheduled_expense.sql"
+    "put__delete_scheduled_expense.sql"
+    "put__advance_scheduled_expense.sql"
 )
 
 for file_name in "${FILES[@]}"; do

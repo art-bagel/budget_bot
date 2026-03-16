@@ -259,6 +259,49 @@ export interface FamilyInvitation {
   responded_at?: string | null;
 }
 
+export interface BankAccount {
+  id: number;
+  name: string;
+  owner_type: string;
+  owner_user_id?: number | null;
+  owner_family_id?: number | null;
+  owner_name: string;
+  is_primary: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ScheduledExpense {
+  id: number;
+  category_id: number;
+  bank_account_id: number;
+  amount: number;
+  currency_code: string;
+  comment: string | null;
+  frequency: 'weekly' | 'monthly';
+  day_of_week: number | null;
+  day_of_month: number | null;
+  next_run_at: string;
+  last_run_at: string | null;
+  is_active: boolean;
+}
+
+export interface CreateScheduledExpenseRequest {
+  category_id: number;
+  bank_account_id: number;
+  amount: number;
+  currency_code: string;
+  frequency: 'weekly' | 'monthly';
+  day_of_week?: number;
+  day_of_month?: number;
+  comment?: string;
+}
+
+export interface CreateScheduledExpenseResponse {
+  id: number;
+  next_run_at: string;
+}
+
 export interface CreateFamilyResponse {
   family_id: number;
   name: string;

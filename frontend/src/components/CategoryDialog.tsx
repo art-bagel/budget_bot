@@ -7,13 +7,31 @@ import {
   fetchGroupMembers,
   replaceGroupMembers,
   updateCategory,
+  fetchBankAccounts,
+  fetchScheduledExpenses,
+  createScheduledExpense,
+  deleteScheduledExpense,
 } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
+  BankAccount,
   Category,
   DashboardBudgetCategory,
   ParentGroup,
+  ScheduledExpense,
 } from '../types';
+
+const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+function formatScheduleLabel(s: ScheduledExpense): string {
+  if (s.frequency === 'weekly' && s.day_of_week != null) {
+    return `Каждую неделю · ${DAY_NAMES[s.day_of_week - 1]}`;
+  }
+  if (s.frequency === 'monthly' && s.day_of_month != null) {
+    return `Каждый месяц · ${s.day_of_month}-го`;
+  }
+  return s.frequency;
+}
 
 
 interface GroupDraftRow {
@@ -67,6 +85,88 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
   const [loadingGroupSettings, setLoadingGroupSettings] = useState(false);
   const groupRequestIdRef = useRef(0);
   const parentGroupsRequestIdRef = useRef(0);
+
+  // --- Scheduled expenses ---
+  const [schedules, setSchedules] = useState<ScheduledExpense[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
+
+  const [sfBankAccountId, setSfBankAccountId] = useState('');
+  const [sfAmount, setSfAmount] = useState('');
+  const [sfFrequency, setSfFrequency] = useState<'weekly' | 'monthly'>('monthly');
+  const [sfDayOfWeek, setSfDayOfWeek] = useState(1);
+  const [sfDayOfMonth, setSfDayOfMonth] = useState(1);
+  const [sfComment, setSfComment] = useState('');
+
+  // Load schedules and bank accounts for regular categories
+  useEffect(() => {
+    if (category.kind !== 'regular') return;
+
+    setLoadingSchedules(true);
+    void Promise.all([
+      fetchScheduledExpenses(category.category_id),
+      fetchBankAccounts(),
+    ])
+      .then(([loadedSchedules, loadedAccounts]) => {
+        setSchedules(loadedSchedules);
+        // Keep only accounts that match the category's owner
+        const compatible = loadedAccounts.filter((acc) => {
+          if (acc.owner_type !== category.owner_type) return false;
+          if (category.owner_type === 'user') return acc.owner_user_id === category.owner_user_id;
+          return acc.owner_family_id === category.owner_family_id;
+        });
+        setBankAccounts(compatible);
+        if (compatible.length > 0) setSfBankAccountId(String(compatible[0].id));
+      })
+      .catch(() => {/* non-critical, schedule section stays empty */})
+      .finally(() => setLoadingSchedules(false));
+  }, [category.category_id, category.kind, category.owner_type, category.owner_user_id, category.owner_family_id]);
+
+  const handleAddSchedule = async () => {
+    if (!sfBankAccountId || !sfAmount || Number(sfAmount) <= 0) {
+      setScheduleError('Укажите счёт и сумму больше нуля.');
+      return;
+    }
+    setSavingSchedule(true);
+    setScheduleError(null);
+    try {
+      await createScheduledExpense({
+        category_id: category.category_id,
+        bank_account_id: Number(sfBankAccountId),
+        amount: Number(sfAmount),
+        currency_code: category.currency_code,
+        frequency: sfFrequency,
+        day_of_week: sfFrequency === 'weekly' ? sfDayOfWeek : undefined,
+        day_of_month: sfFrequency === 'monthly' ? sfDayOfMonth : undefined,
+        comment: sfComment.trim() || undefined,
+      });
+      const updated = await fetchScheduledExpenses(category.category_id);
+      setSchedules(updated);
+      setShowScheduleForm(false);
+      setSfAmount('');
+      setSfComment('');
+    } catch (reason: unknown) {
+      setScheduleError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const handleDeleteSchedule = async (scheduleId: number) => {
+    setDeletingScheduleId(scheduleId);
+    try {
+      await deleteScheduledExpense(scheduleId);
+      setSchedules((prev) => prev.filter((s) => s.id !== scheduleId));
+    } catch (reason: unknown) {
+      setScheduleError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingScheduleId(null);
+    }
+  };
 
   useEffect(() => {
     const requestId = parentGroupsRequestIdRef.current + 1;
@@ -316,6 +416,183 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                     Добавить категорию
                   </button>
                 </div>
+              )}
+            </>
+          )}
+
+          {category.kind === 'regular' && (
+            <>
+              <div className="operations-note" style={{ marginTop: 12 }}>
+                <strong>Расписание списаний</strong>
+              </div>
+
+              {loadingSchedules && (
+                <div className="form-row">
+                  <span className="tag tag--neutral">Загружаем...</span>
+                </div>
+              )}
+
+              {!loadingSchedules && schedules.map((s) => (
+                <div
+                  key={s.id}
+                  className="form-row"
+                  style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                    <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>
+                      {s.amount} {s.currency_code}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)' }}>
+                      {formatScheduleLabel(s)}
+                      {s.comment ? ` · ${s.comment}` : ''}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #888)' }}>
+                      Следующее: {s.next_run_at}
+                    </span>
+                  </div>
+                  <button
+                    className="btn btn--danger"
+                    type="button"
+                    style={{ flexShrink: 0 }}
+                    onClick={() => handleDeleteSchedule(s.id)}
+                    disabled={deletingScheduleId === s.id}
+                  >
+                    {deletingScheduleId === s.id ? '...' : 'Удалить'}
+                  </button>
+                </div>
+              ))}
+
+              {!loadingSchedules && !showScheduleForm && (
+                <div className="form-row">
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => { setShowScheduleForm(true); setScheduleError(null); }}
+                  >
+                    + Добавить расписание
+                  </button>
+                </div>
+              )}
+
+              {showScheduleForm && (
+                <>
+                  <div className="form-row">
+                    <select
+                      className="input"
+                      value={sfBankAccountId}
+                      onChange={(e) => setSfBankAccountId(e.target.value)}
+                      disabled={savingSchedule}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="">Выберите счёт</option>
+                      {bankAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-row">
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder={`Сумма, ${category.currency_code}`}
+                      value={sfAmount}
+                      onChange={(e) => setSfAmount(e.target.value)}
+                      disabled={savingSchedule}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+
+                  <div className="form-row">
+                    <button
+                      className={`btn${sfFrequency === 'monthly' ? ' btn--primary' : ''}`}
+                      type="button"
+                      onClick={() => setSfFrequency('monthly')}
+                      disabled={savingSchedule}
+                    >
+                      Ежемесячно
+                    </button>
+                    <button
+                      className={`btn${sfFrequency === 'weekly' ? ' btn--primary' : ''}`}
+                      type="button"
+                      onClick={() => setSfFrequency('weekly')}
+                      disabled={savingSchedule}
+                    >
+                      Еженедельно
+                    </button>
+                  </div>
+
+                  {sfFrequency === 'monthly' && (
+                    <div className="form-row" style={{ alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '0.9rem', whiteSpace: 'nowrap' }}>Число месяца:</span>
+                      <input
+                        className="input"
+                        type="number"
+                        min={1}
+                        max={28}
+                        value={sfDayOfMonth}
+                        onChange={(e) => setSfDayOfMonth(Number(e.target.value))}
+                        disabled={savingSchedule}
+                        style={{ width: 70 }}
+                      />
+                    </div>
+                  )}
+
+                  {sfFrequency === 'weekly' && (
+                    <div className="form-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+                      {DAY_NAMES.map((name, i) => (
+                        <button
+                          key={i}
+                          className={`btn${sfDayOfWeek === i + 1 ? ' btn--primary' : ''}`}
+                          type="button"
+                          onClick={() => setSfDayOfWeek(i + 1)}
+                          disabled={savingSchedule}
+                          style={{ minWidth: 40 }}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="Комментарий (необязательно)"
+                      value={sfComment}
+                      onChange={(e) => setSfComment(e.target.value)}
+                      disabled={savingSchedule}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+
+                  {scheduleError && (
+                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+                      {scheduleError}
+                    </p>
+                  )}
+
+                  <div className="form-row">
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={() => { setShowScheduleForm(false); setScheduleError(null); }}
+                      disabled={savingSchedule}
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      className="btn btn--primary"
+                      type="button"
+                      onClick={handleAddSchedule}
+                      disabled={savingSchedule || !sfBankAccountId || !sfAmount}
+                    >
+                      {savingSchedule ? '...' : 'Добавить'}
+                    </button>
+                  </div>
+                </>
               )}
             </>
           )}

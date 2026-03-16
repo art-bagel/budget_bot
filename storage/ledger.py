@@ -216,6 +216,64 @@ class Ledger(DataBase):
             comment,
         )
 
+    F_GET__SCHEDULED_EXPENSES_FOR_CATEGORY = 'get__scheduled_expenses_for_category'
+    F_GET__DUE_SCHEDULED_EXPENSES = 'get__due_scheduled_expenses'
+    F_PUT__CREATE_SCHEDULED_EXPENSE = 'put__create_scheduled_expense'
+    F_PUT__DELETE_SCHEDULED_EXPENSE = 'put__delete_scheduled_expense'
+    F_PUT__ADVANCE_SCHEDULED_EXPENSE = 'put__advance_scheduled_expense'
+
+    async def get__scheduled_expenses_for_category(self, user_id: int, category_id: int) -> list:
+        result = await self.call_function(
+            self._fn(self.F_GET__SCHEDULED_EXPENSES_FOR_CATEGORY),
+            user_id,
+            category_id,
+        )
+        return result if result else []
+
+    async def get__due_scheduled_expenses(self) -> list:
+        result = await self.call_function(
+            self._fn(self.F_GET__DUE_SCHEDULED_EXPENSES),
+        )
+        return result if result else []
+
+    async def put__create_scheduled_expense(
+        self,
+        user_id: int,
+        category_id: int,
+        bank_account_id: int,
+        amount: float,
+        currency_code: str,
+        frequency: str,
+        day_of_week: Optional[int] = None,
+        day_of_month: Optional[int] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_SCHEDULED_EXPENSE),
+            user_id,
+            category_id,
+            bank_account_id,
+            amount,
+            currency_code,
+            frequency,
+            day_of_week,
+            day_of_month,
+            comment,
+        )
+
+    async def put__delete_scheduled_expense(self, user_id: int, schedule_id: int) -> bool:
+        return await self.call_function(
+            self._fn(self.F_PUT__DELETE_SCHEDULED_EXPENSE),
+            user_id,
+            schedule_id,
+        )
+
+    async def put__advance_scheduled_expense(self, schedule_id: int) -> str:
+        return await self.call_function(
+            self._fn(self.F_PUT__ADVANCE_SCHEDULED_EXPENSE),
+            schedule_id,
+        )
+
     async def put__reverse_operation(self, user_id: int, operation_id: int, comment: Optional[str] = None) -> dict:
         """
         Создает reversal для операции.

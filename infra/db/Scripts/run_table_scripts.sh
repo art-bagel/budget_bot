@@ -22,6 +22,7 @@ FILES=(
     "fx_lots.sql"
     "lot_consumptions.sql"
     "fx_rate_snapshots.sql"
+    "scheduled_expenses.sql"
 )
 
 for file_name in "${FILES[@]}"; do

@@ -2,6 +2,7 @@ import type {
   UserContext,
   Category,
   Currency,
+  BankAccount,
   DashboardOverview,
   GroupMember,
   IncomeSource,
@@ -26,6 +27,9 @@ import type {
   CreateFamilyResponse,
   AccountTransferRequest,
   AccountTransferResponse,
+  ScheduledExpense,
+  CreateScheduledExpenseRequest,
+  CreateScheduledExpenseResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -320,5 +324,30 @@ export async function transferBetweenAccounts(data: AccountTransferRequest): Pro
   return apiFetch<AccountTransferResponse>('/operations/account-transfer', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function fetchBankAccounts(): Promise<BankAccount[]> {
+  return apiFetch<BankAccount[]>('/bank-accounts');
+}
+
+export async function fetchScheduledExpenses(categoryId: number): Promise<ScheduledExpense[]> {
+  return apiFetch<ScheduledExpense[]>(`/scheduled-expenses/?category_id=${categoryId}`);
+}
+
+export async function createScheduledExpense(
+  data: CreateScheduledExpenseRequest,
+): Promise<CreateScheduledExpenseResponse> {
+  return apiFetch<CreateScheduledExpenseResponse>('/scheduled-expenses/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteScheduledExpense(
+  scheduleId: number,
+): Promise<{ status: string; id: number }> {
+  return apiFetch<{ status: string; id: number }>(`/scheduled-expenses/${scheduleId}`, {
+    method: 'DELETE',
   });
 }
