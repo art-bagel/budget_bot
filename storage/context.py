@@ -115,6 +115,7 @@ class Context(DataBase):
         position_id: int,
         close_amount_in_currency: float,
         close_currency_code: str,
+        close_amount_in_base: Optional[float] = None,
         closed_at: Optional[str] = None,
         comment: Optional[str] = None,
     ) -> dict:
@@ -124,6 +125,7 @@ class Context(DataBase):
             position_id,
             close_amount_in_currency,
             close_currency_code,
+            close_amount_in_base,
             closed_at,
             comment,
         )

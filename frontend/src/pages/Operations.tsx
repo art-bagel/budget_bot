@@ -30,6 +30,7 @@ const ANALYTICS_COLOR_PALETTE = [
 const HISTORY_TYPE_OPTIONS = [
   { value: '', label: 'Все типы' },
   { value: 'income', label: 'Доход' },
+  { value: 'investment_trade', label: 'Сделка по инвестиции' },
   { value: 'investment_income', label: 'Доход по инвестициям' },
   { value: 'expense', label: 'Расход' },
   { value: 'allocate', label: 'Распределение по категории' },
@@ -266,6 +267,7 @@ function getOperationTitle(item: OperationHistoryItem): string {
   if (item.type === 'income') {
     return item.income_source_name ? 'Доход · ' + item.income_source_name : 'Доход';
   }
+  if (item.type === 'investment_trade') return 'Сделка по инвестиции';
   if (item.type === 'investment_income') return 'Доход по инвестициям';
   if (item.type === 'expense') return 'Расход';
   if (item.type === 'allocate') return 'Распределение по категории';
@@ -618,7 +620,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                             )}
                           </div>
                           <div className="history-side">
-                            {!item.has_reversal && item.type !== 'investment_income' && (
+                            {!item.has_reversal && item.type !== 'investment_income' && item.type !== 'investment_trade' && (
                               <button
                                 className="btn"
                                 type="button"

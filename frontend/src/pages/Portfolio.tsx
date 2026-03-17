@@ -29,6 +29,7 @@ type AccountWithBalances = {
 type CloseDraft = {
   amount: string;
   currencyCode: string;
+  baseAmount: string;
   closedAt: string;
   comment: string;
 };
@@ -69,6 +70,7 @@ function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
   return {
     amount: '',
     currencyCode: position.currency_code,
+    baseAmount: '',
     closedAt: todayIso(),
     comment: '',
   };
@@ -188,6 +190,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [positions],
   );
 
+  const selectedAccountBalances = useMemo(
+    () => accounts.find(({ account }) => String(account.id) === newInvestmentAccountId)?.balances ?? [],
+    [accounts, newInvestmentAccountId],
+  );
+
+  const selectedCurrencyBalance = useMemo(
+    () => selectedAccountBalances.find((balance) => balance.currency_code === newCurrencyCode)?.amount ?? 0,
+    [selectedAccountBalances, newCurrencyCode],
+  );
+
   const loadEventsForPosition = async (positionId: number) => {
     setEventsLoadingId(positionId);
     setEventsError(null);
@@ -217,6 +229,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const handleCreatePosition = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newInvestmentAccountId || !newTitle.trim() || !newAmount.trim() || submittingCreate) {
+      return;
+    }
+
+    if (Number(newAmount) > selectedCurrencyBalance) {
+      setCreateError('Недостаточно денег на инвестиционном счете для открытия позиции.');
       return;
     }
 
@@ -263,6 +280,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
       await closePortfolioPosition(positionId, {
         close_amount_in_currency: Number(draft.amount),
         close_currency_code: draft.currencyCode,
+        close_amount_in_base: draft.currencyCode === user.base_currency_code || !draft.baseAmount.trim()
+          ? undefined
+          : Number(draft.baseAmount),
         closed_at: draft.closedAt || undefined,
         comment: draft.comment.trim() || undefined,
       });
@@ -310,6 +330,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         ...(prev[positionId] ?? {
           amount: '',
           currencyCode: positions.find((position) => position.id === positionId)?.currency_code ?? user.base_currency_code,
+          baseAmount: '',
           closedAt: todayIso(),
           comment: '',
         }),
@@ -532,6 +553,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   onChange={(event) => setNewOpenedAt(event.target.value)}
                   disabled={submittingCreate}
                 />
+                <span className="list-row__sub">
+                  Доступно: {formatAmount(selectedCurrencyBalance, newCurrencyCode)}
+                </span>
               </div>
 
               <div className="form-row">
@@ -714,6 +738,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             disabled={submittingCloseId === position.id}
                           />
                         </div>
+                        {closeDraft.currencyCode !== user.base_currency_code && (
+                          <div className="form-row">
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder={`Историческая стоимость в ${user.base_currency_code}`}
+                              value={closeDraft.baseAmount}
+                              onChange={(event) => handleCloseDraftChange(position.id, { baseAmount: event.target.value })}
+                              disabled={submittingCloseId === position.id}
+                              style={{ width: 260 }}
+                            />
+                            <span className="list-row__sub">
+                              Нужна, чтобы вернуть валюту на счет с корректной себестоимостью.
+                            </span>
+                          </div>
+                        )}
                         <div className="form-row">
                           <input
                             className="input"

@@ -336,6 +336,7 @@ export interface CreatePortfolioPositionRequest {
 export interface ClosePortfolioPositionRequest {
   close_amount_in_currency: number;
   close_currency_code: string;
+  close_amount_in_base?: number;
   closed_at?: string;
   comment?: string;
 }

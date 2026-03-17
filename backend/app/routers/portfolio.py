@@ -63,6 +63,7 @@ class CreatePortfolioPositionRequest(BaseModel):
 class ClosePortfolioPositionRequest(BaseModel):
     close_amount_in_currency: float
     close_currency_code: str
+    close_amount_in_base: float | None = None
     closed_at: date | None = None
     comment: str | None = None
 
@@ -126,6 +127,7 @@ async def close_portfolio_position(
         position_id=position_id,
         close_amount_in_currency=body.close_amount_in_currency,
         close_currency_code=body.close_currency_code,
+        close_amount_in_base=body.close_amount_in_base,
         closed_at=body.closed_at,
         comment=body.comment,
     )

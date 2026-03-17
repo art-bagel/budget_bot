@@ -3,6 +3,7 @@ CREATE OR REPLACE FUNCTION budgeting.put__close_portfolio_position(
     _position_id bigint,
     _close_amount_in_currency numeric,
     _close_currency_code char(3),
+    _close_amount_in_base numeric DEFAULT NULL,
     _closed_at date DEFAULT CURRENT_DATE,
     _comment text DEFAULT NULL
 )
@@ -15,6 +16,12 @@ DECLARE
     _owner_family_id bigint;
     _status text;
     _quantity numeric(20, 8);
+    _investment_account_id bigint;
+    _title text;
+    _base_currency_code char(3);
+    _effective_close_amount_in_base numeric(20, 2);
+    _operation_id bigint;
+    _operation_comment text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -22,8 +29,8 @@ BEGIN
         RAISE EXCEPTION 'Close amount must be positive';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, status, quantity
-    INTO _owner_type, _owner_user_id, _owner_family_id, _status, _quantity
+    SELECT owner_type, owner_user_id, owner_family_id, status, quantity, investment_account_id, title
+    INTO _owner_type, _owner_user_id, _owner_family_id, _status, _quantity, _investment_account_id, _title
     FROM portfolio_positions
     WHERE id = _position_id;
 
@@ -45,6 +52,85 @@ BEGIN
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Unknown currency code: %', _close_currency_code;
+    END IF;
+
+    PERFORM 1
+    FROM bank_accounts
+    WHERE id = _investment_account_id
+      AND is_active
+      AND account_kind = 'investment';
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Active investment account is missing for portfolio position %', _position_id;
+    END IF;
+
+    _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
+
+    IF _close_currency_code = _base_currency_code THEN
+        _effective_close_amount_in_base := round(_close_amount_in_currency, 2);
+    ELSE
+        IF _close_amount_in_base IS NULL OR _close_amount_in_base <= 0 THEN
+            RAISE EXCEPTION 'Historical base amount is required for non-base currency close amount';
+        END IF;
+
+        _effective_close_amount_in_base := round(_close_amount_in_base, 2);
+    END IF;
+
+    _operation_comment := 'Закрытие позиции · ' || _title;
+    IF NULLIF(btrim(_comment), '') IS NOT NULL THEN
+        _operation_comment := _operation_comment || ' · ' || NULLIF(btrim(_comment), '');
+    END IF;
+
+    INSERT INTO operations (
+        actor_user_id,
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        type,
+        comment
+    )
+    VALUES (
+        _user_id,
+        _owner_type,
+        _owner_user_id,
+        _owner_family_id,
+        'investment_trade',
+        _operation_comment
+    )
+    RETURNING id
+    INTO _operation_id;
+
+    INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
+    VALUES (_operation_id, _investment_account_id, _close_currency_code, _close_amount_in_currency);
+
+    PERFORM budgeting.put__apply_current_bank_delta(
+        _investment_account_id,
+        _close_currency_code,
+        _close_amount_in_currency,
+        _effective_close_amount_in_base
+    );
+
+    IF _close_currency_code <> _base_currency_code THEN
+        INSERT INTO fx_lots (
+            bank_account_id,
+            currency_code,
+            amount_initial,
+            amount_remaining,
+            buy_rate_in_base,
+            cost_base_initial,
+            cost_base_remaining,
+            opened_by_operation_id
+        )
+        VALUES (
+            _investment_account_id,
+            _close_currency_code,
+            _close_amount_in_currency,
+            _close_amount_in_currency,
+            _effective_close_amount_in_base / _close_amount_in_currency,
+            _effective_close_amount_in_base,
+            _effective_close_amount_in_base,
+            _operation_id
+        );
     END IF;
 
     UPDATE portfolio_positions
@@ -74,9 +160,9 @@ BEGIN
         _quantity,
         _close_amount_in_currency,
         _close_currency_code,
-        NULL,
+        _operation_id,
         NULLIF(btrim(_comment), ''),
-        '{}'::jsonb,
+        jsonb_build_object('amount_in_base', _effective_close_amount_in_base),
         _user_id
     );
 
