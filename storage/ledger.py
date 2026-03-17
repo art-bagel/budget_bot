@@ -8,6 +8,7 @@ class Ledger(DataBase):
 
     F_PUT__RECORD_FX_RATE_SNAPSHOT = 'put__record_fx_rate_snapshot'
     F_PUT__RECORD_INCOME = 'put__record_income'
+    F_PUT__RECORD_PORTFOLIO_INCOME = 'put__record_portfolio_income'
     F_PUT__ALLOCATE_BUDGET = 'put__allocate_budget'
     F_PUT__ALLOCATE_GROUP_BUDGET = 'put__allocate_group_budget'
     F_PUT__EXCHANGE_CURRENCY = 'put__exchange_currency'
@@ -69,6 +70,29 @@ class Ledger(DataBase):
             currency_code,
             income_source_id,
             budget_amount_in_base,
+            comment,
+        )
+
+    async def put__record_portfolio_income(
+        self,
+        user_id: int,
+        position_id: int,
+        amount: float,
+        currency_code: str,
+        amount_in_base: Optional[float] = None,
+        income_kind: Optional[str] = None,
+        received_at: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__RECORD_PORTFOLIO_INCOME),
+            user_id,
+            position_id,
+            amount,
+            currency_code,
+            amount_in_base,
+            income_kind,
+            received_at,
             comment,
         )
 

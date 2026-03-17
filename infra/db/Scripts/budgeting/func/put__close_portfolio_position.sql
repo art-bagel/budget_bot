@@ -62,6 +62,7 @@ BEGIN
         quantity,
         amount,
         currency_code,
+        linked_operation_id,
         comment,
         metadata,
         created_by_user_id
@@ -73,6 +74,7 @@ BEGIN
         _quantity,
         _close_amount_in_currency,
         _close_currency_code,
+        NULL,
         NULLIF(btrim(_comment), ''),
         '{}'::jsonb,
         _user_id

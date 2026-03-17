@@ -40,6 +40,8 @@ import type {
   PortfolioEvent,
   CreatePortfolioPositionRequest,
   ClosePortfolioPositionRequest,
+  RecordPortfolioIncomeRequest,
+  RecordPortfolioIncomeResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -410,6 +412,16 @@ export async function closePortfolioPosition(
 
 export async function fetchPortfolioEvents(positionId: number): Promise<PortfolioEvent[]> {
   return apiFetch<PortfolioEvent[]>(`/portfolio/positions/${positionId}/events`);
+}
+
+export async function recordPortfolioIncome(
+  positionId: number,
+  data: RecordPortfolioIncomeRequest,
+): Promise<RecordPortfolioIncomeResponse> {
+  return apiFetch<RecordPortfolioIncomeResponse>(`/portfolio/positions/${positionId}/income`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function fetchIncomeSourcePattern(incomeSourceId: number): Promise<IncomePattern | null> {

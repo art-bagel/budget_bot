@@ -309,11 +309,12 @@ export interface PortfolioPosition {
 export interface PortfolioEvent {
   id: number;
   position_id: number;
-  event_type: 'open' | 'close';
+  event_type: 'open' | 'close' | 'income';
   event_at: string;
   quantity?: number | null;
   amount?: number | null;
   currency_code?: string | null;
+  linked_operation_id?: number | null;
   comment?: string | null;
   metadata: Record<string, unknown>;
   created_by_user_id: number;
@@ -337,6 +338,21 @@ export interface ClosePortfolioPositionRequest {
   close_currency_code: string;
   closed_at?: string;
   comment?: string;
+}
+
+export interface RecordPortfolioIncomeRequest {
+  amount: number;
+  currency_code: string;
+  amount_in_base?: number;
+  income_kind?: string;
+  received_at?: string;
+  comment?: string;
+}
+
+export interface RecordPortfolioIncomeResponse {
+  operation_id: number;
+  amount_in_base: number;
+  base_currency_code: string;
 }
 
 export interface ScheduledExpense {

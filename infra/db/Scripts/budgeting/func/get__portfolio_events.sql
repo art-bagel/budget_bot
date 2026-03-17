@@ -27,20 +27,21 @@ BEGIN
     END IF;
 
     SELECT COALESCE(
-        jsonb_agg(
-            jsonb_build_object(
-                'id', pe.id,
-                'position_id', pe.position_id,
-                'event_type', pe.event_type,
-                'event_at', pe.event_at,
-                'quantity', pe.quantity,
-                'amount', pe.amount,
-                'currency_code', pe.currency_code,
-                'comment', pe.comment,
-                'metadata', pe.metadata,
-                'created_by_user_id', pe.created_by_user_id,
-                'created_at', pe.created_at
-            )
+            jsonb_agg(
+                jsonb_build_object(
+                    'id', pe.id,
+                    'position_id', pe.position_id,
+                    'event_type', pe.event_type,
+                    'event_at', pe.event_at,
+                    'quantity', pe.quantity,
+                    'amount', pe.amount,
+                    'currency_code', pe.currency_code,
+                    'linked_operation_id', pe.linked_operation_id,
+                    'comment', pe.comment,
+                    'metadata', pe.metadata,
+                    'created_by_user_id', pe.created_by_user_id,
+                    'created_at', pe.created_at
+                )
             ORDER BY pe.event_at DESC, pe.id DESC
         ),
         '[]'::jsonb

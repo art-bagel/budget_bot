@@ -8,6 +8,7 @@ import {
   fetchCurrencies,
   fetchPortfolioEvents,
   fetchPortfolioPositions,
+  recordPortfolioIncome,
 } from '../api';
 import type {
   BankAccount,
@@ -29,6 +30,15 @@ type CloseDraft = {
   amount: string;
   currencyCode: string;
   closedAt: string;
+  comment: string;
+};
+
+type IncomeDraft = {
+  amount: string;
+  currencyCode: string;
+  baseAmount: string;
+  incomeKind: string;
+  receivedAt: string;
   comment: string;
 };
 
@@ -64,6 +74,32 @@ function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
   };
 }
 
+function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
+  return {
+    amount: '',
+    currencyCode: position.currency_code,
+    baseAmount: '',
+    incomeKind: position.asset_type_code === 'deposit' ? 'interest' : 'dividend',
+    receivedAt: todayIso(),
+    comment: '',
+  };
+}
+
+function canRecordPositionIncome(position: PortfolioPosition): boolean {
+  return position.asset_type_code === 'security' || position.asset_type_code === 'deposit';
+}
+
+function getEventLabel(item: PortfolioEvent): string {
+  if (item.event_type === 'income') {
+    const incomeKind = typeof item.metadata?.income_kind === 'string' ? item.metadata.income_kind : 'income';
+    if (incomeKind === 'dividend') return 'DIVIDEND';
+    if (incomeKind === 'interest') return 'INTEREST';
+    return 'INCOME';
+  }
+
+  return item.event_type.toUpperCase();
+}
+
 
 export default function Portfolio({ user }: { user: UserContext }) {
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
@@ -72,14 +108,17 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [loading, setLoading] = useState(true);
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
+  const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const [incomeError, setIncomeError] = useState<string | null>(null);
   const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [closeDrafts, setCloseDrafts] = useState<Record<number, CloseDraft>>({});
+  const [incomeDrafts, setIncomeDrafts] = useState<Record<number, IncomeDraft>>({});
   const [newInvestmentAccountId, setNewInvestmentAccountId] = useState('');
   const [newAssetTypeCode, setNewAssetTypeCode] = useState<(typeof ASSET_TYPE_OPTIONS)[number]['value']>('security');
   const [newTitle, setNewTitle] = useState('');
@@ -252,6 +291,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
     ));
   };
 
+  const handleOpenIncomeForm = (position: PortfolioPosition) => {
+    setIncomeError(null);
+    setIncomeDrafts((prev) => (
+      prev[position.id]
+        ? prev
+        : { ...prev, [position.id]: createInitialIncomeDraft(position) }
+    ));
+  };
+
   const handleCloseDraftChange = (
     positionId: number,
     patch: Partial<CloseDraft>,
@@ -268,6 +316,74 @@ export default function Portfolio({ user }: { user: UserContext }) {
         ...patch,
       },
     }));
+  };
+
+  const handleIncomeDraftChange = (
+    positionId: number,
+    patch: Partial<IncomeDraft>,
+  ) => {
+    setIncomeDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...(prev[positionId] ?? createInitialIncomeDraft(
+          positions.find((position) => position.id === positionId) ?? {
+            id: positionId,
+            investment_account_id: 0,
+            investment_account_name: '',
+            investment_account_owner_type: 'user',
+            investment_account_owner_name: '',
+            asset_type_code: 'security',
+            title: '',
+            status: 'open',
+            amount_in_currency: 0,
+            currency_code: user.base_currency_code,
+            opened_at: todayIso(),
+            metadata: {},
+            created_by_user_id: user.user_id,
+            created_at: '',
+          },
+        )),
+        ...patch,
+      },
+    }));
+  };
+
+  const handleRecordIncome = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = incomeDrafts[position.id];
+
+    if (!draft || !draft.amount.trim() || submittingIncomeId === position.id) {
+      return;
+    }
+
+    setSubmittingIncomeId(position.id);
+    setIncomeError(null);
+
+    try {
+      await recordPortfolioIncome(position.id, {
+        amount: Number(draft.amount),
+        currency_code: draft.currencyCode,
+        amount_in_base: draft.currencyCode === user.base_currency_code || !draft.baseAmount.trim()
+          ? undefined
+          : Number(draft.baseAmount),
+        income_kind: draft.incomeKind,
+        received_at: draft.receivedAt || undefined,
+        comment: draft.comment.trim() || undefined,
+      });
+      setIncomeDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      if (selectedPositionId === position.id) {
+        await loadEventsForPosition(position.id);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setIncomeError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingIncomeId(null);
+    }
   };
 
   if (loading) {
@@ -503,6 +619,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <div className="dashboard-budget-sections">
               {openPositions.map((position) => {
                 const closeDraft = closeDrafts[position.id];
+                const incomeDraft = incomeDrafts[position.id];
                 const events = eventsByPosition[position.id] ?? [];
 
                 return (
@@ -546,6 +663,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       >
                         Закрыть позицию
                       </button>
+                      {canRecordPositionIncome(position) && (
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => handleOpenIncomeForm(position)}
+                        >
+                          Начислить доход
+                        </button>
+                      )}
                       <button
                         className="btn"
                         type="button"
@@ -609,6 +735,96 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       </form>
                     )}
 
+                    {incomeDraft && (
+                      <form onSubmit={(event) => void handleRecordIncome(position, event)}>
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder={position.asset_type_code === 'deposit' ? 'Сумма процентов' : 'Сумма дивидендов'}
+                            value={incomeDraft.amount}
+                            onChange={(event) => handleIncomeDraftChange(position.id, { amount: event.target.value })}
+                            disabled={submittingIncomeId === position.id}
+                            style={{ width: 180 }}
+                          />
+                          <select
+                            className="input"
+                            value={incomeDraft.currencyCode}
+                            onChange={(event) => handleIncomeDraftChange(position.id, { currencyCode: event.target.value })}
+                            disabled={submittingIncomeId === position.id}
+                          >
+                            {currencies.map((currency) => (
+                              <option key={currency.code} value={currency.code}>
+                                {currency.code}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="input"
+                            value={incomeDraft.incomeKind}
+                            onChange={(event) => handleIncomeDraftChange(position.id, { incomeKind: event.target.value })}
+                            disabled={submittingIncomeId === position.id}
+                          >
+                            {position.asset_type_code === 'deposit' ? (
+                              <>
+                                <option value="interest">Проценты</option>
+                                <option value="other">Другой доход</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="dividend">Дивиденды</option>
+                                <option value="coupon">Купон</option>
+                                <option value="other">Другой доход</option>
+                              </>
+                            )}
+                          </select>
+                          <input
+                            className="input"
+                            type="date"
+                            value={incomeDraft.receivedAt}
+                            onChange={(event) => handleIncomeDraftChange(position.id, { receivedAt: event.target.value })}
+                            disabled={submittingIncomeId === position.id}
+                          />
+                        </div>
+                        {incomeDraft.currencyCode !== user.base_currency_code && (
+                          <div className="form-row">
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder={`Историческая стоимость в ${user.base_currency_code}`}
+                              value={incomeDraft.baseAmount}
+                              onChange={(event) => handleIncomeDraftChange(position.id, { baseAmount: event.target.value })}
+                              disabled={submittingIncomeId === position.id}
+                              style={{ width: 260 }}
+                            />
+                            <span className="list-row__sub">
+                              Нужна для сохранения себестоимости дохода в базовой валюте.
+                            </span>
+                          </div>
+                        )}
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            placeholder="Комментарий к доходу"
+                            value={incomeDraft.comment}
+                            onChange={(event) => handleIncomeDraftChange(position.id, { comment: event.target.value })}
+                            disabled={submittingIncomeId === position.id}
+                            style={{ flex: '1 1 280px' }}
+                          />
+                          <button
+                            className="btn btn--primary"
+                            type="submit"
+                            disabled={submittingIncomeId === position.id}
+                          >
+                            {submittingIncomeId === position.id ? 'Начисляем...' : 'Подтвердить доход'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
                     {selectedPositionId === position.id && (
                       <div style={{ marginTop: 12 }}>
                         {eventsError && (
@@ -623,7 +839,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             {events.map((item) => (
                               <li className="bank-detail-row" key={item.id}>
                                 <div className="bank-detail-row__main">
-                                  <span className="pill">{item.event_type.toUpperCase()}</span>
+                                  <span className="pill">{getEventLabel(item)}</span>
                                   <strong className="bank-detail-row__amount">
                                     {item.amount && item.currency_code
                                       ? formatAmount(item.amount, item.currency_code)
@@ -633,6 +849,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 <div className="bank-detail-row__sub">
                                   {formatDateLabel(item.event_at)}
                                   {item.quantity ? ` · Количество: ${item.quantity}` : ''}
+                                  {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
                                   {item.comment ? ` · ${item.comment}` : ''}
                                 </div>
                               </li>
@@ -650,6 +867,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
           {closeError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
               {closeError}
+            </p>
+          )}
+
+          {incomeError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
+              {incomeError}
             </p>
           )}
         </div>
@@ -695,8 +918,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
         <div className="panel">
           <p className="list-row__sub">
-            Базовые ручные позиции и их открытие/закрытие уже готовы. Следом логично добавить события дохода:
-            дивиденды, проценты и пополнения позиции без закрытия.
+            Базовые ручные позиции, закрытие и начисление дохода уже готовы. Следом логично добавить
+            пополнение позиции без закрытия и отдельную инвестиционную вкладку в истории операций.
           </p>
         </div>
       </section>

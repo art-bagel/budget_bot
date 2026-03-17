@@ -129,17 +129,17 @@
   - [ ] `price nullable`
   - [ ] `amount nullable`
   - [ ] `currency_code`
-  - [ ] `linked_operation_id nullable`
+  - [x] `linked_operation_id nullable`
   - [ ] `comment nullable`
   - [ ] `metadata jsonb`
   - [ ] `created_by_user_id`
   - [ ] `created_at`
 - [ ] Начальные типы событий:
-  - [ ] `open`
+  - [x] `open`
   - [ ] `top_up`
   - [ ] `partial_close`
-  - [ ] `close`
-  - [ ] `income`
+  - [x] `close`
+  - [x] `income`
   - [ ] `fee`
   - [ ] `adjustment`
 - [ ] В `metadata` поддержать будущие поля без миграций
@@ -158,13 +158,13 @@
 - [ ] Добавить типы верхнего уровня:
   - [ ] `investment_transfer`
   - [ ] `investment_trade`
-  - [ ] `investment_income`
+  - [x] `investment_income`
   - [ ] `investment_adjustment`
 - [ ] Обновить:
-  - [ ] check constraint в `operations`
-  - [ ] `get__operations_history`
+  - [x] check constraint в `operations`
+  - [x] `get__operations_history`
   - [ ] аналитические SQL-функции
-  - [ ] frontend фильтры операций
+  - [x] frontend фильтры операций
 
 ### 8. Transfer Rules Between Cash and Investment
 
@@ -201,7 +201,7 @@
 
 ### 10. Storage Layer
 
-- [ ] Добавить новые методы в `storage/ledger.py`
+- [x] Добавить новые методы в `storage/ledger.py`
 - [x] Добавить новые методы в `storage/reports.py`
 - [ ] Сохранить существующий стиль: SQL functions как основной write/read слой
 
@@ -212,9 +212,9 @@
 - [ ] `put__transfer_from_investment_account`
 - [x] `put__open_portfolio_position`
 - [x] `put__close_portfolio_position`
-- [ ] `put__record_portfolio_income`
+- [x] `put__record_portfolio_income`
 - [ ] `put__record_portfolio_event`
-- [ ] `put__reverse_investment_operation` или явное решение временно не поддерживать reversal
+- [x] `put__reverse_investment_operation` или явное решение временно не поддерживать reversal
 
 ### 12. SQL Read Functions
 
@@ -233,11 +233,11 @@
 - [ ] `GET /api/v1/portfolio/accounts`
 - [ ] `POST /api/v1/portfolio/accounts`
   - [ ] `GET /api/v1/portfolio/summary`
-  - [ ] `GET /api/v1/portfolio/positions`
-  - [ ] `POST /api/v1/portfolio/positions`
-  - [ ] `POST /api/v1/portfolio/positions/{id}/close`
-  - [ ] `POST /api/v1/portfolio/positions/{id}/income`
-  - [ ] `GET /api/v1/portfolio/positions/{id}/events`
+  - [x] `GET /api/v1/portfolio/positions`
+  - [x] `POST /api/v1/portfolio/positions`
+  - [x] `POST /api/v1/portfolio/positions/{id}/close`
+  - [x] `POST /api/v1/portfolio/positions/{id}/income`
+  - [x] `GET /api/v1/portfolio/positions/{id}/events`
   - [ ] `POST /api/v1/portfolio/transfers/in`
   - [ ] `POST /api/v1/portfolio/transfers/out`
 - [x] Подключить router в [main.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend/app/main.py)
@@ -282,7 +282,7 @@
   - [ ] по статусу
 - [ ] Карточка позиции с действиями:
   - [x] `Закрыть`
-  - [ ] `Начислить доход`
+  - [x] `Начислить доход`
   - [x] `Добавить событие`
 
 ### 18. Position Creation UX
@@ -408,7 +408,7 @@
 - [x] `portfolio_events`
 - [x] создание позиции вручную
 - [x] закрытие позиции
-- [ ] начисление дохода
+- [x] начисление дохода
 - [x] страница `Портфель`
 
 ### Phase 3. Operations Integration
@@ -446,4 +446,4 @@
 - [x] добавить новую страницу `Портфель`
 - [x] добавить простую ручную позицию с типом `security | deposit | crypto`
 - [x] добавить `close position`
-- [ ] добавить `record income`
+- [x] добавить `record income`

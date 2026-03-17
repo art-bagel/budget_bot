@@ -40,6 +40,10 @@ BEGIN
         RAISE EXCEPTION 'Reversal operation cannot be reversed';
     END IF;
 
+    IF _original_type = 'investment_income' THEN
+        RAISE EXCEPTION 'Investment income reversal is not supported yet';
+    END IF;
+
     PERFORM 1
     FROM operations
     WHERE reversal_of_operation_id = _operation_id;

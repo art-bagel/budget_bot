@@ -30,6 +30,7 @@ const ANALYTICS_COLOR_PALETTE = [
 const HISTORY_TYPE_OPTIONS = [
   { value: '', label: 'Все типы' },
   { value: 'income', label: 'Доход' },
+  { value: 'investment_income', label: 'Доход по инвестициям' },
   { value: 'expense', label: 'Расход' },
   { value: 'allocate', label: 'Распределение по категории' },
   { value: 'group_allocate', label: 'Распределение по группе' },
@@ -265,6 +266,7 @@ function getOperationTitle(item: OperationHistoryItem): string {
   if (item.type === 'income') {
     return item.income_source_name ? 'Доход · ' + item.income_source_name : 'Доход';
   }
+  if (item.type === 'investment_income') return 'Доход по инвестициям';
   if (item.type === 'expense') return 'Расход';
   if (item.type === 'allocate') return 'Распределение по категории';
   if (item.type === 'group_allocate') return 'Распределение по группе';
@@ -602,7 +604,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                         className={[
                           'list-row',
                           'list-row--history',
-                          item.type === 'income' ? 'list-row--history-income' : '',
+                          item.type === 'income' || item.type === 'investment_income' ? 'list-row--history-income' : '',
                           item.type === 'expense' ? 'list-row--history-expense' : '',
                           item.type === 'exchange' ? 'list-row--history-exchange' : '',
                         ].filter(Boolean).join(' ')}
@@ -616,7 +618,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                             )}
                           </div>
                           <div className="history-side">
-                            {!item.has_reversal && (
+                            {!item.has_reversal && item.type !== 'investment_income' && (
                               <button
                                 className="btn"
                                 type="button"

@@ -33,6 +33,7 @@ BEGIN
            'exchange',
            'expense',
            'account_transfer',
+           'investment_income',
            'reversal'
        ) THEN
         RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;

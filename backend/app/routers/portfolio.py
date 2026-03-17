@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
-from backend.app.storage import context, reports
+from backend.app.storage import context, ledger, reports
 
 
 router = APIRouter(prefix='/api/v1/portfolio', tags=['portfolio'])
@@ -36,11 +36,12 @@ class PortfolioPositionItem(BaseModel):
 class PortfolioEventItem(BaseModel):
     id: int
     position_id: int
-    event_type: Literal['open', 'close']
+    event_type: Literal['open', 'close', 'income']
     event_at: date
     quantity: float | None = None
     amount: float | None = None
     currency_code: str | None = None
+    linked_operation_id: int | None = None
     comment: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_by_user_id: int
@@ -64,6 +65,21 @@ class ClosePortfolioPositionRequest(BaseModel):
     close_currency_code: str
     closed_at: date | None = None
     comment: str | None = None
+
+
+class RecordPortfolioIncomeRequest(BaseModel):
+    amount: float
+    currency_code: str
+    amount_in_base: float | None = None
+    income_kind: str | None = None
+    received_at: date | None = None
+    comment: str | None = None
+
+
+class RecordPortfolioIncomeResponse(BaseModel):
+    operation_id: int
+    amount_in_base: float
+    base_currency_code: str
 
 
 @router.get('/positions', response_model=List[PortfolioPositionItem])
@@ -114,6 +130,25 @@ async def close_portfolio_position(
         comment=body.comment,
     )
     return PortfolioPositionItem(**result)
+
+
+@router.post('/positions/{position_id}/income', response_model=RecordPortfolioIncomeResponse)
+async def record_portfolio_income(
+    position_id: int,
+    body: RecordPortfolioIncomeRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> RecordPortfolioIncomeResponse:
+    result = await ledger.put__record_portfolio_income(
+        user_id=user.user_id,
+        position_id=position_id,
+        amount=body.amount,
+        currency_code=body.currency_code,
+        amount_in_base=body.amount_in_base,
+        income_kind=body.income_kind,
+        received_at=body.received_at,
+        comment=body.comment,
+    )
+    return RecordPortfolioIncomeResponse(**result)
 
 
 @router.get('/positions/{position_id}/events', response_model=List[PortfolioEventItem])
