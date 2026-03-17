@@ -332,7 +332,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                       </div>
 
                       {patternLines.map((line) => (
-                        <div key={line.key} className="form-row form-row--group-editor" style={{ padding: '3px 0' }}>
+                        <div key={line.key} className="form-row form-row--group-editor" style={{ padding: '2px 0' }}>
                           <select
                             className="input"
                             value={line.bank_account_id}
@@ -340,6 +340,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                               prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
                             )}
                             disabled={savingPattern}
+                            style={{ fontSize: '0.78rem', padding: '5px 28px 5px 10px' }}
                           >
                             <option value="">Выбери счёт</option>
                             {bankAccounts.map((ba) => (
@@ -349,7 +350,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             ))}
                           </select>
 
-                          <div style={{ position: 'relative', width: 58, flexShrink: 0 }}>
+                          <div style={{ position: 'relative', width: 54, flexShrink: 0 }}>
                             <input
                               className="input"
                               type="text"
@@ -360,11 +361,11 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                                 prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
                               )}
                               disabled={savingPattern}
-                              style={{ width: '100%', paddingLeft: 8, paddingRight: 20, textAlign: 'right' }}
+                              style={{ width: '100%', fontSize: '0.78rem', padding: '5px 18px 5px 8px', textAlign: 'right' }}
                             />
                             <span style={{
-                              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                              fontSize: '0.78rem', color: 'var(--text-secondary)', pointerEvents: 'none',
+                              position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+                              fontSize: '0.72rem', color: 'var(--text-secondary)', pointerEvents: 'none',
                             }}>%</span>
                           </div>
 
@@ -373,6 +374,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             type="button"
                             onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
                             disabled={savingPattern || patternLines.length === 1}
+                            style={{ fontSize: '0.78rem', padding: '5px 10px' }}
                           >
                             Убрать
                           </button>
@@ -385,6 +387,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                           type="button"
                           onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
                           disabled={savingPattern}
+                          style={{ fontSize: '0.78rem', padding: '5px 10px' }}
                         >
                           + Добавить счёт
                         </button>
@@ -395,7 +398,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                       </div>
 
                       {patternError && (
-                        <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.82rem', marginBottom: 8 }}>
+                        <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.75rem', marginBottom: 6 }}>
                           {patternError}
                         </p>
                       )}
@@ -407,7 +410,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             type="button"
                             onClick={handleDeletePattern}
                             disabled={savingPattern || deletingPattern}
-                            style={{ marginRight: 'auto' }}
+                            style={{ fontSize: '0.78rem', padding: '5px 10px', marginRight: 'auto' }}
                           >
                             {deletingPattern ? '...' : 'Удалить'}
                           </button>
@@ -418,6 +421,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             type="button"
                             onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
                             disabled={savingPattern}
+                            style={{ fontSize: '0.78rem', padding: '5px 12px' }}
                           >
                             Отмена
                           </button>
@@ -425,6 +429,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             className="action-pill__confirm"
                             type="button"
                             onClick={handleSavePattern}
+                            style={{ fontSize: '0.78rem', padding: '5px 12px' }}
                             disabled={savingPattern}
                           >
                             {savingPattern ? '...' : 'Сохранить'}
