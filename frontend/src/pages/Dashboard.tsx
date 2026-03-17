@@ -754,9 +754,23 @@ export default function Dashboard({ user }: { user: UserContext }) {
               ) : (
                 <ul className="groups-list">
                   {[
-                    ...[...personalGroups].sort((a, b) => (groupMembersByGroupId[b.category_id]?.length ?? 0) - (groupMembersByGroupId[a.category_id]?.length ?? 0)),
+                    ...[...personalGroups].sort((a, b) => {
+                      const aMembers = groupMembersByGroupId[a.category_id] ?? [];
+                      const bMembers = groupMembersByGroupId[b.category_id] ?? [];
+                      if (bMembers.length !== aMembers.length) return bMembers.length - aMembers.length;
+                      const aSubGroups = aMembers.filter((m) => m.child_category_kind === 'group').length;
+                      const bSubGroups = bMembers.filter((m) => m.child_category_kind === 'group').length;
+                      return bSubGroups - aSubGroups;
+                    }),
                     ...(hasFamily && familyGroups.length > 0 && personalGroups.length > 0 ? [null] : []),
-                    ...[...familyGroups].sort((a, b) => (groupMembersByGroupId[b.category_id]?.length ?? 0) - (groupMembersByGroupId[a.category_id]?.length ?? 0)),
+                    ...[...familyGroups].sort((a, b) => {
+                      const aMembers = groupMembersByGroupId[a.category_id] ?? [];
+                      const bMembers = groupMembersByGroupId[b.category_id] ?? [];
+                      if (bMembers.length !== aMembers.length) return bMembers.length - aMembers.length;
+                      const aSubGroups = aMembers.filter((m) => m.child_category_kind === 'group').length;
+                      const bSubGroups = bMembers.filter((m) => m.child_category_kind === 'group').length;
+                      return bSubGroups - aSubGroups;
+                    }),
                   ].map((category) => {
                     if (category === null) {
                       return (
