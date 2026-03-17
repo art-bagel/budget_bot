@@ -23,11 +23,6 @@ import type {
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-const MONTH_NAMES = [
-  'Январь','Февраль','Март','Апрель','Май','Июнь',
-  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь',
-];
-
 interface MonthDayPickerProps {
   selected: number;
   onChange: (day: number) => void;
@@ -35,13 +30,6 @@ interface MonthDayPickerProps {
 }
 
 function MonthDayPicker({ selected, onChange, disabled }: MonthDayPickerProps) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate(); // 28–31
-  // getDay() returns 0=Sun…6=Sat, convert to Mon-based 0=Mon…6=Sun
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-
   const cellBase: React.CSSProperties = {
     padding: '5px 0',
     fontSize: '0.85rem',
@@ -50,40 +38,20 @@ function MonthDayPicker({ selected, onChange, disabled }: MonthDayPickerProps) {
     border: '1px solid transparent',
   };
 
-  const cells: React.ReactNode[] = [];
-  for (let i = 0; i < firstWeekday; i++) {
-    cells.push(<div key={`pad-${i}`} />);
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push(
-      <button
-        key={d}
-        className={`btn${selected === d ? ' btn--primary' : ''}`}
-        type="button"
-        onClick={() => onChange(d)}
-        disabled={disabled}
-        style={cellBase}
-      >
-        {d}
-      </button>,
-    );
-  }
-
   return (
-    <div style={{ marginTop: 4 }}>
-      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #888)', marginBottom: 4 }}>
-        {MONTH_NAMES[month]} {year}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
-        {DAY_NAMES.map((d) => (
-          <div key={d} style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-secondary, #888)', padding: '2px 0' }}>
-            {d}
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-        {cells}
-      </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginTop: 4 }}>
+      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+        <button
+          key={d}
+          className={`btn${selected === d ? ' btn--primary' : ''}`}
+          type="button"
+          onClick={() => onChange(d)}
+          disabled={disabled}
+          style={cellBase}
+        >
+          {d}
+        </button>
+      ))}
     </div>
   );
 }
@@ -354,6 +322,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
       }
 
       onSuccess();
+      onClose();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
