@@ -355,12 +355,13 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
               {/* Pattern editor */}
               {showPatternEditor && (
                 <div style={{ background: 'var(--bg-inset)', borderRadius: 10, padding: '10px 12px', marginBottom: 4 }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 10, color: 'var(--text-secondary)' }}>
                     Распределение по счетам
                   </div>
 
                   {patternLines.map((line) => (
-                    <div key={line.key} className="form-row" style={{ marginBottom: 6, gap: 6 }}>
+                    <div key={line.key} style={{ marginBottom: 10 }}>
+                      {/* Account selector — full width */}
                       <select
                         className="input"
                         value={line.bank_account_id}
@@ -368,9 +369,9 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                           prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
                         )}
                         disabled={savingPattern}
-                        style={{ flex: 1 }}
+                        style={{ width: '100%', marginBottom: 6 }}
                       >
-                        <option value="">Счёт</option>
+                        <option value="">Выбери счёт</option>
                         {bankAccounts.map((ba) => (
                           <option key={ba.id} value={ba.id}>
                             {formatOwnerLabel(ba.owner_type)} · {ba.name}
@@ -378,61 +379,58 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                         ))}
                       </select>
 
-                      {/* Percent input with % suffix */}
-                      <div style={{ position: 'relative', width: 72, flexShrink: 0 }}>
-                        <input
-                          className="input"
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0"
-                          value={line.percent}
-                          onChange={(e) => setPatternLines((prev) =>
-                            prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
-                          )}
-                          disabled={savingPattern}
-                          style={{ width: '100%', paddingRight: 22 }}
-                        />
-                        <span style={{
-                          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                          fontSize: '0.8rem', color: 'var(--text-secondary)', pointerEvents: 'none',
-                        }}>
-                          %
-                        </span>
-                      </div>
-
-                      {patternLines.length > 1 && (
+                      {/* Percent + delete button on one row */}
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={line.percent}
+                            onChange={(e) => setPatternLines((prev) =>
+                              prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
+                            )}
+                            disabled={savingPattern}
+                            style={{ width: '100%', paddingRight: 28 }}
+                          />
+                          <span style={{
+                            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                            fontSize: '0.82rem', color: 'var(--text-secondary)', pointerEvents: 'none',
+                          }}>%</span>
+                        </div>
                         <button
+                          className="btn btn--danger"
                           type="button"
                           onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
-                          disabled={savingPattern}
-                          style={{ ...linkBtnStyle, color: 'var(--tag-out-fg)', borderColor: 'rgba(180,50,50,0.24)', fontSize: '1rem', padding: '2px 7px' }}
+                          disabled={savingPattern || patternLines.length === 1}
                         >
-                          ×
+                          Удалить
                         </button>
-                      )}
+                      </div>
                     </div>
                   ))}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  {/* Total indicator */}
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 8,
+                    color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
+                    Итого: {totalPercent.toFixed(0)} / 100%
+                  </div>
+
+                  {/* Add account */}
+                  <div className="form-row" style={{ marginBottom: 10 }}>
                     <button
+                      className="btn"
                       type="button"
                       onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
                       disabled={savingPattern}
-                      style={linkBtnStyle}
                     >
                       + Добавить счёт
                     </button>
-                    <span style={{
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)',
-                    }}>
-                      {totalPercent.toFixed(0)} / 100%
-                    </span>
                   </div>
 
                   {patternError && (
-                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.82rem', marginBottom: 6 }}>
+                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.82rem', marginBottom: 8 }}>
                       {patternError}
                     </p>
                   )}
@@ -444,9 +442,9 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                         type="button"
                         onClick={handleDeletePattern}
                         disabled={savingPattern || deletingPattern}
-                        style={{ marginRight: 'auto', fontSize: '0.82rem', padding: '6px 12px' }}
+                        style={{ marginRight: 'auto' }}
                       >
-                        {deletingPattern ? '...' : 'Удалить паттерн'}
+                        {deletingPattern ? '...' : 'Удалить'}
                       </button>
                     )}
                     <div className="action-pill" style={{ marginLeft: hasPattern ? 0 : 'auto' }}>

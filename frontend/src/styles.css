@@ -1349,9 +1349,9 @@ body.modal-open {
 }
 
 .action-pill__confirm {
-  background: #22a84a;
+  background: var(--bg-accent);
   border: none;
-  color: #fff;
+  color: var(--text-on-accent);
   padding: 8px 18px;
   border-radius: 999px;
   font-size: 0.875rem;
@@ -1366,7 +1366,7 @@ body.modal-open {
 }
 
 .action-pill__confirm:disabled {
-  opacity: 0.35;
+  opacity: 0.5;
   cursor: default;
 }
 
