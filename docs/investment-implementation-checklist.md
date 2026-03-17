@@ -207,7 +207,6 @@
 
 ### 11. SQL Write Functions
 
-- [ ] `put__create_investment_account`
 - [x] `put__create_investment_account`
 - [ ] `put__transfer_to_investment_account`
 - [ ] `put__transfer_from_investment_account`
@@ -256,10 +255,10 @@
 
 ### 15. Navigation
 
-- [ ] Добавить страницу `portfolio`
-- [ ] Обновить `Page` union в [Layout.tsx](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/components/Layout.tsx)
-- [ ] Обновить `PAGE_IDS` в [App.tsx](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/App.tsx)
-- [ ] Добавить пункт навигации `Портфель`
+- [x] Добавить страницу `portfolio`
+- [x] Обновить `Page` union в [Layout.tsx](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/components/Layout.tsx)
+- [x] Обновить `PAGE_IDS` в [App.tsx](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/App.tsx)
+- [x] Добавить пункт навигации `Портфель`
 
 ### 16. Types and API Client
 
@@ -410,7 +409,7 @@
 - [ ] создание позиции вручную
 - [ ] закрытие позиции
 - [ ] начисление дохода
-- [ ] страница `Портфель`
+- [x] страница `Портфель`
 
 ### Phase 3. Operations Integration
 
@@ -444,7 +443,7 @@
 - [x] обновить dashboard и bank account API
 - [x] реализовать перевод `cash -> investment`
 - [x] реализовать перевод `investment -> cash`
-- [ ] добавить новую страницу `Портфель`
+- [x] добавить новую страницу `Портфель`
 - [ ] добавить простую ручную позицию с типом `security | deposit | crypto`
 - [ ] добавить `close position`
 - [ ] добавить `record income`

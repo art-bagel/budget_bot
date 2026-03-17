@@ -5,7 +5,6 @@ import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { useHints } from '../hooks/useHints';
 import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
-import InvestmentTransferDialog from '../components/InvestmentTransferDialog';
 import {
   createBankAccount,
   deleteAccount,
@@ -49,7 +48,6 @@ export default function Settings({
   const [newInvestmentProvider, setNewInvestmentProvider] = useState('');
   const [creatingInvestmentAccount, setCreatingInvestmentAccount] = useState(false);
   const [createInvestmentError, setCreateInvestmentError] = useState<string | null>(null);
-  const [showInvestmentTransfer, setShowInvestmentTransfer] = useState(false);
 
   useEffect(() => {
     void fetchMyFamily()
@@ -175,11 +173,6 @@ export default function Settings({
     }
   };
 
-  const handleInvestmentTransferSuccess = async () => {
-    setShowInvestmentTransfer(false);
-    await loadAccounts();
-  };
-
   return (
     <>
       <h1 className="page-title">Настройки</h1>
@@ -269,14 +262,6 @@ export default function Settings({
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button className="btn" type="button" onClick={() => setShowCreateInvestmentForm((prev) => !prev)}>
                 {showCreateInvestmentForm ? 'Скрыть форму' : 'Новый счет'}
-              </button>
-              <button
-                className="btn"
-                type="button"
-                onClick={() => setShowInvestmentTransfer(true)}
-                disabled={!cashAccounts.length || !investmentAccounts.length}
-              >
-                Перевод
               </button>
             </div>
           </div>
@@ -442,15 +427,6 @@ export default function Settings({
           </div>
         </div>
       </section>
-
-      {showInvestmentTransfer && (
-        <InvestmentTransferDialog
-          cashAccounts={cashAccounts}
-          investmentAccounts={investmentAccounts}
-          onClose={() => setShowInvestmentTransfer(false)}
-          onSuccess={handleInvestmentTransferSuccess}
-        />
-      )}
     </>
   );
 }

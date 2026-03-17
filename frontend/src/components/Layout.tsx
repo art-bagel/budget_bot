@@ -4,12 +4,13 @@ import {
   IconDashboard,
   IconOperations,
   IconExchange,
+  IconPortfolio,
   IconSettings,
 } from './Icons';
 import { usePageSwipe } from '../hooks/usePageSwipe';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 
-export type Page = 'dashboard' | 'operations' | 'exchange' | 'settings';
+export type Page = 'dashboard' | 'operations' | 'exchange' | 'portfolio' | 'settings';
 
 interface Props {
   page: Page;
@@ -23,6 +24,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
   { id: 'dashboard', label: 'Обзор', icon: IconDashboard },
   { id: 'operations', label: 'Операции', icon: IconOperations },
   { id: 'exchange', label: 'Обмен', icon: IconExchange },
+  { id: 'portfolio', label: 'Портфель', icon: IconPortfolio },
   { id: 'settings', label: 'Настройки', icon: IconSettings },
 ];
 

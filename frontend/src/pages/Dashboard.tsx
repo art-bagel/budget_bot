@@ -935,13 +935,12 @@ export default function Dashboard({ user }: { user: UserContext }) {
         />
       )}
 
-      {showAccountTransfer && hasFamily && overview.family_bank_account_id && (
+      {showAccountTransfer && (
         <AccountTransferDialog
           personalAccountId={user.bank_account_id}
           familyAccountId={overview.family_bank_account_id}
           personalBalances={overview.bank_balances}
           familyBalances={overview.family_bank_balances}
-          baseCurrencyCode={overview.base_currency_code}
           onClose={() => setShowAccountTransfer(false)}
           onSuccess={() => { setShowAccountTransfer(false); void loadOverview(); }}
         />
