@@ -282,6 +282,59 @@ class Ledger(DataBase):
             error,
         )
 
+    F_GET__INCOME_SOURCE_PATTERN = 'get__income_source_pattern'
+    F_PUT__UPSERT_INCOME_SOURCE_PATTERN = 'put__upsert_income_source_pattern'
+    F_PUT__DELETE_INCOME_SOURCE_PATTERN = 'put__delete_income_source_pattern'
+    F_PUT__RECORD_INCOME_SPLIT = 'put__record_income_split'
+
+    async def get__income_source_pattern(self, user_id: int, income_source_id: int) -> Optional[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__INCOME_SOURCE_PATTERN),
+            user_id,
+            income_source_id,
+        )
+        return result
+
+    async def put__upsert_income_source_pattern(
+        self,
+        user_id: int,
+        income_source_id: int,
+        lines: list,
+    ) -> dict:
+        import json
+        return await self.call_function(
+            self._fn(self.F_PUT__UPSERT_INCOME_SOURCE_PATTERN),
+            user_id,
+            income_source_id,
+            json.dumps(lines),
+        )
+
+    async def put__delete_income_source_pattern(self, user_id: int, income_source_id: int) -> bool:
+        return await self.call_function(
+            self._fn(self.F_PUT__DELETE_INCOME_SOURCE_PATTERN),
+            user_id,
+            income_source_id,
+        )
+
+    async def put__record_income_split(
+        self,
+        user_id: int,
+        income_source_id: int,
+        amount: float,
+        currency_code: str,
+        budget_amount_in_base: Optional[float] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__RECORD_INCOME_SPLIT),
+            user_id,
+            income_source_id,
+            amount,
+            currency_code,
+            budget_amount_in_base,
+            comment,
+        )
+
     async def put__reverse_operation(self, user_id: int, operation_id: int, comment: Optional[str] = None) -> dict:
         """
         Создает reversal для операции.

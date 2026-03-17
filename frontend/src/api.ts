@@ -30,6 +30,10 @@ import type {
   CreateScheduledExpenseRequest,
   CreateScheduledExpenseResponse,
   AccountCurrency,
+  BankAccount,
+  IncomePattern,
+  RecordIncomeSplitRequest,
+  RecordIncomeSplitResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -339,6 +343,37 @@ export async function createScheduledExpense(
   data: CreateScheduledExpenseRequest,
 ): Promise<CreateScheduledExpenseResponse> {
   return apiFetch<CreateScheduledExpenseResponse>('/scheduled-expenses/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchBankAccounts(): Promise<BankAccount[]> {
+  return apiFetch<BankAccount[]>('/bank-accounts');
+}
+
+export async function fetchIncomeSourcePattern(incomeSourceId: number): Promise<IncomePattern | null> {
+  return apiFetch<IncomePattern | null>(`/income-sources/${incomeSourceId}/pattern`);
+}
+
+export async function upsertIncomeSourcePattern(
+  incomeSourceId: number,
+  lines: { bank_account_id: number; share: number }[],
+): Promise<{ id: number }> {
+  return apiFetch<{ id: number }>(`/income-sources/${incomeSourceId}/pattern`, {
+    method: 'PUT',
+    body: JSON.stringify({ lines }),
+  });
+}
+
+export async function deleteIncomeSourcePattern(incomeSourceId: number): Promise<{ deleted: boolean }> {
+  return apiFetch<{ deleted: boolean }>(`/income-sources/${incomeSourceId}/pattern`, {
+    method: 'DELETE',
+  });
+}
+
+export async function recordIncomeSplit(data: RecordIncomeSplitRequest): Promise<RecordIncomeSplitResponse> {
+  return apiFetch<RecordIncomeSplitResponse>('/operations/income-split', {
     method: 'POST',
     body: JSON.stringify(data),
   });

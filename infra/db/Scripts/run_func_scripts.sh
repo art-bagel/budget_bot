@@ -53,6 +53,10 @@ FILES=(
     "put__create_scheduled_expense.sql"
     "put__delete_scheduled_expense.sql"
     "put__advance_scheduled_expense.sql"
+    "get__income_source_pattern.sql"
+    "put__upsert_income_source_pattern.sql"
+    "put__delete_income_source_pattern.sql"
+    "put__record_income_split.sql"
 )
 
 for file_name in "${FILES[@]}"; do

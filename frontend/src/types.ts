@@ -306,6 +306,34 @@ export interface CreateScheduledExpenseResponse {
   next_run_at: string;
 }
 
+export interface IncomePatternLine {
+  id: number;
+  bank_account_id: number;
+  bank_account_name: string;
+  bank_account_owner_type: string;
+  share: number;
+}
+
+export interface IncomePattern {
+  id: number;
+  income_source_id: number;
+  lines: IncomePatternLine[];
+}
+
+export interface RecordIncomeSplitRequest {
+  income_source_id: number;
+  amount: number;
+  currency_code: string;
+  budget_amount_in_base?: number;
+  comment?: string;
+}
+
+export interface RecordIncomeSplitResponse {
+  operation_ids: number[];
+  total_budget_in_base: number;
+  base_currency_code: string;
+}
+
 export interface CreateFamilyResponse {
   family_id: number;
   name: string;

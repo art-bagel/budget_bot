@@ -202,6 +202,36 @@ async def record_income(
     return RecordIncomeResponse(**result)
 
 
+class RecordIncomeSplitRequest(BaseModel):
+    income_source_id: int
+    amount: float
+    currency_code: str
+    budget_amount_in_base: Optional[float] = None
+    comment: Optional[str] = None
+
+
+class RecordIncomeSplitResponse(BaseModel):
+    operation_ids: List[int]
+    total_budget_in_base: float
+    base_currency_code: str
+
+
+@router.post('/income-split', response_model=RecordIncomeSplitResponse)
+async def record_income_split(
+    body: RecordIncomeSplitRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> RecordIncomeSplitResponse:
+    result = await ledger.put__record_income_split(
+        user_id=user.user_id,
+        income_source_id=body.income_source_id,
+        amount=body.amount,
+        currency_code=body.currency_code,
+        budget_amount_in_base=body.budget_amount_in_base,
+        comment=body.comment,
+    )
+    return RecordIncomeSplitResponse(**result)
+
+
 @router.post('/expense', response_model=RecordExpenseResponse)
 async def record_expense(
     body: RecordExpenseRequest,

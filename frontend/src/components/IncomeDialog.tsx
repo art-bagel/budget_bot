@@ -2,13 +2,40 @@ import { useEffect, useState } from 'react';
 
 import {
   createIncomeSource,
+  fetchBankAccounts,
   fetchCurrencies,
+  fetchIncomeSourcePattern,
   fetchIncomeSources,
   recordIncome,
+  recordIncomeSplit,
+  upsertIncomeSourcePattern,
+  deleteIncomeSourcePattern,
 } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
-import type { Currency, IncomeSource, RecordIncomeRequest, UserContext } from '../types';
+import type {
+  BankAccount,
+  Currency,
+  IncomePattern,
+  IncomeSource,
+  RecordIncomeRequest,
+  UserContext,
+} from '../types';
 import { sanitizeDecimalInput } from '../utils/validation';
+
+
+interface PatternDraftLine {
+  key: string;
+  bank_account_id: string;
+  percent: string;
+}
+
+function createPatternLine(index: number): PatternDraftLine {
+  return { key: 'line-' + index, bank_account_id: '', percent: '' };
+}
+
+function formatOwnerLabel(ownerType: string): string {
+  return ownerType === 'family' ? 'Семейный' : 'Личный';
+}
 
 
 interface Props {
@@ -22,6 +49,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   useModalOpen();
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [incomeAmount, setIncomeAmount] = useState('');
@@ -34,11 +62,21 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [creatingSource, setCreatingSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pattern state
+  const [pattern, setPattern] = useState<IncomePattern | null>(null);
+  const [patternLoading, setPatternLoading] = useState(false);
+  const [showPatternEditor, setShowPatternEditor] = useState(false);
+  const [patternLines, setPatternLines] = useState<PatternDraftLine[]>([createPatternLine(1)]);
+  const [savingPattern, setSavingPattern] = useState(false);
+  const [deletingPattern, setDeletingPattern] = useState(false);
+  const [patternError, setPatternError] = useState<string | null>(null);
+
   useEffect(() => {
-    Promise.all([fetchCurrencies(), fetchIncomeSources()])
-      .then(([loadedCurrencies, loadedSources]) => {
+    Promise.all([fetchCurrencies(), fetchIncomeSources(), fetchBankAccounts()])
+      .then(([loadedCurrencies, loadedSources, loadedAccounts]) => {
         setCurrencies(loadedCurrencies);
         setIncomeSources(loadedSources);
+        setBankAccounts(loadedAccounts);
         if (loadedSources.length > 0) {
           setIncomeSourceId(String(loadedSources[0].id));
         }
@@ -47,8 +85,24 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Load pattern when source changes
+  useEffect(() => {
+    if (!incomeSourceId) {
+      setPattern(null);
+      return;
+    }
+    setPatternLoading(true);
+    setPattern(null);
+    setShowPatternEditor(false);
+    fetchIncomeSourcePattern(Number(incomeSourceId))
+      .then((p) => setPattern(p))
+      .catch(() => setPattern(null))
+      .finally(() => setPatternLoading(false));
+  }, [incomeSourceId]);
+
   const isNonBase = incomeCurrencyCode !== user.base_currency_code;
   const selectedSource = incomeSources.find((s) => String(s.id) === incomeSourceId);
+  const hasPattern = pattern !== null;
 
   const canSubmit =
     !submitting &&
@@ -88,14 +142,24 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
     setError(null);
 
     try {
-      await recordIncome({
-        bank_account_id: user.bank_account_id,
-        income_source_id: selectedSource.id,
-        amount: parseFloat(incomeAmount),
-        currency_code: incomeCurrencyCode,
-        budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
-        comment: incomeComment.trim() || undefined,
-      } as RecordIncomeRequest);
+      if (hasPattern) {
+        await recordIncomeSplit({
+          income_source_id: selectedSource.id,
+          amount: parseFloat(incomeAmount),
+          currency_code: incomeCurrencyCode,
+          budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
+          comment: incomeComment.trim() || undefined,
+        });
+      } else {
+        await recordIncome({
+          bank_account_id: user.bank_account_id,
+          income_source_id: selectedSource.id,
+          amount: parseFloat(incomeAmount),
+          currency_code: incomeCurrencyCode,
+          budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
+          comment: incomeComment.trim() || undefined,
+        } as RecordIncomeRequest);
+      }
 
       onSuccess();
     } catch (e: unknown) {
@@ -104,6 +168,73 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       setSubmitting(false);
     }
   };
+
+  // Pattern editor helpers
+  const openPatternEditor = () => {
+    if (pattern) {
+      setPatternLines(
+        pattern.lines.map((l, i) => ({
+          key: 'line-' + i,
+          bank_account_id: String(l.bank_account_id),
+          percent: String(Math.round(l.share * 10000) / 100),
+        })),
+      );
+    } else {
+      setPatternLines([createPatternLine(1), createPatternLine(2)]);
+    }
+    setPatternError(null);
+    setShowPatternEditor(true);
+  };
+
+  const totalPercent = patternLines.reduce((sum, l) => sum + (parseFloat(l.percent) || 0), 0);
+
+  const handleSavePattern = async () => {
+    const validLines = patternLines.filter((l) => l.bank_account_id && parseFloat(l.percent) > 0);
+    if (validLines.length === 0) {
+      setPatternError('Добавьте хотя бы одну строку.');
+      return;
+    }
+    if (Math.abs(totalPercent - 100) > 0.1) {
+      setPatternError(`Сумма должна быть 100%, сейчас ${totalPercent.toFixed(2)}%.`);
+      return;
+    }
+
+    setSavingPattern(true);
+    setPatternError(null);
+    try {
+      const lines = validLines.map((l) => ({
+        bank_account_id: Number(l.bank_account_id),
+        share: Math.round((parseFloat(l.percent) / 100) * 100000) / 100000,
+      }));
+      // Normalize last line to exactly 1.0
+      const totalShare = lines.reduce((s, l) => s + l.share, 0);
+      lines[lines.length - 1].share = Math.round((lines[lines.length - 1].share + (1 - totalShare)) * 100000) / 100000;
+
+      await upsertIncomeSourcePattern(Number(incomeSourceId), lines);
+      const updated = await fetchIncomeSourcePattern(Number(incomeSourceId));
+      setPattern(updated);
+      setShowPatternEditor(false);
+    } catch (e: unknown) {
+      setPatternError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingPattern(false);
+    }
+  };
+
+  const handleDeletePattern = async () => {
+    setDeletingPattern(true);
+    try {
+      await deleteIncomeSourcePattern(Number(incomeSourceId));
+      setPattern(null);
+      setShowPatternEditor(false);
+    } catch (e: unknown) {
+      setPatternError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingPattern(false);
+    }
+  };
+
+  const totalAmount = parseFloat(incomeAmount) || 0;
 
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
@@ -123,9 +254,12 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
           ) : (
             <>
               <div className="operations-note">
-                Источник дохода → банк → нераспределённый бюджет.
+                {hasPattern
+                  ? 'Доход будет распределён по счетам согласно паттерну.'
+                  : 'Источник дохода → банк → нераспределённый бюджет.'}
               </div>
 
+              {/* Income source selector */}
               <div className="form-row">
                 <select
                   className="input"
@@ -145,25 +279,157 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 </select>
               </div>
 
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Новый источник дохода"
-                  value={newIncomeSourceName}
-                  onChange={(e) => setNewIncomeSourceName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
-                />
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={creatingSource || newIncomeSourceName.trim().length === 0}
-                  onClick={handleCreateSource}
-                >
-                  {creatingSource ? '...' : 'Добавить'}
-                </button>
-              </div>
+              {/* Pattern status */}
+              {incomeSourceId && !patternLoading && !showPatternEditor && (
+                <div className="form-row" style={{ alignItems: 'center', gap: 8 }}>
+                  {hasPattern ? (
+                    <>
+                      <div style={{ flex: 1, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                        {pattern!.lines.map((l) => (
+                          <span key={l.id} style={{ marginRight: 8 }}>
+                            {formatOwnerLabel(l.bank_account_owner_type)} {l.bank_account_name} · {Math.round(l.share * 100)}%
+                          </span>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openPatternEditor}
+                        style={{
+                          fontSize: '0.78rem', background: 'transparent',
+                          border: 'none', color: 'var(--text-secondary)',
+                          cursor: 'pointer', flexShrink: 0, padding: '2px 4px',
+                        }}
+                      >
+                        Изменить
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openPatternEditor}
+                      style={{
+                        fontSize: '0.82rem', background: 'transparent',
+                        border: 'none', color: 'var(--text-secondary)',
+                        cursor: 'pointer', padding: 0,
+                      }}
+                    >
+                      + Настроить паттерн распределения
+                    </button>
+                  )}
+                </div>
+              )}
 
+              {/* Pattern editor */}
+              {showPatternEditor && (
+                <div style={{ background: 'var(--bg-inset)', borderRadius: 10, padding: '10px 12px', marginBottom: 4 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
+                    Паттерн распределения
+                  </div>
+
+                  {patternLines.map((line, idx) => (
+                    <div key={line.key} className="form-row" style={{ marginBottom: 6 }}>
+                      <select
+                        className="input"
+                        value={line.bank_account_id}
+                        onChange={(e) => setPatternLines((prev) =>
+                          prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
+                        )}
+                        disabled={savingPattern}
+                        style={{ flex: 1 }}
+                      >
+                        <option value="">Счёт</option>
+                        {bankAccounts.map((ba) => (
+                          <option key={ba.id} value={ba.id}>
+                            {formatOwnerLabel(ba.owner_type)} · {ba.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className="input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="%"
+                        value={line.percent}
+                        onChange={(e) => setPatternLines((prev) =>
+                          prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
+                        )}
+                        disabled={savingPattern}
+                        style={{ width: 64 }}
+                      />
+                      {totalAmount > 0 && parseFloat(line.percent) > 0 && (
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                          {(totalAmount * parseFloat(line.percent) / 100).toFixed(2)}
+                        </span>
+                      )}
+                      {patternLines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
+                          disabled={savingPattern}
+                          style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1rem', padding: '0 4px' }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="form-row" style={{ marginBottom: 6, justifyContent: 'space-between' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
+                      disabled={savingPattern}
+                      style={{ fontSize: '0.82rem', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}
+                    >
+                      + Добавить счёт
+                    </button>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)',
+                    }}>
+                      Итого: {totalPercent.toFixed(0)}%
+                    </span>
+                  </div>
+
+                  {patternError && (
+                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.82rem', marginTop: 4, marginBottom: 4 }}>
+                      {patternError}
+                    </p>
+                  )}
+
+                  <div className="form-row">
+                    {hasPattern && (
+                      <button
+                        className="btn btn--danger"
+                        type="button"
+                        onClick={handleDeletePattern}
+                        disabled={savingPattern || deletingPattern}
+                        style={{ marginRight: 'auto' }}
+                      >
+                        {deletingPattern ? '...' : 'Удалить'}
+                      </button>
+                    )}
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
+                      disabled={savingPattern}
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      className="btn btn--primary"
+                      type="button"
+                      onClick={handleSavePattern}
+                      disabled={savingPattern}
+                    >
+                      {savingPattern ? '...' : 'Сохранить'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Amount + currency */}
               <div className="form-row">
                 <input
                   className="input"
@@ -186,6 +452,17 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 </select>
               </div>
 
+              {/* Split preview */}
+              {hasPattern && totalAmount > 0 && !showPatternEditor && (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {pattern!.lines.map((l) => (
+                    <span key={l.id} className="tag tag--neutral">
+                      {l.bank_account_name}: {(totalAmount * l.share).toFixed(2)} {incomeCurrencyCode}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {isNonBase && (
                 <div className="form-row">
                   <input
@@ -199,6 +476,26 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   />
                 </div>
               )}
+
+              {/* New income source creation */}
+              <div className="form-row">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Новый источник дохода"
+                  value={newIncomeSourceName}
+                  onChange={(e) => setNewIncomeSourceName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
+                />
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={creatingSource || newIncomeSourceName.trim().length === 0}
+                  onClick={handleCreateSource}
+                >
+                  {creatingSource ? '...' : 'Добавить'}
+                </button>
+              </div>
 
               <div className="form-row">
                 <input
