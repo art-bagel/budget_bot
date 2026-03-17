@@ -27,6 +27,7 @@ BEGIN
 
     IF _normalized_operation_type IS NOT NULL
        AND _normalized_operation_type NOT IN (
+           'investment',
            'income',
            'allocate',
            'group_allocate',
@@ -72,7 +73,27 @@ BEGIN
                 (o.owner_type = 'family' AND o.owner_family_id = _family_id)
               )
           AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
-          AND (_normalized_operation_type IS NULL OR o.type = _normalized_operation_type)
+          AND (
+                _normalized_operation_type IS NULL
+                OR (
+                    _normalized_operation_type = 'investment'
+                    AND (
+                        o.type IN ('investment_trade', 'investment_income')
+                        OR EXISTS (
+                            SELECT 1
+                            FROM bank_entries be_filter
+                            JOIN bank_accounts ba_filter
+                              ON ba_filter.id = be_filter.bank_account_id
+                            WHERE be_filter.operation_id = o.id
+                              AND ba_filter.account_kind = 'investment'
+                        )
+                    )
+                )
+                OR (
+                    _normalized_operation_type <> 'investment'
+                    AND o.type = _normalized_operation_type
+                )
+          )
         ORDER BY o.created_at DESC, o.id DESC
         LIMIT _limit OFFSET _offset
     ),

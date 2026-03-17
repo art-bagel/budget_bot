@@ -58,7 +58,7 @@ type OperationLine = {
   amount?: string;
 };
 
-type OperationsViewMode = 'history' | 'analytics';
+type OperationsViewMode = 'history' | 'investment' | 'analytics';
 
 type AnalyticsSegment = {
   entryKey: string;
@@ -411,10 +411,25 @@ export default function Operations({ user: _user }: { user: UserContext }) {
     [analyticsPeriodMode, analyticsAnchorDate],
   );
 
+  const getEffectiveHistoryType = (
+    nextViewMode: OperationsViewMode = viewMode,
+    nextHistoryTypeFilter = historyTypeFilter,
+  ): string | undefined => {
+    if (nextViewMode === 'investment') {
+      return 'investment';
+    }
+
+    if (nextViewMode === 'history' && nextHistoryTypeFilter) {
+      return nextHistoryTypeFilter;
+    }
+
+    return undefined;
+  };
+
   const loadHistory = async (
     offset: number,
     replace = false,
-    operationType = historyTypeFilter,
+    operationType = getEffectiveHistoryType(),
   ) => {
     setLoadingHistory(true);
     setHistoryError(null);
@@ -460,8 +475,11 @@ export default function Operations({ user: _user }: { user: UserContext }) {
   };
 
   useEffect(() => {
+    if (viewMode === 'analytics') {
+      return;
+    }
     void loadHistory(0, true);
-  }, [historyTypeFilter]);
+  }, [viewMode, historyTypeFilter]);
 
   useEffect(() => {
     if (viewMode !== 'analytics') {
@@ -561,6 +579,16 @@ export default function Operations({ user: _user }: { user: UserContext }) {
             <button
               className={[
                 'operations-mode-switch__item',
+                viewMode === 'investment' ? 'operations-mode-switch__item--active' : '',
+              ].filter(Boolean).join(' ')}
+              type="button"
+              onClick={() => setViewMode('investment')}
+            >
+              Инвестиции
+            </button>
+            <button
+              className={[
+                'operations-mode-switch__item',
                 viewMode === 'analytics' ? 'operations-mode-switch__item--active' : '',
               ].filter(Boolean).join(' ')}
               type="button"
@@ -570,25 +598,37 @@ export default function Operations({ user: _user }: { user: UserContext }) {
             </button>
           </div>
 
-          {viewMode === 'history' ? (
+          {viewMode !== 'analytics' ? (
             <>
               <div className="section__header">
-                <h3 className="section__title">История операций</h3>
+                <h3 className="section__title">
+                  {viewMode === 'investment' ? 'Инвестиционные операции' : 'История операций'}
+                </h3>
                 <div className="section__header-actions">
-                  <select
-                    className="input input--compact"
-                    value={historyTypeFilter}
-                    onChange={(event) => setHistoryTypeFilter(event.target.value)}
-                  >
-                    {HISTORY_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value || 'all'} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  {viewMode === 'history' ? (
+                    <select
+                      className="input input--compact"
+                      value={historyTypeFilter}
+                      onChange={(event) => setHistoryTypeFilter(event.target.value)}
+                    >
+                      {HISTORY_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value || 'all'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="tag tag--neutral">Trade, income, transfers</span>
+                  )}
                   <span className="tag tag--neutral">{historyTotalCount} всего</span>
                 </div>
               </div>
+
+              {viewMode === 'investment' && (
+                <p className="list-row__sub" style={{ marginBottom: 12 }}>
+                  Здесь собраны сделки по позициям, доход по инвестициям и переводы между обычными и investment-счетами.
+                </p>
+              )}
 
               {historyError && (
                 <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 12 }}>
