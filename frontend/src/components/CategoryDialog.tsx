@@ -30,24 +30,25 @@ interface MonthDayPickerProps {
 }
 
 function MonthDayPicker({ selected, onChange, disabled }: MonthDayPickerProps) {
-  const cellBase: React.CSSProperties = {
-    padding: '5px 0',
-    fontSize: '0.85rem',
-    minWidth: 0,
-    justifyContent: 'center',
-    border: '1px solid transparent',
-  };
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginTop: 4 }}>
       {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
         <button
           key={d}
-          className={`btn${selected === d ? ' btn--primary' : ''}`}
           type="button"
           onClick={() => onChange(d)}
           disabled={disabled}
-          style={cellBase}
+          style={{
+            padding: '5px 0',
+            fontSize: '0.85rem',
+            minWidth: 0,
+            background: selected === d ? 'var(--bg-accent)' : 'transparent',
+            color: selected === d ? 'var(--text-on-accent, #fff)' : 'var(--text-primary)',
+            border: 'none',
+            borderRadius: 8,
+            cursor: disabled ? 'default' : 'pointer',
+            outline: 'none',
+          }}
         >
           {d}
         </button>
@@ -294,7 +295,6 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
     !saving &&
     !archiving &&
     !!nameDraft.trim() &&
-    (hasNameChanged || groupRowsChanged) &&
     (category.kind !== 'group' || !groupRowsChanged || canSaveGroupSettings);
 
   const handleSubmit = async () => {
@@ -540,22 +540,27 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                   </div>
 
                   <div className="form-row">
-                    <button
-                      className={`btn${sfFrequency === 'monthly' ? ' btn--primary' : ''}`}
-                      type="button"
-                      onClick={() => setSfFrequency('monthly')}
-                      disabled={savingSchedule}
-                    >
-                      Ежемесячно
-                    </button>
-                    <button
-                      className={`btn${sfFrequency === 'weekly' ? ' btn--primary' : ''}`}
-                      type="button"
-                      onClick={() => setSfFrequency('weekly')}
-                      disabled={savingSchedule}
-                    >
-                      Еженедельно
-                    </button>
+                    {(['monthly', 'weekly'] as const).map((freq) => (
+                      <button
+                        key={freq}
+                        type="button"
+                        onClick={() => setSfFrequency(freq)}
+                        disabled={savingSchedule}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          fontSize: '0.9rem',
+                          background: sfFrequency === freq ? 'var(--bg-accent)' : 'transparent',
+                          color: sfFrequency === freq ? 'var(--text-on-accent, #fff)' : 'var(--text-primary)',
+                          border: 'none',
+                          borderRadius: 8,
+                          cursor: savingSchedule ? 'default' : 'pointer',
+                          outline: 'none',
+                        }}
+                      >
+                        {freq === 'monthly' ? 'Ежемесячно' : 'Еженедельно'}
+                      </button>
+                    ))}
                   </div>
 
                   {sfFrequency === 'monthly' && (
@@ -571,16 +576,20 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                       {DAY_NAMES.map((name, i) => (
                         <button
                           key={i}
-                          className={`btn${sfDayOfWeek === i + 1 ? ' btn--primary' : ''}`}
                           type="button"
                           onClick={() => setSfDayOfWeek(i + 1)}
                           disabled={savingSchedule}
                           style={{
                             flex: 1,
                             minWidth: 0,
-                            justifyContent: 'center',
-                            border: '1px solid transparent',
                             padding: '6px 0',
+                            fontSize: '0.85rem',
+                            background: sfDayOfWeek === i + 1 ? 'var(--bg-accent)' : 'transparent',
+                            color: sfDayOfWeek === i + 1 ? 'var(--text-on-accent, #fff)' : 'var(--text-primary)',
+                            border: 'none',
+                            borderRadius: 8,
+                            cursor: savingSchedule ? 'default' : 'pointer',
+                            outline: 'none',
                           }}
                         >
                           {name}
