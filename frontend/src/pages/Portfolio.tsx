@@ -10,7 +10,9 @@ import {
   fetchCurrencies,
   fetchPortfolioEvents,
   fetchPortfolioPositions,
+  fetchPortfolioSummary,
   recordPortfolioIncome,
+  topUpPortfolioPosition,
 } from '../api';
 import type {
   BankAccount,
@@ -18,6 +20,7 @@ import type {
   DashboardBankBalance,
   PortfolioEvent,
   PortfolioPosition,
+  PortfolioSummaryItem,
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
@@ -42,6 +45,14 @@ type IncomeDraft = {
   baseAmount: string;
   incomeKind: string;
   receivedAt: string;
+  comment: string;
+};
+
+type TopUpDraft = {
+  amount: string;
+  quantity: string;
+  currencyCode: string;
+  toppedUpAt: string;
   comment: string;
 };
 
@@ -89,6 +100,16 @@ function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
   };
 }
 
+function createInitialTopUpDraft(position: PortfolioPosition): TopUpDraft {
+  return {
+    amount: '',
+    quantity: '',
+    currencyCode: position.currency_code,
+    toppedUpAt: todayIso(),
+    comment: '',
+  };
+}
+
 function canRecordPositionIncome(position: PortfolioPosition): boolean {
   return position.asset_type_code === 'security' || position.asset_type_code === 'deposit';
 }
@@ -99,6 +120,10 @@ function getEventLabel(item: PortfolioEvent): string {
     if (incomeKind === 'dividend') return 'DIVIDEND';
     if (incomeKind === 'interest') return 'INTEREST';
     return 'INCOME';
+  }
+
+  if (item.event_type === 'top_up') {
+    return 'TOP UP';
   }
 
   if (item.event_type === 'adjustment') {
@@ -115,16 +140,19 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
+  const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
   const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
+  const [submittingTopUpId, setSubmittingTopUpId] = useState<number | null>(null);
   const [deletingPositionId, setDeletingPositionId] = useState<number | null>(null);
   const [cancellingIncomeEventId, setCancellingIncomeEventId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
   const [incomeError, setIncomeError] = useState<string | null>(null);
+  const [topUpError, setTopUpError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [cancelIncomeError, setCancelIncomeError] = useState<string | null>(null);
   const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
@@ -133,6 +161,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [closeDrafts, setCloseDrafts] = useState<Record<number, CloseDraft>>({});
   const [incomeDrafts, setIncomeDrafts] = useState<Record<number, IncomeDraft>>({});
+  const [topUpDrafts, setTopUpDrafts] = useState<Record<number, TopUpDraft>>({});
   const [newInvestmentAccountId, setNewInvestmentAccountId] = useState('');
   const [newAssetTypeCode, setNewAssetTypeCode] = useState<(typeof ASSET_TYPE_OPTIONS)[number]['value']>('security');
   const [newTitle, setNewTitle] = useState('');
@@ -147,10 +176,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setError(null);
 
     try {
-      const [investmentAccounts, loadedPositions, loadedCurrencies] = await Promise.all([
+      const [investmentAccounts, loadedPositions, loadedCurrencies, loadedSummary] = await Promise.all([
         fetchBankAccounts('investment'),
         fetchPortfolioPositions(),
         fetchCurrencies(),
+        fetchPortfolioSummary(),
       ]);
       const snapshots = await Promise.all(
         investmentAccounts.map(async (account) => ({
@@ -162,6 +192,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setAccounts(snapshots);
       setPositions(loadedPositions);
       setCurrencies(loadedCurrencies);
+      setSummaryItems(loadedSummary);
       setNewInvestmentAccountId((currentValue) => {
         if (currentValue && investmentAccounts.some((account) => String(account.id) === currentValue)) {
           return currentValue;
@@ -200,6 +231,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const closedPositions = useMemo(
     () => positions.filter((position) => position.status === 'closed'),
     [positions],
+  );
+
+  const totalInvestedPrincipalInBase = useMemo(
+    () => summaryItems.reduce((sum, item) => sum + item.invested_principal_in_base, 0),
+    [summaryItems],
+  );
+
+  const totalRealizedIncomeInBase = useMemo(
+    () => summaryItems.reduce((sum, item) => sum + item.realized_income_in_base, 0),
+    [summaryItems],
   );
 
   const selectedAccountBalances = useMemo(
@@ -332,6 +373,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
     ));
   };
 
+  const handleOpenTopUpForm = (position: PortfolioPosition) => {
+    setTopUpError(null);
+    setTopUpDrafts((prev) => (
+      prev[position.id]
+        ? prev
+        : { ...prev, [position.id]: createInitialTopUpDraft(position) }
+    ));
+  };
+
   const handleCloseDraftChange = (
     positionId: number,
     patch: Partial<CloseDraft>,
@@ -359,6 +409,36 @@ export default function Portfolio({ user }: { user: UserContext }) {
       ...prev,
       [positionId]: {
         ...(prev[positionId] ?? createInitialIncomeDraft(
+          positions.find((position) => position.id === positionId) ?? {
+            id: positionId,
+            investment_account_id: 0,
+            investment_account_name: '',
+            investment_account_owner_type: 'user',
+            investment_account_owner_name: '',
+            asset_type_code: 'security',
+            title: '',
+            status: 'open',
+            amount_in_currency: 0,
+            currency_code: user.base_currency_code,
+            opened_at: todayIso(),
+            metadata: {},
+            created_by_user_id: user.user_id,
+            created_at: '',
+          },
+        )),
+        ...patch,
+      },
+    }));
+  };
+
+  const handleTopUpDraftChange = (
+    positionId: number,
+    patch: Partial<TopUpDraft>,
+  ) => {
+    setTopUpDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...(prev[positionId] ?? createInitialTopUpDraft(
           positions.find((position) => position.id === positionId) ?? {
             id: positionId,
             investment_account_id: 0,
@@ -416,6 +496,49 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setIncomeError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSubmittingIncomeId(null);
+    }
+  };
+
+  const handleTopUpPosition = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = topUpDrafts[position.id];
+
+    if (!draft || !draft.amount.trim() || submittingTopUpId === position.id) {
+      return;
+    }
+
+    const accountBalances = accounts.find(({ account }) => account.id === position.investment_account_id)?.balances ?? [];
+    const availableAmount = accountBalances.find((balance) => balance.currency_code === draft.currencyCode)?.amount ?? 0;
+
+    if (Number(draft.amount) > availableAmount) {
+      setTopUpError('Недостаточно денег на инвестиционном счете для пополнения позиции.');
+      return;
+    }
+
+    setSubmittingTopUpId(position.id);
+    setTopUpError(null);
+
+    try {
+      await topUpPortfolioPosition(position.id, {
+        amount_in_currency: Number(draft.amount),
+        currency_code: draft.currencyCode,
+        quantity: draft.quantity.trim() ? Number(draft.quantity) : undefined,
+        topped_up_at: draft.toppedUpAt || undefined,
+        comment: draft.comment.trim() || undefined,
+      });
+      setTopUpDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      if (selectedPositionId === position.id) {
+        await loadEventsForPosition(position.id);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setTopUpError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingTopUpId(null);
     }
   };
 
@@ -514,11 +637,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </article>
             <article className="balance-card">
               <div className="balance-card__head">
-                <span className="pill">CLOSED</span>
-                <span className="tag tag--neutral">{closedPositions.length} позиций</span>
+                <span className="pill">PRINCIPAL</span>
+                <span className="tag tag--neutral">BASE</span>
               </div>
-              <span className="balance-card__amount">{closedPositions.length}</span>
-              <span className="balance-card__sub">Закрытых позиций с сохраненной историей</span>
+              <span className="balance-card__amount">
+                {formatAmount(totalInvestedPrincipalInBase, user.base_currency_code)}
+              </span>
+              <span className="balance-card__sub">Вложенный principal по открытым позициям</span>
+            </article>
+            <article className="balance-card">
+              <div className="balance-card__head">
+                <span className="pill">INCOME</span>
+                <span className="tag tag--neutral">BASE</span>
+              </div>
+              <span className="balance-card__amount">
+                {formatAmount(totalRealizedIncomeInBase, user.base_currency_code)}
+              </span>
+              <span className="balance-card__sub">Зафиксированный доход по портфелю</span>
             </article>
           </div>
         </div>
@@ -656,6 +791,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <div className="dashboard-budget-sections">
               {accounts.map(({ account, balances }) => (
                 <div className="dashboard-budget-section" key={account.id}>
+                  {(() => {
+                    const summary = summaryItems.find((item) => item.investment_account_id === account.id);
+
+                    return (
+                      <>
                   <div className="dashboard-budget-section__header">
                     <div>
                       <div className="section__eyebrow">
@@ -667,6 +807,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       {account.provider_name || `Счет #${account.id}`}
                     </span>
                   </div>
+
+                  {summary && (
+                    <div className="form-row" style={{ paddingTop: 0 }}>
+                      <span className="tag tag--neutral">
+                        Cash: {formatAmount(summary.cash_balance_in_base, user.base_currency_code)}
+                      </span>
+                      <span className="tag tag--neutral">
+                        Principal: {formatAmount(summary.invested_principal_in_base, user.base_currency_code)}
+                      </span>
+                      <span className="tag tag--neutral">
+                        Income: {formatAmount(summary.realized_income_in_base, user.base_currency_code)}
+                      </span>
+                      <span className="tag tag--neutral">
+                        Open: {summary.open_positions_count}
+                      </span>
+                    </div>
+                  )}
 
                   {balances.length === 0 ? (
                     <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
@@ -687,6 +844,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       ))}
                     </ul>
                   )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -706,6 +866,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
               {openPositions.map((position) => {
                 const closeDraft = closeDrafts[position.id];
                 const incomeDraft = incomeDrafts[position.id];
+                const topUpDraft = topUpDrafts[position.id];
                 const events = eventsByPosition[position.id] ?? [];
                 const cancelledIncomeIds = new Set(
                   events
@@ -755,7 +916,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       >
                         Закрыть позицию
                       </button>
-                        {canRecordPositionIncome(position) && (
+                      {canRecordPositionIncome(position) && (
                         <button
                           className="btn"
                           type="button"
@@ -764,6 +925,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           Начислить доход
                         </button>
                       )}
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handleOpenTopUpForm(position)}
+                      >
+                        Пополнить позицию
+                      </button>
                       <button
                         className="btn"
                         type="button"
@@ -942,6 +1110,66 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       </form>
                     )}
 
+                    {topUpDraft && (
+                      <form onSubmit={(event) => void handleTopUpPosition(position, event)}>
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Сумма пополнения"
+                            value={topUpDraft.amount}
+                            onChange={(event) => handleTopUpDraftChange(position.id, { amount: event.target.value })}
+                            disabled={submittingTopUpId === position.id}
+                            style={{ width: 180 }}
+                          />
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Количество, если есть"
+                            value={topUpDraft.quantity}
+                            onChange={(event) => handleTopUpDraftChange(position.id, { quantity: event.target.value })}
+                            disabled={submittingTopUpId === position.id}
+                            style={{ width: 180 }}
+                          />
+                          <select
+                            className="input"
+                            value={topUpDraft.currencyCode}
+                            onChange={(event) => handleTopUpDraftChange(position.id, { currencyCode: event.target.value })}
+                            disabled={submittingTopUpId === position.id}
+                          >
+                            <option value={position.currency_code}>{position.currency_code}</option>
+                          </select>
+                          <input
+                            className="input"
+                            type="date"
+                            value={topUpDraft.toppedUpAt}
+                            onChange={(event) => handleTopUpDraftChange(position.id, { toppedUpAt: event.target.value })}
+                            disabled={submittingTopUpId === position.id}
+                          />
+                        </div>
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            placeholder="Комментарий к пополнению"
+                            value={topUpDraft.comment}
+                            onChange={(event) => handleTopUpDraftChange(position.id, { comment: event.target.value })}
+                            disabled={submittingTopUpId === position.id}
+                            style={{ flex: '1 1 280px' }}
+                          />
+                          <button
+                            className="btn btn--primary"
+                            type="submit"
+                            disabled={submittingTopUpId === position.id}
+                          >
+                            {submittingTopUpId === position.id ? 'Пополняем...' : 'Подтвердить пополнение'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
                     {selectedPositionId === position.id && (
                       <div style={{ marginTop: 12 }}>
                         {eventsError && (
@@ -1009,6 +1237,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </p>
           )}
 
+          {topUpError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
+              {topUpError}
+            </p>
+          )}
+
           {deleteError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
               {deleteError}
@@ -1063,8 +1297,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
         <div className="panel">
           <p className="list-row__sub">
-            Базовые ручные позиции, закрытие, начисление дохода и безопасные отмены уже готовы.
-            Следом логично добавить пополнение позиции без закрытия и сводные метрики по инвестиционным счетам.
+            Базовый инвестиционный контур уже собран: переводы, ручные позиции, пополнение, доходы, закрытие и безопасные корректировки.
+            Дальше логично добавить частичное закрытие, комиссии и более богатые метаданные по типам активов.
           </p>
         </div>
       </section>

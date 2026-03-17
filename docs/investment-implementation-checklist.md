@@ -136,12 +136,12 @@
   - [ ] `created_at`
 - [ ] Начальные типы событий:
   - [x] `open`
-  - [ ] `top_up`
+  - [x] `top_up`
   - [ ] `partial_close`
   - [x] `close`
   - [x] `income`
   - [ ] `fee`
-  - [ ] `adjustment`
+  - [x] `adjustment`
 - [ ] В `metadata` поддержать будущие поля без миграций
 
 ### 6. Optional Read Model
@@ -211,6 +211,7 @@
 - [ ] `put__transfer_to_investment_account`
 - [ ] `put__transfer_from_investment_account`
 - [x] `put__open_portfolio_position`
+- [x] `put__top_up_portfolio_position`
 - [x] `put__close_portfolio_position`
 - [x] `put__record_portfolio_income`
 - [x] `put__delete_portfolio_position`
@@ -221,7 +222,7 @@
 ### 12. SQL Read Functions
 
 - [x] `get__investment_accounts`
-- [ ] `get__portfolio_summary`
+- [x] `get__portfolio_summary`
 - [x] `get__portfolio_positions`
 - [x] `get__portfolio_position`
 - [x] `get__portfolio_events`
@@ -234,9 +235,10 @@
 - [ ] Добавить endpoints:
 - [ ] `GET /api/v1/portfolio/accounts`
 - [ ] `POST /api/v1/portfolio/accounts`
-  - [ ] `GET /api/v1/portfolio/summary`
+  - [x] `GET /api/v1/portfolio/summary`
   - [x] `GET /api/v1/portfolio/positions`
   - [x] `POST /api/v1/portfolio/positions`
+  - [x] `POST /api/v1/portfolio/positions/{id}/top-up`
   - [x] `POST /api/v1/portfolio/positions/{id}/close`
   - [x] `POST /api/v1/portfolio/positions/{id}/income`
   - [x] `DELETE /api/v1/portfolio/positions/{id}`
@@ -272,7 +274,7 @@
   - [ ] `PortfolioAssetType`
   - [x] `PortfolioPosition`
   - [x] `PortfolioEvent`
-  - [ ] `PortfolioSummary`
+  - [x] `PortfolioSummary`
 - [x] Добавить API-функции в [api.ts](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/api.ts)
 
 ### 17. Portfolio Page
@@ -289,6 +291,7 @@
   - [x] `Закрыть`
   - [x] `Начислить доход`
   - [x] `Добавить событие`
+  - [x] `Пополнить позицию`
 
 ### 18. Position Creation UX
 
@@ -330,16 +333,16 @@
 
 ### 21. Portfolio Metrics
 
-- [ ] Показать по investment-счету:
-  - [ ] cash balance
-  - [ ] invested principal
-  - [ ] realized income
-  - [ ] current position count
+- [x] Показать по investment-счету:
+  - [x] cash balance
+  - [x] invested principal
+  - [x] realized income
+  - [x] current position count
 - [ ] Показать по позиции:
-  - [ ] invested amount
+  - [x] invested amount
   - [ ] returned amount
   - [ ] income amount
-  - [ ] status
+  - [x] status
 
 ### 22. Valuation Strategy
 
@@ -412,6 +415,7 @@
 - [x] `portfolio_positions`
 - [x] `portfolio_events`
 - [x] создание позиции вручную
+- [x] пополнение позиции
 - [x] закрытие позиции
 - [x] начисление дохода
 - [x] страница `Портфель`
@@ -453,3 +457,5 @@
 - [x] добавить `close position`
 - [x] добавить `record income`
 - [x] сделать открытие/закрытие позиции с реальным движением денег на investment-счете
+- [x] добавить `top_up position`
+- [x] добавить сводку по investment-счетам

@@ -1,0 +1,108 @@
+CREATE OR REPLACE FUNCTION budgeting.get__portfolio_summary(
+    _user_id bigint
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    _family_id bigint;
+    _result jsonb;
+BEGIN
+    SET search_path TO budgeting;
+
+    _family_id := budgeting.get__user_family_id(_user_id);
+
+    WITH scoped_accounts AS (
+        SELECT
+            ba.id,
+            ba.name,
+            ba.owner_type,
+            ba.owner_user_id,
+            ba.owner_family_id,
+            CASE
+                WHEN ba.owner_type = 'user' THEN COALESCE(u.first_name, u.username, 'Personal')
+                ELSE f.name
+            END AS owner_name
+        FROM bank_accounts ba
+        LEFT JOIN users u
+          ON u.id = ba.owner_user_id
+        LEFT JOIN families f
+          ON f.id = ba.owner_family_id
+        WHERE ba.is_active
+          AND ba.account_kind = 'investment'
+          AND (
+                (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
+                OR
+                (ba.owner_type = 'family' AND ba.owner_family_id = _family_id)
+              )
+    ),
+    cash_by_account AS (
+        SELECT
+            cbb.bank_account_id,
+            COALESCE(sum(cbb.historical_cost_in_base), 0) AS cash_balance_in_base
+        FROM current_bank_balances cbb
+        JOIN scoped_accounts sa
+          ON sa.id = cbb.bank_account_id
+        GROUP BY cbb.bank_account_id
+    ),
+    principal_by_account AS (
+        SELECT
+            pp.investment_account_id,
+            count(*) FILTER (WHERE pp.status = 'open') AS open_positions_count,
+            COALESCE(sum(
+                CASE
+                    WHEN pp.status = 'open' THEN COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0)
+                    ELSE 0
+                END
+            ), 0) AS invested_principal_in_base
+        FROM portfolio_positions pp
+        JOIN scoped_accounts sa
+          ON sa.id = pp.investment_account_id
+        GROUP BY pp.investment_account_id
+    ),
+    income_by_account AS (
+        SELECT
+            pp.investment_account_id,
+            COALESCE(sum(
+                CASE
+                    WHEN pe.event_type = 'income' THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
+                    WHEN pe.event_type = 'adjustment' AND (pe.metadata ->> 'action') = 'cancel_income'
+                        THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
+                    ELSE 0
+                END
+            ), 0) AS realized_income_in_base
+        FROM portfolio_events pe
+        JOIN portfolio_positions pp
+          ON pp.id = pe.position_id
+        JOIN scoped_accounts sa
+          ON sa.id = pp.investment_account_id
+        GROUP BY pp.investment_account_id
+    )
+    SELECT COALESCE(
+        jsonb_agg(
+            jsonb_build_object(
+                'investment_account_id', sa.id,
+                'investment_account_name', sa.name,
+                'investment_account_owner_type', sa.owner_type,
+                'investment_account_owner_name', sa.owner_name,
+                'cash_balance_in_base', COALESCE(ca.cash_balance_in_base, 0),
+                'invested_principal_in_base', COALESCE(pa.invested_principal_in_base, 0),
+                'realized_income_in_base', COALESCE(ia.realized_income_in_base, 0),
+                'open_positions_count', COALESCE(pa.open_positions_count, 0)
+            )
+            ORDER BY sa.id
+        ),
+        '[]'::jsonb
+    )
+    INTO _result
+    FROM scoped_accounts sa
+    LEFT JOIN cash_by_account ca
+      ON ca.bank_account_id = sa.id
+    LEFT JOIN principal_by_account pa
+      ON pa.investment_account_id = sa.id
+    LEFT JOIN income_by_account ia
+      ON ia.investment_account_id = sa.id;
+
+    RETURN _result;
+END
+$function$;

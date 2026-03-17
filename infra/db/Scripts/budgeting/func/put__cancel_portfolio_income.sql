@@ -193,7 +193,8 @@ BEGIN
         jsonb_build_object(
             'action', 'cancel_income',
             'cancelled_event_id', _event_id,
-            'source_operation_id', _linked_operation_id
+            'source_operation_id', _linked_operation_id,
+            'amount_in_base', -_bank_cost_delta
         ),
         _user_id
     );

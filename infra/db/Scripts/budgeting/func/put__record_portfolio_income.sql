@@ -169,7 +169,8 @@ BEGIN
         NULLIF(btrim(_comment), ''),
         jsonb_build_object(
             'income_kind', _normalized_income_kind,
-            'asset_type_code', _asset_type_code
+            'asset_type_code', _asset_type_code,
+            'amount_in_base', _effective_amount_in_base
         ),
         _user_id
     );

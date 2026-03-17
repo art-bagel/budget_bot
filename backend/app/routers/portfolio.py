@@ -36,7 +36,7 @@ class PortfolioPositionItem(BaseModel):
 class PortfolioEventItem(BaseModel):
     id: int
     position_id: int
-    event_type: Literal['open', 'close', 'income', 'adjustment']
+    event_type: Literal['open', 'top_up', 'close', 'income', 'adjustment']
     event_at: date
     quantity: float | None = None
     amount: float | None = None
@@ -58,6 +58,14 @@ class CreatePortfolioPositionRequest(BaseModel):
     opened_at: date | None = None
     comment: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TopUpPortfolioPositionRequest(BaseModel):
+    amount_in_currency: float
+    currency_code: str
+    quantity: float | None = None
+    topped_up_at: date | None = None
+    comment: str | None = None
 
 
 class ClosePortfolioPositionRequest(BaseModel):
@@ -97,6 +105,24 @@ class CancelPortfolioIncomeResponse(BaseModel):
     status: Literal['cancelled']
     event_id: int
     operation_id: int
+
+
+class PortfolioSummaryItem(BaseModel):
+    investment_account_id: int
+    investment_account_name: str
+    investment_account_owner_type: Literal['user', 'family']
+    investment_account_owner_name: str
+    cash_balance_in_base: float
+    invested_principal_in_base: float
+    realized_income_in_base: float
+    open_positions_count: int
+
+
+@router.get('/summary', response_model=List[PortfolioSummaryItem])
+async def get_portfolio_summary(
+    user: TelegramUser = Depends(get_telegram_user),
+) -> list:
+    return await reports.get__portfolio_summary(user.user_id)
 
 
 @router.get('/positions', response_model=List[PortfolioPositionItem])
@@ -145,6 +171,24 @@ async def close_portfolio_position(
         close_currency_code=body.close_currency_code,
         close_amount_in_base=body.close_amount_in_base,
         closed_at=body.closed_at,
+        comment=body.comment,
+    )
+    return PortfolioPositionItem(**result)
+
+
+@router.post('/positions/{position_id}/top-up', response_model=PortfolioPositionItem)
+async def top_up_portfolio_position(
+    position_id: int,
+    body: TopUpPortfolioPositionRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> PortfolioPositionItem:
+    result = await context.put__top_up_portfolio_position(
+        user_id=user.user_id,
+        position_id=position_id,
+        amount_in_currency=body.amount_in_currency,
+        currency_code=body.currency_code,
+        quantity=body.quantity,
+        topped_up_at=body.topped_up_at,
         comment=body.comment,
     )
     return PortfolioPositionItem(**result)

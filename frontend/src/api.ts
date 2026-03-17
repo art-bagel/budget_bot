@@ -39,12 +39,14 @@ import type {
   PortfolioPosition,
   PortfolioEvent,
   CreatePortfolioPositionRequest,
+  TopUpPortfolioPositionRequest,
   ClosePortfolioPositionRequest,
   RecordPortfolioIncomeRequest,
   RecordPortfolioIncomeResponse,
   DeletePortfolioPositionResponse,
   CancelPortfolioIncomeRequest,
   CancelPortfolioIncomeResponse,
+  PortfolioSummaryItem,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -394,10 +396,24 @@ export async function fetchPortfolioPositions(
   return apiFetch<PortfolioPosition[]>(`/portfolio/positions${query ? `?${query}` : ''}`);
 }
 
+export async function fetchPortfolioSummary(): Promise<PortfolioSummaryItem[]> {
+  return apiFetch<PortfolioSummaryItem[]>('/portfolio/summary');
+}
+
 export async function createPortfolioPosition(
   data: CreatePortfolioPositionRequest,
 ): Promise<PortfolioPosition> {
   return apiFetch<PortfolioPosition>('/portfolio/positions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function topUpPortfolioPosition(
+  positionId: number,
+  data: TopUpPortfolioPositionRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/top-up`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

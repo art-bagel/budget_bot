@@ -310,7 +310,7 @@ export interface PortfolioPosition {
 export interface PortfolioEvent {
   id: number;
   position_id: number;
-  event_type: 'open' | 'close' | 'income' | 'adjustment';
+  event_type: 'open' | 'top_up' | 'close' | 'income' | 'adjustment';
   event_at: string;
   quantity?: number | null;
   amount?: number | null;
@@ -332,6 +332,14 @@ export interface CreatePortfolioPositionRequest {
   opened_at?: string;
   comment?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface TopUpPortfolioPositionRequest {
+  amount_in_currency: number;
+  currency_code: string;
+  quantity?: number;
+  topped_up_at?: string;
+  comment?: string;
 }
 
 export interface ClosePortfolioPositionRequest {
@@ -371,6 +379,17 @@ export interface CancelPortfolioIncomeResponse {
   status: 'cancelled';
   event_id: number;
   operation_id: number;
+}
+
+export interface PortfolioSummaryItem {
+  investment_account_id: number;
+  investment_account_name: string;
+  investment_account_owner_type: 'user' | 'family';
+  investment_account_owner_name: string;
+  cash_balance_in_base: number;
+  invested_principal_in_base: number;
+  realized_income_in_base: number;
+  open_positions_count: number;
 }
 
 export interface ScheduledExpense {

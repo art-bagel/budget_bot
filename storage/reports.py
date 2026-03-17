@@ -21,6 +21,7 @@ class Reports(DataBase):
     F_GET__OPERATIONS_HISTORY = 'get__operations_history'
     F_GET__OPERATIONS_ANALYTICS = 'get__operations_analytics'
     F_GET__PORTFOLIO_VALUATION = 'get__portfolio_valuation'
+    F_GET__PORTFOLIO_SUMMARY = 'get__portfolio_summary'
     F_GET__PORTFOLIO_POSITION = 'get__portfolio_position'
     F_GET__PORTFOLIO_POSITIONS = 'get__portfolio_positions'
     F_GET__PORTFOLIO_EVENTS = 'get__portfolio_events'
@@ -241,6 +242,16 @@ class Reports(DataBase):
             target_currency_code,
             as_of,
         )
+
+    async def get__portfolio_summary(
+        self,
+        user_id: int,
+    ) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__PORTFOLIO_SUMMARY),
+            user_id,
+        )
+        return result if result else []
 
     async def get__portfolio_position(
         self,
