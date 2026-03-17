@@ -36,6 +36,10 @@ import type {
   RecordIncomeSplitResponse,
   CreateBankAccountRequest,
   DashboardBankBalance,
+  PortfolioPosition,
+  PortfolioEvent,
+  CreatePortfolioPositionRequest,
+  ClosePortfolioPositionRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -365,6 +369,47 @@ export async function createBankAccount(data: CreateBankAccountRequest): Promise
 
 export async function fetchBankAccountSnapshot(bankAccountId: number): Promise<DashboardBankBalance[]> {
   return apiFetch<DashboardBankBalance[]>(`/bank-accounts/${bankAccountId}/snapshot`);
+}
+
+export async function fetchPortfolioPositions(
+  status?: 'open' | 'closed',
+  investmentAccountId?: number,
+): Promise<PortfolioPosition[]> {
+  const params = new URLSearchParams();
+
+  if (status) {
+    params.set('status', status);
+  }
+
+  if (investmentAccountId) {
+    params.set('investment_account_id', String(investmentAccountId));
+  }
+
+  const query = params.toString();
+  return apiFetch<PortfolioPosition[]>(`/portfolio/positions${query ? `?${query}` : ''}`);
+}
+
+export async function createPortfolioPosition(
+  data: CreatePortfolioPositionRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>('/portfolio/positions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function closePortfolioPosition(
+  positionId: number,
+  data: ClosePortfolioPositionRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/close`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchPortfolioEvents(positionId: number): Promise<PortfolioEvent[]> {
+  return apiFetch<PortfolioEvent[]>(`/portfolio/positions/${positionId}/events`);
 }
 
 export async function fetchIncomeSourcePattern(incomeSourceId: number): Promise<IncomePattern | null> {

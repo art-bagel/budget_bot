@@ -9,6 +9,8 @@ class Context(DataBase):
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_FAMILY = 'put__create_family'
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
+    F_PUT__CREATE_PORTFOLIO_POSITION = 'put__create_portfolio_position'
+    F_PUT__CLOSE_PORTFOLIO_POSITION = 'put__close_portfolio_position'
     F_PUT__INVITE_FAMILY_MEMBER = 'put__invite_family_member'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
@@ -78,6 +80,52 @@ class Context(DataBase):
             self._fn(self.F_PUT__INVITE_FAMILY_MEMBER),
             user_id,
             username,
+        )
+
+    async def put__create_portfolio_position(
+        self,
+        user_id: int,
+        investment_account_id: int,
+        asset_type_code: str,
+        title: str,
+        quantity: Optional[float] = None,
+        amount_in_currency: float = 0,
+        currency_code: str = '',
+        opened_at: Optional[str] = None,
+        comment: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_PORTFOLIO_POSITION),
+            user_id,
+            investment_account_id,
+            asset_type_code,
+            title,
+            quantity,
+            amount_in_currency,
+            currency_code,
+            opened_at,
+            comment,
+            metadata,
+        )
+
+    async def put__close_portfolio_position(
+        self,
+        user_id: int,
+        position_id: int,
+        close_amount_in_currency: float,
+        close_currency_code: str,
+        closed_at: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CLOSE_PORTFOLIO_POSITION),
+            user_id,
+            position_id,
+            close_amount_in_currency,
+            close_currency_code,
+            closed_at,
+            comment,
         )
 
     async def put__create_category(

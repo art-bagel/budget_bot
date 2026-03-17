@@ -95,7 +95,7 @@
 
 ### 4. Portfolio Positions
 
-- [ ] Создать таблицу `portfolio_positions`
+- [x] Создать таблицу `portfolio_positions`
 - [ ] Поля:
   - [ ] `id`
   - [ ] `owner_type`
@@ -115,11 +115,11 @@
 - [ ] Check constraints:
   - [ ] owner consistency
   - [ ] `status in ('open', 'closed')`
-- [ ] Проверить, что `investment_account_id` указывает только на `account_kind = 'investment'`
+- [x] Проверить, что `investment_account_id` указывает только на `account_kind = 'investment'`
 
 ### 5. Portfolio Events
 
-- [ ] Создать таблицу `portfolio_events`
+- [x] Создать таблицу `portfolio_events`
 - [ ] Поля:
   - [ ] `id`
   - [ ] `position_id`
@@ -210,8 +210,8 @@
 - [x] `put__create_investment_account`
 - [ ] `put__transfer_to_investment_account`
 - [ ] `put__transfer_from_investment_account`
-- [ ] `put__open_portfolio_position`
-- [ ] `put__close_portfolio_position`
+- [x] `put__open_portfolio_position`
+- [x] `put__close_portfolio_position`
 - [ ] `put__record_portfolio_income`
 - [ ] `put__record_portfolio_event`
 - [ ] `put__reverse_investment_operation` или явное решение временно не поддерживать reversal
@@ -220,15 +220,15 @@
 
 - [x] `get__investment_accounts`
 - [ ] `get__portfolio_summary`
-- [ ] `get__portfolio_positions`
-- [ ] `get__portfolio_position`
-- [ ] `get__portfolio_events`
+- [x] `get__portfolio_positions`
+- [x] `get__portfolio_position`
+- [x] `get__portfolio_events`
 - [ ] `get__investment_operations_history`
 - [ ] `get__investment_asset_types`
 
 ### 13. FastAPI Routers
 
-- [ ] Добавить новый router `portfolio`
+- [x] Добавить новый router `portfolio`
 - [ ] Добавить endpoints:
 - [ ] `GET /api/v1/portfolio/accounts`
 - [ ] `POST /api/v1/portfolio/accounts`
@@ -240,7 +240,7 @@
   - [ ] `GET /api/v1/portfolio/positions/{id}/events`
   - [ ] `POST /api/v1/portfolio/transfers/in`
   - [ ] `POST /api/v1/portfolio/transfers/out`
-- [ ] Подключить router в [main.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend/app/main.py)
+- [x] Подключить router в [main.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend/app/main.py)
 
 ### 14. Validation Rules
 
@@ -262,40 +262,40 @@
 
 ### 16. Types and API Client
 
-- [ ] Добавить TS-типы:
+- [x] Добавить TS-типы:
   - [ ] `InvestmentAccount`
   - [ ] `PortfolioAssetType`
-  - [ ] `PortfolioPosition`
-  - [ ] `PortfolioEvent`
+  - [x] `PortfolioPosition`
+  - [x] `PortfolioEvent`
   - [ ] `PortfolioSummary`
-- [ ] Добавить API-функции в [api.ts](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/api.ts)
+- [x] Добавить API-функции в [api.ts](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend/src/api.ts)
 
 ### 17. Portfolio Page
 
-- [ ] Блок со списком investment-счетов
-- [ ] Блок со сводкой по портфелю
-- [ ] Список открытых позиций
-- [ ] Список закрытых позиций
+- [x] Блок со списком investment-счетов
+- [x] Блок со сводкой по портфелю
+- [x] Список открытых позиций
+- [x] Список закрытых позиций
 - [ ] Фильтры:
   - [ ] по счету
   - [ ] по типу актива
   - [ ] по статусу
 - [ ] Карточка позиции с действиями:
-  - [ ] `Закрыть`
+  - [x] `Закрыть`
   - [ ] `Начислить доход`
-  - [ ] `Добавить событие`
+  - [x] `Добавить событие`
 
 ### 18. Position Creation UX
 
-- [ ] Форма создания позиции
+- [x] Форма создания позиции
 - [ ] Поля MVP:
-  - [ ] инвестиционный счет
-  - [ ] тип актива
-  - [ ] название
-  - [ ] валюта
-  - [ ] сумма вложения
-  - [ ] дата открытия
-  - [ ] комментарий
+  - [x] инвестиционный счет
+  - [x] тип актива
+  - [x] название
+  - [x] валюта
+  - [x] сумма вложения
+  - [x] дата открытия
+  - [x] комментарий
 - [ ] Дополнительные поля по типу актива сначала хранить в `metadata`
 - [ ] Не блокировать создание позиции, если инструмент не найден в справочнике
 
@@ -404,10 +404,10 @@
 ### Phase 2. Portfolio MVP
 
 - [ ] `investment_asset_types`
-- [ ] `portfolio_positions`
-- [ ] `portfolio_events`
-- [ ] создание позиции вручную
-- [ ] закрытие позиции
+- [x] `portfolio_positions`
+- [x] `portfolio_events`
+- [x] создание позиции вручную
+- [x] закрытие позиции
 - [ ] начисление дохода
 - [x] страница `Портфель`
 
@@ -444,6 +444,6 @@
 - [x] реализовать перевод `cash -> investment`
 - [x] реализовать перевод `investment -> cash`
 - [x] добавить новую страницу `Портфель`
-- [ ] добавить простую ручную позицию с типом `security | deposit | crypto`
-- [ ] добавить `close position`
+- [x] добавить простую ручную позицию с типом `security | deposit | crypto`
+- [x] добавить `close position`
 - [ ] добавить `record income`

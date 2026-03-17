@@ -284,6 +284,61 @@ export interface CreateBankAccountRequest {
 
 export interface CreateBankAccountResponse extends BankAccount {}
 
+export interface PortfolioPosition {
+  id: number;
+  investment_account_id: number;
+  investment_account_name: string;
+  investment_account_owner_type: 'user' | 'family';
+  investment_account_owner_name: string;
+  asset_type_code: string;
+  title: string;
+  status: 'open' | 'closed';
+  quantity?: number | null;
+  amount_in_currency: number;
+  currency_code: string;
+  opened_at: string;
+  closed_at?: string | null;
+  close_amount_in_currency?: number | null;
+  close_currency_code?: string | null;
+  comment?: string | null;
+  metadata: Record<string, unknown>;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface PortfolioEvent {
+  id: number;
+  position_id: number;
+  event_type: 'open' | 'close';
+  event_at: string;
+  quantity?: number | null;
+  amount?: number | null;
+  currency_code?: string | null;
+  comment?: string | null;
+  metadata: Record<string, unknown>;
+  created_by_user_id: number;
+  created_at: string;
+}
+
+export interface CreatePortfolioPositionRequest {
+  investment_account_id: number;
+  asset_type_code: string;
+  title: string;
+  quantity?: number;
+  amount_in_currency: number;
+  currency_code: string;
+  opened_at?: string;
+  comment?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ClosePortfolioPositionRequest {
+  close_amount_in_currency: number;
+  close_currency_code: string;
+  closed_at?: string;
+  comment?: string;
+}
+
 export interface ScheduledExpense {
   id: number;
   category_id: number;
