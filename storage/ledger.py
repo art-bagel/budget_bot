@@ -301,12 +301,11 @@ class Ledger(DataBase):
         income_source_id: int,
         lines: list,
     ) -> dict:
-        import json
         return await self.call_function(
             self._fn(self.F_PUT__UPSERT_INCOME_SOURCE_PATTERN),
             user_id,
             income_source_id,
-            json.dumps(lines),
+            lines,
         )
 
     async def put__delete_income_source_pattern(self, user_id: int, income_source_id: int) -> bool:
