@@ -1,8 +1,10 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import {
+  cancelPortfolioIncome,
   closePortfolioPosition,
   createPortfolioPosition,
+  deletePortfolioPosition,
   fetchBankAccountSnapshot,
   fetchBankAccounts,
   fetchCurrencies,
@@ -99,6 +101,12 @@ function getEventLabel(item: PortfolioEvent): string {
     return 'INCOME';
   }
 
+  if (item.event_type === 'adjustment') {
+    const action = typeof item.metadata?.action === 'string' ? item.metadata.action : '';
+    if (action === 'cancel_income') return 'CANCEL';
+    return 'ADJUST';
+  }
+
   return item.event_type.toUpperCase();
 }
 
@@ -111,10 +119,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
   const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
+  const [deletingPositionId, setDeletingPositionId] = useState<number | null>(null);
+  const [cancellingIncomeEventId, setCancellingIncomeEventId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
   const [incomeError, setIncomeError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [cancelIncomeError, setCancelIncomeError] = useState<string | null>(null);
   const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
@@ -407,6 +419,56 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
   };
 
+  const handleDeletePosition = async (position: PortfolioPosition) => {
+    const isConfirmed = window.confirm(
+      'Удалить незакрытую позицию? Это возможно только если по ней еще нет доходов и других событий.',
+    );
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    setDeletingPositionId(position.id);
+    setDeleteError(null);
+
+    try {
+      await deletePortfolioPosition(position.id);
+      if (selectedPositionId === position.id) {
+        setSelectedPositionId(null);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setDeleteError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingPositionId(null);
+    }
+  };
+
+  const handleCancelIncome = async (positionId: number, eventId: number) => {
+    const isConfirmed = window.confirm(
+      'Отменить этот доход? На инвестиционном счете будет создана отдельная корректировка.',
+    );
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    setCancellingIncomeEventId(eventId);
+    setCancelIncomeError(null);
+
+    try {
+      await cancelPortfolioIncome(eventId);
+      if (selectedPositionId === positionId) {
+        await loadEventsForPosition(positionId);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setCancelIncomeError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setCancellingIncomeEventId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="status-screen">
@@ -645,6 +707,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 const closeDraft = closeDrafts[position.id];
                 const incomeDraft = incomeDrafts[position.id];
                 const events = eventsByPosition[position.id] ?? [];
+                const cancelledIncomeIds = new Set(
+                  events
+                    .filter((item) => item.event_type === 'adjustment' && item.metadata?.action === 'cancel_income')
+                    .map((item) => Number(item.metadata?.cancelled_event_id))
+                    .filter((value) => Number.isFinite(value)),
+                );
 
                 return (
                   <div className="dashboard-budget-section" key={position.id}>
@@ -687,7 +755,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       >
                         Закрыть позицию
                       </button>
-                      {canRecordPositionIncome(position) && (
+                        {canRecordPositionIncome(position) && (
                         <button
                           className="btn"
                           type="button"
@@ -696,6 +764,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           Начислить доход
                         </button>
                       )}
+                      <button
+                        className="btn"
+                        type="button"
+                        disabled={deletingPositionId === position.id}
+                        onClick={() => void handleDeletePosition(position)}
+                      >
+                        {deletingPositionId === position.id ? 'Удаляем...' : 'Удалить позицию'}
+                      </button>
                       <button
                         className="btn"
                         type="button"
@@ -882,7 +958,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 <div className="bank-detail-row__main">
                                   <span className="pill">{getEventLabel(item)}</span>
                                   <strong className="bank-detail-row__amount">
-                                    {item.amount && item.currency_code
+                                    {item.amount !== null && item.amount !== undefined && item.currency_code
                                       ? formatAmount(item.amount, item.currency_code)
                                       : 'Без суммы'}
                                   </strong>
@@ -893,6 +969,22 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                   {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
                                   {item.comment ? ` · ${item.comment}` : ''}
                                 </div>
+                                {item.event_type === 'income' && (
+                                  <div className="form-row" style={{ paddingTop: 8 }}>
+                                    {cancelledIncomeIds.has(item.id) ? (
+                                      <span className="tag tag--neutral">Уже отменен</span>
+                                    ) : (
+                                      <button
+                                        className="btn"
+                                        type="button"
+                                        disabled={cancellingIncomeEventId === item.id}
+                                        onClick={() => void handleCancelIncome(position.id, item.id)}
+                                      >
+                                        {cancellingIncomeEventId === item.id ? 'Отменяем...' : 'Отменить доход'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </li>
                             ))}
                           </ul>
@@ -914,6 +1006,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
           {incomeError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
               {incomeError}
+            </p>
+          )}
+
+          {deleteError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
+              {deleteError}
+            </p>
+          )}
+
+          {cancelIncomeError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
+              {cancelIncomeError}
             </p>
           )}
         </div>
@@ -959,8 +1063,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
         <div className="panel">
           <p className="list-row__sub">
-            Базовые ручные позиции, закрытие и начисление дохода уже готовы. Следом логично добавить
-            пополнение позиции без закрытия и отдельную инвестиционную вкладку в истории операций.
+            Базовые ручные позиции, закрытие, начисление дохода и безопасные отмены уже готовы.
+            Следом логично добавить пополнение позиции без закрытия и сводные метрики по инвестиционным счетам.
           </p>
         </div>
       </section>

@@ -36,6 +36,7 @@ BEGIN
            'account_transfer',
            'investment_trade',
            'investment_income',
+           'investment_adjustment',
            'reversal'
        ) THEN
         RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
@@ -78,7 +79,7 @@ BEGIN
                 OR (
                     _normalized_operation_type = 'investment'
                     AND (
-                        o.type IN ('investment_trade', 'investment_income')
+                        o.type IN ('investment_trade', 'investment_income', 'investment_adjustment')
                         OR EXISTS (
                             SELECT 1
                             FROM bank_entries be_filter

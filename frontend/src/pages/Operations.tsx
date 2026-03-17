@@ -32,6 +32,7 @@ const HISTORY_TYPE_OPTIONS = [
   { value: 'income', label: 'Доход' },
   { value: 'investment_trade', label: 'Сделка по инвестиции' },
   { value: 'investment_income', label: 'Доход по инвестициям' },
+  { value: 'investment_adjustment', label: 'Корректировка инвестиции' },
   { value: 'expense', label: 'Расход' },
   { value: 'allocate', label: 'Распределение по категории' },
   { value: 'group_allocate', label: 'Распределение по группе' },
@@ -281,6 +282,12 @@ function getOperationTitle(item: OperationHistoryItem): string {
     return 'Сделка по инвестиции';
   }
   if (item.type === 'investment_income') return 'Доход по инвестициям';
+  if (item.type === 'investment_adjustment') {
+    const investmentEntry = item.bank_entries.find((entry) => entry.bank_account_kind === 'investment');
+    if (investmentEntry?.amount && investmentEntry.amount > 0) return 'Удаление позиции';
+    if (investmentEntry?.amount && investmentEntry.amount < 0) return 'Отмена дохода';
+    return 'Корректировка инвестиции';
+  }
   if (item.type === 'expense') return 'Расход';
   if (item.type === 'allocate') return 'Распределение по категории';
   if (item.type === 'group_allocate') return 'Распределение по группе';
@@ -399,6 +406,10 @@ function buildDonutGradient(segments: AnalyticsSegment[]): string {
 function getInvestmentHistoryKind(item: OperationHistoryItem): InvestmentHistoryFilter {
   if (item.type === 'investment_trade') return 'trade';
   if (item.type === 'investment_income') return 'income';
+  if (item.type === 'investment_adjustment') {
+    const investmentEntry = item.bank_entries.find((entry) => entry.bank_account_kind === 'investment');
+    return investmentEntry?.amount && investmentEntry.amount > 0 ? 'trade' : 'income';
+  }
   return 'transfer';
 }
 
@@ -710,7 +721,10 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                             )}
                           </div>
                           <div className="history-side">
-                            {!item.has_reversal && item.type !== 'investment_income' && item.type !== 'investment_trade' && (
+                            {!item.has_reversal
+                              && item.type !== 'investment_income'
+                              && item.type !== 'investment_trade'
+                              && item.type !== 'investment_adjustment' && (
                               <button
                                 className="btn"
                                 type="button"

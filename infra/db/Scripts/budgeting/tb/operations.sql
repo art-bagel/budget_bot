@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS budgeting.operations (
     owner_user_id bigint REFERENCES budgeting.users(id),
     owner_family_id bigint REFERENCES budgeting.families(id) ON DELETE CASCADE,
     income_source_id bigint REFERENCES budgeting.income_sources(id),
-    type varchar(30) NOT NULL CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'reversal')),
+    type varchar(30) NOT NULL CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal')),
     reversal_of_operation_id bigint REFERENCES budgeting.operations(id),
     comment text,
     created_at timestamptz NOT NULL DEFAULT current_timestamp,
@@ -26,7 +26,7 @@ ALTER TABLE budgeting.operations
 
 ALTER TABLE budgeting.operations
     ADD CONSTRAINT chk_operations_type
-    CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'reversal'));
+    CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal'));
 
 CREATE INDEX IF NOT EXISTS idx_operations_actor_created_at_id
     ON budgeting.operations (actor_user_id, created_at DESC, id DESC);

@@ -310,7 +310,7 @@ export interface PortfolioPosition {
 export interface PortfolioEvent {
   id: number;
   position_id: number;
-  event_type: 'open' | 'close' | 'income';
+  event_type: 'open' | 'close' | 'income' | 'adjustment';
   event_at: string;
   quantity?: number | null;
   amount?: number | null;
@@ -355,6 +355,22 @@ export interface RecordPortfolioIncomeResponse {
   operation_id: number;
   amount_in_base: number;
   base_currency_code: string;
+}
+
+export interface DeletePortfolioPositionResponse {
+  status: 'deleted';
+  position_id: number;
+  operation_id: number;
+}
+
+export interface CancelPortfolioIncomeRequest {
+  comment?: string;
+}
+
+export interface CancelPortfolioIncomeResponse {
+  status: 'cancelled';
+  event_id: number;
+  operation_id: number;
 }
 
 export interface ScheduledExpense {

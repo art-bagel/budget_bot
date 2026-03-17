@@ -159,7 +159,7 @@
   - [ ] `investment_transfer`
   - [x] `investment_trade`
   - [x] `investment_income`
-  - [ ] `investment_adjustment`
+  - [x] `investment_adjustment`
 - [ ] Обновить:
   - [x] check constraint в `operations`
   - [x] `get__operations_history`
@@ -213,6 +213,8 @@
 - [x] `put__open_portfolio_position`
 - [x] `put__close_portfolio_position`
 - [x] `put__record_portfolio_income`
+- [x] `put__delete_portfolio_position`
+- [x] `put__cancel_portfolio_income`
 - [ ] `put__record_portfolio_event`
 - [x] `put__reverse_investment_operation` или явное решение временно не поддерживать reversal
 
@@ -237,7 +239,9 @@
   - [x] `POST /api/v1/portfolio/positions`
   - [x] `POST /api/v1/portfolio/positions/{id}/close`
   - [x] `POST /api/v1/portfolio/positions/{id}/income`
+  - [x] `DELETE /api/v1/portfolio/positions/{id}`
   - [x] `GET /api/v1/portfolio/positions/{id}/events`
+  - [x] `POST /api/v1/portfolio/events/{id}/cancel`
   - [ ] `POST /api/v1/portfolio/transfers/in`
   - [ ] `POST /api/v1/portfolio/transfers/out`
 - [x] Подключить router в [main.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend/app/main.py)
@@ -417,7 +421,7 @@
 - [x] отдельная вкладка инвестиционных операций
 - [x] фильтры
 - [x] улучшенные подписи событий
-- [ ] безопасная стратегия отмены операций
+- [x] безопасная стратегия отмены операций
 
 ### Phase 4. Extensibility and Analytics
 

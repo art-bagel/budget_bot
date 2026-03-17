@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS budgeting;
 CREATE TABLE IF NOT EXISTS budgeting.portfolio_events (
     id bigserial PRIMARY KEY,
     position_id bigint NOT NULL REFERENCES budgeting.portfolio_positions(id) ON DELETE CASCADE,
-    event_type varchar(30) NOT NULL CHECK (event_type IN ('open', 'close', 'income')),
+    event_type varchar(30) NOT NULL CHECK (event_type IN ('open', 'close', 'income', 'adjustment')),
     event_at date NOT NULL DEFAULT CURRENT_DATE,
     quantity numeric(20, 8),
     amount numeric(20, 8),

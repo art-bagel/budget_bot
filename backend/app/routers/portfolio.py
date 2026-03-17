@@ -36,7 +36,7 @@ class PortfolioPositionItem(BaseModel):
 class PortfolioEventItem(BaseModel):
     id: int
     position_id: int
-    event_type: Literal['open', 'close', 'income']
+    event_type: Literal['open', 'close', 'income', 'adjustment']
     event_at: date
     quantity: float | None = None
     amount: float | None = None
@@ -81,6 +81,22 @@ class RecordPortfolioIncomeResponse(BaseModel):
     operation_id: int
     amount_in_base: float
     base_currency_code: str
+
+
+class DeletePortfolioPositionResponse(BaseModel):
+    status: Literal['deleted']
+    position_id: int
+    operation_id: int
+
+
+class CancelPortfolioIncomeRequest(BaseModel):
+    comment: str | None = None
+
+
+class CancelPortfolioIncomeResponse(BaseModel):
+    status: Literal['cancelled']
+    event_id: int
+    operation_id: int
 
 
 @router.get('/positions', response_model=List[PortfolioPositionItem])
@@ -151,6 +167,32 @@ async def record_portfolio_income(
         comment=body.comment,
     )
     return RecordPortfolioIncomeResponse(**result)
+
+
+@router.delete('/positions/{position_id}', response_model=DeletePortfolioPositionResponse)
+async def delete_portfolio_position(
+    position_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> DeletePortfolioPositionResponse:
+    result = await context.put__delete_portfolio_position(
+        user_id=user.user_id,
+        position_id=position_id,
+    )
+    return DeletePortfolioPositionResponse(**result)
+
+
+@router.post('/events/{event_id}/cancel', response_model=CancelPortfolioIncomeResponse)
+async def cancel_portfolio_income(
+    event_id: int,
+    body: CancelPortfolioIncomeRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CancelPortfolioIncomeResponse:
+    result = await context.put__cancel_portfolio_income(
+        user_id=user.user_id,
+        event_id=event_id,
+        comment=body.comment,
+    )
+    return CancelPortfolioIncomeResponse(**result)
 
 
 @router.get('/positions/{position_id}/events', response_model=List[PortfolioEventItem])

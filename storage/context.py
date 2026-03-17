@@ -11,6 +11,8 @@ class Context(DataBase):
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
     F_PUT__CREATE_PORTFOLIO_POSITION = 'put__create_portfolio_position'
     F_PUT__CLOSE_PORTFOLIO_POSITION = 'put__close_portfolio_position'
+    F_PUT__DELETE_PORTFOLIO_POSITION = 'put__delete_portfolio_position'
+    F_PUT__CANCEL_PORTFOLIO_INCOME = 'put__cancel_portfolio_income'
     F_PUT__INVITE_FAMILY_MEMBER = 'put__invite_family_member'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
@@ -127,6 +129,32 @@ class Context(DataBase):
             close_currency_code,
             close_amount_in_base,
             closed_at,
+            comment,
+        )
+
+    async def put__delete_portfolio_position(
+        self,
+        user_id: int,
+        position_id: int,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__DELETE_PORTFOLIO_POSITION),
+            user_id,
+            position_id,
+            comment,
+        )
+
+    async def put__cancel_portfolio_income(
+        self,
+        user_id: int,
+        event_id: int,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CANCEL_PORTFOLIO_INCOME),
+            user_id,
+            event_id,
             comment,
         )
 

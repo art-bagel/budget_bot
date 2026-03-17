@@ -42,6 +42,9 @@ import type {
   ClosePortfolioPositionRequest,
   RecordPortfolioIncomeRequest,
   RecordPortfolioIncomeResponse,
+  DeletePortfolioPositionResponse,
+  CancelPortfolioIncomeRequest,
+  CancelPortfolioIncomeResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -419,6 +422,24 @@ export async function recordPortfolioIncome(
   data: RecordPortfolioIncomeRequest,
 ): Promise<RecordPortfolioIncomeResponse> {
   return apiFetch<RecordPortfolioIncomeResponse>(`/portfolio/positions/${positionId}/income`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePortfolioPosition(
+  positionId: number,
+): Promise<DeletePortfolioPositionResponse> {
+  return apiFetch<DeletePortfolioPositionResponse>(`/portfolio/positions/${positionId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function cancelPortfolioIncome(
+  eventId: number,
+  data: CancelPortfolioIncomeRequest = {},
+): Promise<CancelPortfolioIncomeResponse> {
+  return apiFetch<CancelPortfolioIncomeResponse>(`/portfolio/events/${eventId}/cancel`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
