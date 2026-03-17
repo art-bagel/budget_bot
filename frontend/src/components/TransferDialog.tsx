@@ -148,10 +148,20 @@ export default function TransferDialog({
               {allTargets.map((t) => (
                 <button
                   key={t.category_id}
-                  className={`btn${selectedTargetId === t.category_id ? ' btn--primary' : ''}`}
                   type="button"
                   onClick={() => handleTargetChange(t.category_id)}
                   disabled={submitting}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    fontSize: '0.9rem',
+                    background: selectedTargetId === t.category_id ? 'var(--bg-accent)' : 'transparent',
+                    color: selectedTargetId === t.category_id ? 'var(--text-on-accent)' : 'var(--text-primary)',
+                    border: 'none',
+                    borderRadius: 8,
+                    cursor: submitting ? 'default' : 'pointer',
+                    outline: 'none',
+                  }}
                 >
                   {t.owner_type === 'family' ? 'Семейный' : 'Личный'}
                 </button>

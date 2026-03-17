@@ -37,16 +37,17 @@ function formatOwnerLabel(ownerType: string): string {
   return ownerType === 'family' ? 'Семейный' : 'Личный';
 }
 
-// Shared style for small inline action links
+// Small text-link button used inside the pattern section
 const linkBtnStyle: React.CSSProperties = {
   background: 'transparent',
-  border: 'none',
+  border: '1px solid var(--border)',
   color: 'var(--text-secondary)',
   cursor: 'pointer',
   fontSize: '0.78rem',
-  padding: '2px 6px',
+  padding: '3px 8px',
   borderRadius: 6,
   flexShrink: 0,
+  lineHeight: 1.4,
 };
 
 
@@ -339,7 +340,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                       </span>
                     ))}
                   </div>
-                  <button type="button" onClick={openPatternEditor} style={linkBtnStyle}>
+                  <button type="button" onClick={openPatternEditor} style={linkBtnStyle} disabled={patternLoading}>
                     Изменить
                   </button>
                 </div>
@@ -404,7 +405,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                           type="button"
                           onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
                           disabled={savingPattern}
-                          style={{ ...linkBtnStyle, fontSize: '1.1rem', lineHeight: 1 }}
+                          style={{ ...linkBtnStyle, color: 'var(--tag-out-fg)', borderColor: 'rgba(180,50,50,0.24)', fontSize: '1rem', padding: '2px 7px' }}
                         >
                           ×
                         </button>
@@ -436,33 +437,36 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                     </p>
                   )}
 
-                  <div className="form-row" style={{ gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {hasPattern && (
                       <button
+                        className="btn btn--danger"
                         type="button"
                         onClick={handleDeletePattern}
                         disabled={savingPattern || deletingPattern}
-                        style={{ ...linkBtnStyle, color: 'var(--tag-out-fg)', marginRight: 'auto' }}
+                        style={{ marginRight: 'auto', fontSize: '0.82rem', padding: '6px 12px' }}
                       >
                         {deletingPattern ? '...' : 'Удалить паттерн'}
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
-                      disabled={savingPattern}
-                      style={linkBtnStyle}
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      className="btn btn--primary"
-                      type="button"
-                      onClick={handleSavePattern}
-                      disabled={savingPattern}
-                    >
-                      {savingPattern ? '...' : 'Сохранить'}
-                    </button>
+                    <div className="action-pill" style={{ marginLeft: hasPattern ? 0 : 'auto' }}>
+                      <button
+                        className="action-pill__cancel"
+                        type="button"
+                        onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
+                        disabled={savingPattern}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        className="action-pill__confirm"
+                        type="button"
+                        onClick={handleSavePattern}
+                        disabled={savingPattern}
+                      >
+                        {savingPattern ? '...' : 'Сохранить'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
