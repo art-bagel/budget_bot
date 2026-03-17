@@ -20,12 +20,12 @@ import { formatAmount } from '../utils/format';
 const HISTORY_PAGE_SIZE = 20;
 const ANALYTICS_PERIOD_WINDOW = 6;
 const ANALYTICS_COLOR_PALETTE = [
-  '#3ec9eb',
-  '#52d4a8',
-  '#8878ff',
-  '#c49df9',
-  '#5aafd6',
-  '#9baab6',
+  '#00d2ff',
+  '#00e090',
+  '#ff5580',
+  '#ffaa00',
+  '#a855ff',
+  '#7b8a99',
 ];
 const HISTORY_TYPE_OPTIONS = [
   { value: '', label: 'Все типы' },

@@ -927,7 +927,7 @@ p { margin: 0; }
   border: 1px solid var(--border);
   background: var(--analytics-chip-bg);
   color: var(--text-secondary);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 7px 14px;
   font-size: 0.8rem;
   font-weight: 600;
@@ -949,7 +949,7 @@ p { margin: 0; }
 .analytics-period-select {
   height: 34px;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background-color: var(--analytics-chip-bg);
   color: var(--text-primary);
@@ -1084,12 +1084,13 @@ p { margin: 0; }
 .analytics-donut--glow {
   box-shadow:
     0 0 0 1px var(--border),
-    0 0 48px rgba(72, 208, 240, 0.18);
+    0 0 64px rgba(0, 210, 255, 0.35),
+    0 0 24px rgba(0, 224, 144, 0.2);
 }
 
 .analytics-donut__inner {
-  width: 60%;
-  height: 60%;
+  width: 54%;
+  height: 54%;
   border-radius: 50%;
   background: var(--analytics-donut-center);
   border: 1px solid var(--border);
