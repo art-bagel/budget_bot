@@ -754,9 +754,9 @@ export default function Dashboard({ user }: { user: UserContext }) {
               ) : (
                 <ul className="groups-list">
                   {[
-                    ...personalGroups,
+                    ...[...personalGroups].sort((a, b) => (groupMembersByGroupId[b.category_id]?.length ?? 0) - (groupMembersByGroupId[a.category_id]?.length ?? 0)),
                     ...(hasFamily && familyGroups.length > 0 && personalGroups.length > 0 ? [null] : []),
-                    ...familyGroups,
+                    ...[...familyGroups].sort((a, b) => (groupMembersByGroupId[b.category_id]?.length ?? 0) - (groupMembersByGroupId[a.category_id]?.length ?? 0)),
                   ].map((category) => {
                     if (category === null) {
                       return (
