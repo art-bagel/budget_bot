@@ -59,13 +59,14 @@ BEGIN
     LIMIT 1;
 
     IF _bank_account_id IS NULL THEN
-        INSERT INTO bank_accounts (owner_type, owner_user_id, name, is_primary, is_active)
-        VALUES ('user', _user_id, 'Main', true, true)
+        INSERT INTO bank_accounts (owner_type, owner_user_id, name, account_kind, is_primary, is_active)
+        VALUES ('user', _user_id, 'Main', 'cash', true, true)
         RETURNING id
         INTO _bank_account_id;
     ELSE
         UPDATE bank_accounts
         SET is_primary = true,
+            account_kind = 'cash',
             is_active = true
         WHERE id = _bank_account_id;
     END IF;

@@ -72,6 +72,9 @@ Table bank_accounts {
   owner_user_id bigint [ref: > users.id]
   owner_family_id bigint [ref: > families.id]
   name varchar(100) [not null]
+  account_kind varchar(20) [not null, default: 'cash', note: "cash | investment"]
+  provider_name varchar(150)
+  provider_account_ref varchar(150)
   is_primary boolean [not null, default: false]
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]

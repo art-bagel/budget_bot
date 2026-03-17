@@ -40,6 +40,7 @@ BEGIN
             SELECT 1 FROM bank_accounts ba
             WHERE ba.id = _ba_id
               AND ba.is_active
+              AND ba.account_kind = 'cash'
               AND budgeting.has__owner_access(_user_id, ba.owner_type, ba.owner_user_id, ba.owner_family_id)
         ) THEN
             RAISE EXCEPTION 'Bank account % is not accessible', _ba_id;

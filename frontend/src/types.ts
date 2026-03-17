@@ -262,13 +262,24 @@ export interface FamilyInvitation {
 export interface BankAccount {
   id: number;
   name: string;
-  owner_type: string;
+  owner_type: 'user' | 'family';
   owner_user_id?: number | null;
   owner_family_id?: number | null;
   owner_name: string;
+  account_kind: 'cash' | 'investment';
+  provider_name?: string | null;
+  provider_account_ref?: string | null;
   is_primary: boolean;
   is_active: boolean;
   created_at: string;
+}
+
+export interface CreateBankAccountRequest {
+  name: string;
+  owner_type?: 'user' | 'family';
+  account_kind?: 'cash' | 'investment';
+  provider_name?: string;
+  provider_account_ref?: string;
 }
 
 export interface ScheduledExpense {

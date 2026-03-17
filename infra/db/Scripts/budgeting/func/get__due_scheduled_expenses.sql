@@ -40,6 +40,7 @@ BEGIN
           OR (se.owner_type = 'family' AND ba.owner_family_id = se.owner_family_id)
          )
      AND ba.is_primary = TRUE
+     AND ba.account_kind = 'cash'
      AND ba.is_active  = TRUE
     WHERE se.is_active    = TRUE
       AND se.next_run_at <= CURRENT_DATE;

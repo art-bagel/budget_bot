@@ -1,17 +1,24 @@
 CREATE OR REPLACE FUNCTION budgeting.get__bank_accounts(
     _user_id bigint,
-    _is_active boolean DEFAULT true
+    _is_active boolean DEFAULT true,
+    _account_kind text DEFAULT 'cash'
 )
 RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
     _family_id bigint;
+    _normalized_account_kind text := nullif(trim(_account_kind), '');
     _result jsonb;
 BEGIN
     SET search_path TO budgeting;
 
     _family_id := budgeting.get__user_family_id(_user_id);
+
+    IF _normalized_account_kind IS NOT NULL
+       AND _normalized_account_kind NOT IN ('cash', 'investment') THEN
+        RAISE EXCEPTION 'Unsupported bank account kind filter: %', _normalized_account_kind;
+    END IF;
 
     SELECT COALESCE(
         jsonb_agg(
@@ -25,11 +32,14 @@ BEGIN
                     WHEN ba.owner_type = 'user' THEN COALESCE(u.first_name, u.username, 'Personal')
                     ELSE f.name
                 END,
+                'account_kind', ba.account_kind,
+                'provider_name', ba.provider_name,
+                'provider_account_ref', ba.provider_account_ref,
                 'is_primary', ba.is_primary,
                 'is_active', ba.is_active,
                 'created_at', ba.created_at
             )
-            ORDER BY ba.owner_type, ba.is_primary DESC, ba.id
+            ORDER BY ba.owner_type, ba.account_kind, ba.is_primary DESC, ba.id
         ),
         '[]'::jsonb
     )
@@ -44,7 +54,8 @@ BEGIN
             OR
             (ba.owner_type = 'family' AND ba.owner_family_id = _family_id)
           )
-      AND (_is_active IS NULL OR ba.is_active = _is_active);
+      AND (_is_active IS NULL OR ba.is_active = _is_active)
+      AND (_normalized_account_kind IS NULL OR ba.account_kind = _normalized_account_kind);
 
     RETURN _result;
 END

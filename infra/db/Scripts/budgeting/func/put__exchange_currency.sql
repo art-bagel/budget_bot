@@ -29,6 +29,7 @@ DECLARE
     _owner_type text;
     _owner_user_id bigint;
     _owner_family_id bigint;
+    _account_kind text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -40,8 +41,8 @@ BEGIN
         RAISE EXCEPTION 'Exchange amounts must be positive';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id
-    INTO _owner_type, _owner_user_id, _owner_family_id
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind
+    INTO _owner_type, _owner_user_id, _owner_family_id, _account_kind
     FROM bank_accounts
     WHERE id = _bank_account_id
       AND is_active;
@@ -52,6 +53,10 @@ BEGIN
 
     IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
         RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
+    END IF;
+
+    IF _account_kind <> 'cash' THEN
+        RAISE EXCEPTION 'Currency exchange is only supported for cash accounts in MVP';
     END IF;
 
     _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);

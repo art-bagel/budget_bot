@@ -28,11 +28,17 @@ class Reports(DataBase):
         )
         return result if result else []
 
-    async def get__bank_accounts(self, user_id: int, is_active: Optional[bool] = True) -> list[dict]:
+    async def get__bank_accounts(
+        self,
+        user_id: int,
+        is_active: Optional[bool] = True,
+        account_kind: Optional[str] = 'cash',
+    ) -> list[dict]:
         result = await self.call_function(
             self._fn(self.F_GET__BANK_ACCOUNTS),
             user_id,
             is_active,
+            account_kind,
         )
         return result if result else []
 

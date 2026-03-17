@@ -37,8 +37,8 @@ BEGIN
     INSERT INTO family_members (family_id, user_id, role)
     VALUES (_family_id, _user_id, 'owner');
 
-    INSERT INTO bank_accounts (owner_type, owner_family_id, name, is_primary, is_active)
-    VALUES ('family', _family_id, 'Family Main', true, true)
+    INSERT INTO bank_accounts (owner_type, owner_family_id, name, account_kind, is_primary, is_active)
+    VALUES ('family', _family_id, 'Family Main', 'cash', true, true)
     RETURNING id
     INTO _bank_account_id;
 

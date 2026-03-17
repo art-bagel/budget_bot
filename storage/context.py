@@ -8,6 +8,7 @@ class Context(DataBase):
 
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_FAMILY = 'put__create_family'
+    F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
     F_PUT__INVITE_FAMILY_MEMBER = 'put__invite_family_member'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
@@ -51,6 +52,25 @@ class Context(DataBase):
             self._fn(self.F_PUT__CREATE_FAMILY),
             user_id,
             name,
+        )
+
+    async def put__create_bank_account(
+        self,
+        user_id: int,
+        name: str,
+        owner_type: str = 'user',
+        account_kind: str = 'investment',
+        provider_name: Optional[str] = None,
+        provider_account_ref: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_BANK_ACCOUNT),
+            user_id,
+            name,
+            owner_type,
+            account_kind,
+            provider_name,
+            provider_account_ref,
         )
 
     async def put__invite_family_member(self, user_id: int, username: str) -> dict:

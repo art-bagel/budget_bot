@@ -13,9 +13,11 @@ DECLARE
     _from_owner_type      text;
     _from_owner_user_id   bigint;
     _from_owner_family_id bigint;
+    _from_account_kind    text;
     _to_owner_type        text;
     _to_owner_user_id     bigint;
     _to_owner_family_id   bigint;
+    _to_account_kind      text;
     _base_currency_code   char(3);
     _from_unallocated_id  bigint;
     _to_unallocated_id    bigint;
@@ -42,8 +44,8 @@ BEGIN
     END IF;
 
     -- Validate source account and access
-    SELECT owner_type, owner_user_id, owner_family_id
-    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind
+    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind
     FROM bank_accounts
     WHERE id = _from_account_id AND is_active;
 
@@ -56,8 +58,8 @@ BEGIN
     END IF;
 
     -- Validate target account and access
-    SELECT owner_type, owner_user_id, owner_family_id
-    INTO _to_owner_type, _to_owner_user_id, _to_owner_family_id
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind
+    INTO _to_owner_type, _to_owner_user_id, _to_owner_family_id, _to_account_kind
     FROM bank_accounts
     WHERE id = _to_account_id AND is_active;
 
@@ -74,19 +76,22 @@ BEGIN
         _from_owner_type, _from_owner_user_id, _from_owner_family_id
     );
 
-    -- Get unallocated categories for both sides
-    _from_unallocated_id := budgeting.get__owner_system_category_id(
-        _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
-    );
-    IF _from_unallocated_id IS NULL THEN
-        RAISE EXCEPTION 'Unallocated category missing for source account %', _from_account_id;
+    IF _from_account_kind = 'cash' THEN
+        _from_unallocated_id := budgeting.get__owner_system_category_id(
+            _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
+        );
+        IF _from_unallocated_id IS NULL THEN
+            RAISE EXCEPTION 'Unallocated category missing for source account %', _from_account_id;
+        END IF;
     END IF;
 
-    _to_unallocated_id := budgeting.get__owner_system_category_id(
-        _to_owner_type, _to_owner_user_id, _to_owner_family_id, 'Unallocated'
-    );
-    IF _to_unallocated_id IS NULL THEN
-        RAISE EXCEPTION 'Unallocated category missing for target account %', _to_account_id;
+    IF _to_account_kind = 'cash' THEN
+        _to_unallocated_id := budgeting.get__owner_system_category_id(
+            _to_owner_type, _to_owner_user_id, _to_owner_family_id, 'Unallocated'
+        );
+        IF _to_unallocated_id IS NULL THEN
+            RAISE EXCEPTION 'Unallocated category missing for target account %', _to_account_id;
+        END IF;
     END IF;
 
     -- Check source balance
@@ -145,19 +150,29 @@ BEGIN
         (_operation_id, _from_account_id, _currency_code, -_amount),
         (_operation_id, _to_account_id,   _currency_code,  _amount);
 
-    -- Two budget entries: debit source unallocated, credit target unallocated
-    INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-    VALUES
-        (_operation_id, _from_unallocated_id, _base_currency_code, -_cost_base),
-        (_operation_id, _to_unallocated_id,   _base_currency_code,  _cost_base);
+    -- Budget participates only when one of the accounts is a cash account.
+    IF _from_account_kind = 'cash' THEN
+        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+        VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_cost_base);
+    END IF;
+
+    IF _to_account_kind = 'cash' THEN
+        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+        VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _cost_base);
+    END IF;
 
     -- Update bank balances
     PERFORM budgeting.put__apply_current_bank_delta(_from_account_id, _currency_code, -_amount, -_cost_base);
     PERFORM budgeting.put__apply_current_bank_delta(_to_account_id,   _currency_code,  _amount,  _cost_base);
 
-    -- Update budget balances
-    PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_cost_base);
-    PERFORM budgeting.put__apply_current_budget_delta(_to_unallocated_id,   _base_currency_code,  _cost_base);
+    -- Update budget balances only for cash-side accounts.
+    IF _from_account_kind = 'cash' THEN
+        PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_cost_base);
+    END IF;
+
+    IF _to_account_kind = 'cash' THEN
+        PERFORM budgeting.put__apply_current_budget_delta(_to_unallocated_id, _base_currency_code, _cost_base);
+    END IF;
 
     -- Handle FX lots for foreign currencies
     IF _currency_code <> _base_currency_code THEN

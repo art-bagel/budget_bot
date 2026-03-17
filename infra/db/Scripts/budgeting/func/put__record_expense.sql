@@ -30,6 +30,7 @@ DECLARE
     _bank_owner_type text;
     _bank_owner_user_id bigint;
     _bank_owner_family_id bigint;
+    _bank_account_kind text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -60,8 +61,8 @@ BEGIN
         RAISE EXCEPTION 'Expense category % must be of kind regular', _category_id;
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id
-    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind
+    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind
     FROM bank_accounts
     WHERE id = _bank_account_id
       AND is_active;
@@ -77,6 +78,10 @@ BEGIN
         _bank_owner_family_id
     ) THEN
         RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
+    END IF;
+
+    IF _bank_account_kind <> 'cash' THEN
+        RAISE EXCEPTION 'Expenses can only be recorded from cash accounts';
     END IF;
 
     IF _category_owner_type <> _bank_owner_type

@@ -34,6 +34,7 @@ import type {
   IncomePattern,
   RecordIncomeSplitRequest,
   RecordIncomeSplitResponse,
+  CreateBankAccountRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -348,8 +349,17 @@ export async function createScheduledExpense(
   });
 }
 
-export async function fetchBankAccounts(): Promise<BankAccount[]> {
-  return apiFetch<BankAccount[]>('/bank-accounts');
+export async function fetchBankAccounts(
+  accountKind: 'cash' | 'investment' = 'cash',
+): Promise<BankAccount[]> {
+  return apiFetch<BankAccount[]>(`/bank-accounts?account_kind=${accountKind}`);
+}
+
+export async function createBankAccount(data: CreateBankAccountRequest): Promise<BankAccount> {
+  return apiFetch<BankAccount>('/bank-accounts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function fetchIncomeSourcePattern(incomeSourceId: number): Promise<IncomePattern | null> {
