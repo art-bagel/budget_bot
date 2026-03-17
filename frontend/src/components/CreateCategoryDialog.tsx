@@ -170,22 +170,27 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
 
           {inFamily && (
             <div className="form-row">
-              <button
-                className={`btn${ownerType === 'user' ? ' btn--primary' : ''}`}
-                type="button"
-                onClick={() => setOwnerType('user')}
-                disabled={creating}
-              >
-                Личная
-              </button>
-              <button
-                className={`btn${ownerType === 'family' ? ' btn--primary' : ''}`}
-                type="button"
-                onClick={() => setOwnerType('family')}
-                disabled={creating}
-              >
-                Семейная
-              </button>
+              {(['user', 'family'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setOwnerType(type)}
+                  disabled={creating}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    fontSize: '0.9rem',
+                    background: ownerType === type ? '#22a84a' : 'transparent',
+                    color: ownerType === type ? '#fff' : 'var(--text-primary)',
+                    border: 'none',
+                    borderRadius: 8,
+                    cursor: creating ? 'default' : 'pointer',
+                    outline: 'none',
+                  }}
+                >
+                  {type === 'user' ? 'Личная' : 'Семейная'}
+                </button>
+              ))}
             </div>
           )}
 

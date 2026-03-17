@@ -617,22 +617,24 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                   )}
 
                   <div className="form-row">
-                    <button
-                      className="btn"
-                      type="button"
-                      onClick={() => { setShowScheduleForm(false); setScheduleError(null); }}
-                      disabled={savingSchedule}
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      className="btn btn--primary"
-                      type="button"
-                      onClick={handleAddSchedule}
-                      disabled={savingSchedule || !sfAmount}
+                    <div className="action-pill">
+                      <button
+                        className="action-pill__cancel"
+                        type="button"
+                        onClick={() => { setShowScheduleForm(false); setScheduleError(null); }}
+                        disabled={savingSchedule}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        className="action-pill__confirm"
+                        type="button"
+                        onClick={handleAddSchedule}
+                        disabled={savingSchedule || !sfAmount}
                     >
                       {savingSchedule ? '...' : 'Добавить'}
-                    </button>
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

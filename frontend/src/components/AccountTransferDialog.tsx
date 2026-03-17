@@ -109,22 +109,27 @@ export default function AccountTransferDialog({
           </div>
 
           <div className="form-row">
-            <button
-              className={`btn${direction === 'personal_to_family' ? ' btn--primary' : ''}`}
-              type="button"
-              onClick={() => handleDirectionChange('personal_to_family')}
-              disabled={submitting}
-            >
-              Личный → Семейный
-            </button>
-            <button
-              className={`btn${direction === 'family_to_personal' ? ' btn--primary' : ''}`}
-              type="button"
-              onClick={() => handleDirectionChange('family_to_personal')}
-              disabled={submitting}
-            >
-              Семейный → Личный
-            </button>
+            {(['personal_to_family', 'family_to_personal'] as const).map((dir) => (
+              <button
+                key={dir}
+                type="button"
+                onClick={() => handleDirectionChange(dir)}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: '0.9rem',
+                  background: direction === dir ? '#22a84a' : 'transparent',
+                  color: direction === dir ? '#fff' : 'var(--text-primary)',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: submitting ? 'default' : 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {dir === 'personal_to_family' ? 'Личный → Семейный' : 'Семейный → Личный'}
+              </button>
+            ))}
           </div>
 
           <div className="form-row">
