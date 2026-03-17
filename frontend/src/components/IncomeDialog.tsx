@@ -303,7 +303,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   style={{
                     width: '100%',
                     marginBottom: 0,
-                    borderRadius: '10px 10px 0 0',
                     borderLeft: 'none',
                     borderRight: 'none',
                     borderTop: 'none',
@@ -322,151 +321,144 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 </select>
 
                 {incomeSourceId && (
-                  <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {patternLoading ? (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', flex: 1 }}>...</span>
-                    ) : !showPatternEditor ? (
-                      <>
-                        <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
-                          {displayLines.map((line, i) => (
-                            <span key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              {line.label}
-                              <span style={{ marginLeft: 4, fontWeight: 600 }}>
-                                {Math.round(line.share * 100)}%
-                              </span>
-                              {totalAmount > 0 && (
-                                <span style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
-                                  ({(totalAmount * line.share).toFixed(2)} {incomeCurrencyCode})
-                                </span>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                        <button type="button" className="btn" onClick={openPatternEditor} disabled={patternLoading}>
-                          Изменить
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                )}
-              </div>
+                  patternLoading ? (
+                    <div style={{ padding: '8px 12px' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>...</span>
+                    </div>
+                  ) : showPatternEditor ? (
+                    <div style={{ padding: '10px 12px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                        Распределение по счетам
+                      </div>
 
-              {/* Pattern editor */}
-              {showPatternEditor && (
-                <div style={{ background: 'var(--bg-inset)', borderRadius: 10, padding: '10px 12px', marginBottom: 4 }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 10, color: 'var(--text-secondary)' }}>
-                    Распределение по счетам
-                  </div>
-
-                  {patternLines.map((line) => (
-                    <div key={line.key} style={{ marginBottom: 10 }}>
-                      {/* Account selector — full width */}
-                      <select
-                        className="input"
-                        value={line.bank_account_id}
-                        onChange={(e) => setPatternLines((prev) =>
-                          prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
-                        )}
-                        disabled={savingPattern}
-                        style={{ width: '100%', marginBottom: 6 }}
-                      >
-                        <option value="">Выбери счёт</option>
-                        {bankAccounts.map((ba) => (
-                          <option key={ba.id} value={ba.id}>
-                            {formatOwnerLabel(ba.owner_type)} · {ba.name}
-                          </option>
-                        ))}
-                      </select>
-
-                      {/* Percent + delete button on one row */}
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <div style={{ position: 'relative', flex: 1 }}>
-                          <input
+                      {patternLines.map((line) => (
+                        <div key={line.key} style={{ marginBottom: 10 }}>
+                          <select
                             className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={line.percent}
+                            value={line.bank_account_id}
                             onChange={(e) => setPatternLines((prev) =>
-                              prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
+                              prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
                             )}
                             disabled={savingPattern}
-                            style={{ width: '100%', paddingRight: 28 }}
-                          />
-                          <span style={{
-                            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                            fontSize: '0.82rem', color: 'var(--text-secondary)', pointerEvents: 'none',
-                          }}>%</span>
+                            style={{ width: '100%', marginBottom: 6 }}
+                          >
+                            <option value="">Выбери счёт</option>
+                            {bankAccounts.map((ba) => (
+                              <option key={ba.id} value={ba.id}>
+                                {formatOwnerLabel(ba.owner_type)} · {ba.name}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <div style={{ position: 'relative', flex: 1 }}>
+                              <input
+                                className="input"
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0"
+                                value={line.percent}
+                                onChange={(e) => setPatternLines((prev) =>
+                                  prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
+                                )}
+                                disabled={savingPattern}
+                                style={{ width: '100%', paddingRight: 28 }}
+                              />
+                              <span style={{
+                                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                                fontSize: '0.82rem', color: 'var(--text-secondary)', pointerEvents: 'none',
+                              }}>%</span>
+                            </div>
+                            <button
+                              className="btn btn--danger"
+                              type="button"
+                              onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
+                              disabled={savingPattern || patternLines.length === 1}
+                            >
+                              Удалить
+                            </button>
+                          </div>
                         </div>
+                      ))}
+
+                      <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 8,
+                        color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
+                        Итого: {totalPercent.toFixed(0)} / 100%
+                      </div>
+
+                      <div className="form-row" style={{ marginBottom: 10 }}>
                         <button
-                          className="btn btn--danger"
+                          className="btn"
                           type="button"
-                          onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
-                          disabled={savingPattern || patternLines.length === 1}
+                          onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
+                          disabled={savingPattern}
                         >
-                          Удалить
+                          + Добавить счёт
                         </button>
                       </div>
+
+                      {patternError && (
+                        <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.82rem', marginBottom: 8 }}>
+                          {patternError}
+                        </p>
+                      )}
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {hasPattern && (
+                          <button
+                            className="btn btn--danger"
+                            type="button"
+                            onClick={handleDeletePattern}
+                            disabled={savingPattern || deletingPattern}
+                            style={{ marginRight: 'auto' }}
+                          >
+                            {deletingPattern ? '...' : 'Удалить'}
+                          </button>
+                        )}
+                        <div className="action-pill" style={{ marginLeft: hasPattern ? 0 : 'auto' }}>
+                          <button
+                            className="action-pill__cancel"
+                            type="button"
+                            onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
+                            disabled={savingPattern}
+                          >
+                            Отмена
+                          </button>
+                          <button
+                            className="action-pill__confirm"
+                            type="button"
+                            onClick={handleSavePattern}
+                            disabled={savingPattern}
+                          >
+                            {savingPattern ? '...' : 'Сохранить'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-
-                  {/* Total indicator */}
-                  <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 8,
-                    color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
-                    Итого: {totalPercent.toFixed(0)} / 100%
-                  </div>
-
-                  {/* Add account */}
-                  <div className="form-row" style={{ marginBottom: 10 }}>
-                    <button
-                      className="btn"
-                      type="button"
-                      onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
-                      disabled={savingPattern}
-                    >
-                      + Добавить счёт
-                    </button>
-                  </div>
-
-                  {patternError && (
-                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.82rem', marginBottom: 8 }}>
-                      {patternError}
-                    </p>
-                  )}
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {hasPattern && (
-                      <button
-                        className="btn btn--danger"
-                        type="button"
-                        onClick={handleDeletePattern}
-                        disabled={savingPattern || deletingPattern}
-                        style={{ marginRight: 'auto' }}
-                      >
-                        {deletingPattern ? '...' : 'Удалить'}
-                      </button>
-                    )}
-                    <div className="action-pill" style={{ marginLeft: hasPattern ? 0 : 'auto' }}>
-                      <button
-                        className="action-pill__cancel"
-                        type="button"
-                        onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
-                        disabled={savingPattern}
-                      >
-                        Отмена
-                      </button>
-                      <button
-                        className="action-pill__confirm"
-                        type="button"
-                        onClick={handleSavePattern}
-                        disabled={savingPattern}
-                      >
-                        {savingPattern ? '...' : 'Сохранить'}
+                  ) : (
+                    <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+                        {displayLines.map((line, i) => (
+                          <span key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {line.label}
+                            <span style={{ marginLeft: 4, fontWeight: 600 }}>
+                              {Math.round(line.share * 100)}%
+                            </span>
+                            {totalAmount > 0 && (
+                              <span style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
+                                ({(totalAmount * line.share).toFixed(2)} {incomeCurrencyCode})
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                      <button type="button" className="btn" onClick={openPatternEditor} disabled={patternLoading}>
+                        Изменить
                       </button>
                     </div>
-                  </div>
-                </div>
-              )}
+                  )
+                )}
+              </div>
 
               {/* Amount + currency */}
               <div className="form-row">
