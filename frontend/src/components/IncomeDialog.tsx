@@ -37,19 +37,6 @@ function formatOwnerLabel(ownerType: string): string {
   return ownerType === 'family' ? 'Семейный' : 'Личный';
 }
 
-// Small text-link button used inside the pattern section
-const linkBtnStyle: React.CSSProperties = {
-  background: 'transparent',
-  border: '1px solid var(--border)',
-  color: 'var(--text-secondary)',
-  cursor: 'pointer',
-  fontSize: '0.78rem',
-  padding: '3px 8px',
-  borderRadius: 6,
-  flexShrink: 0,
-  lineHeight: 1.4,
-};
-
 
 interface Props {
   user: UserContext;
@@ -301,14 +288,27 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 </button>
               </div>
 
-              {/* Income source selector */}
-              <div className="form-row">
+              {/* Income source selector + pattern summary */}
+              <div style={{
+                background: 'var(--bg-inset)',
+                borderRadius: 10,
+                overflow: 'hidden',
+                marginBottom: 4,
+              }}>
                 <select
                   className="input"
                   value={incomeSourceId}
                   onChange={(e) => setIncomeSourceId(e.target.value)}
                   disabled={incomeSources.length === 0}
-                  style={{ flex: 1 }}
+                  style={{
+                    width: '100%',
+                    marginBottom: 0,
+                    borderRadius: '10px 10px 0 0',
+                    borderLeft: 'none',
+                    borderRight: 'none',
+                    borderTop: 'none',
+                    background: 'var(--bg-inset)',
+                  }}
                 >
                   {incomeSources.length === 0 ? (
                     <option value="">Сначала создайте источник</option>
@@ -320,37 +320,36 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                     ))
                   )}
                 </select>
-              </div>
 
-              {/* Distribution summary — always visible when source selected */}
-              {incomeSourceId && !patternLoading && !showPatternEditor && (
-                <div className="form-row" style={{ alignItems: 'center', gap: 4 }}>
-                  <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
-                    {displayLines.map((line, i) => (
-                      <span key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {line.label}
-                        <span style={{ marginLeft: 4, fontWeight: 600 }}>
-                          {Math.round(line.share * 100)}%
-                        </span>
-                        {totalAmount > 0 && (
-                          <span style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
-                            ({(totalAmount * line.share).toFixed(2)} {incomeCurrencyCode})
-                          </span>
-                        )}
-                      </span>
-                    ))}
+                {incomeSourceId && (
+                  <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {patternLoading ? (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', flex: 1 }}>...</span>
+                    ) : !showPatternEditor ? (
+                      <>
+                        <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+                          {displayLines.map((line, i) => (
+                            <span key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {line.label}
+                              <span style={{ marginLeft: 4, fontWeight: 600 }}>
+                                {Math.round(line.share * 100)}%
+                              </span>
+                              {totalAmount > 0 && (
+                                <span style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
+                                  ({(totalAmount * line.share).toFixed(2)} {incomeCurrencyCode})
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                        <button type="button" className="btn" onClick={openPatternEditor} disabled={patternLoading}>
+                          Изменить
+                        </button>
+                      </>
+                    ) : null}
                   </div>
-                  <button type="button" onClick={openPatternEditor} style={linkBtnStyle} disabled={patternLoading}>
-                    Изменить
-                  </button>
-                </div>
-              )}
-
-              {patternLoading && (
-                <div className="form-row">
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>...</span>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Pattern editor */}
               {showPatternEditor && (
