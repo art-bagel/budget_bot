@@ -326,13 +326,13 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>...</span>
                     </div>
                   ) : showPatternEditor ? (
-                    <div style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                    <div style={{ padding: '8px 12px' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: 6, color: 'var(--text-secondary)' }}>
                         Распределение по счетам
                       </div>
 
                       {patternLines.map((line) => (
-                        <div key={line.key} style={{ marginBottom: 10 }}>
+                        <div key={line.key} className="form-row form-row--group-editor" style={{ padding: '3px 0' }}>
                           <select
                             className="input"
                             value={line.bank_account_id}
@@ -340,7 +340,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                               prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
                             )}
                             disabled={savingPattern}
-                            style={{ width: '100%', marginBottom: 6 }}
                           >
                             <option value="">Выбери счёт</option>
                             {bankAccounts.map((ba) => (
@@ -350,43 +349,42 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             ))}
                           </select>
 
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <div style={{ position: 'relative', flex: 1 }}>
-                              <input
-                                className="input"
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="0"
-                                value={line.percent}
-                                onChange={(e) => setPatternLines((prev) =>
-                                  prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
-                                )}
-                                disabled={savingPattern}
-                                style={{ width: '100%', paddingRight: 28 }}
-                              />
-                              <span style={{
-                                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                                fontSize: '0.82rem', color: 'var(--text-secondary)', pointerEvents: 'none',
-                              }}>%</span>
-                            </div>
-                            <button
-                              className="btn btn--danger"
-                              type="button"
-                              onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
-                              disabled={savingPattern || patternLines.length === 1}
-                            >
-                              Удалить
-                            </button>
+                          <div style={{ position: 'relative', width: 58, flexShrink: 0 }}>
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={line.percent}
+                              onChange={(e) => setPatternLines((prev) =>
+                                prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
+                              )}
+                              disabled={savingPattern}
+                              style={{ width: '100%', paddingLeft: 8, paddingRight: 20, textAlign: 'right' }}
+                            />
+                            <span style={{
+                              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                              fontSize: '0.78rem', color: 'var(--text-secondary)', pointerEvents: 'none',
+                            }}>%</span>
                           </div>
+
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
+                            disabled={savingPattern || patternLines.length === 1}
+                          >
+                            Убрать
+                          </button>
                         </div>
                       ))}
 
-                      <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 8,
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: 6, marginTop: 4,
                         color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
                         Итого: {totalPercent.toFixed(0)} / 100%
                       </div>
 
-                      <div className="form-row" style={{ marginBottom: 10 }}>
+                      <div style={{ marginBottom: 8 }}>
                         <button
                           className="btn"
                           type="button"
