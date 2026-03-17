@@ -105,6 +105,7 @@ BEGIN
                     'bank_account_id', be.bank_account_id,
                     'bank_account_name', ba.name,
                     'bank_account_owner_type', ba.owner_type,
+                    'bank_account_kind', ba.account_kind,
                     'currency_code', be.currency_code,
                     'amount', be.amount
                 )

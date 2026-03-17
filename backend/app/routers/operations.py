@@ -107,6 +107,7 @@ class OperationBankEntry(BaseModel):
     bank_account_id: int
     bank_account_name: Optional[str] = None
     bank_account_owner_type: Optional[str] = None
+    bank_account_kind: Optional[str] = None
     currency_code: str
     amount: float
 

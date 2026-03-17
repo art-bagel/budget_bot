@@ -163,6 +163,7 @@ export interface OperationHistoryBankEntry {
   bank_account_id: number;
   bank_account_name?: string | null;
   bank_account_owner_type?: string | null;
+  bank_account_kind?: 'cash' | 'investment' | null;
   currency_code: string;
   amount: number;
 }

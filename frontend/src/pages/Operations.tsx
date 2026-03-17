@@ -52,6 +52,12 @@ const ANALYTICS_PERIOD_MODE_OPTIONS: { value: 'week' | 'month' | 'year'; label: 
   { value: 'month', label: 'Мес' },
   { value: 'year', label: 'Год' },
 ];
+const INVESTMENT_HISTORY_FILTER_OPTIONS = [
+  { value: 'all', label: 'Все' },
+  { value: 'trade', label: 'Сделки' },
+  { value: 'income', label: 'Доход' },
+  { value: 'transfer', label: 'Переводы' },
+] as const;
 
 type OperationLine = {
   label: string;
@@ -59,6 +65,7 @@ type OperationLine = {
 };
 
 type OperationsViewMode = 'history' | 'investment' | 'analytics';
+type InvestmentHistoryFilter = (typeof INVESTMENT_HISTORY_FILTER_OPTIONS)[number]['value'];
 
 type AnalyticsSegment = {
   entryKey: string;
@@ -267,26 +274,39 @@ function getOperationTitle(item: OperationHistoryItem): string {
   if (item.type === 'income') {
     return item.income_source_name ? 'Доход · ' + item.income_source_name : 'Доход';
   }
-  if (item.type === 'investment_trade') return 'Сделка по инвестиции';
+  if (item.type === 'investment_trade') {
+    const investmentEntry = item.bank_entries.find((entry) => entry.bank_account_kind === 'investment');
+    if (investmentEntry?.amount && investmentEntry.amount < 0) return 'Покупка позиции';
+    if (investmentEntry?.amount && investmentEntry.amount > 0) return 'Закрытие позиции';
+    return 'Сделка по инвестиции';
+  }
   if (item.type === 'investment_income') return 'Доход по инвестициям';
   if (item.type === 'expense') return 'Расход';
   if (item.type === 'allocate') return 'Распределение по категории';
   if (item.type === 'group_allocate') return 'Распределение по группе';
   if (item.type === 'exchange') return 'Обмен валют';
-  if (item.type === 'account_transfer') return 'Перевод между счетами';
+  if (item.type === 'account_transfer') {
+    const investmentEntry = item.bank_entries.find((entry) => entry.bank_account_kind === 'investment');
+    if (investmentEntry?.amount && investmentEntry.amount > 0) return 'Пополнение investment-счета';
+    if (investmentEntry?.amount && investmentEntry.amount < 0) return 'Вывод на cash-счет';
+    return 'Перевод между счетами';
+  }
   return item.type;
 }
 
 
 function getBankEntryLabel(
   ownerType?: string | null,
+  accountKind?: string | null,
   accountName?: string | null,
   bankAccountId?: number,
 ): string {
   const resolvedName = accountName || (bankAccountId ? `Счет #${bankAccountId}` : 'Счет');
+  const scopePrefix = ownerType === 'family' ? 'Семейный' : ownerType === 'user' ? 'Личный' : null;
+  const kindSuffix = accountKind === 'investment' ? 'investment' : null;
+  const prefix = [scopePrefix, kindSuffix].filter(Boolean).join(' · ');
 
-  if (ownerType === 'family') return 'Семейный · ' + resolvedName;
-  if (ownerType === 'user') return 'Личный · ' + resolvedName;
+  if (prefix) return prefix + ' · ' + resolvedName;
   return resolvedName;
 }
 
@@ -305,6 +325,7 @@ function getOperationLines(item: OperationHistoryItem): OperationLine[] {
     lines.push({
       label: getBankEntryLabel(
         entry.bank_account_owner_type,
+        entry.bank_account_kind,
         entry.bank_account_name,
         entry.bank_account_id,
       ),
@@ -375,6 +396,12 @@ function buildDonutGradient(segments: AnalyticsSegment[]): string {
   return `conic-gradient(${parts.join(', ')})`;
 }
 
+function getInvestmentHistoryKind(item: OperationHistoryItem): InvestmentHistoryFilter {
+  if (item.type === 'investment_trade') return 'trade';
+  if (item.type === 'investment_income') return 'income';
+  return 'transfer';
+}
+
 
 export default function Operations({ user: _user }: { user: UserContext }) {
   const [viewMode, setViewMode] = useState<OperationsViewMode>('history');
@@ -384,6 +411,7 @@ export default function Operations({ user: _user }: { user: UserContext }) {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyTypeFilter, setHistoryTypeFilter] = useState('');
+  const [investmentHistoryFilter, setInvestmentHistoryFilter] = useState<InvestmentHistoryFilter>('all');
   const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
 
   const [analyticsData, setAnalyticsData] = useState<OperationAnalyticsResponse | null>(null);
@@ -507,6 +535,13 @@ export default function Operations({ user: _user }: { user: UserContext }) {
   }, [analyticsAnchorDate, analyticsPeriodMode]);
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
+  const visibleHistoryItems = useMemo(() => {
+    if (viewMode !== 'investment' || investmentHistoryFilter === 'all') {
+      return historyItems;
+    }
+
+    return historyItems.filter((item) => getInvestmentHistoryKind(item) === investmentHistoryFilter);
+  }, [historyItems, investmentHistoryFilter, viewMode]);
 
   const handleReverseOperation = async (operationId: number) => {
     setReversingOperationId(operationId);
@@ -613,12 +648,27 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                     >
                       {HISTORY_TYPE_OPTIONS.map((option) => (
                         <option key={option.value || 'all'} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                   ) : (
-                    <span className="tag tag--neutral">Trade, income, transfers</span>
+                    <div className="analytics-toolbar__row">
+                      {INVESTMENT_HISTORY_FILTER_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          className={[
+                            'analytics-chip',
+                            'analytics-chip--compact',
+                            investmentHistoryFilter === option.value ? 'analytics-chip--active' : '',
+                          ].filter(Boolean).join(' ')}
+                          type="button"
+                          onClick={() => setInvestmentHistoryFilter(option.value)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
                   )}
                   <span className="tag tag--neutral">{historyTotalCount} всего</span>
                 </div>
@@ -636,12 +686,12 @@ export default function Operations({ user: _user }: { user: UserContext }) {
                 </p>
               )}
 
-              {historyItems.length === 0 && !loadingHistory ? (
+              {visibleHistoryItems.length === 0 && !loadingHistory ? (
                 <p className="list-row__sub">Операций пока нет</p>
               ) : (
                 <div className="history-list">
                   <ul>
-                    {historyItems.map((item) => (
+                    {visibleHistoryItems.map((item) => (
                       <li
                         className={[
                           'list-row',
