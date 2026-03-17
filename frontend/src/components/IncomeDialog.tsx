@@ -379,12 +379,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                         </div>
                       ))}
 
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: 6, marginTop: 4,
-                        color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
-                        Итого: {totalPercent.toFixed(0)} / 100%
-                      </div>
-
-                      <div style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 8 }}>
                         <button
                           className="btn"
                           type="button"
@@ -393,6 +388,10 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                         >
                           + Добавить счёт
                         </button>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, marginLeft: 'auto',
+                          color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
+                          Итого: {totalPercent.toFixed(0)} / 100%
+                        </span>
                       </div>
 
                       {patternError && (
