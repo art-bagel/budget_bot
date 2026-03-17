@@ -25,6 +25,13 @@ class BankAccountItem(BaseModel):
     created_at: str
 
 
+class BankAccountBalanceItem(BaseModel):
+    currency_code: str
+    amount: float
+    historical_cost_in_base: float
+    base_currency_code: str
+
+
 class CreateBankAccountRequest(BaseModel):
     name: str
     owner_type: Literal['user', 'family'] = 'user'
@@ -56,3 +63,11 @@ async def create_bank_account(
         provider_account_ref=body.provider_account_ref,
     )
     return BankAccountItem(**result)
+
+
+@router.get('/{bank_account_id}/snapshot', response_model=List[BankAccountBalanceItem])
+async def get_bank_account_snapshot(
+    bank_account_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> list:
+    return await reports.get__bank_snapshot(user.user_id, bank_account_id)

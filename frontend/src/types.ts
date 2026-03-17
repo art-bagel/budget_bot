@@ -282,6 +282,8 @@ export interface CreateBankAccountRequest {
   provider_account_ref?: string;
 }
 
+export interface CreateBankAccountResponse extends BankAccount {}
+
 export interface ScheduledExpense {
   id: number;
   category_id: number;

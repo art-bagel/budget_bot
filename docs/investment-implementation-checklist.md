@@ -208,6 +208,7 @@
 ### 11. SQL Write Functions
 
 - [ ] `put__create_investment_account`
+- [x] `put__create_investment_account`
 - [ ] `put__transfer_to_investment_account`
 - [ ] `put__transfer_from_investment_account`
 - [ ] `put__open_portfolio_position`
@@ -218,7 +219,7 @@
 
 ### 12. SQL Read Functions
 
-- [ ] `get__investment_accounts`
+- [x] `get__investment_accounts`
 - [ ] `get__portfolio_summary`
 - [ ] `get__portfolio_positions`
 - [ ] `get__portfolio_position`
@@ -230,8 +231,8 @@
 
 - [ ] Добавить новый router `portfolio`
 - [ ] Добавить endpoints:
-  - [ ] `GET /api/v1/portfolio/accounts`
-  - [ ] `POST /api/v1/portfolio/accounts`
+- [ ] `GET /api/v1/portfolio/accounts`
+- [ ] `POST /api/v1/portfolio/accounts`
   - [ ] `GET /api/v1/portfolio/summary`
   - [ ] `GET /api/v1/portfolio/positions`
   - [ ] `POST /api/v1/portfolio/positions`
@@ -397,8 +398,8 @@
 ### Phase 1. Foundation
 
 - [x] `account_kind` в `bank_accounts`
-- [ ] read API для investment-счетов
-- [ ] базовые переводы `cash <-> investment`
+- [x] read API для investment-счетов
+- [x] базовые переводы `cash <-> investment`
 - [ ] скрытая системная категория или эквивалентный механизм консистентности
 
 ### Phase 2. Portfolio MVP
@@ -440,9 +441,9 @@
 Если идти самым практичным путем, первый рабочий инкремент должен быть таким:
 
 - [x] добавить `account_kind` в `bank_accounts`
-- [ ] обновить dashboard и bank account API
-- [ ] реализовать перевод `cash -> investment`
-- [ ] реализовать перевод `investment -> cash`
+- [x] обновить dashboard и bank account API
+- [x] реализовать перевод `cash -> investment`
+- [x] реализовать перевод `investment -> cash`
 - [ ] добавить новую страницу `Портфель`
 - [ ] добавить простую ручную позицию с типом `security | deposit | crypto`
 - [ ] добавить `close position`
