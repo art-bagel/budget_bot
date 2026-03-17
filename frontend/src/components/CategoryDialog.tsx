@@ -656,17 +656,14 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
             {archiving ? '...' : confirmArchive ? 'Точно в архив?' : 'В архив'}
           </button>
           <div className="modal-actions-group">
-            <button className="btn" type="button" onClick={onClose} disabled={isBusy}>
-              Отмена
-            </button>
-            <button
-              className="btn btn--primary"
-              type="button"
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-            >
-              {saving ? '...' : 'Сохранить'}
-            </button>
+            <div className="action-pill">
+              <button className="action-pill__cancel" type="button" onClick={onClose} disabled={isBusy}>
+                Отмена
+              </button>
+              <button className="action-pill__confirm" type="button" onClick={handleSubmit} disabled={!canSubmit}>
+                {saving ? '...' : 'Сохранить'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

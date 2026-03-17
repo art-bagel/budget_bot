@@ -260,17 +260,14 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
         </div>
 
         <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose} disabled={creating}>
-            Отмена
-          </button>
-          <button
-            className="btn btn--primary"
-            type="button"
-            onClick={handleCreate}
-            disabled={creating || !name.trim()}
-          >
-            {creating ? '...' : 'Создать'}
-          </button>
+          <div className="action-pill">
+            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={creating}>
+              Отмена
+            </button>
+            <button className="action-pill__confirm" type="button" onClick={handleCreate} disabled={creating || !name.trim()}>
+              {creating ? '...' : 'Создать'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -191,17 +191,14 @@ export default function AccountTransferDialog({
         </div>
 
         <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose} disabled={submitting}>
-            Отмена
-          </button>
-          <button
-            className="btn btn--primary"
-            type="button"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-          >
-            {submitting ? '...' : 'Перевести'}
-          </button>
+          <div className="action-pill">
+            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
+              Отмена
+            </button>
+            <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>
+              {submitting ? '...' : 'Перевести'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

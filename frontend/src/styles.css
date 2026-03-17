@@ -1297,9 +1297,9 @@ body.modal-open {
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   padding: 14px 20px 20px;
-  flex-wrap: wrap;
   border-top: 1px solid var(--border);
   background: var(--bg-surface);
 }
@@ -1311,8 +1311,62 @@ body.modal-open {
 .modal-actions-group {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Pill action button ───────────────────────────── */
+
+.action-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-inset);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 0;
+}
+
+.action-pill__cancel {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.action-pill__cancel:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.action-pill__cancel:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.action-pill__confirm {
+  background: var(--bg-accent);
+  border: none;
+  color: var(--text-on-accent);
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.action-pill__confirm:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.action-pill__confirm:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* ── Inputs ──────────────────────────────────────── */

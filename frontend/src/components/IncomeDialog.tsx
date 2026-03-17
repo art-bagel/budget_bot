@@ -279,6 +279,27 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
             <p className="list-row__sub">Загрузка...</p>
           ) : (
             <>
+              {/* New income source creation */}
+              <div className="form-row">
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Новый источник дохода"
+                  value={newIncomeSourceName}
+                  onChange={(e) => setNewIncomeSourceName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={creatingSource || newIncomeSourceName.trim().length === 0}
+                  onClick={handleCreateSource}
+                >
+                  {creatingSource ? '...' : 'Добавить'}
+                </button>
+              </div>
+
               {/* Income source selector */}
               <div className="form-row">
                 <select
@@ -484,27 +505,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 </div>
               )}
 
-              {/* New income source creation */}
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Новый источник дохода"
-                  value={newIncomeSourceName}
-                  onChange={(e) => setNewIncomeSourceName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
-                  style={{ flex: 1 }}
-                />
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={creatingSource || newIncomeSourceName.trim().length === 0}
-                  onClick={handleCreateSource}
-                >
-                  {creatingSource ? '...' : 'Добавить'}
-                </button>
-              </div>
-
               <div className="form-row">
                 <input
                   className="input"
@@ -527,17 +527,14 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
         </div>
 
         <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose} disabled={submitting}>
-            Отмена
-          </button>
-          <button
-            className="btn btn--primary"
-            type="button"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-          >
-            {submitting ? '...' : 'Записать'}
-          </button>
+          <div className="action-pill">
+            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
+              Отмена
+            </button>
+            <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>
+              {submitting ? '...' : 'Записать'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
