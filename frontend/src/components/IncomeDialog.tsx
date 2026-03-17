@@ -291,7 +291,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
               {/* Income source selector + pattern summary */}
               <div style={{
                 background: 'var(--bg-inset)',
-                borderRadius: 10,
+                borderRadius: 999,
                 overflow: 'hidden',
                 marginBottom: 4,
               }}>
