@@ -1010,21 +1010,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             onClick={() => void handleOpenPositionDetails(position.id)}
                           >
                             <div className="portfolio-position-card__head">
-                              <span className="pill">{position.currency_code}</span>
-                              {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
-                                <span className="tag tag--neutral">Fee</span>
-                              ) : null}
-                            </div>
-                            <div className="portfolio-position-card__title">{position.title}</div>
-                            <div className="portfolio-position-card__amount">
-                              {formatAmount(position.amount_in_currency, position.currency_code)}
+                              <div className="portfolio-position-card__title">{position.title}</div>
+                              <div className="portfolio-position-card__amount">
+                                {formatAmount(position.amount_in_currency, position.currency_code)}
+                              </div>
                             </div>
                             <div className="portfolio-position-card__meta">
-                              <span>Дата: {formatDateLabel(position.opened_at)}</span>
-                              {position.quantity ? <span>Кол-во: {position.quantity}</span> : null}
                               {unitPrice ? <span>Цена: {unitPrice}</span> : null}
+                              {position.quantity ? <span>Кол-во: {position.quantity}</span> : null}
+                              <span>{formatDateLabel(position.opened_at)}</span>
                               {typeof position.metadata?.amount_in_base === 'number' ? (
                                 <span>Base: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
+                              ) : null}
+                              {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
+                                <span>Fee</span>
                               ) : null}
                             </div>
                           </button>
