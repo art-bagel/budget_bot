@@ -455,8 +455,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
     };
   }, [openPositions, moexPrices]);
 
-  // Total = all positions at market/cost + realized income + uninvested cash
-  const totalRealPortfolioValue = totalPositionsValue + totalRealizedIncomeInBase + totalInvestmentCashInBase;
+  // Total = positions at market/cost + uninvested cash
+  // Realized income is NOT added separately — it's already in cash or reinvested in positions
+  const totalRealPortfolioValue = totalPositionsValue + totalInvestmentCashInBase;
 
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0

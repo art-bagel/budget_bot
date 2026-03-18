@@ -49,12 +49,27 @@ BEGIN
           AND owner_user_id = _user_id
     );
 
+    -- portfolio_events.linked_operation_id → operations (no CASCADE)
+    -- Delete positions first so portfolio_events are removed via CASCADE before operations are deleted
+    DELETE FROM portfolio_positions
+    WHERE investment_account_id IN (
+        SELECT id FROM bank_accounts
+        WHERE owner_type = 'user' AND owner_user_id = _user_id
+    );
+
     DELETE FROM operations
     WHERE owner_type = 'user'
       AND owner_user_id = _user_id;
 
     DELETE FROM income_sources
     WHERE user_id = _user_id;
+
+    -- scheduled_expenses.category_id → categories (no CASCADE)
+    DELETE FROM scheduled_expenses
+    WHERE category_id IN (
+        SELECT id FROM categories
+        WHERE owner_type = 'user' AND owner_user_id = _user_id
+    );
 
     DELETE FROM categories
     WHERE owner_type = 'user'
