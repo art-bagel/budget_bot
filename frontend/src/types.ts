@@ -310,7 +310,7 @@ export interface PortfolioPosition {
 export interface PortfolioEvent {
   id: number;
   position_id: number;
-  event_type: 'open' | 'top_up' | 'close' | 'income' | 'adjustment';
+  event_type: 'open' | 'top_up' | 'partial_close' | 'close' | 'income' | 'fee' | 'adjustment';
   event_at: string;
   quantity?: number | null;
   amount?: number | null;
@@ -350,6 +350,16 @@ export interface ClosePortfolioPositionRequest {
   comment?: string;
 }
 
+export interface PartialClosePortfolioPositionRequest {
+  return_amount_in_currency: number;
+  return_currency_code: string;
+  principal_reduction_in_currency: number;
+  return_amount_in_base?: number;
+  closed_quantity?: number;
+  closed_at?: string;
+  comment?: string;
+}
+
 export interface RecordPortfolioIncomeRequest {
   amount: number;
   currency_code: string;
@@ -363,6 +373,13 @@ export interface RecordPortfolioIncomeResponse {
   operation_id: number;
   amount_in_base: number;
   base_currency_code: string;
+}
+
+export interface RecordPortfolioFeeRequest {
+  amount: number;
+  currency_code: string;
+  charged_at?: string;
+  comment?: string;
 }
 
 export interface DeletePortfolioPositionResponse {

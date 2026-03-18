@@ -11,6 +11,8 @@ import {
   fetchPortfolioEvents,
   fetchPortfolioPositions,
   fetchPortfolioSummary,
+  partialClosePortfolioPosition,
+  recordPortfolioFee,
   recordPortfolioIncome,
   topUpPortfolioPosition,
 } from '../api';
@@ -53,6 +55,23 @@ type TopUpDraft = {
   quantity: string;
   currencyCode: string;
   toppedUpAt: string;
+  comment: string;
+};
+
+type PartialCloseDraft = {
+  returnAmount: string;
+  returnCurrencyCode: string;
+  returnBaseAmount: string;
+  principalReduction: string;
+  closedQuantity: string;
+  closedAt: string;
+  comment: string;
+};
+
+type FeeDraft = {
+  amount: string;
+  currencyCode: string;
+  chargedAt: string;
   comment: string;
 };
 
@@ -110,6 +129,27 @@ function createInitialTopUpDraft(position: PortfolioPosition): TopUpDraft {
   };
 }
 
+function createInitialPartialCloseDraft(position: PortfolioPosition): PartialCloseDraft {
+  return {
+    returnAmount: '',
+    returnCurrencyCode: position.currency_code,
+    returnBaseAmount: '',
+    principalReduction: '',
+    closedQuantity: '',
+    closedAt: todayIso(),
+    comment: '',
+  };
+}
+
+function createInitialFeeDraft(position: PortfolioPosition): FeeDraft {
+  return {
+    amount: '',
+    currencyCode: position.currency_code,
+    chargedAt: todayIso(),
+    comment: '',
+  };
+}
+
 function canRecordPositionIncome(position: PortfolioPosition): boolean {
   return position.asset_type_code === 'security' || position.asset_type_code === 'deposit';
 }
@@ -124,6 +164,14 @@ function getEventLabel(item: PortfolioEvent): string {
 
   if (item.event_type === 'top_up') {
     return 'TOP UP';
+  }
+
+  if (item.event_type === 'partial_close') {
+    return 'PARTIAL CLOSE';
+  }
+
+  if (item.event_type === 'fee') {
+    return 'FEE';
   }
 
   if (item.event_type === 'adjustment') {
@@ -146,6 +194,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
   const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
   const [submittingTopUpId, setSubmittingTopUpId] = useState<number | null>(null);
+  const [submittingPartialCloseId, setSubmittingPartialCloseId] = useState<number | null>(null);
+  const [submittingFeeId, setSubmittingFeeId] = useState<number | null>(null);
   const [deletingPositionId, setDeletingPositionId] = useState<number | null>(null);
   const [cancellingIncomeEventId, setCancellingIncomeEventId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +203,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [closeError, setCloseError] = useState<string | null>(null);
   const [incomeError, setIncomeError] = useState<string | null>(null);
   const [topUpError, setTopUpError] = useState<string | null>(null);
+  const [partialCloseError, setPartialCloseError] = useState<string | null>(null);
+  const [feeError, setFeeError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [cancelIncomeError, setCancelIncomeError] = useState<string | null>(null);
   const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
@@ -162,6 +214,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [closeDrafts, setCloseDrafts] = useState<Record<number, CloseDraft>>({});
   const [incomeDrafts, setIncomeDrafts] = useState<Record<number, IncomeDraft>>({});
   const [topUpDrafts, setTopUpDrafts] = useState<Record<number, TopUpDraft>>({});
+  const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
+  const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
   const [newInvestmentAccountId, setNewInvestmentAccountId] = useState('');
   const [newAssetTypeCode, setNewAssetTypeCode] = useState<(typeof ASSET_TYPE_OPTIONS)[number]['value']>('security');
   const [newTitle, setNewTitle] = useState('');
@@ -251,6 +305,29 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const selectedCurrencyBalance = useMemo(
     () => selectedAccountBalances.find((balance) => balance.currency_code === newCurrencyCode)?.amount ?? 0,
     [selectedAccountBalances, newCurrencyCode],
+  );
+
+  const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
+    accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
+  );
+
+  const getDraftPositionFallback = (positionId: number): PortfolioPosition => (
+    positions.find((position) => position.id === positionId) ?? {
+      id: positionId,
+      investment_account_id: 0,
+      investment_account_name: '',
+      investment_account_owner_type: 'user',
+      investment_account_owner_name: '',
+      asset_type_code: 'security',
+      title: '',
+      status: 'open',
+      amount_in_currency: 0,
+      currency_code: user.base_currency_code,
+      opened_at: todayIso(),
+      metadata: {},
+      created_by_user_id: user.user_id,
+      created_at: '',
+    }
   );
 
   const loadEventsForPosition = async (positionId: number) => {
@@ -382,6 +459,24 @@ export default function Portfolio({ user }: { user: UserContext }) {
     ));
   };
 
+  const handleOpenPartialCloseForm = (position: PortfolioPosition) => {
+    setPartialCloseError(null);
+    setPartialCloseDrafts((prev) => (
+      prev[position.id]
+        ? prev
+        : { ...prev, [position.id]: createInitialPartialCloseDraft(position) }
+    ));
+  };
+
+  const handleOpenFeeForm = (position: PortfolioPosition) => {
+    setFeeError(null);
+    setFeeDrafts((prev) => (
+      prev[position.id]
+        ? prev
+        : { ...prev, [position.id]: createInitialFeeDraft(position) }
+    ));
+  };
+
   const handleCloseDraftChange = (
     positionId: number,
     patch: Partial<CloseDraft>,
@@ -408,24 +503,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setIncomeDrafts((prev) => ({
       ...prev,
       [positionId]: {
-        ...(prev[positionId] ?? createInitialIncomeDraft(
-          positions.find((position) => position.id === positionId) ?? {
-            id: positionId,
-            investment_account_id: 0,
-            investment_account_name: '',
-            investment_account_owner_type: 'user',
-            investment_account_owner_name: '',
-            asset_type_code: 'security',
-            title: '',
-            status: 'open',
-            amount_in_currency: 0,
-            currency_code: user.base_currency_code,
-            opened_at: todayIso(),
-            metadata: {},
-            created_by_user_id: user.user_id,
-            created_at: '',
-          },
-        )),
+        ...(prev[positionId] ?? createInitialIncomeDraft(getDraftPositionFallback(positionId))),
         ...patch,
       },
     }));
@@ -438,24 +516,33 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setTopUpDrafts((prev) => ({
       ...prev,
       [positionId]: {
-        ...(prev[positionId] ?? createInitialTopUpDraft(
-          positions.find((position) => position.id === positionId) ?? {
-            id: positionId,
-            investment_account_id: 0,
-            investment_account_name: '',
-            investment_account_owner_type: 'user',
-            investment_account_owner_name: '',
-            asset_type_code: 'security',
-            title: '',
-            status: 'open',
-            amount_in_currency: 0,
-            currency_code: user.base_currency_code,
-            opened_at: todayIso(),
-            metadata: {},
-            created_by_user_id: user.user_id,
-            created_at: '',
-          },
-        )),
+        ...(prev[positionId] ?? createInitialTopUpDraft(getDraftPositionFallback(positionId))),
+        ...patch,
+      },
+    }));
+  };
+
+  const handlePartialCloseDraftChange = (
+    positionId: number,
+    patch: Partial<PartialCloseDraft>,
+  ) => {
+    setPartialCloseDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...(prev[positionId] ?? createInitialPartialCloseDraft(getDraftPositionFallback(positionId))),
+        ...patch,
+      },
+    }));
+  };
+
+  const handleFeeDraftChange = (
+    positionId: number,
+    patch: Partial<FeeDraft>,
+  ) => {
+    setFeeDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...(prev[positionId] ?? createInitialFeeDraft(getDraftPositionFallback(positionId))),
         ...patch,
       },
     }));
@@ -507,8 +594,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       return;
     }
 
-    const accountBalances = accounts.find(({ account }) => account.id === position.investment_account_id)?.balances ?? [];
-    const availableAmount = accountBalances.find((balance) => balance.currency_code === draft.currencyCode)?.amount ?? 0;
+    const availableAmount = getAccountBalanceForCurrency(position.investment_account_id, draft.currencyCode);
 
     if (Number(draft.amount) > availableAmount) {
       setTopUpError('Недостаточно денег на инвестиционном счете для пополнения позиции.');
@@ -539,6 +625,105 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setTopUpError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSubmittingTopUpId(null);
+    }
+  };
+
+  const handlePartialClosePosition = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = partialCloseDrafts[position.id];
+
+    if (!draft || !draft.returnAmount.trim() || !draft.principalReduction.trim() || submittingPartialCloseId === position.id) {
+      return;
+    }
+
+    const principalReduction = Number(draft.principalReduction);
+    const closedQuantity = draft.closedQuantity.trim() ? Number(draft.closedQuantity) : undefined;
+
+    if (principalReduction >= position.amount_in_currency) {
+      setPartialCloseError('Частичное закрытие должно оставлять положительный остаток. Для полного выхода используй закрытие позиции.');
+      return;
+    }
+
+    if (position.quantity !== null && position.quantity !== undefined) {
+      if (!draft.closedQuantity.trim()) {
+        setPartialCloseError('Для позиции с количеством нужно указать, сколько единиц закрывается.');
+        return;
+      }
+
+      if ((closedQuantity ?? 0) >= position.quantity) {
+        setPartialCloseError('Частичное закрытие по количеству должно быть меньше текущего количества.');
+        return;
+      }
+    }
+
+    setSubmittingPartialCloseId(position.id);
+    setPartialCloseError(null);
+
+    try {
+      await partialClosePortfolioPosition(position.id, {
+        return_amount_in_currency: Number(draft.returnAmount),
+        return_currency_code: draft.returnCurrencyCode,
+        principal_reduction_in_currency: principalReduction,
+        return_amount_in_base: draft.returnCurrencyCode === user.base_currency_code || !draft.returnBaseAmount.trim()
+          ? undefined
+          : Number(draft.returnBaseAmount),
+        closed_quantity: closedQuantity,
+        closed_at: draft.closedAt || undefined,
+        comment: draft.comment.trim() || undefined,
+      });
+      setPartialCloseDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      if (selectedPositionId === position.id) {
+        await loadEventsForPosition(position.id);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setPartialCloseError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingPartialCloseId(null);
+    }
+  };
+
+  const handleRecordFee = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = feeDrafts[position.id];
+
+    if (!draft || !draft.amount.trim() || submittingFeeId === position.id) {
+      return;
+    }
+
+    const availableAmount = getAccountBalanceForCurrency(position.investment_account_id, draft.currencyCode);
+    if (Number(draft.amount) > availableAmount) {
+      setFeeError('Недостаточно денег на инвестиционном счете для списания комиссии.');
+      return;
+    }
+
+    setSubmittingFeeId(position.id);
+    setFeeError(null);
+
+    try {
+      await recordPortfolioFee(position.id, {
+        amount: Number(draft.amount),
+        currency_code: draft.currencyCode,
+        charged_at: draft.chargedAt || undefined,
+        comment: draft.comment.trim() || undefined,
+      });
+      setFeeDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      if (selectedPositionId === position.id) {
+        await loadEventsForPosition(position.id);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setFeeError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingFeeId(null);
     }
   };
 
@@ -867,7 +1052,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 const closeDraft = closeDrafts[position.id];
                 const incomeDraft = incomeDrafts[position.id];
                 const topUpDraft = topUpDrafts[position.id];
+                const partialCloseDraft = partialCloseDrafts[position.id];
+                const feeDraft = feeDrafts[position.id];
                 const events = eventsByPosition[position.id] ?? [];
+                const feeBalance = feeDraft ? getAccountBalanceForCurrency(position.investment_account_id, feeDraft.currencyCode) : 0;
                 const cancelledIncomeIds = new Set(
                   events
                     .filter((item) => item.event_type === 'adjustment' && item.metadata?.action === 'cancel_income')
@@ -898,6 +1086,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         <div className="bank-detail-row__sub">
                           Дата входа: {formatDateLabel(position.opened_at)}
                           {position.quantity ? ` · Количество: ${position.quantity}` : ''}
+                          {typeof position.metadata?.amount_in_base === 'number'
+                            ? ` · Себестоимость: ${formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}`
+                            : ''}
+                          {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0
+                            ? ` · Комиссии: ${formatAmount(Number(position.metadata.fees_in_base), user.base_currency_code)}`
+                            : ''}
                         </div>
                       </div>
                     </div>
@@ -928,9 +1122,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       <button
                         className="btn"
                         type="button"
+                        onClick={() => handleOpenPartialCloseForm(position)}
+                      >
+                        Частично закрыть
+                      </button>
+                      <button
+                        className="btn"
+                        type="button"
                         onClick={() => handleOpenTopUpForm(position)}
                       >
                         Пополнить позицию
+                      </button>
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handleOpenFeeForm(position)}
+                      >
+                        Списать комиссию
                       </button>
                       <button
                         className="btn"
@@ -1015,6 +1223,99 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             disabled={submittingCloseId === position.id}
                           >
                             {submittingCloseId === position.id ? 'Закрываем...' : 'Подтвердить закрытие'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {partialCloseDraft && (
+                      <form onSubmit={(event) => void handlePartialClosePosition(position, event)}>
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Сумма возврата"
+                            value={partialCloseDraft.returnAmount}
+                            onChange={(event) => handlePartialCloseDraftChange(position.id, { returnAmount: event.target.value })}
+                            disabled={submittingPartialCloseId === position.id}
+                            style={{ width: 180 }}
+                          />
+                          <select
+                            className="input"
+                            value={partialCloseDraft.returnCurrencyCode}
+                            onChange={(event) => handlePartialCloseDraftChange(position.id, { returnCurrencyCode: event.target.value })}
+                            disabled={submittingPartialCloseId === position.id}
+                          >
+                            {currencies.map((currency) => (
+                              <option key={currency.code} value={currency.code}>
+                                {currency.code}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Списать principal"
+                            value={partialCloseDraft.principalReduction}
+                            onChange={(event) => handlePartialCloseDraftChange(position.id, { principalReduction: event.target.value })}
+                            disabled={submittingPartialCloseId === position.id}
+                            style={{ width: 180 }}
+                          />
+                          {position.quantity !== null && position.quantity !== undefined && (
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Списать количество"
+                              value={partialCloseDraft.closedQuantity}
+                              onChange={(event) => handlePartialCloseDraftChange(position.id, { closedQuantity: event.target.value })}
+                              disabled={submittingPartialCloseId === position.id}
+                              style={{ width: 180 }}
+                            />
+                          )}
+                          <input
+                            className="input"
+                            type="date"
+                            value={partialCloseDraft.closedAt}
+                            onChange={(event) => handlePartialCloseDraftChange(position.id, { closedAt: event.target.value })}
+                            disabled={submittingPartialCloseId === position.id}
+                          />
+                        </div>
+                        {partialCloseDraft.returnCurrencyCode !== user.base_currency_code && (
+                          <div className="form-row">
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder={`Историческая стоимость возврата в ${user.base_currency_code}`}
+                              value={partialCloseDraft.returnBaseAmount}
+                              onChange={(event) => handlePartialCloseDraftChange(position.id, { returnBaseAmount: event.target.value })}
+                              disabled={submittingPartialCloseId === position.id}
+                              style={{ width: 320 }}
+                            />
+                            <span className="list-row__sub">
+                              Нужна для корректной себестоимости валюты, возвращенной на investment-счет.
+                            </span>
+                          </div>
+                        )}
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            placeholder="Комментарий к частичному закрытию"
+                            value={partialCloseDraft.comment}
+                            onChange={(event) => handlePartialCloseDraftChange(position.id, { comment: event.target.value })}
+                            disabled={submittingPartialCloseId === position.id}
+                            style={{ flex: '1 1 280px' }}
+                          />
+                          <button
+                            className="btn btn--primary"
+                            type="submit"
+                            disabled={submittingPartialCloseId === position.id}
+                          >
+                            {submittingPartialCloseId === position.id ? 'Проводим...' : 'Подтвердить частичное закрытие'}
                           </button>
                         </div>
                       </form>
@@ -1170,6 +1471,63 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       </form>
                     )}
 
+                    {feeDraft && (
+                      <form onSubmit={(event) => void handleRecordFee(position, event)}>
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Сумма комиссии"
+                            value={feeDraft.amount}
+                            onChange={(event) => handleFeeDraftChange(position.id, { amount: event.target.value })}
+                            disabled={submittingFeeId === position.id}
+                            style={{ width: 180 }}
+                          />
+                          <select
+                            className="input"
+                            value={feeDraft.currencyCode}
+                            onChange={(event) => handleFeeDraftChange(position.id, { currencyCode: event.target.value })}
+                            disabled={submittingFeeId === position.id}
+                          >
+                            {currencies.map((currency) => (
+                              <option key={currency.code} value={currency.code}>
+                                {currency.code}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            className="input"
+                            type="date"
+                            value={feeDraft.chargedAt}
+                            onChange={(event) => handleFeeDraftChange(position.id, { chargedAt: event.target.value })}
+                            disabled={submittingFeeId === position.id}
+                          />
+                          <span className="list-row__sub">
+                            Доступно: {formatAmount(feeBalance, feeDraft.currencyCode)}
+                          </span>
+                        </div>
+                        <div className="form-row">
+                          <input
+                            className="input"
+                            type="text"
+                            placeholder="Комментарий к комиссии"
+                            value={feeDraft.comment}
+                            onChange={(event) => handleFeeDraftChange(position.id, { comment: event.target.value })}
+                            disabled={submittingFeeId === position.id}
+                            style={{ flex: '1 1 280px' }}
+                          />
+                          <button
+                            className="btn btn--primary"
+                            type="submit"
+                            disabled={submittingFeeId === position.id}
+                          >
+                            {submittingFeeId === position.id ? 'Списываем...' : 'Подтвердить комиссию'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
                     {selectedPositionId === position.id && (
                       <div style={{ marginTop: 12 }}>
                         {eventsError && (
@@ -1194,6 +1552,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 <div className="bank-detail-row__sub">
                                   {formatDateLabel(item.event_at)}
                                   {item.quantity ? ` · Количество: ${item.quantity}` : ''}
+                                  {item.event_type === 'partial_close' && typeof item.metadata?.principal_amount_in_currency === 'number'
+                                    ? ` · Principal: ${formatAmount(Number(item.metadata.principal_amount_in_currency), position.currency_code)}`
+                                    : ''}
                                   {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
                                   {item.comment ? ` · ${item.comment}` : ''}
                                 </div>
@@ -1240,6 +1601,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
           {topUpError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
               {topUpError}
+            </p>
+          )}
+
+          {partialCloseError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
+              {partialCloseError}
+            </p>
+          )}
+
+          {feeError && (
+            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
+              {feeError}
             </p>
           )}
 
@@ -1297,8 +1670,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
         <div className="panel">
           <p className="list-row__sub">
-            Базовый инвестиционный контур уже собран: переводы, ручные позиции, пополнение, доходы, закрытие и безопасные корректировки.
-            Дальше логично добавить частичное закрытие, комиссии и более богатые метаданные по типам активов.
+            Базовый инвестиционный контур уже собран: переводы, ручные позиции, пополнение, частичное и полное закрытие, доходы, комиссии и безопасные корректировки.
+            Дальше логично добавить справочник типов активов, ручную valuation и более детальную доходность по позициям.
           </p>
         </div>
       </section>

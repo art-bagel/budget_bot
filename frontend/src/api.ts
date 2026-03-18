@@ -41,8 +41,10 @@ import type {
   CreatePortfolioPositionRequest,
   TopUpPortfolioPositionRequest,
   ClosePortfolioPositionRequest,
+  PartialClosePortfolioPositionRequest,
   RecordPortfolioIncomeRequest,
   RecordPortfolioIncomeResponse,
+  RecordPortfolioFeeRequest,
   DeletePortfolioPositionResponse,
   CancelPortfolioIncomeRequest,
   CancelPortfolioIncomeResponse,
@@ -429,6 +431,16 @@ export async function closePortfolioPosition(
   });
 }
 
+export async function partialClosePortfolioPosition(
+  positionId: number,
+  data: PartialClosePortfolioPositionRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/partial-close`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function fetchPortfolioEvents(positionId: number): Promise<PortfolioEvent[]> {
   return apiFetch<PortfolioEvent[]>(`/portfolio/positions/${positionId}/events`);
 }
@@ -438,6 +450,16 @@ export async function recordPortfolioIncome(
   data: RecordPortfolioIncomeRequest,
 ): Promise<RecordPortfolioIncomeResponse> {
   return apiFetch<RecordPortfolioIncomeResponse>(`/portfolio/positions/${positionId}/income`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function recordPortfolioFee(
+  positionId: number,
+  data: RecordPortfolioFeeRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/fee`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

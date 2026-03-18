@@ -11,7 +11,9 @@ class Context(DataBase):
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
     F_PUT__CREATE_PORTFOLIO_POSITION = 'put__create_portfolio_position'
     F_PUT__TOP_UP_PORTFOLIO_POSITION = 'put__top_up_portfolio_position'
+    F_PUT__PARTIAL_CLOSE_PORTFOLIO_POSITION = 'put__partial_close_portfolio_position'
     F_PUT__CLOSE_PORTFOLIO_POSITION = 'put__close_portfolio_position'
+    F_PUT__RECORD_PORTFOLIO_FEE = 'put__record_portfolio_fee'
     F_PUT__DELETE_PORTFOLIO_POSITION = 'put__delete_portfolio_position'
     F_PUT__CANCEL_PORTFOLIO_INCOME = 'put__cancel_portfolio_income'
     F_PUT__INVITE_FAMILY_MEMBER = 'put__invite_family_member'
@@ -151,6 +153,50 @@ class Context(DataBase):
             close_currency_code,
             close_amount_in_base,
             closed_at,
+            comment,
+        )
+
+    async def put__partial_close_portfolio_position(
+        self,
+        user_id: int,
+        position_id: int,
+        return_amount_in_currency: float,
+        return_currency_code: str,
+        principal_reduction_in_currency: float,
+        return_amount_in_base: Optional[float] = None,
+        closed_quantity: Optional[float] = None,
+        closed_at: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__PARTIAL_CLOSE_PORTFOLIO_POSITION),
+            user_id,
+            position_id,
+            return_amount_in_currency,
+            return_currency_code,
+            principal_reduction_in_currency,
+            return_amount_in_base,
+            closed_quantity,
+            closed_at,
+            comment,
+        )
+
+    async def put__record_portfolio_fee(
+        self,
+        user_id: int,
+        position_id: int,
+        amount: float,
+        currency_code: str,
+        charged_at: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__RECORD_PORTFOLIO_FEE),
+            user_id,
+            position_id,
+            amount,
+            currency_code,
+            charged_at,
             comment,
         )
 

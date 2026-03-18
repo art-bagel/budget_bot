@@ -137,10 +137,10 @@
 - [ ] Начальные типы событий:
   - [x] `open`
   - [x] `top_up`
-  - [ ] `partial_close`
+  - [x] `partial_close`
   - [x] `close`
   - [x] `income`
-  - [ ] `fee`
+  - [x] `fee`
   - [x] `adjustment`
 - [ ] В `metadata` поддержать будущие поля без миграций
 
@@ -212,8 +212,10 @@
 - [ ] `put__transfer_from_investment_account`
 - [x] `put__open_portfolio_position`
 - [x] `put__top_up_portfolio_position`
+- [x] `put__partial_close_portfolio_position`
 - [x] `put__close_portfolio_position`
 - [x] `put__record_portfolio_income`
+- [x] `put__record_portfolio_fee`
 - [x] `put__delete_portfolio_position`
 - [x] `put__cancel_portfolio_income`
 - [ ] `put__record_portfolio_event`
@@ -239,8 +241,10 @@
   - [x] `GET /api/v1/portfolio/positions`
   - [x] `POST /api/v1/portfolio/positions`
   - [x] `POST /api/v1/portfolio/positions/{id}/top-up`
+  - [x] `POST /api/v1/portfolio/positions/{id}/partial-close`
   - [x] `POST /api/v1/portfolio/positions/{id}/close`
   - [x] `POST /api/v1/portfolio/positions/{id}/income`
+  - [x] `POST /api/v1/portfolio/positions/{id}/fee`
   - [x] `DELETE /api/v1/portfolio/positions/{id}`
   - [x] `GET /api/v1/portfolio/positions/{id}/events`
   - [x] `POST /api/v1/portfolio/events/{id}/cancel`
@@ -289,9 +293,11 @@
   - [ ] по статусу
 - [ ] Карточка позиции с действиями:
   - [x] `Закрыть`
+  - [x] `Частично закрыть`
   - [x] `Начислить доход`
   - [x] `Добавить событие`
   - [x] `Пополнить позицию`
+  - [x] `Списать комиссию`
 
 ### 18. Position Creation UX
 
@@ -416,8 +422,10 @@
 - [x] `portfolio_events`
 - [x] создание позиции вручную
 - [x] пополнение позиции
+- [x] частичное закрытие позиции
 - [x] закрытие позиции
 - [x] начисление дохода
+- [x] комиссии по позиции
 - [x] страница `Портфель`
 
 ### Phase 3. Operations Integration

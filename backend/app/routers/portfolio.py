@@ -36,7 +36,7 @@ class PortfolioPositionItem(BaseModel):
 class PortfolioEventItem(BaseModel):
     id: int
     position_id: int
-    event_type: Literal['open', 'top_up', 'close', 'income', 'adjustment']
+    event_type: Literal['open', 'top_up', 'partial_close', 'close', 'income', 'fee', 'adjustment']
     event_at: date
     quantity: float | None = None
     amount: float | None = None
@@ -76,6 +76,16 @@ class ClosePortfolioPositionRequest(BaseModel):
     comment: str | None = None
 
 
+class PartialClosePortfolioPositionRequest(BaseModel):
+    return_amount_in_currency: float
+    return_currency_code: str
+    principal_reduction_in_currency: float
+    return_amount_in_base: float | None = None
+    closed_quantity: float | None = None
+    closed_at: date | None = None
+    comment: str | None = None
+
+
 class RecordPortfolioIncomeRequest(BaseModel):
     amount: float
     currency_code: str
@@ -89,6 +99,13 @@ class RecordPortfolioIncomeResponse(BaseModel):
     operation_id: int
     amount_in_base: float
     base_currency_code: str
+
+
+class RecordPortfolioFeeRequest(BaseModel):
+    amount: float
+    currency_code: str
+    charged_at: date | None = None
+    comment: str | None = None
 
 
 class DeletePortfolioPositionResponse(BaseModel):
@@ -176,6 +193,26 @@ async def close_portfolio_position(
     return PortfolioPositionItem(**result)
 
 
+@router.post('/positions/{position_id}/partial-close', response_model=PortfolioPositionItem)
+async def partial_close_portfolio_position(
+    position_id: int,
+    body: PartialClosePortfolioPositionRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> PortfolioPositionItem:
+    result = await context.put__partial_close_portfolio_position(
+        user_id=user.user_id,
+        position_id=position_id,
+        return_amount_in_currency=body.return_amount_in_currency,
+        return_currency_code=body.return_currency_code,
+        principal_reduction_in_currency=body.principal_reduction_in_currency,
+        return_amount_in_base=body.return_amount_in_base,
+        closed_quantity=body.closed_quantity,
+        closed_at=body.closed_at,
+        comment=body.comment,
+    )
+    return PortfolioPositionItem(**result)
+
+
 @router.post('/positions/{position_id}/top-up', response_model=PortfolioPositionItem)
 async def top_up_portfolio_position(
     position_id: int,
@@ -211,6 +248,23 @@ async def record_portfolio_income(
         comment=body.comment,
     )
     return RecordPortfolioIncomeResponse(**result)
+
+
+@router.post('/positions/{position_id}/fee', response_model=PortfolioPositionItem)
+async def record_portfolio_fee(
+    position_id: int,
+    body: RecordPortfolioFeeRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> PortfolioPositionItem:
+    result = await context.put__record_portfolio_fee(
+        user_id=user.user_id,
+        position_id=position_id,
+        amount=body.amount,
+        currency_code=body.currency_code,
+        charged_at=body.charged_at,
+        comment=body.comment,
+    )
+    return PortfolioPositionItem(**result)
 
 
 @router.delete('/positions/{position_id}', response_model=DeletePortfolioPositionResponse)
