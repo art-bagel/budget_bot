@@ -81,6 +81,8 @@ type PortfolioAssetTab = {
   openCount: number;
   closedCount: number;
   principalInBase: number;
+  incomeInBase: number;
+  totalInBase: number;
 };
 
 type PositionAccountGroup = {
@@ -349,6 +351,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
       principalInBase: openPositions
         .filter((position) => position.asset_type_code === code)
         .reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
+      incomeInBase: positions
+        .filter((position) => position.asset_type_code === code)
+        .reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
+      totalInBase: 0,
+    })).map((tab) => ({
+      ...tab,
+      totalInBase: tab.principalInBase + tab.incomeInBase,
     }));
   }, [closedPositions, openPositions, positions]);
 
@@ -946,7 +955,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <section className="section">
         <div className="section__header">
-          <h2 className="section__title">Сводка</h2>
+          <h2 className="section__title">Свободно на инвестиционных счетах</h2>
         </div>
         <div className="panel">
           {error && (
@@ -955,45 +964,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </p>
           )}
 
-          <div className="balance-scroll">
-            <article className="balance-card">
-              <div className="balance-card__head">
-                <span className="pill">BASE</span>
-                <span className="tag tag--neutral">{accounts.length} счетов</span>
+          <div className="portfolio-free-cash">
+            <div className="portfolio-free-cash__total">
+              {formatAmount(totalHistoricalInBase, user.base_currency_code)}
+            </div>
+            {accounts.length > 1 && (
+              <div className="portfolio-free-cash__accounts">
+                {summaryItems.map((item) => (
+                  <div className="portfolio-free-cash__row" key={item.investment_account_id}>
+                    <span>{item.investment_account_name}</span>
+                    <span>{formatAmount(item.cash_balance_in_base, user.base_currency_code)}</span>
+                  </div>
+                ))}
               </div>
-              <span className="balance-card__amount">
-                {formatAmount(totalHistoricalInBase, user.base_currency_code)}
-              </span>
-              <span className="balance-card__sub">Историческая стоимость investment-счетов</span>
-            </article>
-            <article className="balance-card">
-              <div className="balance-card__head">
-                <span className="pill">OPEN</span>
-                <span className="tag tag--neutral">{openPositions.length} позиций</span>
-              </div>
-              <span className="balance-card__amount">{openPositions.length}</span>
-              <span className="balance-card__sub">Открытых ручных позиций в портфеле</span>
-            </article>
-            <article className="balance-card">
-              <div className="balance-card__head">
-                <span className="pill">ВЛОЖЕНО</span>
-                <span className="tag tag--neutral">BASE</span>
-              </div>
-              <span className="balance-card__amount">
-                {formatAmount(totalInvestedPrincipalInBase, user.base_currency_code)}
-              </span>
-              <span className="balance-card__sub">Вложено в открытые позиции</span>
-            </article>
-            <article className="balance-card">
-              <div className="balance-card__head">
-                <span className="pill">INCOME</span>
-                <span className="tag tag--neutral">BASE</span>
-              </div>
-              <span className="balance-card__amount">
-                {formatAmount(totalRealizedIncomeInBase, user.base_currency_code)}
-              </span>
-              <span className="balance-card__sub">Зафиксированный доход по портфелю</span>
-            </article>
+            )}
           </div>
         </div>
       </section>
@@ -1012,6 +996,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
               <span className="portfolio-type-switcher__pill">
                 {activeAssetTab.label}
               </span>
+              <span className="portfolio-type-switcher__total">
+                {formatAmount(activeAssetTab.totalInBase, user.base_currency_code)}
+              </span>
             </div>
           )}
 
@@ -1021,6 +1008,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 <span className="portfolio-type-stats__label">Вложено</span>
                 <span className="portfolio-type-stats__value">
                   {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
+                </span>
+              </div>
+              <div className="portfolio-type-stats__row">
+                <span className="portfolio-type-stats__label">Доход</span>
+                <span className="portfolio-type-stats__value">
+                  {formatAmount(activeAssetTab.incomeInBase, user.base_currency_code)}
                 </span>
               </div>
               <div className="portfolio-type-stats__row">

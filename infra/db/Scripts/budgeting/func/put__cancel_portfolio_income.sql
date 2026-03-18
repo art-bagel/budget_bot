@@ -21,6 +21,7 @@ DECLARE
     _operation_id bigint;
     _operation_comment text;
     _bank_cost_delta numeric(20, 2) := 0;
+    _current_income_in_base numeric(20, 2);
     _created_lot record;
 BEGIN
     SET search_path TO budgeting;
@@ -132,6 +133,11 @@ BEGIN
         END IF;
     END IF;
 
+    SELECT COALESCE((metadata ->> 'income_in_base')::numeric, 0)
+    INTO _current_income_in_base
+    FROM portfolio_positions
+    WHERE id = _position_id;
+
     _operation_comment := 'Отмена дохода · ' || _position_title;
     IF NULLIF(btrim(_comment), '') IS NOT NULL THEN
         _operation_comment := _operation_comment || ' · ' || NULLIF(btrim(_comment), '');
@@ -170,6 +176,15 @@ BEGIN
         -_amount,
         -_bank_cost_delta
     );
+
+    UPDATE portfolio_positions
+    SET metadata = jsonb_set(
+        COALESCE(metadata, '{}'::jsonb),
+        '{income_in_base}',
+        to_jsonb(GREATEST(_current_income_in_base - _bank_cost_delta, 0)),
+        true
+    )
+    WHERE id = _position_id;
 
     INSERT INTO portfolio_events (
         position_id,

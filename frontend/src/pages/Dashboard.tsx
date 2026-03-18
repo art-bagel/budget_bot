@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  fetchBankAccounts,
+  fetchBankAccountSnapshot,
   fetchDashboardOverview,
   fetchGroupMembers,
 } from '../api';
 import type {
+  BankAccount,
+  DashboardBankBalance,
   DashboardBudgetCategory,
   DashboardOverview as DashboardOverviewType,
   GroupMember,
@@ -24,6 +28,8 @@ import { hapticRigid } from '../telegram';
 
 export default function Dashboard({ user }: { user: UserContext }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
+  const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
+  const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
@@ -263,8 +269,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setError(null);
 
     try {
-      const result = await fetchDashboardOverview(user.bank_account_id);
+      const [result, loadedInvestmentAccounts] = await Promise.all([
+        fetchDashboardOverview(user.bank_account_id),
+        fetchBankAccounts('investment'),
+      ]);
+      const investmentSnapshots = await Promise.all(
+        loadedInvestmentAccounts.map(async (account) => ({
+          accountId: account.id,
+          balances: await fetchBankAccountSnapshot(account.id),
+        })),
+      );
       setOverview(result);
+      setInvestmentAccounts(loadedInvestmentAccounts);
+      setInvestmentBalancesByAccountId(
+        investmentSnapshots.reduce<Record<number, DashboardBankBalance[]>>((acc, item) => {
+          acc[item.accountId] = item.balances;
+          return acc;
+        }, {}),
+      );
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -403,6 +425,13 @@ export default function Dashboard({ user }: { user: UserContext }) {
     (sum, balance) => sum + balance.historical_cost_in_base,
     0,
   );
+  const investmentBankTotal = investmentAccounts.reduce(
+    (sum, account) => sum + (investmentBalancesByAccountId[account.id] ?? []).reduce(
+      (accountSum, balance) => accountSum + balance.historical_cost_in_base,
+      0,
+    ),
+    0,
+  );
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
@@ -534,15 +563,31 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <span>Семейный счет</span>
                 <strong>{formatAmount(familyBankTotal, overview.base_currency_code)}</strong>
               </div>
+              <div className="hero-card__breakdown-row">
+                <span>Инвестиции</span>
+                <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
+              </div>
             </div>
             {hintsEnabled && (
               <span className="hero-card__sub">← свайп для перевода между счетами</span>
             )}
           </>
         ) : (
-          <span className="hero-card__sub">
-            Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
-          </span>
+          <>
+            <div className="hero-card__breakdown">
+              <div className="hero-card__breakdown-row">
+                <span>Личный счет</span>
+                <strong>{formatAmount(personalBankTotal, overview.base_currency_code)}</strong>
+              </div>
+              <div className="hero-card__breakdown-row">
+                <span>Инвестиции</span>
+                <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
+              </div>
+            </div>
+            <span className="hero-card__sub">
+              Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
+            </span>
+          </>
         )}
       </article>
 
@@ -1010,6 +1055,45 @@ export default function Dashboard({ user }: { user: UserContext }) {
                     )}
                   </div>
                 )}
+
+                <div className="dashboard-budget-section">
+                  <div className="dashboard-budget-section__header">
+                    <div className="section__eyebrow">Инвестиции</div>
+                  </div>
+                  {investmentAccounts.length === 0 ? (
+                    <p className="list-row__sub">Инвестиционных счетов пока нет.</p>
+                  ) : (
+                    <div className="dashboard-budget-sections">
+                      {investmentAccounts.map((account) => {
+                        const balances = investmentBalancesByAccountId[account.id] ?? [];
+                        return (
+                          <div className="dashboard-budget-section" key={`investment-${account.id}`}>
+                            <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
+                            {balances.length === 0 ? (
+                              <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
+                            ) : (
+                              <ul className="bank-detail-list">
+                                {balances.map((balance) => (
+                                  <li className="bank-detail-row" key={`investment-${account.id}-${balance.currency_code}`}>
+                                    <div className="bank-detail-row__main">
+                                      <span className="pill">{balance.currency_code}</span>
+                                      <strong className="bank-detail-row__amount">
+                                        {formatAmount(balance.amount, balance.currency_code)}
+                                      </strong>
+                                    </div>
+                                    <div className="bank-detail-row__sub">
+                                      Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="modal-actions modal-actions--split">

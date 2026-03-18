@@ -20,6 +20,7 @@ DECLARE
     _status text;
     _base_currency_code char(3);
     _effective_amount_in_base numeric(20, 2);
+    _current_income_in_base numeric(20, 2);
     _operation_id bigint;
     _normalized_income_kind text := lower(coalesce(nullif(btrim(_income_kind), ''), 'income'));
 BEGIN
@@ -86,6 +87,11 @@ BEGIN
         RAISE EXCEPTION 'Base currency is missing for portfolio position %', _position_id;
     END IF;
 
+    SELECT COALESCE((metadata ->> 'income_in_base')::numeric, 0)
+    INTO _current_income_in_base
+    FROM portfolio_positions
+    WHERE id = _position_id;
+
     IF _currency_code = _base_currency_code THEN
         _effective_amount_in_base := round(_amount, 2);
     ELSE
@@ -147,6 +153,15 @@ BEGIN
             _operation_id
         );
     END IF;
+
+    UPDATE portfolio_positions
+    SET metadata = jsonb_set(
+        COALESCE(metadata, '{}'::jsonb),
+        '{income_in_base}',
+        to_jsonb(_current_income_in_base + _effective_amount_in_base),
+        true
+    )
+    WHERE id = _position_id;
 
     INSERT INTO portfolio_events (
         position_id,
