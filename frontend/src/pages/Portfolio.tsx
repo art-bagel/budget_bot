@@ -423,6 +423,35 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [summaryItems],
   );
 
+  // Market value computed from MOEX prices (shares only, bonds price is % of nominal — skip for now)
+  const { totalPricedMarketValue, totalPricedEntry, totalUnrealizedPnl, hasPricedPositions } = useMemo(() => {
+    let market = 0;
+    let entry = 0;
+    let count = 0;
+    for (const pos of openPositions) {
+      const t = pos.metadata?.ticker;
+      if (typeof t !== 'string' || !t) continue;
+      if (pos.metadata?.moex_market === 'bonds') continue;
+      const price = moexPrices.get(t);
+      const currentPrice = price?.last ?? price?.prevClose ?? null;
+      if (currentPrice === null || !pos.quantity) continue;
+      market += currentPrice * pos.quantity;
+      entry += pos.amount_in_currency;
+      count++;
+    }
+    return {
+      totalPricedMarketValue: market,
+      totalPricedEntry: entry,
+      totalUnrealizedPnl: market - entry,
+      hasPricedPositions: count > 0,
+    };
+  }, [openPositions, moexPrices]);
+
+  // Real portfolio value = invested (substituting priced positions at market) + realized income + cash
+  const totalRealPortfolioValue = hasPricedPositions
+    ? (totalInvestedPrincipalInBase - totalPricedEntry + totalPricedMarketValue) + totalRealizedIncomeInBase + totalInvestmentCashInBase
+    : null;
+
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
   );
@@ -993,15 +1022,36 @@ export default function Portfolio({ user }: { user: UserContext }) {
       <article className="hero-card">
         <span className="hero-card__label">Инвестиционный портфель</span>
         <strong className="hero-card__value">
-          {formatAmount(totalInvestedPrincipalInBase + totalRealizedIncomeInBase + totalInvestmentCashInBase, user.base_currency_code)}
+          {formatAmount(
+            totalRealPortfolioValue ?? (totalInvestedPrincipalInBase + totalRealizedIncomeInBase + totalInvestmentCashInBase),
+            user.base_currency_code,
+          )}
         </strong>
+        {hasPricedPositions && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span className={`hero-pnl-badge${totalUnrealizedPnl >= 0 ? ' hero-pnl-badge--pos' : ' hero-pnl-badge--neg'}`}>
+              {totalUnrealizedPnl >= 0 ? '+' : ''}
+              {formatAmount(totalUnrealizedPnl, user.base_currency_code)}
+              {totalPricedEntry > 0 && (
+                <> ({totalUnrealizedPnl >= 0 ? '+' : ''}{((totalUnrealizedPnl / totalPricedEntry) * 100).toFixed(1)}%)</>
+              )}
+            </span>
+            <span className="hero-card__label" style={{ margin: 0, fontSize: '0.7rem' }}>нереализованный P&L</span>
+          </div>
+        )}
         <div className="hero-card__breakdown">
           <div className="hero-card__breakdown-row">
             <span>Вложено</span>
             <strong>{formatAmount(totalInvestedPrincipalInBase, user.base_currency_code)}</strong>
           </div>
+          {hasPricedPositions && (
+            <div className="hero-card__breakdown-row">
+              <span>Рыночная оценка</span>
+              <strong>{formatAmount(totalPricedMarketValue, user.base_currency_code)}</strong>
+            </div>
+          )}
           <div className="hero-card__breakdown-row">
-            <span>Доход</span>
+            <span>Зафиксированный доход</span>
             <strong>{formatAmount(totalRealizedIncomeInBase, user.base_currency_code)}</strong>
           </div>
           <div className="hero-card__breakdown-row">
@@ -1116,17 +1166,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         )}
                         <div className="portfolio-position-grid">
                           {section.positions.map((position) => {
-                            const unitPrice = formatUnitPrice(position.amount_in_currency, position.quantity, position.currency_code);
                             const posTicker = typeof position.metadata?.ticker === 'string' ? position.metadata.ticker : null;
-                            const posMarket = position.metadata?.moex_market;
+                            const isBond = position.metadata?.moex_market === 'bonds';
                             const moexPrice = posTicker ? moexPrices.get(posTicker) : null;
                             const currentPrice = moexPrice?.last ?? moexPrice?.prevClose ?? null;
-                            const isBond = posMarket === 'bonds';
-
-                            // For shares: P&L = (currentPrice * quantity) - entryAmount
-                            // For bonds: price is % of nominal (usually 1000 RUB), show price only
-                            const unrealizedPnl = !isBond && currentPrice !== null && position.quantity
-                              ? currentPrice * position.quantity - position.amount_in_currency
+                            const currentTotalValue = !isBond && currentPrice !== null && position.quantity
+                              ? currentPrice * position.quantity
+                              : null;
+                            const unrealizedPnl = currentTotalValue !== null
+                              ? currentTotalValue - position.amount_in_currency
                               : null;
                             const pnlPercent = unrealizedPnl !== null && position.amount_in_currency > 0
                               ? (unrealizedPnl / position.amount_in_currency) * 100
@@ -1140,43 +1188,44 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 onClick={() => void handleOpenPositionDetails(position.id)}
                               >
                                 <div className="portfolio-position-card__head">
-                                  <div className="portfolio-position-card__title">
+                                  <div className="portfolio-position-card__left">
                                     {posTicker && (
                                       <span className="portfolio-position-card__ticker">{posTicker}</span>
                                     )}
-                                    {position.title}
+                                    <div className="portfolio-position-card__title">{position.title}</div>
                                   </div>
-                                  <div className="portfolio-position-card__amount">
-                                    {formatAmount(position.amount_in_currency, position.currency_code)}
+                                  <div className="portfolio-position-card__right">
+                                    <div className="portfolio-position-card__amount">
+                                      {currentTotalValue !== null
+                                        ? formatAmount(currentTotalValue, position.currency_code)
+                                        : formatAmount(position.amount_in_currency, position.currency_code)}
+                                    </div>
+                                    {unrealizedPnl !== null && pnlPercent !== null && (
+                                      <div className={`portfolio-position-card__pnl${unrealizedPnl >= 0 ? ' portfolio-position-card__pnl--pos' : ' portfolio-position-card__pnl--neg'}`}>
+                                        {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(0)} ₽
+                                        {' '}({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                                {currentPrice !== null && (
-                                  <div className="portfolio-position-card__price-row">
-                                    <span className="portfolio-position-card__price">
+                                <div className="portfolio-position-card__sub-row">
+                                  {currentPrice !== null && position.quantity ? (
+                                    <span>
                                       {isBond
                                         ? `${currentPrice.toFixed(2)}% от ном.`
                                         : formatAmount(currentPrice, position.currency_code)}
+                                      {' · '}{position.quantity} шт.
+                                      {moexPrice?.last === null && <span className="portfolio-position-card__price-hint"> посл. закр.</span>}
                                     </span>
-                                    {pnlPercent !== null && (
-                                      <span className={`portfolio-position-card__pnl${unrealizedPnl! >= 0 ? ' portfolio-position-card__pnl--pos' : ' portfolio-position-card__pnl--neg'}`}>
-                                        {unrealizedPnl! >= 0 ? '+' : ''}{unrealizedPnl!.toFixed(0)} ₽
-                                        {' '}({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
-                                      </span>
-                                    )}
-                                    {moexPrice?.last === null && (
-                                      <span className="portfolio-position-card__price-hint">посл. закр.</span>
-                                    )}
-                                  </div>
-                                )}
-                                <div className="portfolio-position-card__meta">
-                                  {unitPrice ? <span>Цена входа: {unitPrice}</span> : null}
-                                  {position.quantity ? <span>{position.quantity} шт</span> : null}
-                                  {typeof position.metadata?.amount_in_base === 'number' ? (
-                                    <span>Себестоимость: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
-                                  ) : null}
-                                  {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
-                                    <span>Комиссии</span>
-                                  ) : null}
+                                  ) : (
+                                    <>
+                                      {position.quantity ? (
+                                        <span>{formatAmount(position.amount_in_currency / position.quantity, position.currency_code)} · {position.quantity} шт.</span>
+                                      ) : (
+                                        <span>{formatAmount(position.amount_in_currency, position.currency_code)}</span>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
                               </button>
                             );
@@ -1243,15 +1292,67 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
             <div className="modal-body">
               <div className="portfolio-position-detail">
-                <div className="portfolio-position-detail__summary">
-                  <span className="pill">{selectedPosition.currency_code}</span>
-                  <strong className="portfolio-position-detail__amount">
-                    {formatAmount(selectedPosition.amount_in_currency, selectedPosition.currency_code)}
-                  </strong>
-                </div>
+                {(() => {
+                  const detailTicker = typeof selectedPosition.metadata?.ticker === 'string' ? selectedPosition.metadata.ticker : null;
+                  const detailIsBond = selectedPosition.metadata?.moex_market === 'bonds';
+                  const detailMoexPrice = detailTicker ? moexPrices.get(detailTicker) : null;
+                  const detailCurrentPrice = detailMoexPrice?.last ?? detailMoexPrice?.prevClose ?? null;
+                  const detailCurrentTotal = !detailIsBond && detailCurrentPrice !== null && selectedPosition.quantity
+                    ? detailCurrentPrice * selectedPosition.quantity
+                    : null;
+                  const detailPnl = detailCurrentTotal !== null
+                    ? detailCurrentTotal - selectedPosition.amount_in_currency
+                    : null;
+                  const detailPnlPct = detailPnl !== null && selectedPosition.amount_in_currency > 0
+                    ? (detailPnl / selectedPosition.amount_in_currency) * 100
+                    : null;
+                  return (
+                    <>
+                      {detailTicker && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                          <span className="portfolio-position-card__ticker" style={{ fontSize: '0.8rem', padding: '2px 8px' }}>
+                            {detailTicker}
+                          </span>
+                          <span className="pill">{selectedPosition.currency_code}</span>
+                          {detailMoexPrice?.last === null && detailMoexPrice?.prevClose !== null && (
+                            <span className="portfolio-position-card__price-hint">цена закрытия</span>
+                          )}
+                        </div>
+                      )}
+                      <div className="portfolio-position-detail__summary">
+                        {!detailTicker && <span className="pill">{selectedPosition.currency_code}</span>}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                            <span className="settings-row__sub">Вложено</span>
+                            <strong className="portfolio-position-detail__amount">
+                              {formatAmount(selectedPosition.amount_in_currency, selectedPosition.currency_code)}
+                            </strong>
+                          </div>
+                          {detailCurrentTotal !== null && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+                              <span className="settings-row__sub">Текущая стоимость</span>
+                              <strong className="portfolio-position-detail__amount">
+                                {formatAmount(detailCurrentTotal, selectedPosition.currency_code)}
+                              </strong>
+                            </div>
+                          )}
+                          {detailPnl !== null && detailPnlPct !== null && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
+                              <span className="settings-row__sub">Нереализованный P&L</span>
+                              <span className={`portfolio-position-card__pnl${detailPnl >= 0 ? ' portfolio-position-card__pnl--pos' : ' portfolio-position-card__pnl--neg'}`}>
+                                {detailPnl >= 0 ? '+' : ''}{formatAmount(detailPnl, selectedPosition.currency_code)}
+                                {' '}({detailPnlPct >= 0 ? '+' : ''}{detailPnlPct.toFixed(1)}%)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="portfolio-position-detail__meta">
                   <span>Дата входа: {formatDateLabel(selectedPosition.opened_at)}</span>
-                  {selectedPosition.quantity ? <span>Количество: {selectedPosition.quantity}</span> : null}
+                  {selectedPosition.quantity ? <span>Количество: {selectedPosition.quantity} шт.</span> : null}
                   {typeof selectedPosition.metadata?.amount_in_base === 'number'
                     ? <span>Себестоимость: {formatAmount(Number(selectedPosition.metadata.amount_in_base), user.base_currency_code)}</span>
                     : null}

@@ -1335,33 +1335,42 @@ p { margin: 0; }
 
 .portfolio-position-card__ticker {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-accent);
-  background: rgba(82, 126, 142, 0.12);
+  background: rgba(82, 126, 142, 0.14);
   border-radius: 4px;
-  padding: 1px 5px;
-  margin-right: 6px;
-  vertical-align: middle;
+  padding: 1px 6px;
+  margin-bottom: 3px;
 }
 
-.portfolio-position-card__price-row {
+/* New 2-column card layout */
+.portfolio-position-card__left {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-.portfolio-position-card__price {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-primary);
+.portfolio-position-card__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.portfolio-position-card__sub-row {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
 }
 
 .portfolio-position-card__pnl {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
   border-radius: 4px;
   padding: 1px 5px;
@@ -1380,6 +1389,25 @@ p { margin: 0; }
 .portfolio-position-card__price-hint {
   font-size: 0.72rem;
   color: var(--text-tertiary);
+}
+
+/* Hero P&L badge */
+.hero-pnl-badge {
+  display: inline-block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+.hero-pnl-badge--pos {
+  color: var(--tag-in-fg);
+  background: var(--tag-in-bg);
+}
+
+.hero-pnl-badge--neg {
+  color: var(--tag-out-fg);
+  background: var(--tag-out-bg);
 }
 
 /* Ticker search dropdown */
