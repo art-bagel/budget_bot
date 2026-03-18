@@ -75,11 +75,21 @@ type FeeDraft = {
   comment: string;
 };
 
+type PortfolioAssetTab = {
+  code: string;
+  label: string;
+  openCount: number;
+  closedCount: number;
+  principalInBase: number;
+};
+
 const ASSET_TYPE_OPTIONS = [
   { value: 'security', label: 'Ценные бумаги' },
   { value: 'deposit', label: 'Депозит' },
   { value: 'crypto', label: 'Криптовалюта' },
 ] as const;
+
+const DEFAULT_PORTFOLIO_ASSET_TYPE_CODES = ['security', 'deposit', 'crypto'] as const;
 
 
 function todayIso(): string {
@@ -95,7 +105,16 @@ function formatDateLabel(value: string): string {
 }
 
 function assetTypeLabel(assetTypeCode: string): string {
-  return ASSET_TYPE_OPTIONS.find((item) => item.value === assetTypeCode)?.label ?? assetTypeCode;
+  const knownLabel = ASSET_TYPE_OPTIONS.find((item) => item.value === assetTypeCode)?.label;
+  if (knownLabel) {
+    return knownLabel;
+  }
+
+  return assetTypeCode
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
@@ -189,6 +208,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
+  const [activeAssetTypeCode, setActiveAssetTypeCode] = useState<string>(DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0]);
   const [loading, setLoading] = useState(true);
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
@@ -285,6 +305,45 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const closedPositions = useMemo(
     () => positions.filter((position) => position.status === 'closed'),
     [positions],
+  );
+
+  const assetTabs = useMemo<PortfolioAssetTab[]>(() => {
+    const positionTypeCodes = Array.from(new Set(positions.map((position) => position.asset_type_code)));
+    const knownCodes = [...DEFAULT_PORTFOLIO_ASSET_TYPE_CODES];
+    const extraCodes = positionTypeCodes
+      .filter((code) => !knownCodes.includes(code as (typeof DEFAULT_PORTFOLIO_ASSET_TYPE_CODES)[number]))
+      .sort((left, right) => assetTypeLabel(left).localeCompare(assetTypeLabel(right), 'ru'));
+
+    return [...knownCodes, ...extraCodes].map((code) => ({
+      code,
+      label: assetTypeLabel(code),
+      openCount: openPositions.filter((position) => position.asset_type_code === code).length,
+      closedCount: closedPositions.filter((position) => position.asset_type_code === code).length,
+      principalInBase: openPositions
+        .filter((position) => position.asset_type_code === code)
+        .reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
+    }));
+  }, [closedPositions, openPositions, positions]);
+
+  useEffect(() => {
+    if (!assetTabs.some((tab) => tab.code === activeAssetTypeCode)) {
+      setActiveAssetTypeCode(assetTabs[0]?.code ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0]);
+    }
+  }, [activeAssetTypeCode, assetTabs]);
+
+  const activeAssetTab = useMemo(
+    () => assetTabs.find((tab) => tab.code === activeAssetTypeCode) ?? assetTabs[0] ?? null,
+    [activeAssetTypeCode, assetTabs],
+  );
+
+  const filteredOpenPositions = useMemo(
+    () => openPositions.filter((position) => position.asset_type_code === activeAssetTypeCode),
+    [activeAssetTypeCode, openPositions],
+  );
+
+  const filteredClosedPositions = useMemo(
+    () => closedPositions.filter((position) => position.asset_type_code === activeAssetTypeCode),
+    [activeAssetTypeCode, closedPositions],
   );
 
   const totalInvestedPrincipalInBase = useMemo(
@@ -846,6 +905,50 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <section className="section">
         <div className="section__header">
+          <h2 className="section__title">Типы активов</h2>
+        </div>
+        <div className="panel">
+          <div className="portfolio-type-tabs" role="tablist" aria-label="Типы инвестиционных активов">
+            {assetTabs.map((tab) => (
+              <button
+                key={tab.code}
+                type="button"
+                role="tab"
+                aria-selected={activeAssetTypeCode === tab.code}
+                className={[
+                  'analytics-chip',
+                  activeAssetTypeCode === tab.code ? 'analytics-chip--active' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => {
+                  setActiveAssetTypeCode(tab.code);
+                  if (ASSET_TYPE_OPTIONS.some((option) => option.value === tab.code)) {
+                    setNewAssetTypeCode(tab.code as (typeof ASSET_TYPE_OPTIONS)[number]['value']);
+                  }
+                }}
+              >
+                {tab.label} · {tab.openCount}
+              </button>
+            ))}
+          </div>
+
+          {activeAssetTab && (
+            <div className="portfolio-type-tabs__summary">
+              <span className="tag tag--neutral">
+                Открыто: {activeAssetTab.openCount}
+              </span>
+              <span className="tag tag--neutral">
+                Закрыто: {activeAssetTab.closedCount}
+              </span>
+              <span className="tag tag--neutral">
+                Principal: {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section__header">
           <h2 className="section__title">Новая позиция</h2>
         </div>
         <div className="panel">
@@ -967,88 +1070,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <section className="section">
         <div className="section__header">
-          <h2 className="section__title">Инвестиционные счета</h2>
+          <h2 className="section__title">
+            {activeAssetTab ? `${activeAssetTab.label} · Открытые позиции` : 'Открытые позиции'}
+          </h2>
         </div>
         <div className="panel">
-          {accounts.length === 0 ? (
-            <p className="list-row__sub">Инвестиционных счетов пока нет.</p>
+          {filteredOpenPositions.length === 0 ? (
+            <p className="list-row__sub">
+              {activeAssetTab ? `Открытых позиций типа «${activeAssetTab.label}» пока нет.` : 'Открытых позиций пока нет.'}
+            </p>
           ) : (
             <div className="dashboard-budget-sections">
-              {accounts.map(({ account, balances }) => (
-                <div className="dashboard-budget-section" key={account.id}>
-                  {(() => {
-                    const summary = summaryItems.find((item) => item.investment_account_id === account.id);
-
-                    return (
-                      <>
-                  <div className="dashboard-budget-section__header">
-                    <div>
-                      <div className="section__eyebrow">
-                        {account.owner_type === 'family' ? 'Семейный investment' : 'Личный investment'}
-                      </div>
-                      <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
-                    </div>
-                    <span className="tag tag--neutral">
-                      {account.provider_name || `Счет #${account.id}`}
-                    </span>
-                  </div>
-
-                  {summary && (
-                    <div className="form-row" style={{ paddingTop: 0 }}>
-                      <span className="tag tag--neutral">
-                        Cash: {formatAmount(summary.cash_balance_in_base, user.base_currency_code)}
-                      </span>
-                      <span className="tag tag--neutral">
-                        Principal: {formatAmount(summary.invested_principal_in_base, user.base_currency_code)}
-                      </span>
-                      <span className="tag tag--neutral">
-                        Income: {formatAmount(summary.realized_income_in_base, user.base_currency_code)}
-                      </span>
-                      <span className="tag tag--neutral">
-                        Open: {summary.open_positions_count}
-                      </span>
-                    </div>
-                  )}
-
-                  {balances.length === 0 ? (
-                    <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
-                  ) : (
-                    <ul className="bank-detail-list">
-                      {balances.map((balance) => (
-                        <li className="bank-detail-row" key={`${account.id}-${balance.currency_code}`}>
-                          <div className="bank-detail-row__main">
-                            <span className="pill">{balance.currency_code}</span>
-                            <strong className="bank-detail-row__amount">
-                              {formatAmount(balance.amount, balance.currency_code)}
-                            </strong>
-                          </div>
-                          <div className="bank-detail-row__sub">
-                            Себестоимость: {formatAmount(balance.historical_cost_in_base, balance.base_currency_code)}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                      </>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Открытые позиции</h2>
-        </div>
-        <div className="panel">
-          {openPositions.length === 0 ? (
-            <p className="list-row__sub">Открытых позиций пока нет.</p>
-          ) : (
-            <div className="dashboard-budget-sections">
-              {openPositions.map((position) => {
+              {filteredOpenPositions.map((position) => {
                 const closeDraft = closeDrafts[position.id];
                 const incomeDraft = incomeDrafts[position.id];
                 const topUpDraft = topUpDrafts[position.id];
@@ -1632,14 +1665,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <section className="section">
         <div className="section__header">
-          <h2 className="section__title">Закрытые позиции</h2>
+          <h2 className="section__title">
+            {activeAssetTab ? `${activeAssetTab.label} · Закрытые позиции` : 'Закрытые позиции'}
+          </h2>
         </div>
         <div className="panel">
-          {closedPositions.length === 0 ? (
-            <p className="list-row__sub">Закрытых позиций пока нет.</p>
+          {filteredClosedPositions.length === 0 ? (
+            <p className="list-row__sub">
+              {activeAssetTab ? `Закрытых позиций типа «${activeAssetTab.label}» пока нет.` : 'Закрытых позиций пока нет.'}
+            </p>
           ) : (
             <ul className="bank-detail-list">
-              {closedPositions.map((position) => (
+              {filteredClosedPositions.map((position) => (
                 <li className="bank-detail-row" key={position.id}>
                   <div className="bank-detail-row__main">
                     <div>
@@ -1660,6 +1697,80 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section__header">
+          <h2 className="section__title">Инвестиционные счета</h2>
+        </div>
+        <div className="panel">
+          {accounts.length === 0 ? (
+            <p className="list-row__sub">Инвестиционных счетов пока нет.</p>
+          ) : (
+            <div className="dashboard-budget-sections">
+              {accounts.map(({ account, balances }) => (
+                <div className="dashboard-budget-section" key={account.id}>
+                  {(() => {
+                    const summary = summaryItems.find((item) => item.investment_account_id === account.id);
+
+                    return (
+                      <>
+                  <div className="dashboard-budget-section__header">
+                    <div>
+                      <div className="section__eyebrow">
+                        {account.owner_type === 'family' ? 'Семейный investment' : 'Личный investment'}
+                      </div>
+                      <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
+                    </div>
+                    <span className="tag tag--neutral">
+                      {account.provider_name || `Счет #${account.id}`}
+                    </span>
+                  </div>
+
+                  {summary && (
+                    <div className="form-row" style={{ paddingTop: 0 }}>
+                      <span className="tag tag--neutral">
+                        Cash: {formatAmount(summary.cash_balance_in_base, user.base_currency_code)}
+                      </span>
+                      <span className="tag tag--neutral">
+                        Principal: {formatAmount(summary.invested_principal_in_base, user.base_currency_code)}
+                      </span>
+                      <span className="tag tag--neutral">
+                        Income: {formatAmount(summary.realized_income_in_base, user.base_currency_code)}
+                      </span>
+                      <span className="tag tag--neutral">
+                        Open: {summary.open_positions_count}
+                      </span>
+                    </div>
+                  )}
+
+                  {balances.length === 0 ? (
+                    <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
+                  ) : (
+                    <ul className="bank-detail-list">
+                      {balances.map((balance) => (
+                        <li className="bank-detail-row" key={`${account.id}-${balance.currency_code}`}>
+                          <div className="bank-detail-row__main">
+                            <span className="pill">{balance.currency_code}</span>
+                            <strong className="bank-detail-row__amount">
+                              {formatAmount(balance.amount, balance.currency_code)}
+                            </strong>
+                          </div>
+                          <div className="bank-detail-row__sub">
+                            Себестоимость: {formatAmount(balance.historical_cost_in_base, balance.base_currency_code)}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                      </>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>

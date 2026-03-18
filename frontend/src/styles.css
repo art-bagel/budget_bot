@@ -919,6 +919,19 @@ p { margin: 0; }
   flex-wrap: nowrap;
 }
 
+.portfolio-type-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.portfolio-type-tabs__summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
 .analytics-view {
   touch-action: pan-y;
 }
