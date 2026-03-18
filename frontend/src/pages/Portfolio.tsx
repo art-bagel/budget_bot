@@ -976,13 +976,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </article>
             <article className="balance-card">
               <div className="balance-card__head">
-                <span className="pill">PRINCIPAL</span>
+                <span className="pill">ВЛОЖЕНО</span>
                 <span className="tag tag--neutral">BASE</span>
               </div>
               <span className="balance-card__amount">
                 {formatAmount(totalInvestedPrincipalInBase, user.base_currency_code)}
               </span>
-              <span className="balance-card__sub">Вложенный principal по открытым позициям</span>
+              <span className="balance-card__sub">Вложено в открытые позиции</span>
             </article>
             <article className="balance-card">
               <div className="balance-card__head">
@@ -1007,22 +1007,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
           onTouchStart={(event) => handleAssetSwipeStart(event.touches[0].clientX)}
           onTouchEnd={(event) => handleAssetSwipeEnd(event.changedTouches[0].clientX)}
         >
-          <div className="portfolio-type-tabs__summary">
-            {activeAssetTab && (
-              <>
-                <span className="tag tag--neutral">
-                  Открыто: {activeAssetTab.openCount}
-                </span>
-                <span className="tag tag--neutral">
-                  Закрыто: {activeAssetTab.closedCount}
-                </span>
-                <span className="tag tag--neutral">
-                  Principal: {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
-                </span>
-              </>
-            )}
-          </div>
-
           {activeAssetTab && (
             <div className="portfolio-type-switcher__active">
               <span className="portfolio-type-switcher__pill">
@@ -1031,9 +1015,28 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
           )}
 
+          {activeAssetTab && (
+            <div className="portfolio-type-stats">
+              <div className="portfolio-type-stats__row">
+                <span className="portfolio-type-stats__label">Вложено</span>
+                <span className="portfolio-type-stats__value">
+                  {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
+                </span>
+              </div>
+              <div className="portfolio-type-stats__row">
+                <span className="portfolio-type-stats__label">Открыто</span>
+                <span className="portfolio-type-stats__value">{activeAssetTab.openCount}</span>
+              </div>
+              <div className="portfolio-type-stats__row">
+                <span className="portfolio-type-stats__label">Закрыто</span>
+                <span className="portfolio-type-stats__value">{activeAssetTab.closedCount}</span>
+              </div>
+            </div>
+          )}
+
           <div className="portfolio-type-switcher__actions">
             <button
-              className="btn btn--primary"
+              className="portfolio-type-switcher__add"
               type="button"
               onClick={() => setIsCreateDialogOpen(true)}
               disabled={accounts.length === 0}
@@ -1075,15 +1078,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <section className="section">
         <div className="section__header">
-          <h2 className="section__title">
-            {activeAssetTab ? `${activeAssetTab.label} · Открытые позиции` : 'Открытые позиции'}
-          </h2>
+          <h2 className="section__title">Открытые позиции</h2>
         </div>
         <div className="panel">
           {filteredOpenPositions.length === 0 ? (
-            <p className="list-row__sub">
-              {activeAssetTab ? `Открытых позиций типа «${activeAssetTab.label}» пока нет.` : 'Открытых позиций пока нет.'}
-            </p>
+            <p className="list-row__sub">Открытых позиций пока нет.</p>
           ) : (
             <div className="dashboard-budget-sections">
               {filteredOpenPositionGroups.map((group, index) => {
@@ -1158,15 +1157,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <section className="section">
         <div className="section__header">
-          <h2 className="section__title">
-            {activeAssetTab ? `${activeAssetTab.label} · Закрытые позиции` : 'Закрытые позиции'}
-          </h2>
+          <h2 className="section__title">Закрытые позиции</h2>
         </div>
         <div className="panel">
           {filteredClosedPositions.length === 0 ? (
-            <p className="list-row__sub">
-              {activeAssetTab ? `Закрытых позиций типа «${activeAssetTab.label}» пока нет.` : 'Закрытых позиций пока нет.'}
-            </p>
+            <p className="list-row__sub">Закрытых позиций пока нет.</p>
           ) : (
             <ul className="bank-detail-list">
               {filteredClosedPositions.map((position) => (
@@ -1176,7 +1171,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span className="pill">{position.currency_code}</span>
                         <strong className="bank-detail-row__amount">{position.title}</strong>
-                        <span className="tag tag--neutral">{assetTypeLabel(position.asset_type_code)}</span>
                       </div>
                       <div className="bank-detail-row__sub">
                         {position.investment_account_name} · вход {formatAmount(position.amount_in_currency, position.currency_code)}
