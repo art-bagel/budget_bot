@@ -1,3 +1,5 @@
+import type { ReactElement } from 'react';
+
 const s = {
   viewBox: '0 0 24 24',
   width: '100%',
@@ -9,7 +11,7 @@ const s = {
   strokeLinejoin: 'round' as const,
 };
 
-export const CATEGORY_SVG_ICONS: Record<string, () => JSX.Element> = {
+export const CATEGORY_SVG_ICONS: Record<string, () => ReactElement> = {
   cart:      () => <svg {...s}><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
   basket:    () => <svg {...s}><path d="M6 2l-4 6h20l-4-6"/><rect x="2" y="8" width="20" height="13" rx="2"/><path d="M9 8v3m6-3v3"/></svg>,
   home:      () => <svg {...s}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
