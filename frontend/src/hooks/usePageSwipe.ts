@@ -19,6 +19,13 @@ export function usePageSwipe(
     blocked: boolean;
   } | null>(null);
 
+  // Keep refs to avoid stale closures without re-mounting listeners
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
+
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -27,13 +34,11 @@ export function usePageSwipe(
       const x = e.touches[0].clientX;
       const screenWidth = window.innerWidth;
 
-      // Only allow swipe from screen edges
       if (x > EDGE_ZONE && x < screenWidth - EDGE_ZONE) {
         stateRef.current = null;
         return;
       }
 
-      // Ignore if touch starts on a swipeable element (category cards, free budget)
       const target = e.target as Element;
       if (target.closest('.swipeable')) {
         stateRef.current = null;
@@ -52,7 +57,6 @@ export function usePageSwipe(
       if (!s || s.blocked) return;
       const dx = e.touches[0].clientX - s.startX;
       const dy = e.touches[0].clientY - s.startY;
-      // If vertical movement dominates early — block this gesture
       if (Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dy) > 10) {
         s.blocked = true;
       }
@@ -69,12 +73,12 @@ export function usePageSwipe(
       if (Math.abs(dx) < MIN_DISTANCE) return;
       if (Math.abs(dy) / Math.abs(dx) > MAX_ANGLE) return;
 
-      const idx = PAGE_ORDER.indexOf(currentPage);
+      const idx = PAGE_ORDER.indexOf(currentPageRef.current);
       if (dx < 0 && idx < PAGE_ORDER.length - 1) {
-        onNavigate(PAGE_ORDER[idx + 1]);
+        onNavigateRef.current(PAGE_ORDER[idx + 1]);
         navigator.vibrate?.(10);
       } else if (dx > 0 && idx > 0) {
-        onNavigate(PAGE_ORDER[idx - 1]);
+        onNavigateRef.current(PAGE_ORDER[idx - 1]);
         navigator.vibrate?.(10);
       }
     };
@@ -88,5 +92,5 @@ export function usePageSwipe(
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);
     };
-  }, [ref, currentPage, onNavigate]);
+  }, [ref]); // listeners mounted once — currentPage and onNavigate read via refs
 }
