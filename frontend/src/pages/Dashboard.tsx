@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   fetchBankAccounts,
@@ -430,13 +430,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
     (sum, balance) => sum + balance.historical_cost_in_base,
     0,
   );
-  const investmentSummaryByAccountId = useMemo(
-    () => portfolioSummaryItems.reduce<Record<number, PortfolioSummaryItem>>((acc, item) => {
-      acc[item.investment_account_id] = item;
-      return acc;
-    }, {}),
-    [portfolioSummaryItems],
-  );
+  const investmentSummaryByAccountId = portfolioSummaryItems.reduce<Record<number, PortfolioSummaryItem>>((acc, item) => {
+    acc[item.investment_account_id] = item;
+    return acc;
+  }, {});
   const getInvestmentCashInBase = (accountId: number) => (
     investmentBalancesByAccountId[accountId] ?? []
   ).reduce((sum, balance) => sum + balance.historical_cost_in_base, 0);
