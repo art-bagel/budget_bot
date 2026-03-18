@@ -338,6 +338,56 @@ p { margin: 0; }
   font-weight: 600;
 }
 
+.dashboard-bank-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.dashboard-bank-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+
+.dashboard-bank-action__icon {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-on-accent);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.dashboard-bank-action:hover .dashboard-bank-action__icon {
+  background: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.dashboard-bank-action__icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.dashboard-bank-action__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+}
+
 /* ── Bank detail modal list ──────────────────────── */
 
 .bank-detail-list {
@@ -379,6 +429,10 @@ p { margin: 0; }
 
 .section {
   margin-bottom: 24px;
+}
+
+.section--embedded {
+  margin-bottom: 0;
 }
 
 .section__header {
@@ -1556,6 +1610,18 @@ body.modal-open {
 
 .modal-card--compact {
   width: min(460px, 100%);
+}
+
+.modal-card--wide {
+  width: min(860px, 100%);
+  height: min(
+    calc(var(--visual-viewport-height, 100svh) * 0.84),
+    calc(
+      var(--visual-viewport-height, 100svh)
+      - var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)))
+      - 24px
+    )
+  );
 }
 
 /* Scrollable body — wraps all content between header and actions */

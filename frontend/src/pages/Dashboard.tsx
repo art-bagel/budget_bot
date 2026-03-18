@@ -24,9 +24,12 @@ import CategoryDialog from '../components/CategoryDialog';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
+import Operations from './Operations';
+import { IconAnalyticsDonut, IconClock, IconPlusCircle } from '../components/Icons';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
 
+type DashboardBankHubMode = 'history' | 'analytics';
 
 export default function Dashboard({ user }: { user: UserContext }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
@@ -38,15 +41,17 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const { hintsEnabled } = useHints();
 
   const [showBankDetail, setShowBankDetail] = useState(false);
+  const [showBankHub, setShowBankHub] = useState(false);
+  const [bankHubMode, setBankHubMode] = useState<DashboardBankHubMode>('history');
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
   const [showAccountTransfer, setShowAccountTransfer] = useState(false);
 
   useEffect(() => {
-    if (showBankDetail) {
+    if (showBankDetail || showBankHub) {
       document.body.classList.add('modal-open');
       return () => document.body.classList.remove('modal-open');
     }
-  }, [showBankDetail]);
+  }, [showBankDetail, showBankHub]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
@@ -400,6 +405,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
     await loadOverview();
   };
 
+  const openBankHub = (mode: DashboardBankHubMode) => {
+    setBankHubMode(mode);
+    setShowBankHub(true);
+  };
+
   /* ── render ─────────────────────────────────────── */
 
   if (loading) {
@@ -602,11 +612,40 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
               </div>
             </div>
-            <span className="hero-card__sub">
-              Бюджет по категориям: {formatAmount(overview.total_budget_in_base, overview.base_currency_code)}
-            </span>
           </>
         )}
+        <div className="dashboard-bank-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="dashboard-bank-action"
+            type="button"
+            onClick={() => openBankHub('history')}
+          >
+            <span className="dashboard-bank-action__icon">
+              <IconClock />
+            </span>
+            <span className="dashboard-bank-action__label">Операции</span>
+          </button>
+          <button
+            className="dashboard-bank-action"
+            type="button"
+            onClick={() => setShowIncomeDialog(true)}
+          >
+            <span className="dashboard-bank-action__icon">
+              <IconPlusCircle />
+            </span>
+            <span className="dashboard-bank-action__label">Пополнить</span>
+          </button>
+          <button
+            className="dashboard-bank-action"
+            type="button"
+            onClick={() => openBankHub('analytics')}
+          >
+            <span className="dashboard-bank-action__icon">
+              <IconAnalyticsDonut />
+            </span>
+            <span className="dashboard-bank-action__label">Аналитика</span>
+          </button>
+        </div>
       </article>
 
       <section className="section">
@@ -1129,16 +1168,38 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 </div>
               </div>
             </div>
-            <div className="modal-actions modal-actions--split">
+            <div className="modal-actions">
               <button className="btn" type="button" onClick={() => setShowBankDetail(false)}>
                 Закрыть
               </button>
-              <button
-                className="btn btn--primary"
-                type="button"
-                onClick={() => { setShowBankDetail(false); setShowIncomeDialog(true); }}
-              >
-                Пополнить
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBankHub && (
+        <div className="modal-backdrop" onClick={() => setShowBankHub(false)}>
+          <div className="modal-card modal-card--wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="section__header">
+                <div>
+                  <div className="section__eyebrow">Банк</div>
+                  <h2 className="section__title">
+                    {bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}
+                  </h2>
+                </div>
+              </div>
+            </div>
+            <div className="modal-body">
+              <Operations
+                user={user}
+                embedded
+                initialViewMode={bankHubMode === 'analytics' ? 'analytics' : 'history'}
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={() => setShowBankHub(false)}>
+                Закрыть
               </button>
             </div>
           </div>

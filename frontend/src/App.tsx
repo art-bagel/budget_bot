@@ -3,20 +3,19 @@ import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import Dashboard from './pages/Dashboard';
-import Operations from './pages/Operations';
 import Exchange from './pages/Exchange';
 import Portfolio from './pages/Portfolio';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 import { bindTelegramBackButton } from './telegram';
 
-const PAGE_IDS: Page[] = ['dashboard', 'operations', 'exchange', 'portfolio', 'settings'];
+const PAGE_IDS: Page[] = ['dashboard', 'exchange', 'portfolio', 'settings'];
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const [visited, setVisited] = useState<Set<Page>>(new Set(['dashboard']));
   const [refreshKeys, setRefreshKeys] = useState<Record<Page, number>>({
-    dashboard: 0, operations: 0, exchange: 0, portfolio: 0, settings: 0,
+    dashboard: 0, exchange: 0, portfolio: 0, settings: 0,
   });
   const [familyBadge, setFamilyBadge] = useState(0);
   const { user, loading, error } = useAuth();
@@ -63,7 +62,6 @@ export default function App() {
         <div key={id} style={id !== page ? { display: 'none' } : undefined}>
           <ErrorBoundary key={refreshKeys[id]}>
             {id === 'dashboard' && <Dashboard user={user} />}
-            {id === 'operations' && <Operations user={user} />}
             {id === 'exchange' && <Exchange user={user} />}
             {id === 'portfolio' && <Portfolio user={user} />}
             {id === 'settings' && <Settings user={user} onFamilyBadgeUpdate={setFamilyBadge} />}

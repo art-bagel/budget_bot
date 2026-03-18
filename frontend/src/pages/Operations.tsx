@@ -79,6 +79,11 @@ type AnalyticsSegment = {
 };
 
 type AnalyticsPeriodMode = 'week' | 'month' | 'year';
+type OperationsProps = {
+  user: UserContext;
+  embedded?: boolean;
+  initialViewMode?: OperationsViewMode;
+};
 
 
 function toIsoDate(value: Date): string {
@@ -417,8 +422,12 @@ function getInvestmentHistoryKind(item: OperationHistoryItem): InvestmentHistory
 }
 
 
-export default function Operations({ user: _user }: { user: UserContext }) {
-  const [viewMode, setViewMode] = useState<OperationsViewMode>('history');
+export default function Operations({
+  user: _user,
+  embedded = false,
+  initialViewMode = 'history',
+}: OperationsProps) {
+  const [viewMode, setViewMode] = useState<OperationsViewMode>(initialViewMode);
 
   const [historyItems, setHistoryItems] = useState<OperationHistoryItem[]>([]);
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
@@ -537,6 +546,10 @@ export default function Operations({ user: _user }: { user: UserContext }) {
   }, [analyticsHasFamily, analyticsOwnerScope]);
 
   useEffect(() => {
+    setViewMode(initialViewMode);
+  }, [initialViewMode]);
+
+  useEffect(() => {
     const el = periodSelectRef.current;
     if (!el) return;
     const text = el.options[el.selectedIndex]?.text ?? '';
@@ -607,12 +620,14 @@ export default function Operations({ user: _user }: { user: UserContext }) {
 
   return (
     <>
-      <h1 className="page-title">Операции</h1>
+      {!embedded && <h1 className="page-title">Операции</h1>}
 
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">История и аналитика</h2>
-        </div>
+      <section className={['section', embedded ? 'section--embedded' : ''].filter(Boolean).join(' ')}>
+        {!embedded && (
+          <div className="section__header">
+            <h2 className="section__title">История и аналитика</h2>
+          </div>
+        )}
         <div className={['panel', viewMode === 'analytics' ? 'panel--analytics' : ''].filter(Boolean).join(' ')}>
           <div className="operations-mode-switch">
             <button
@@ -634,16 +649,6 @@ export default function Operations({ user: _user }: { user: UserContext }) {
               onClick={() => setViewMode('investment')}
             >
               Инвестиции
-            </button>
-            <button
-              className={[
-                'operations-mode-switch__item',
-                viewMode === 'analytics' ? 'operations-mode-switch__item--active' : '',
-              ].filter(Boolean).join(' ')}
-              type="button"
-              onClick={() => setViewMode('analytics')}
-            >
-              Аналитика
             </button>
           </div>
 

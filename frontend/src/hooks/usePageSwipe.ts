@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import type { RefObject } from 'react';
 import type { Page } from '../components/Layout';
 
-const PAGE_ORDER: Page[] = ['dashboard', 'operations', 'exchange', 'settings'];
+const PAGE_ORDER: Page[] = ['dashboard', 'exchange', 'portfolio', 'settings'];
 
 const MIN_DISTANCE = 72;   // px — minimum horizontal travel
 const MAX_ANGLE = 0.5;     // tan(angle) — keeps gesture mostly horizontal

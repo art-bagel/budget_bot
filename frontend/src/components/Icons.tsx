@@ -8,6 +8,42 @@ export function IconOperations() {
   return <svg viewBox="0 0 24 24" {...s}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg>;
 }
 
+export function IconClock() {
+  return (
+    <svg viewBox="0 0 24 24" {...s}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  );
+}
+
+export function IconPlusCircle() {
+  return (
+    <svg viewBox="0 0 24 24" {...s}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
+    </svg>
+  );
+}
+
+export function IconAnalyticsDonut() {
+  // Donut ring at r=6.5, circumference ≈ 40.8
+  // Highlighted segment ~25% ≈ 10.2, gap = 30.6
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+      <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity="0.3" />
+      <circle
+        cx="12" cy="12" r="6.5"
+        stroke="currentColor" strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray="10.2 30.6"
+        transform="rotate(-90 12 12)"
+      />
+    </svg>
+  );
+}
+
 export function IconExchange() {
   return <svg viewBox="0 0 24 24" {...s}><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>;
 }
