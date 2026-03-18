@@ -304,11 +304,19 @@ p { margin: 0; }
   margin-bottom: 6px;
 }
 
+.hero-card__value-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .hero-card__value {
   display: block;
   font-size: clamp(1.6rem, 6vw, 2.4rem);
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 .hero-card__sub {

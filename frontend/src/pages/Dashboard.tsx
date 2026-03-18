@@ -5,6 +5,7 @@ import {
   fetchBankAccountSnapshot,
   fetchDashboardOverview,
   fetchGroupMembers,
+  fetchPortfolioPositions,
   fetchPortfolioSummary,
 } from '../api';
 import type {
@@ -13,10 +14,13 @@ import type {
   DashboardBudgetCategory,
   DashboardOverview as DashboardOverviewType,
   GroupMember,
+  PortfolioPosition,
   PortfolioSummaryItem,
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
+import { fetchMoexPrices } from '../utils/moex';
+import type { MoexPrice } from '../utils/moex';
 import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
 import AccountTransferDialog from '../components/AccountTransferDialog';
@@ -38,6 +42,8 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
   const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
+  const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
+  const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
@@ -279,10 +285,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setError(null);
 
     try {
-      const [result, loadedInvestmentAccounts, loadedPortfolioSummary] = await Promise.all([
+      const [result, loadedInvestmentAccounts, loadedPortfolioSummary, loadedPositions] = await Promise.all([
         fetchDashboardOverview(user.bank_account_id),
         fetchBankAccounts('investment'),
         fetchPortfolioSummary(),
+        fetchPortfolioPositions(),
       ]);
       const investmentSnapshots = await Promise.all(
         loadedInvestmentAccounts.map(async (account) => ({
@@ -293,6 +300,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
       setOverview(result);
       setInvestmentAccounts(loadedInvestmentAccounts);
       setPortfolioSummaryItems(loadedPortfolioSummary);
+      setOpenPositions(loadedPositions.filter((p) => p.status === 'open'));
       setInvestmentBalancesByAccountId(
         investmentSnapshots.reduce<Record<number, DashboardBankBalance[]>>((acc, item) => {
           acc[item.accountId] = item.balances;
@@ -309,6 +317,23 @@ export default function Dashboard({ user }: { user: UserContext }) {
   useEffect(() => {
     void loadOverview();
   }, [user.bank_account_id]);
+
+  useEffect(() => {
+    const sharesTickers: string[] = [];
+    const bondsTickers: string[] = [];
+    for (const pos of openPositions) {
+      const t = pos.metadata?.ticker;
+      const m = pos.metadata?.moex_market;
+      if (typeof t !== 'string' || !t) continue;
+      if (m === 'bonds') bondsTickers.push(t);
+      else sharesTickers.push(t);
+    }
+    if (sharesTickers.length === 0 && bondsTickers.length === 0) return;
+    void Promise.all([
+      fetchMoexPrices(sharesTickers, 'shares'),
+      fetchMoexPrices(bondsTickers, 'bonds'),
+    ]).then(([s, b]) => setMoexPrices(new Map([...s, ...b]))).catch(() => {});
+  }, [openPositions]);
 
   useEffect(() => {
     if (!overview) {
@@ -449,16 +474,33 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const getInvestmentCashInBase = (accountId: number) => (
     investmentBalancesByAccountId[accountId] ?? []
   ).reduce((sum, balance) => sum + balance.historical_cost_in_base, 0);
-  const getInvestmentAccountTotalInBase = (accountId: number) => {
-    const summary = investmentSummaryByAccountId[accountId];
-    if (summary) {
-      return summary.cash_balance_in_base + summary.invested_principal_in_base;
-    }
 
-    return getInvestmentCashInBase(accountId);
+  // Market-adjusted value per account:
+  // cash + (for each open position: market value if ticker known, else cost basis)
+  const getInvestmentAccountMarketTotal = (accountId: number) => {
+    const summary = investmentSummaryByAccountId[accountId];
+    if (!summary) return getInvestmentCashInBase(accountId);
+
+    const accountPositions = openPositions.filter((p) => p.investment_account_id === accountId);
+    let marketValue = 0;
+    for (const pos of accountPositions) {
+      const t = pos.metadata?.ticker;
+      const isBond = pos.metadata?.moex_market === 'bonds';
+      if (typeof t === 'string' && t && !isBond) {
+        const price = moexPrices.get(t);
+        const currentPrice = price?.last ?? price?.prevClose ?? null;
+        if (currentPrice !== null && pos.quantity) {
+          marketValue += currentPrice * pos.quantity;
+          continue;
+        }
+      }
+      marketValue += pos.amount_in_currency;
+    }
+    return summary.cash_balance_in_base + marketValue;
   };
+
   const investmentBankTotal = investmentAccounts.reduce(
-    (sum, account) => sum + getInvestmentAccountTotalInBase(account.id),
+    (sum, account) => sum + getInvestmentAccountMarketTotal(account.id),
     0,
   );
   const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal;
@@ -1146,7 +1188,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
                               <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
                               {(summary || balances.length > 0) ? (
                                 <span className="tag tag--neutral">
-                                  {formatAmount(getInvestmentAccountTotalInBase(account.id), overview.base_currency_code)}
+                                  {formatAmount(getInvestmentAccountMarketTotal(account.id), overview.base_currency_code)}
                                 </span>
                               ) : null}
                             </div>

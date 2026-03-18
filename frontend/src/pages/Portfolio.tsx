@@ -447,10 +447,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
     };
   }, [openPositions, moexPrices]);
 
-  // Real portfolio value = invested (substituting priced positions at market) + realized income + cash
-  const totalRealPortfolioValue = hasPricedPositions
-    ? (totalInvestedPrincipalInBase - totalPricedEntry + totalPricedMarketValue) + totalRealizedIncomeInBase + totalInvestmentCashInBase
-    : null;
+  // Real portfolio value: priced positions at market, unpriced at book (amount_in_currency), plus income + cash
+  // Works even without any MOEX prices (degrades to book value)
+  const totalRealPortfolioValue =
+    (totalInvestedPrincipalInBase - totalPricedEntry + totalPricedMarketValue) + totalRealizedIncomeInBase + totalInvestmentCashInBase;
 
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
@@ -1021,24 +1021,17 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       <article className="hero-card">
         <span className="hero-card__label">Инвестиционный портфель</span>
-        <strong className="hero-card__value">
-          {formatAmount(
-            totalRealPortfolioValue ?? (totalInvestedPrincipalInBase + totalRealizedIncomeInBase + totalInvestmentCashInBase),
-            user.base_currency_code,
-          )}
-        </strong>
-        {hasPricedPositions && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div className="hero-card__value-row">
+          <strong className="hero-card__value">
+            {formatAmount(totalRealPortfolioValue, user.base_currency_code)}
+          </strong>
+          {hasPricedPositions && totalPricedEntry > 0 && (
             <span className={`hero-pnl-badge${totalUnrealizedPnl >= 0 ? ' hero-pnl-badge--pos' : ' hero-pnl-badge--neg'}`}>
-              {totalUnrealizedPnl >= 0 ? '+' : ''}
-              {formatAmount(totalUnrealizedPnl, user.base_currency_code)}
-              {totalPricedEntry > 0 && (
-                <> ({totalUnrealizedPnl >= 0 ? '+' : ''}{((totalUnrealizedPnl / totalPricedEntry) * 100).toFixed(1)}%)</>
-              )}
+              {totalUnrealizedPnl >= 0 ? '+' : ''}{formatAmount(totalUnrealizedPnl, user.base_currency_code)}
+              {' '}({totalUnrealizedPnl >= 0 ? '+' : ''}{((totalUnrealizedPnl / totalPricedEntry) * 100).toFixed(1)}%)
             </span>
-            <span className="hero-card__label" style={{ margin: 0, fontSize: '0.7rem' }}>нереализованный P&L</span>
-          </div>
-        )}
+          )}
+        </div>
         <div className="hero-card__breakdown">
           <div className="hero-card__breakdown-row">
             <span>Вложено</span>
