@@ -26,6 +26,8 @@ import type {
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
+import { fetchMoexPrices } from '../utils/moex';
+import type { MoexPrice } from '../utils/moex';
 
 
 type AccountWithBalances = {
@@ -285,6 +287,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
+  const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -318,6 +321,28 @@ export default function Portfolio({ user }: { user: UserContext }) {
   useEffect(() => {
     void loadPortfolio();
   }, [user.user_id]);
+
+  // Fetch MOEX prices for open positions that have a ticker in metadata
+  useEffect(() => {
+    const sharesTickers: string[] = [];
+    const bondsTickers: string[] = [];
+    for (const pos of positions) {
+      if (pos.status !== 'open') continue;
+      const t = pos.metadata?.ticker;
+      const m = pos.metadata?.moex_market;
+      if (typeof t !== 'string' || !t) continue;
+      if (m === 'bonds') bondsTickers.push(t);
+      else sharesTickers.push(t);
+    }
+    if (sharesTickers.length === 0 && bondsTickers.length === 0) return;
+
+    void Promise.all([
+      fetchMoexPrices(sharesTickers, 'shares'),
+      fetchMoexPrices(bondsTickers, 'bonds'),
+    ]).then(([sharesMap, bondsMap]) => {
+      setMoexPrices(new Map([...sharesMap, ...bondsMap]));
+    }).catch(() => {});
+  }, [positions]);
 
   const totalHistoricalInBase = useMemo(
     () => accounts.reduce(
@@ -1092,6 +1117,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         <div className="portfolio-position-grid">
                           {section.positions.map((position) => {
                             const unitPrice = formatUnitPrice(position.amount_in_currency, position.quantity, position.currency_code);
+                            const posTicker = typeof position.metadata?.ticker === 'string' ? position.metadata.ticker : null;
+                            const posMarket = position.metadata?.moex_market;
+                            const moexPrice = posTicker ? moexPrices.get(posTicker) : null;
+                            const currentPrice = moexPrice?.last ?? moexPrice?.prevClose ?? null;
+                            const isBond = posMarket === 'bonds';
+
+                            // For shares: P&L = (currentPrice * quantity) - entryAmount
+                            // For bonds: price is % of nominal (usually 1000 RUB), show price only
+                            const unrealizedPnl = !isBond && currentPrice !== null && position.quantity
+                              ? currentPrice * position.quantity - position.amount_in_currency
+                              : null;
+                            const pnlPercent = unrealizedPnl !== null && position.amount_in_currency > 0
+                              ? (unrealizedPnl / position.amount_in_currency) * 100
+                              : null;
 
                             return (
                               <button
@@ -1101,13 +1140,36 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 onClick={() => void handleOpenPositionDetails(position.id)}
                               >
                                 <div className="portfolio-position-card__head">
-                                  <div className="portfolio-position-card__title">{position.title}</div>
+                                  <div className="portfolio-position-card__title">
+                                    {posTicker && (
+                                      <span className="portfolio-position-card__ticker">{posTicker}</span>
+                                    )}
+                                    {position.title}
+                                  </div>
                                   <div className="portfolio-position-card__amount">
                                     {formatAmount(position.amount_in_currency, position.currency_code)}
                                   </div>
                                 </div>
+                                {currentPrice !== null && (
+                                  <div className="portfolio-position-card__price-row">
+                                    <span className="portfolio-position-card__price">
+                                      {isBond
+                                        ? `${currentPrice.toFixed(2)}% от ном.`
+                                        : formatAmount(currentPrice, position.currency_code)}
+                                    </span>
+                                    {pnlPercent !== null && (
+                                      <span className={`portfolio-position-card__pnl${unrealizedPnl! >= 0 ? ' portfolio-position-card__pnl--pos' : ' portfolio-position-card__pnl--neg'}`}>
+                                        {unrealizedPnl! >= 0 ? '+' : ''}{unrealizedPnl!.toFixed(0)} ₽
+                                        {' '}({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
+                                      </span>
+                                    )}
+                                    {moexPrice?.last === null && (
+                                      <span className="portfolio-position-card__price-hint">посл. закр.</span>
+                                    )}
+                                  </div>
+                                )}
                                 <div className="portfolio-position-card__meta">
-                                  {unitPrice ? <span>Цена: {unitPrice}</span> : null}
+                                  {unitPrice ? <span>Цена входа: {unitPrice}</span> : null}
                                   {position.quantity ? <span>{position.quantity} шт</span> : null}
                                   {typeof position.metadata?.amount_in_base === 'number' ? (
                                     <span>Себестоимость: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>

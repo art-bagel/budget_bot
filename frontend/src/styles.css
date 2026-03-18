@@ -1333,6 +1333,122 @@ p { margin: 0; }
   line-height: 1.35;
 }
 
+.portfolio-position-card__ticker {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-accent);
+  background: rgba(82, 126, 142, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.portfolio-position-card__price-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.portfolio-position-card__price {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.portfolio-position-card__pnl {
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.portfolio-position-card__pnl--pos {
+  color: var(--tag-in-fg);
+  background: var(--tag-in-bg);
+}
+
+.portfolio-position-card__pnl--neg {
+  color: var(--tag-out-fg);
+  background: var(--tag-out-bg);
+}
+
+.portfolio-position-card__price-hint {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+/* Ticker search dropdown */
+.ticker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-card);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.ticker-dropdown__hint {
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+}
+
+.ticker-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ticker-dropdown__item:first-child {
+  border-top: none;
+}
+
+.ticker-dropdown__item:hover,
+.ticker-dropdown__item:focus {
+  background: var(--bg-inset);
+}
+
+.ticker-dropdown__ticker {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-accent);
+  min-width: 52px;
+}
+
+.ticker-dropdown__name {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticker-dropdown__badge {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  background: var(--bg-inset);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
 .portfolio-position-detail {
   border: 1px solid var(--border);
   background: var(--bg-inset);

@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { createPortfolioPosition } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
+import { useMoexSearch } from '../hooks/useMoexSearch';
 import type { BankAccount, Currency, DashboardBankBalance, UserContext } from '../types';
 import { formatAmount } from '../utils/format';
+import { groupToSecurityKind } from '../utils/moex';
+import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -48,6 +51,11 @@ export default function PortfolioPositionDialog({
   const [investmentAccountId, setInvestmentAccountId] = useState(accounts[0] ? String(accounts[0].account.id) : '');
   const [securityKind, setSecurityKind] = useState<(typeof SECURITY_KIND_OPTIONS)[number]['value']>('stock');
   const [title, setTitle] = useState('');
+  const [ticker, setTicker] = useState('');
+  const [tickerQuery, setTickerQuery] = useState('');
+  const [moexMarket, setMoexMarket] = useState<MoexMarket>('shares');
+  const [showTickerDropdown, setShowTickerDropdown] = useState(false);
+  const tickerInputRef = useRef<HTMLInputElement>(null);
   const [quantity, setQuantity] = useState('');
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
@@ -55,6 +63,26 @@ export default function PortfolioPositionDialog({
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { results: tickerResults, loading: tickerLoading } = useMoexSearch(
+    defaultAssetTypeCode === 'security' ? tickerQuery : '',
+  );
+
+  const handleSelectTicker = (item: MoexSecurityInfo) => {
+    setTicker(item.ticker);
+    setTickerQuery(item.ticker);
+    setMoexMarket(item.market);
+    setSecurityKind(groupToSecurityKind(item.group));
+    if (!title.trim()) setTitle(item.shortName);
+    setShowTickerDropdown(false);
+    tickerInputRef.current?.blur();
+  };
+
+  const handleClearTicker = () => {
+    setTicker('');
+    setTickerQuery('');
+    setShowTickerDropdown(false);
+  };
 
   useEffect(() => {
     if (accounts[0] && !accounts.some(({ account }) => String(account.id) === investmentAccountId)) {
@@ -112,7 +140,9 @@ export default function PortfolioPositionDialog({
         currency_code: currencyCode,
         opened_at: openedAt || undefined,
         comment: comment.trim() || undefined,
-        metadata: defaultAssetTypeCode === 'security' ? { security_kind: securityKind } : undefined,
+        metadata: defaultAssetTypeCode === 'security'
+          ? { security_kind: securityKind, ...(ticker ? { ticker, moex_market: moexMarket } : {}) }
+          : undefined,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -156,20 +186,80 @@ export default function PortfolioPositionDialog({
           </div>
 
           {defaultAssetTypeCode === 'security' && (
-            <div className="form-row">
-              <select
-                className="input"
-                value={securityKind}
-                onChange={(event) => setSecurityKind(event.target.value as (typeof SECURITY_KIND_OPTIONS)[number]['value'])}
-                disabled={submitting}
-              >
-                {SECURITY_KIND_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={securityKind}
+                  onChange={(event) => setSecurityKind(event.target.value as (typeof SECURITY_KIND_OPTIONS)[number]['value'])}
+                  disabled={submitting}
+                >
+                  {SECURITY_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row" style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                  <input
+                    ref={tickerInputRef}
+                    className="input"
+                    type="text"
+                    placeholder="Тикер MOEX (SBER, GAZP…)"
+                    value={tickerQuery}
+                    onChange={(e) => {
+                      setTickerQuery(e.target.value);
+                      setTicker('');
+                      setShowTickerDropdown(true);
+                    }}
+                    onFocus={() => setShowTickerDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowTickerDropdown(false), 200)}
+                    disabled={submitting}
+                    autoComplete="off"
+                  />
+                  {showTickerDropdown && (tickerLoading || tickerResults.length > 0) && (
+                    <div className="ticker-dropdown">
+                      {tickerLoading && (
+                        <div className="ticker-dropdown__hint">Поиск...</div>
+                      )}
+                      {!tickerLoading && tickerResults.map((item) => (
+                        <button
+                          key={item.ticker}
+                          type="button"
+                          className="ticker-dropdown__item"
+                          onMouseDown={(e) => { e.preventDefault(); handleSelectTicker(item); }}
+                        >
+                          <span className="ticker-dropdown__ticker">{item.ticker}</span>
+                          <span className="ticker-dropdown__name">{item.shortName}</span>
+                          <span className="ticker-dropdown__badge">
+                            {item.market === 'bonds' ? 'облиг' : item.group === 'stock_etf' ? 'фонд' : 'акция'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {ticker && (
+                  <span className="tag tag--in" style={{ alignSelf: 'center' }}>
+                    {ticker}
+                  </span>
+                )}
+                {ticker && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleClearTicker}
+                    disabled={submitting}
+                    style={{ alignSelf: 'center' }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </>
           )}
 
           <div className="form-row">
