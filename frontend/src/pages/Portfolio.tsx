@@ -284,6 +284,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
+  const [showClosedPositions, setShowClosedPositions] = useState(false);
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -958,128 +959,102 @@ export default function Portfolio({ user }: { user: UserContext }) {
     <>
       <h1 className="page-title">Портфель</h1>
 
+      {error && (
+        <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 12 }}>
+          {error}
+        </p>
+      )}
+
+      <article className="hero-card">
+        <span className="hero-card__label">Инвестиционный портфель</span>
+        <strong className="hero-card__value">
+          {formatAmount(totalInvestedPrincipalInBase + totalRealizedIncomeInBase + totalInvestmentCashInBase, user.base_currency_code)}
+        </strong>
+        <div className="hero-card__breakdown">
+          <div className="hero-card__breakdown-row">
+            <span>Вложено</span>
+            <strong>{formatAmount(totalInvestedPrincipalInBase, user.base_currency_code)}</strong>
+          </div>
+          <div className="hero-card__breakdown-row">
+            <span>Доход</span>
+            <strong>{formatAmount(totalRealizedIncomeInBase, user.base_currency_code)}</strong>
+          </div>
+          <div className="hero-card__breakdown-row">
+            <span>Кэш</span>
+            <strong>{formatAmount(totalInvestmentCashInBase, user.base_currency_code)}</strong>
+          </div>
+        </div>
+      </article>
+
       <section className="section">
         <div className="section__header">
-          <h2 className="section__title">Свободно на инвестиционных счетах</h2>
+          <div>
+            <div className="section__eyebrow">Портфель</div>
+            <h2 className="section__title">Позиции</h2>
+          </div>
+          <button
+            className="btn btn--icon"
+            type="button"
+            onClick={() => setIsCreateDialogOpen(true)}
+            disabled={accounts.length === 0}
+            aria-label="Добавить позицию"
+            title="Добавить позицию"
+          >
+            +
+          </button>
         </div>
         <div className="panel">
-          {error && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 12 }}>
-              {error}
-            </p>
-          )}
-
-          <div className="portfolio-free-cash">
-            <div className="portfolio-free-cash__total">
-              {formatAmount(totalInvestmentCashInBase, user.base_currency_code)}
-            </div>
-            {accounts.length > 1 && (
-              <div className="portfolio-free-cash__accounts">
-                {summaryItems.map((item) => (
-                  <div className="portfolio-free-cash__row" key={item.investment_account_id}>
-                    <span>{item.investment_account_name}</span>
-                    <span>{formatAmount(item.cash_balance_in_base, user.base_currency_code)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Типы активов</h2>
-        </div>
-        <div
-          className="panel portfolio-type-switcher"
-          onTouchStart={(event) => handleAssetSwipeStart(event.touches[0].clientX)}
-          onTouchEnd={(event) => handleAssetSwipeEnd(event.changedTouches[0].clientX)}
-        >
-          {activeAssetTab && (
-            <div className="portfolio-type-switcher__active">
-              <span className="portfolio-type-switcher__pill">
-                {activeAssetTab.label}
-              </span>
-              <span className="portfolio-type-switcher__total">
-                {formatAmount(activeAssetTab.totalInBase, user.base_currency_code)}
-              </span>
-            </div>
-          )}
-
-          {activeAssetTab && (
-            <div className="portfolio-type-stats">
-              <div className="portfolio-type-stats__row">
-                <span className="portfolio-type-stats__label">Вложено</span>
-                <span className="portfolio-type-stats__value">
-                  {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
-                </span>
-              </div>
-              <div className="portfolio-type-stats__row">
-                <span className="portfolio-type-stats__label">Доход</span>
-                <span className="portfolio-type-stats__value">
-                  {formatAmount(activeAssetTab.incomeInBase, user.base_currency_code)}
-                </span>
-              </div>
-              <div className="portfolio-type-stats__row">
-                <span className="portfolio-type-stats__label">Открыто</span>
-                <span className="portfolio-type-stats__value">{activeAssetTab.openCount}</span>
-              </div>
-              <div className="portfolio-type-stats__row">
-                <span className="portfolio-type-stats__label">Закрыто</span>
-                <span className="portfolio-type-stats__value">{activeAssetTab.closedCount}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="portfolio-type-switcher__actions">
-            <button
-              className="portfolio-type-switcher__add"
-              type="button"
-              onClick={() => setIsCreateDialogOpen(true)}
-              disabled={accounts.length === 0}
+          {assetTabs.length > 1 && (
+            <div
+              className="portfolio-type-tabs"
+              onTouchStart={(event) => handleAssetSwipeStart(event.touches[0].clientX)}
+              onTouchEnd={(event) => handleAssetSwipeEnd(event.changedTouches[0].clientX)}
             >
-              Добавить позицию
-            </button>
-          </div>
+              {assetTabs.map((tab) => (
+                <button
+                  key={tab.code}
+                  type="button"
+                  className={[
+                    'portfolio-type-tabs__item',
+                    activeAssetTypeCode === tab.code ? 'portfolio-type-tabs__item--active' : '',
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => setActiveAssetTypeCode(tab.code)}
+                >
+                  {tab.label}
+                  {tab.openCount > 0 && (
+                    <span className="portfolio-type-tabs__count">{tab.openCount}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <div
-            className="portfolio-type-segments"
-            role="tablist"
-            aria-label="Типы инвестиционных активов"
-            style={{ ['--segment-count' as string]: String(assetTabs.length) }}
-          >
-            {assetTabs.map((tab) => (
-              <button
-                key={tab.code}
-                type="button"
-                role="tab"
-                aria-selected={activeAssetTypeCode === tab.code}
-                className={[
-                  'portfolio-type-segments__item',
-                  activeAssetTypeCode === tab.code ? 'portfolio-type-segments__item--active' : '',
-                ].filter(Boolean).join(' ')}
-                onClick={() => setActiveAssetTypeCode(tab.code)}
-                title={tab.label}
-                aria-label={tab.label}
-              />
-            ))}
-          </div>
+          {activeAssetTab && (activeAssetTab.principalInBase > 0 || activeAssetTab.incomeInBase > 0) && (
+            <div className="portfolio-type-stats">
+              {activeAssetTab.principalInBase > 0 && (
+                <div className="portfolio-type-stats__row">
+                  <span className="portfolio-type-stats__label">Вложено</span>
+                  <span className="portfolio-type-stats__value">
+                    {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
+                  </span>
+                </div>
+              )}
+              {activeAssetTab.incomeInBase > 0 && (
+                <div className="portfolio-type-stats__row">
+                  <span className="portfolio-type-stats__label">Доход</span>
+                  <span className="portfolio-type-stats__value">
+                    {formatAmount(activeAssetTab.incomeInBase, user.base_currency_code)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
-          {accounts.length === 0 && (
-            <p className="list-row__sub" style={{ marginTop: 12 }}>
+          {accounts.length === 0 ? (
+            <p className="list-row__sub">
               Сначала создай инвестиционный счет в настройках и переведи на него деньги с главного экрана.
             </p>
-          )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Открытые позиции</h2>
-        </div>
-        <div className="panel">
-          {filteredOpenPositions.length === 0 ? (
+          ) : filteredOpenPositions.length === 0 ? (
             <p className="list-row__sub">Открытых позиций пока нет.</p>
           ) : (
             <div className="dashboard-budget-sections">
@@ -1136,7 +1111,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                     <span>Себестоимость: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
                                   ) : null}
                                   {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
-                                    <span>Fee</span>
+                                    <span>Комиссии</span>
                                   ) : null}
                                 </div>
                               </button>
@@ -1150,125 +1125,41 @@ export default function Portfolio({ user }: { user: UserContext }) {
               })}
             </div>
           )}
-        </div>
-      </section>
 
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Закрытые позиции</h2>
-        </div>
-        <div className="panel">
-          {filteredClosedPositions.length === 0 ? (
-            <p className="list-row__sub">Закрытых позиций пока нет.</p>
-          ) : (
-            <ul className="bank-detail-list">
-              {filteredClosedPositions.map((position) => (
-                <li className="bank-detail-row" key={position.id}>
-                  <div className="bank-detail-row__main">
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span className="pill">{position.currency_code}</span>
-                        <strong className="bank-detail-row__amount">{position.title}</strong>
-                      </div>
-                      <div className="bank-detail-row__sub">
-                        {position.investment_account_name} · вход {formatAmount(position.amount_in_currency, position.currency_code)}
-                        {position.close_amount_in_currency && position.close_currency_code
-                          ? ` · выход ${formatAmount(position.close_amount_in_currency, position.close_currency_code)}`
-                          : ''}
-                        {position.closed_at ? ` · закрыта ${formatDateLabel(position.closed_at)}` : ''}
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Инвестиционные счета</h2>
-        </div>
-        <div className="panel">
-          {accounts.length === 0 ? (
-            <p className="list-row__sub">Инвестиционных счетов пока нет.</p>
-          ) : (
-            <div className="dashboard-budget-sections">
-              {accounts.map(({ account, balances }) => (
-                <div className="dashboard-budget-section" key={account.id}>
-                  {(() => {
-                    const summary = summaryItems.find((item) => item.investment_account_id === account.id);
-
-                    return (
-                      <>
-                  <div className="dashboard-budget-section__header">
-                    <div>
-                      <div className="section__eyebrow">
-                        {account.owner_type === 'family' ? 'Семейный investment' : 'Личный investment'}
-                      </div>
-                      <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
-                    </div>
-                    <span className="tag tag--neutral">
-                      {account.provider_name || `Счет #${account.id}`}
-                    </span>
-                  </div>
-
-                  {summary && (
-                    <div className="form-row" style={{ paddingTop: 0 }}>
-                      <span className="tag tag--neutral">
-                        Cash: {formatAmount(summary.cash_balance_in_base, user.base_currency_code)}
-                      </span>
-                      <span className="tag tag--neutral">
-                        Principal: {formatAmount(summary.invested_principal_in_base, user.base_currency_code)}
-                      </span>
-                      <span className="tag tag--neutral">
-                        Income: {formatAmount(summary.realized_income_in_base, user.base_currency_code)}
-                      </span>
-                      <span className="tag tag--neutral">
-                        Open: {summary.open_positions_count}
-                      </span>
-                    </div>
-                  )}
-
-                  {balances.length === 0 ? (
-                    <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
-                  ) : (
-                    <ul className="bank-detail-list">
-                      {balances.map((balance) => (
-                        <li className="bank-detail-row" key={`${account.id}-${balance.currency_code}`}>
-                          <div className="bank-detail-row__main">
-                            <span className="pill">{balance.currency_code}</span>
-                            <strong className="bank-detail-row__amount">
-                              {formatAmount(balance.amount, balance.currency_code)}
-                            </strong>
+          {filteredClosedPositions.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setShowClosedPositions((prev) => !prev)}
+              >
+                {showClosedPositions ? 'Скрыть закрытые' : `Закрытые (${filteredClosedPositions.length})`}
+              </button>
+              {showClosedPositions && (
+                <ul className="bank-detail-list" style={{ marginTop: 12 }}>
+                  {filteredClosedPositions.map((position) => (
+                    <li className="bank-detail-row" key={position.id}>
+                      <div className="bank-detail-row__main">
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span className="pill">{position.currency_code}</span>
+                            <strong className="bank-detail-row__amount">{position.title}</strong>
                           </div>
                           <div className="bank-detail-row__sub">
-                            Себестоимость: {formatAmount(balance.historical_cost_in_base, balance.base_currency_code)}
+                            {position.investment_account_name} · вход {formatAmount(position.amount_in_currency, position.currency_code)}
+                            {position.close_amount_in_currency && position.close_currency_code
+                              ? ` · выход ${formatAmount(position.close_amount_in_currency, position.close_currency_code)}`
+                              : ''}
+                            {position.closed_at ? ` · закрыта ${formatDateLabel(position.closed_at)}` : ''}
                           </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                      </>
-                    );
-                  })()}
-                </div>
-              ))}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Следующий шаг</h2>
-        </div>
-        <div className="panel">
-          <p className="list-row__sub">
-            Базовый инвестиционный контур уже собран: переводы, ручные позиции, пополнение, частичное и полное закрытие, доходы, комиссии и безопасные корректировки.
-            Дальше логично добавить справочник типов активов, ручную valuation и более детальную доходность по позициям.
-          </p>
         </div>
       </section>
 
