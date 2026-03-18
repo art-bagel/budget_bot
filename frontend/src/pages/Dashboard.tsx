@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   fetchBankAccounts,
   fetchBankAccountSnapshot,
   fetchDashboardOverview,
   fetchGroupMembers,
+  fetchPortfolioSummary,
 } from '../api';
 import type {
   BankAccount,
@@ -12,6 +13,7 @@ import type {
   DashboardBudgetCategory,
   DashboardOverview as DashboardOverviewType,
   GroupMember,
+  PortfolioSummaryItem,
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
@@ -30,6 +32,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
+  const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
@@ -269,9 +272,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setError(null);
 
     try {
-      const [result, loadedInvestmentAccounts] = await Promise.all([
+      const [result, loadedInvestmentAccounts, loadedPortfolioSummary] = await Promise.all([
         fetchDashboardOverview(user.bank_account_id),
         fetchBankAccounts('investment'),
+        fetchPortfolioSummary(),
       ]);
       const investmentSnapshots = await Promise.all(
         loadedInvestmentAccounts.map(async (account) => ({
@@ -281,6 +285,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
       );
       setOverview(result);
       setInvestmentAccounts(loadedInvestmentAccounts);
+      setPortfolioSummaryItems(loadedPortfolioSummary);
       setInvestmentBalancesByAccountId(
         investmentSnapshots.reduce<Record<number, DashboardBankBalance[]>>((acc, item) => {
           acc[item.accountId] = item.balances;
@@ -425,11 +430,26 @@ export default function Dashboard({ user }: { user: UserContext }) {
     (sum, balance) => sum + balance.historical_cost_in_base,
     0,
   );
+  const investmentSummaryByAccountId = useMemo(
+    () => portfolioSummaryItems.reduce<Record<number, PortfolioSummaryItem>>((acc, item) => {
+      acc[item.investment_account_id] = item;
+      return acc;
+    }, {}),
+    [portfolioSummaryItems],
+  );
+  const getInvestmentCashInBase = (accountId: number) => (
+    investmentBalancesByAccountId[accountId] ?? []
+  ).reduce((sum, balance) => sum + balance.historical_cost_in_base, 0);
+  const getInvestmentAccountTotalInBase = (accountId: number) => {
+    const summary = investmentSummaryByAccountId[accountId];
+    if (summary) {
+      return summary.cash_balance_in_base + summary.invested_principal_in_base;
+    }
+
+    return getInvestmentCashInBase(accountId);
+  };
   const investmentBankTotal = investmentAccounts.reduce(
-    (sum, account) => sum + (investmentBalancesByAccountId[account.id] ?? []).reduce(
-      (accountSum, balance) => accountSum + balance.historical_cost_in_base,
-      0,
-    ),
+    (sum, account) => sum + getInvestmentAccountTotalInBase(account.id),
     0,
   );
   const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal;
@@ -1067,9 +1087,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
                     <div className="dashboard-budget-sections">
                       {investmentAccounts.map((account) => {
                         const balances = investmentBalancesByAccountId[account.id] ?? [];
+                        const summary = investmentSummaryByAccountId[account.id];
                         return (
                           <div className="dashboard-budget-section" key={`investment-${account.id}`}>
-                            <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
+                            <div className="dashboard-budget-section__header">
+                              <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
+                              {(summary || balances.length > 0) ? (
+                                <span className="tag tag--neutral">
+                                  {formatAmount(getInvestmentAccountTotalInBase(account.id), overview.base_currency_code)}
+                                </span>
+                              ) : null}
+                            </div>
+                            {summary ? (
+                              <div className="list-row__sub" style={{ marginBottom: balances.length > 0 ? '0.5rem' : 0 }}>
+                                Свободно {formatAmount(summary.cash_balance_in_base, overview.base_currency_code)}
+                                {' · '}
+                                Вложено {formatAmount(summary.invested_principal_in_base, overview.base_currency_code)}
+                              </div>
+                            ) : null}
                             {balances.length === 0 ? (
                               <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
                             ) : (
