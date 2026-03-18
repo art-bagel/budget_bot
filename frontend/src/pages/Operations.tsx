@@ -628,8 +628,8 @@ export default function Operations({
             <h2 className="section__title">История и аналитика</h2>
           </div>
         )}
-        <div className={['panel', viewMode === 'analytics' ? 'panel--analytics' : ''].filter(Boolean).join(' ')}>
-          <div className="operations-mode-switch">
+        <div className={[embedded ? '' : 'panel', !embedded && viewMode === 'analytics' ? 'panel--analytics' : ''].filter(Boolean).join(' ')}>
+          {viewMode !== 'analytics' && <div className="operations-mode-switch">
             <button
               className={[
                 'operations-mode-switch__item',
@@ -650,7 +650,7 @@ export default function Operations({
             >
               Инвестиции
             </button>
-          </div>
+          </div>}
 
           {viewMode !== 'analytics' ? (
             <>
@@ -867,7 +867,6 @@ export default function Operations({
                       {analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}
                     </div>
                     <div className="analytics-hero__meta">
-                      <span>{analyticsData.total_operations} операций</span>
                       <span>
                         {analyticsOwnerScope === 'family'
                           ? 'Семейный срез'
