@@ -423,34 +423,40 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [summaryItems],
   );
 
-  // Market value computed from MOEX prices (shares only, bonds price is % of nominal — skip for now)
-  const { totalPricedMarketValue, totalPricedEntry, totalUnrealizedPnl, hasPricedPositions } = useMemo(() => {
-    let market = 0;
-    let entry = 0;
+  // For each open position: MOEX-priced shares at market value, everything else at cost (amount_in_currency)
+  const { totalPositionsValue, totalPricedMarketValue, totalPricedEntry, totalUnrealizedPnl, hasPricedPositions } = useMemo(() => {
+    let total = 0;
+    let pricedMarket = 0;
+    let pricedEntry = 0;
     let count = 0;
     for (const pos of openPositions) {
       const t = pos.metadata?.ticker;
-      if (typeof t !== 'string' || !t) continue;
-      if (pos.metadata?.moex_market === 'bonds') continue;
-      const price = moexPrices.get(t);
-      const currentPrice = price?.last ?? price?.prevClose ?? null;
-      if (currentPrice === null || !pos.quantity) continue;
-      market += currentPrice * pos.quantity;
-      entry += pos.amount_in_currency;
-      count++;
+      const isBond = pos.metadata?.moex_market === 'bonds';
+      if (typeof t === 'string' && t && !isBond) {
+        const price = moexPrices.get(t);
+        const cp = price?.last ?? price?.prevClose ?? null;
+        if (cp !== null && pos.quantity) {
+          total += cp * pos.quantity;
+          pricedMarket += cp * pos.quantity;
+          pricedEntry += pos.amount_in_currency;
+          count++;
+          continue;
+        }
+      }
+      // No ticker, no price, or bond — use cost basis
+      total += pos.amount_in_currency;
     }
     return {
-      totalPricedMarketValue: market,
-      totalPricedEntry: entry,
-      totalUnrealizedPnl: market - entry,
+      totalPositionsValue: total,
+      totalPricedMarketValue: pricedMarket,
+      totalPricedEntry: pricedEntry,
+      totalUnrealizedPnl: pricedMarket - pricedEntry,
       hasPricedPositions: count > 0,
     };
   }, [openPositions, moexPrices]);
 
-  // Real portfolio value: priced positions at market, unpriced at book (amount_in_currency), plus income + cash
-  // Works even without any MOEX prices (degrades to book value)
-  const totalRealPortfolioValue =
-    (totalInvestedPrincipalInBase - totalPricedEntry + totalPricedMarketValue) + totalRealizedIncomeInBase + totalInvestmentCashInBase;
+  // Total = all positions at market/cost + realized income + uninvested cash
+  const totalRealPortfolioValue = totalPositionsValue + totalRealizedIncomeInBase + totalInvestmentCashInBase;
 
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
@@ -1037,18 +1043,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <span>Вложено</span>
             <strong>{formatAmount(totalInvestedPrincipalInBase, user.base_currency_code)}</strong>
           </div>
-          {hasPricedPositions && (
-            <div className="hero-card__breakdown-row">
-              <span>Рыночная оценка</span>
-              <strong>{formatAmount(totalPricedMarketValue, user.base_currency_code)}</strong>
-            </div>
-          )}
+          <div className="hero-card__breakdown-row">
+            <span>Оценочная стоимость</span>
+            <strong>{formatAmount(totalPositionsValue, user.base_currency_code)}</strong>
+          </div>
           <div className="hero-card__breakdown-row">
             <span>Зафиксированный доход</span>
             <strong>{formatAmount(totalRealizedIncomeInBase, user.base_currency_code)}</strong>
           </div>
           <div className="hero-card__breakdown-row">
-            <span>Кэш</span>
+            <span>Нераспределённый кэш</span>
             <strong>{formatAmount(totalInvestmentCashInBase, user.base_currency_code)}</strong>
           </div>
         </div>
