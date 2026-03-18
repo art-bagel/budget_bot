@@ -27,6 +27,12 @@ const ASSET_TYPE_OPTIONS = [
   { value: 'crypto', label: 'Криптовалюта' },
 ] as const;
 
+const SECURITY_KIND_OPTIONS = [
+  { value: 'stock', label: 'Акции' },
+  { value: 'bond', label: 'Облигации' },
+  { value: 'fund', label: 'Фонды' },
+] as const;
+
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -49,6 +55,7 @@ export default function PortfolioPositionDialog({
 
   const [investmentAccountId, setInvestmentAccountId] = useState(accounts[0] ? String(accounts[0].account.id) : '');
   const [assetTypeCode, setAssetTypeCode] = useState<(typeof ASSET_TYPE_OPTIONS)[number]['value']>(resolvedDefaultAssetType);
+  const [securityKind, setSecurityKind] = useState<(typeof SECURITY_KIND_OPTIONS)[number]['value']>('stock');
   const [title, setTitle] = useState('');
   const [quantity, setQuantity] = useState('');
   const [amount, setAmount] = useState('');
@@ -67,6 +74,12 @@ export default function PortfolioPositionDialog({
   useEffect(() => {
     setAssetTypeCode(resolvedDefaultAssetType);
   }, [resolvedDefaultAssetType]);
+
+  useEffect(() => {
+    if (assetTypeCode !== 'security') {
+      setSecurityKind('stock');
+    }
+  }, [assetTypeCode]);
 
   useEffect(() => {
     if (!currencies.some((currency) => currency.code === currencyCode)) {
@@ -112,6 +125,7 @@ export default function PortfolioPositionDialog({
         currency_code: currencyCode,
         opened_at: openedAt || undefined,
         comment: comment.trim() || undefined,
+        metadata: assetTypeCode === 'security' ? { security_kind: securityKind } : undefined,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -165,6 +179,23 @@ export default function PortfolioPositionDialog({
               ))}
             </select>
           </div>
+
+          {assetTypeCode === 'security' && (
+            <div className="form-row">
+              <select
+                className="input"
+                value={securityKind}
+                onChange={(event) => setSecurityKind(event.target.value as (typeof SECURITY_KIND_OPTIONS)[number]['value'])}
+                disabled={submitting}
+              >
+                {SECURITY_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-row">
             <input

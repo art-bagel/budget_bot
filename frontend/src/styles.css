@@ -982,6 +982,15 @@ p { margin: 0; }
   gap: 10px;
 }
 
+.portfolio-position-section-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
 .portfolio-position-card {
   border: 1px solid var(--border);
   background: var(--bg-inset);

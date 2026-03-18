@@ -90,6 +90,12 @@ type PositionAccountGroup = {
   positions: PortfolioPosition[];
 };
 
+type SecuritySection = {
+  code: string;
+  label: string;
+  positions: PortfolioPosition[];
+};
+
 const ASSET_TYPE_OPTIONS = [
   { value: 'security', label: 'Ценные бумаги' },
   { value: 'deposit', label: 'Депозит' },
@@ -97,6 +103,12 @@ const ASSET_TYPE_OPTIONS = [
 ] as const;
 
 const DEFAULT_PORTFOLIO_ASSET_TYPE_CODES = ['security', 'deposit', 'crypto'] as const;
+
+const SECURITY_KIND_OPTIONS = [
+  { value: 'stock', label: 'Акции' },
+  { value: 'bond', label: 'Облигации' },
+  { value: 'fund', label: 'Фонды' },
+] as const;
 
 
 function todayIso(): string {
@@ -130,6 +142,25 @@ function formatUnitPrice(amount: number, quantity: number | null | undefined, cu
   }
 
   return formatAmount(amount / quantity, currencyCode);
+}
+
+function getSecurityKindCode(position: PortfolioPosition): string {
+  return typeof position.metadata?.security_kind === 'string' && position.metadata.security_kind.trim()
+    ? position.metadata.security_kind
+    : 'stock';
+}
+
+function getSecurityKindLabel(code: string): string {
+  const knownLabel = SECURITY_KIND_OPTIONS.find((option) => option.value === code)?.label;
+  if (knownLabel) {
+    return knownLabel;
+  }
+
+  return code
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
@@ -837,6 +868,30 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
   const hasMultipleOpenPositionAccounts = filteredOpenPositionGroups.length > 1;
 
+  const getOpenPositionSections = (positionsForGroup: PortfolioPosition[]): SecuritySection[] => {
+    if (activeAssetTypeCode !== 'security') {
+      return [{
+        code: activeAssetTypeCode,
+        label: activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode),
+        positions: positionsForGroup,
+      }];
+    }
+
+    const knownCodes = SECURITY_KIND_OPTIONS.map((option) => option.value);
+    const presentCodes = Array.from(new Set(positionsForGroup.map((position) => getSecurityKindCode(position))));
+    const extraCodes = presentCodes
+      .filter((code) => !knownCodes.includes(code as (typeof SECURITY_KIND_OPTIONS)[number]['value']))
+      .sort((left, right) => getSecurityKindLabel(left).localeCompare(getSecurityKindLabel(right), 'ru'));
+
+    return [...knownCodes, ...extraCodes]
+      .map((code) => ({
+        code,
+        label: getSecurityKindLabel(code),
+        positions: positionsForGroup.filter((position) => getSecurityKindCode(position) === code),
+      }))
+      .filter((section) => section.positions.length > 0);
+  };
+
   if (loading) {
     return (
       <div className="status-screen">
@@ -980,6 +1035,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   && group.ownerType === 'family'
                   && filteredOpenPositionGroups[index - 1]?.ownerType !== 'family';
                 const showAccountHeader = hasMultipleOpenPositionAccounts || hasMultipleOpenPositionOwners;
+                const sections = getOpenPositionSections(group.positions);
 
                 return (
                   <div className="dashboard-budget-section" key={`${group.ownerType}-${group.accountId}`}>
@@ -998,38 +1054,44 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       </div>
                     ) : null}
 
-                    <div className="portfolio-position-grid">
-                      {group.positions.map((position) => {
-                        const unitPrice = formatUnitPrice(position.amount_in_currency, position.quantity, position.currency_code);
+                    {sections.map((section) => (
+                      <div className="dashboard-budget-section" key={`${group.accountId}-${section.code}`}>
+                        {activeAssetTypeCode === 'security' && (
+                          <div className="portfolio-position-section-title">{section.label}</div>
+                        )}
+                        <div className="portfolio-position-grid">
+                          {section.positions.map((position) => {
+                            const unitPrice = formatUnitPrice(position.amount_in_currency, position.quantity, position.currency_code);
 
-                        return (
-                          <button
-                            key={position.id}
-                            className="portfolio-position-card"
-                            type="button"
-                            onClick={() => void handleOpenPositionDetails(position.id)}
-                          >
-                            <div className="portfolio-position-card__head">
-                              <div className="portfolio-position-card__title">{position.title}</div>
-                              <div className="portfolio-position-card__amount">
-                                {formatAmount(position.amount_in_currency, position.currency_code)}
-                              </div>
-                            </div>
-                            <div className="portfolio-position-card__meta">
-                              {unitPrice ? <span>Цена: {unitPrice}</span> : null}
-                              {position.quantity ? <span>Кол-во: {position.quantity}</span> : null}
-                              <span>{formatDateLabel(position.opened_at)}</span>
-                              {typeof position.metadata?.amount_in_base === 'number' ? (
-                                <span>Base: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
-                              ) : null}
-                              {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
-                                <span>Fee</span>
-                              ) : null}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                            return (
+                              <button
+                                key={position.id}
+                                className="portfolio-position-card"
+                                type="button"
+                                onClick={() => void handleOpenPositionDetails(position.id)}
+                              >
+                                <div className="portfolio-position-card__head">
+                                  <div className="portfolio-position-card__title">{position.title}</div>
+                                  <div className="portfolio-position-card__amount">
+                                    {formatAmount(position.amount_in_currency, position.currency_code)}
+                                  </div>
+                                </div>
+                                <div className="portfolio-position-card__meta">
+                                  {unitPrice ? <span>Цена: {unitPrice}</span> : null}
+                                  {position.quantity ? <span>{position.quantity} шт</span> : null}
+                                  {typeof position.metadata?.amount_in_base === 'number' ? (
+                                    <span>Base: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
+                                  ) : null}
+                                  {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
+                                    <span>Fee</span>
+                                  ) : null}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 );
               })}
