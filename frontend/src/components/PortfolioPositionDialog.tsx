@@ -17,15 +17,10 @@ type Props = {
   currencies: Currency[];
   user: UserContext;
   defaultAssetTypeCode: string;
+  defaultAssetTypeLabel: string;
   onClose: () => void;
   onSuccess: () => void;
 };
-
-const ASSET_TYPE_OPTIONS = [
-  { value: 'security', label: 'Ценные бумаги' },
-  { value: 'deposit', label: 'Депозит' },
-  { value: 'crypto', label: 'Криптовалюта' },
-] as const;
 
 const SECURITY_KIND_OPTIONS = [
   { value: 'stock', label: 'Акции' },
@@ -44,17 +39,13 @@ export default function PortfolioPositionDialog({
   currencies,
   user,
   defaultAssetTypeCode,
+  defaultAssetTypeLabel,
   onClose,
   onSuccess,
 }: Props) {
   useModalOpen();
 
-  const resolvedDefaultAssetType = ASSET_TYPE_OPTIONS.some((option) => option.value === defaultAssetTypeCode)
-    ? defaultAssetTypeCode as (typeof ASSET_TYPE_OPTIONS)[number]['value']
-    : 'security';
-
   const [investmentAccountId, setInvestmentAccountId] = useState(accounts[0] ? String(accounts[0].account.id) : '');
-  const [assetTypeCode, setAssetTypeCode] = useState<(typeof ASSET_TYPE_OPTIONS)[number]['value']>(resolvedDefaultAssetType);
   const [securityKind, setSecurityKind] = useState<(typeof SECURITY_KIND_OPTIONS)[number]['value']>('stock');
   const [title, setTitle] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -72,14 +63,10 @@ export default function PortfolioPositionDialog({
   }, [accounts, investmentAccountId]);
 
   useEffect(() => {
-    setAssetTypeCode(resolvedDefaultAssetType);
-  }, [resolvedDefaultAssetType]);
-
-  useEffect(() => {
-    if (assetTypeCode !== 'security') {
+    if (defaultAssetTypeCode !== 'security') {
       setSecurityKind('stock');
     }
-  }, [assetTypeCode]);
+  }, [defaultAssetTypeCode]);
 
   useEffect(() => {
     if (!currencies.some((currency) => currency.code === currencyCode)) {
@@ -118,14 +105,14 @@ export default function PortfolioPositionDialog({
     try {
       await createPortfolioPosition({
         investment_account_id: Number(investmentAccountId),
-        asset_type_code: assetTypeCode,
+        asset_type_code: defaultAssetTypeCode,
         title: title.trim(),
         quantity: quantity.trim() ? Number(quantity) : undefined,
         amount_in_currency: Number(amount),
         currency_code: currencyCode,
         opened_at: openedAt || undefined,
         comment: comment.trim() || undefined,
-        metadata: assetTypeCode === 'security' ? { security_kind: securityKind } : undefined,
+        metadata: defaultAssetTypeCode === 'security' ? { security_kind: securityKind } : undefined,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -149,7 +136,7 @@ export default function PortfolioPositionDialog({
 
         <div className="modal-body">
           <div className="operations-note">
-            Выбранный тип актива можно оставить как есть или переключить внутри формы.
+            Новая позиция будет добавлена в раздел <strong>{defaultAssetTypeLabel}</strong>.
           </div>
 
           <div className="form-row">
@@ -165,22 +152,10 @@ export default function PortfolioPositionDialog({
                 </option>
               ))}
             </select>
-
-            <select
-              className="input"
-              value={assetTypeCode}
-              onChange={(event) => setAssetTypeCode(event.target.value as (typeof ASSET_TYPE_OPTIONS)[number]['value'])}
-              disabled={submitting}
-            >
-              {ASSET_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="input input--read-only">{defaultAssetTypeLabel}</div>
           </div>
 
-          {assetTypeCode === 'security' && (
+          {defaultAssetTypeCode === 'security' && (
             <div className="form-row">
               <select
                 className="input"

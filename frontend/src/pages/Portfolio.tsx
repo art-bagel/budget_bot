@@ -281,6 +281,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [topUpDrafts, setTopUpDrafts] = useState<Record<number, TopUpDraft>>({});
   const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
+  const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -892,6 +893,44 @@ export default function Portfolio({ user }: { user: UserContext }) {
       .filter((section) => section.positions.length > 0);
   };
 
+  const switchAssetTab = (direction: 'prev' | 'next') => {
+    if (assetTabs.length <= 1) {
+      return;
+    }
+
+    const currentIndex = assetTabs.findIndex((tab) => tab.code === activeAssetTypeCode);
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = direction === 'next'
+      ? (safeIndex + 1) % assetTabs.length
+      : (safeIndex - 1 + assetTabs.length) % assetTabs.length;
+
+    setActiveAssetTypeCode(assetTabs[nextIndex].code);
+  };
+
+  const handleAssetSwipeStart = (clientX: number) => {
+    setAssetSwipeStartX(clientX);
+  };
+
+  const handleAssetSwipeEnd = (clientX: number) => {
+    if (assetSwipeStartX === null) {
+      return;
+    }
+
+    const deltaX = clientX - assetSwipeStartX;
+    setAssetSwipeStartX(null);
+
+    if (Math.abs(deltaX) < 36) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      switchAssetTab('next');
+      return;
+    }
+
+    switchAssetTab('prev');
+  };
+
   if (loading) {
     return (
       <div className="status-screen">
@@ -963,28 +1002,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
         <div className="section__header">
           <h2 className="section__title">Типы активов</h2>
         </div>
-        <div className="panel">
-          <div className="portfolio-type-tabs" role="tablist" aria-label="Типы инвестиционных активов">
-            {assetTabs.map((tab) => (
-              <button
-                key={tab.code}
-                type="button"
-                role="tab"
-                aria-selected={activeAssetTypeCode === tab.code}
-                className={[
-                  'portfolio-type-tabs__item',
-                  activeAssetTypeCode === tab.code ? 'portfolio-type-tabs__item--active' : '',
-                ].filter(Boolean).join(' ')}
-                onClick={() => {
-                  setActiveAssetTypeCode(tab.code);
-                }}
-              >
-                <span>{tab.label}</span>
-                <span className="portfolio-type-tabs__count">{tab.openCount}</span>
-              </button>
-            ))}
-          </div>
-
+        <div
+          className="panel portfolio-type-switcher"
+          onTouchStart={(event) => handleAssetSwipeStart(event.touches[0].clientX)}
+          onTouchEnd={(event) => handleAssetSwipeEnd(event.changedTouches[0].clientX)}
+        >
           <div className="portfolio-type-tabs__summary">
             {activeAssetTab && (
               <>
@@ -999,6 +1021,17 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 </span>
               </>
             )}
+          </div>
+
+          {activeAssetTab && (
+            <div className="portfolio-type-switcher__active">
+              <span className="portfolio-type-switcher__pill">
+                {activeAssetTab.label}
+              </span>
+            </div>
+          )}
+
+          <div className="portfolio-type-switcher__actions">
             <button
               className="btn btn--primary"
               type="button"
@@ -1007,6 +1040,29 @@ export default function Portfolio({ user }: { user: UserContext }) {
             >
               Добавить позицию
             </button>
+          </div>
+
+          <div
+            className="portfolio-type-segments"
+            role="tablist"
+            aria-label="Типы инвестиционных активов"
+            style={{ ['--segment-count' as string]: String(assetTabs.length) }}
+          >
+            {assetTabs.map((tab) => (
+              <button
+                key={tab.code}
+                type="button"
+                role="tab"
+                aria-selected={activeAssetTypeCode === tab.code}
+                className={[
+                  'portfolio-type-segments__item',
+                  activeAssetTypeCode === tab.code ? 'portfolio-type-segments__item--active' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => setActiveAssetTypeCode(tab.code)}
+                title={tab.label}
+                aria-label={tab.label}
+              />
+            ))}
           </div>
 
           {accounts.length === 0 && (
@@ -1080,7 +1136,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                   {unitPrice ? <span>Цена: {unitPrice}</span> : null}
                                   {position.quantity ? <span>{position.quantity} шт</span> : null}
                                   {typeof position.metadata?.amount_in_base === 'number' ? (
-                                    <span>Base: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
+                                    <span>Себестоимость: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
                                   ) : null}
                                   {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
                                     <span>Fee</span>
@@ -1729,6 +1785,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
           currencies={currencies}
           user={user}
           defaultAssetTypeCode={activeAssetTypeCode}
+          defaultAssetTypeLabel={activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)}
           onClose={() => setIsCreateDialogOpen(false)}
           onSuccess={() => {
             setIsCreateDialogOpen(false);
