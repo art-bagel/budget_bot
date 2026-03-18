@@ -1050,6 +1050,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
           )}
 
+          <div className="portfolio-positions-divider" />
+
           {accounts.length === 0 ? (
             <p className="list-row__sub">
               Сначала создай инвестиционный счет в настройках и переведи на него деньги с главного экрана.
