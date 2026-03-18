@@ -3,7 +3,6 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   cancelPortfolioIncome,
   closePortfolioPosition,
-  createPortfolioPosition,
   deletePortfolioPosition,
   fetchBankAccountSnapshot,
   fetchBankAccounts,
@@ -16,6 +15,7 @@ import {
   recordPortfolioIncome,
   topUpPortfolioPosition,
 } from '../api';
+import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
 import type {
   BankAccount,
   Currency,
@@ -209,8 +209,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [activeAssetTypeCode, setActiveAssetTypeCode] = useState<string>(DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0]);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
   const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
   const [submittingTopUpId, setSubmittingTopUpId] = useState<number | null>(null);
@@ -219,7 +219,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [deletingPositionId, setDeletingPositionId] = useState<number | null>(null);
   const [cancellingIncomeEventId, setCancellingIncomeEventId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
   const [incomeError, setIncomeError] = useState<string | null>(null);
   const [topUpError, setTopUpError] = useState<string | null>(null);
@@ -236,14 +235,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [topUpDrafts, setTopUpDrafts] = useState<Record<number, TopUpDraft>>({});
   const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
-  const [newInvestmentAccountId, setNewInvestmentAccountId] = useState('');
-  const [newAssetTypeCode, setNewAssetTypeCode] = useState<(typeof ASSET_TYPE_OPTIONS)[number]['value']>('security');
-  const [newTitle, setNewTitle] = useState('');
-  const [newQuantity, setNewQuantity] = useState('');
-  const [newAmount, setNewAmount] = useState('');
-  const [newCurrencyCode, setNewCurrencyCode] = useState(user.base_currency_code);
-  const [newOpenedAt, setNewOpenedAt] = useState(todayIso());
-  const [newComment, setNewComment] = useState('');
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -267,17 +258,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setPositions(loadedPositions);
       setCurrencies(loadedCurrencies);
       setSummaryItems(loadedSummary);
-      setNewInvestmentAccountId((currentValue) => {
-        if (currentValue && investmentAccounts.some((account) => String(account.id) === currentValue)) {
-          return currentValue;
-        }
-        return investmentAccounts[0] ? String(investmentAccounts[0].id) : '';
-      });
-      setNewCurrencyCode((currentValue) => (
-        loadedCurrencies.some((currency) => currency.code === currentValue)
-          ? currentValue
-          : (loadedCurrencies[0]?.code ?? user.base_currency_code)
-      ));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -356,16 +336,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [summaryItems],
   );
 
-  const selectedAccountBalances = useMemo(
-    () => accounts.find(({ account }) => String(account.id) === newInvestmentAccountId)?.balances ?? [],
-    [accounts, newInvestmentAccountId],
-  );
-
-  const selectedCurrencyBalance = useMemo(
-    () => selectedAccountBalances.find((balance) => balance.currency_code === newCurrencyCode)?.amount ?? 0,
-    [selectedAccountBalances, newCurrencyCode],
-  );
-
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
   );
@@ -412,45 +382,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setSelectedPositionId(positionId);
     if (!eventsByPosition[positionId]) {
       await loadEventsForPosition(positionId);
-    }
-  };
-
-  const handleCreatePosition = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!newInvestmentAccountId || !newTitle.trim() || !newAmount.trim() || submittingCreate) {
-      return;
-    }
-
-    if (Number(newAmount) > selectedCurrencyBalance) {
-      setCreateError('Недостаточно денег на инвестиционном счете для открытия позиции.');
-      return;
-    }
-
-    setSubmittingCreate(true);
-    setCreateError(null);
-
-    try {
-      await createPortfolioPosition({
-        investment_account_id: Number(newInvestmentAccountId),
-        asset_type_code: newAssetTypeCode,
-        title: newTitle.trim(),
-        quantity: newQuantity.trim() ? Number(newQuantity) : undefined,
-        amount_in_currency: Number(newAmount),
-        currency_code: newCurrencyCode,
-        opened_at: newOpenedAt || undefined,
-        comment: newComment.trim() || undefined,
-      });
-      setNewAssetTypeCode('security');
-      setNewTitle('');
-      setNewQuantity('');
-      setNewAmount('');
-      setNewOpenedAt(todayIso());
-      setNewComment('');
-      await loadPortfolio();
-    } catch (reason: unknown) {
-      setCreateError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setSubmittingCreate(false);
     }
   };
 
@@ -916,154 +847,47 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 role="tab"
                 aria-selected={activeAssetTypeCode === tab.code}
                 className={[
-                  'analytics-chip',
-                  activeAssetTypeCode === tab.code ? 'analytics-chip--active' : '',
+                  'portfolio-type-tabs__item',
+                  activeAssetTypeCode === tab.code ? 'portfolio-type-tabs__item--active' : '',
                 ].filter(Boolean).join(' ')}
                 onClick={() => {
                   setActiveAssetTypeCode(tab.code);
-                  if (ASSET_TYPE_OPTIONS.some((option) => option.value === tab.code)) {
-                    setNewAssetTypeCode(tab.code as (typeof ASSET_TYPE_OPTIONS)[number]['value']);
-                  }
                 }}
               >
-                {tab.label} · {tab.openCount}
+                <span>{tab.label}</span>
+                <span className="portfolio-type-tabs__count">{tab.openCount}</span>
               </button>
             ))}
           </div>
 
-          {activeAssetTab && (
-            <div className="portfolio-type-tabs__summary">
-              <span className="tag tag--neutral">
-                Открыто: {activeAssetTab.openCount}
-              </span>
-              <span className="tag tag--neutral">
-                Закрыто: {activeAssetTab.closedCount}
-              </span>
-              <span className="tag tag--neutral">
-                Principal: {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
-              </span>
-            </div>
-          )}
-        </div>
-      </section>
+          <div className="portfolio-type-tabs__summary">
+            {activeAssetTab && (
+              <>
+                <span className="tag tag--neutral">
+                  Открыто: {activeAssetTab.openCount}
+                </span>
+                <span className="tag tag--neutral">
+                  Закрыто: {activeAssetTab.closedCount}
+                </span>
+                <span className="tag tag--neutral">
+                  Principal: {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
+                </span>
+              </>
+            )}
+            <button
+              className="btn btn--primary"
+              type="button"
+              onClick={() => setIsCreateDialogOpen(true)}
+              disabled={accounts.length === 0}
+            >
+              Добавить позицию
+            </button>
+          </div>
 
-      <section className="section">
-        <div className="section__header">
-          <h2 className="section__title">Новая позиция</h2>
-        </div>
-        <div className="panel">
-          {accounts.length === 0 ? (
-            <p className="list-row__sub">
+          {accounts.length === 0 && (
+            <p className="list-row__sub" style={{ marginTop: 12 }}>
               Сначала создай инвестиционный счет в настройках и переведи на него деньги с главного экрана.
             </p>
-          ) : (
-            <form onSubmit={(event) => void handleCreatePosition(event)}>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={newInvestmentAccountId}
-                  onChange={(event) => setNewInvestmentAccountId(event.target.value)}
-                  disabled={submittingCreate}
-                >
-                  {accounts.map(({ account }) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} · {account.owner_type === 'family' ? 'семейный' : 'личный'}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  className="input"
-                  value={newAssetTypeCode}
-                  onChange={(event) => setNewAssetTypeCode(event.target.value as (typeof ASSET_TYPE_OPTIONS)[number]['value'])}
-                  disabled={submittingCreate}
-                >
-                  {ASSET_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Название позиции"
-                  value={newTitle}
-                  onChange={(event) => setNewTitle(event.target.value)}
-                  disabled={submittingCreate}
-                  style={{ flex: '1 1 280px' }}
-                />
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Количество, если есть"
-                  value={newQuantity}
-                  onChange={(event) => setNewQuantity(event.target.value)}
-                  disabled={submittingCreate}
-                  style={{ width: 180 }}
-                />
-              </div>
-
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Сумма входа"
-                  value={newAmount}
-                  onChange={(event) => setNewAmount(event.target.value)}
-                  disabled={submittingCreate}
-                  style={{ width: 180 }}
-                />
-                <select
-                  className="input"
-                  value={newCurrencyCode}
-                  onChange={(event) => setNewCurrencyCode(event.target.value)}
-                  disabled={submittingCreate}
-                >
-                  {currencies.map((currency) => (
-                    <option key={currency.code} value={currency.code}>
-                      {currency.code}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="input"
-                  type="date"
-                  value={newOpenedAt}
-                  onChange={(event) => setNewOpenedAt(event.target.value)}
-                  disabled={submittingCreate}
-                />
-                <span className="list-row__sub">
-                  Доступно: {formatAmount(selectedCurrencyBalance, newCurrencyCode)}
-                </span>
-              </div>
-
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Комментарий"
-                  value={newComment}
-                  onChange={(event) => setNewComment(event.target.value)}
-                  disabled={submittingCreate}
-                  style={{ flex: '1 1 320px' }}
-                />
-                <button className="btn btn--primary" type="submit" disabled={submittingCreate}>
-                  {submittingCreate ? 'Сохраняем...' : 'Добавить позицию'}
-                </button>
-              </div>
-
-              {createError && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem' }}>
-                  {createError}
-                </p>
-              )}
-            </form>
           )}
         </div>
       </section>
@@ -1786,6 +1610,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
           </p>
         </div>
       </section>
+
+      {isCreateDialogOpen && (
+        <PortfolioPositionDialog
+          accounts={accounts}
+          currencies={currencies}
+          user={user}
+          defaultAssetTypeCode={activeAssetTypeCode}
+          onClose={() => setIsCreateDialogOpen(false)}
+          onSuccess={() => {
+            setIsCreateDialogOpen(false);
+            void loadPortfolio();
+          }}
+        />
+      )}
     </>
   );
 }

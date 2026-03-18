@@ -921,8 +921,52 @@ p { margin: 0; }
 
 .portfolio-type-tabs {
   display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.portfolio-type-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.portfolio-type-tabs__item {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 9px 14px;
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.portfolio-type-tabs__item--active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.portfolio-type-tabs__count {
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(82, 126, 142, 0.14);
+  color: inherit;
+  font-size: 0.74rem;
 }
 
 .portfolio-type-tabs__summary {
