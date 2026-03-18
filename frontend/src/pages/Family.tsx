@@ -21,7 +21,7 @@ function memberDisplayName(m: FamilyMember): string {
   const full = [m.first_name, m.last_name].filter(Boolean).join(' ');
   if (full) return full;
   if (m.username) return `@${m.username}`;
-  return `ID ${m.user_id}`;
+  return 'Пользователь';
 }
 
 export default function Family({ user, onBadgeUpdate, embedded = false, onFamilyChange }: Props) {
@@ -160,7 +160,7 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
                       <div className="settings-row__sub">
                         {inv.invited_by_username
                           ? `от @${inv.invited_by_username}`
-                          : `от ID ${inv.invited_by_user_id}`}
+                          : 'Приглашение в семью'}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>

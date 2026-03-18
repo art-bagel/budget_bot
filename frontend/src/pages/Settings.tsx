@@ -16,6 +16,16 @@ import {
 import Family from './Family';
 import type { BankAccount, FamilyInfo, UserContext } from '../types';
 
+type SettingsTab = 'appearance' | 'account' | 'family' | 'investments' | 'data';
+
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'appearance', label: 'Оформление' },
+  { id: 'account',    label: 'Аккаунт' },
+  { id: 'family',     label: 'Семья' },
+  { id: 'investments',label: 'Инвестиции' },
+  { id: 'data',       label: 'Данные' },
+];
+
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
   { value: 'system', label: 'Системная', icon: IconMonitor },
   { value: 'light', label: 'Светлая', icon: IconSun },
@@ -28,6 +38,7 @@ export default function Settings({
   user: UserContext;
   onFamilyBadgeUpdate: (count: number) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const { theme, setTheme } = useTheme();
   const { hintsEnabled, toggle: toggleHints } = useHints();
   const [family, setFamily] = useState<FamilyInfo | null>(null);
@@ -177,256 +188,264 @@ export default function Settings({
     <>
       <h1 className="page-title">Настройки</h1>
 
-      {/* Theme */}
-      <section className="settings-section">
-        <h2 className="settings-section__title">Оформление</h2>
-        <div className="panel">
-          <p className="settings-label">Тема интерфейса</p>
-          <div className="theme-picker">
-            {THEME_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                className={`theme-picker__option${theme === opt.value ? ' theme-picker__option--active' : ''}`}
-                onClick={() => setTheme(opt.value)}
-              >
-                <span className="theme-picker__icon"><opt.icon /></span>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <div className="settings-row settings-row--first">
-            <div>
-              <div className="settings-row__title">Подсказки жестов</div>
-              <div className="settings-row__sub">Показывать подсказки по свайпам в категориях</div>
-            </div>
-            <button
-              className={`toggle${hintsEnabled ? ' toggle--on' : ''}`}
-              type="button"
-              role="switch"
-              aria-checked={hintsEnabled}
-              onClick={toggleHints}
-            />
-          </div>
-        </div>
-      </section>
+      <div className="portfolio-type-tabs" style={{ marginBottom: 20 }}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`portfolio-type-tabs__item${activeTab === tab.id ? ' portfolio-type-tabs__item--active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Account */}
-      <section className="settings-section">
-        <h2 className="settings-section__title">Аккаунт</h2>
-        <div className="panel">
-          <ul>
-            <li className="settings-row">
-              <div>
-                <div className="settings-row__title">Личная базовая валюта</div>
-                <div className="settings-row__sub">Все личные категории ведутся в этой валюте</div>
-              </div>
-              <span className="pill">{user.base_currency_code}</span>
-            </li>
-            {family && (
-              <>
-                <li className="settings-row">
-                  <div>
-                    <div className="settings-row__title">Семья</div>
-                    <div className="settings-row__sub">Семейный бюджет подключён</div>
-                  </div>
-                  <span className="tag tag--neutral">{family.name}</span>
-                </li>
-                <li className="settings-row">
-                  <div>
-                    <div className="settings-row__title">Семейная базовая валюта</div>
-                    <div className="settings-row__sub">Все семейные категории ведутся в этой валюте</div>
-                  </div>
-                  <span className="pill">{family.base_currency_code}</span>
-                </li>
-              </>
-            )}
-            <li className="settings-row">
-              <div>
-                <div className="settings-row__title">Банковский счёт</div>
-                <div className="settings-row__sub">Основной счёт для операций</div>
-              </div>
-              <span className="tag tag--neutral">Main #{user.bank_account_id}</span>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <h2 className="settings-section__title">Инвестиции</h2>
-        <div className="panel">
-          <div className="settings-row settings-row--first">
-            <div>
-              <div className="settings-row__title">Инвестиционные счета</div>
-              <div className="settings-row__sub">Пока это foundation: отдельные счета и переводы cash ↔ investment.</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <button className="btn" type="button" onClick={() => setShowCreateInvestmentForm((prev) => !prev)}>
-                {showCreateInvestmentForm ? 'Скрыть форму' : 'Новый счет'}
-              </button>
-            </div>
-          </div>
-
-          {showCreateInvestmentForm && (
-            <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Название инвестиционного счета"
-                  value={newInvestmentName}
-                  onChange={(event) => setNewInvestmentName(event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={newInvestmentOwnerType}
-                  onChange={(event) => setNewInvestmentOwnerType(event.target.value as 'user' | 'family')}
-                  disabled={!family}
-                >
-                  <option value="user">Личный контур</option>
-                  {family ? <option value="family">Семейный контур</option> : null}
-                </select>
-              </div>
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Провайдер (необязательно)"
-                  value={newInvestmentProvider}
-                  onChange={(event) => setNewInvestmentProvider(event.target.value)}
-                  onKeyDown={(event) => event.key === 'Enter' && !creatingInvestmentAccount && handleCreateInvestmentAccount()}
-                />
-              </div>
-              {createInvestmentError ? (
-                <div className="settings-danger__error">{createInvestmentError}</div>
-              ) : null}
-              <div className="form-row">
+      {activeTab === 'appearance' && (
+        <section className="settings-section">
+          <div className="panel">
+            <p className="settings-label">Тема интерфейса</p>
+            <div className="theme-picker">
+              {THEME_OPTIONS.map((opt) => (
                 <button
-                  className="btn"
-                  type="button"
-                  onClick={handleCreateInvestmentAccount}
-                  disabled={creatingInvestmentAccount || !newInvestmentName.trim()}
+                  key={opt.value}
+                  className={`theme-picker__option${theme === opt.value ? ' theme-picker__option--active' : ''}`}
+                  onClick={() => setTheme(opt.value)}
                 >
-                  {creatingInvestmentAccount ? 'Создаем...' : 'Создать инвестиционный счет'}
+                  <span className="theme-picker__icon"><opt.icon /></span>
+                  {opt.label}
                 </button>
-              </div>
-            </div>
-          )}
-
-          {accountsError ? <div className="settings-danger__error">{accountsError}</div> : null}
-
-          {accountsLoading ? (
-            <div className="settings-row__sub">Загружаем счета...</div>
-          ) : investmentAccounts.length === 0 ? (
-            <div className="settings-row__sub">Инвестиционных счетов пока нет.</div>
-          ) : (
-            <ul>
-              {investmentAccounts.map((account) => (
-                <li key={account.id} className="settings-row">
-                  <div>
-                    <div className="settings-row__title">{account.name}</div>
-                    <div className="settings-row__sub">
-                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} счет
-                      {account.provider_name ? ` · ${account.provider_name}` : ''}
-                    </div>
-                  </div>
-                  <span className="tag tag--neutral">#{account.id}</span>
-                </li>
               ))}
+            </div>
+            <div className="settings-row settings-row--first">
+              <div>
+                <div className="settings-row__title">Подсказки жестов</div>
+                <div className="settings-row__sub">Показывать подсказки по свайпам в категориях</div>
+              </div>
+              <button
+                className={`toggle${hintsEnabled ? ' toggle--on' : ''}`}
+                type="button"
+                role="switch"
+                aria-checked={hintsEnabled}
+                onClick={toggleHints}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'account' && (
+        <section className="settings-section">
+          <div className="panel">
+            <ul>
+              <li className="settings-row settings-row--first">
+                <div>
+                  <div className="settings-row__title">Личная базовая валюта</div>
+                  <div className="settings-row__sub">Все личные категории ведутся в этой валюте</div>
+                </div>
+                <span className="pill">{user.base_currency_code}</span>
+              </li>
+              {family && (
+                <>
+                  <li className="settings-row">
+                    <div>
+                      <div className="settings-row__title">Семья</div>
+                      <div className="settings-row__sub">Семейный бюджет подключён</div>
+                    </div>
+                    <span className="tag tag--neutral">{family.name}</span>
+                  </li>
+                  <li className="settings-row">
+                    <div>
+                      <div className="settings-row__title">Семейная базовая валюта</div>
+                      <div className="settings-row__sub">Все семейные категории ведутся в этой валюте</div>
+                    </div>
+                    <span className="pill">{family.base_currency_code}</span>
+                  </li>
+                </>
+              )}
+              <li className="settings-row">
+                <div>
+                  <div className="settings-row__title">Банковский счёт</div>
+                  <div className="settings-row__sub">Основной счёт для операций</div>
+                </div>
+                <span className="tag tag--neutral">Main #{user.bank_account_id}</span>
+              </li>
             </ul>
-          )}
-        </div>
-      </section>
+          </div>
 
-      <section className="settings-section">
-        <h2 className="settings-section__title">Семья</h2>
-        <Family
-          key={familyRefreshKey}
-          user={user}
-          onBadgeUpdate={onFamilyBadgeUpdate}
-          onFamilyChange={setFamily}
-          embedded
-        />
-      </section>
-
-      {/* Data */}
-      <section className="settings-section">
-        <h2 className="settings-section__title">Данные</h2>
-        <div className="panel">
-          <ul>
-            <li className="settings-row">
-              <div>
-                <div className="settings-row__title">Экспорт операций</div>
-                <div className="settings-row__sub">Скачать историю в CSV</div>
-              </div>
-              <button className="btn" type="button">Скачать</button>
-            </li>
-            <li className="settings-row">
-              <div>
-                <div className="settings-row__title">Курсы валют</div>
-                <div className="settings-row__sub">Источник и время последнего обновления</div>
-              </div>
-              <span className="tag tag--neutral">CBR</span>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <h2 className="settings-section__title">Опасная зона</h2>
-        <div className="panel">
-          {family && (
+          <h2 className="settings-section__title" style={{ marginTop: 24 }}>Опасная зона</h2>
+          <div className="panel">
             <div className="settings-danger">
               <div>
-                <div className="settings-row__title">
-                  {isFamilyOwner ? 'Распустить семью' : 'Покинуть семью'}
-                </div>
+                <div className="settings-row__title">Удалить аккаунт</div>
                 <div className="settings-row__sub">
-                  {isFamilyOwner
-                    ? 'Все семейные счета, категории и история операций будут удалены безвозвратно. Личные данные участников не пострадают.'
-                    : 'Вы выйдете из семьи. Ваши личные счета и данные останутся нетронутыми.'}
+                  Полностью очистить все данные пользователя: банк, операции, категории, группы и историю обменов.
                 </div>
-                {isFamilyOwner && dissolveError ? (
-                  <div className="settings-danger__error">{dissolveError}</div>
-                ) : null}
-                {!isFamilyOwner && leaveError ? (
-                  <div className="settings-danger__error">{leaveError}</div>
-                ) : null}
+                {deleteError && <div className="settings-danger__error">{deleteError}</div>}
               </div>
               <button
                 className="btn btn--danger"
                 type="button"
-                onClick={isFamilyOwner ? handleDissolveFamily : handleLeaveFamily}
-                disabled={leaveInProgress || dissolveInProgress}
+                onClick={handleDeleteAccount}
+                disabled={deleteInProgress}
               >
-                {isFamilyOwner
-                  ? (dissolveInProgress ? 'Удаляем...' : 'Распустить')
-                  : (leaveInProgress ? 'Выходим...' : 'Покинуть')}
+                {deleteInProgress ? 'Удаляем...' : 'Удалить аккаунт'}
               </button>
             </div>
-          )}
-          <div className="settings-danger">
-            <div>
-              <div className="settings-row__title">Удалить аккаунт</div>
-              <div className="settings-row__sub">
-                Полностью очистить все данные пользователя: банк, операции, категории, группы и историю обменов.
-              </div>
-              {deleteError ? (
-                <div className="settings-danger__error">{deleteError}</div>
-              ) : null}
-            </div>
-            <button
-              className="btn btn--danger"
-              type="button"
-              onClick={handleDeleteAccount}
-              disabled={deleteInProgress}
-            >
-              {deleteInProgress ? 'Удаляем...' : 'Удалить аккаунт'}
-            </button>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {activeTab === 'family' && (
+        <section className="settings-section">
+          <Family
+            key={familyRefreshKey}
+            user={user}
+            onBadgeUpdate={onFamilyBadgeUpdate}
+            onFamilyChange={setFamily}
+            embedded
+          />
+          {family && (
+            <>
+              <h2 className="settings-section__title" style={{ marginTop: 24 }}>Опасная зона</h2>
+              <div className="panel">
+                <div className="settings-danger">
+                  <div>
+                    <div className="settings-row__title">
+                      {isFamilyOwner ? 'Распустить семью' : 'Покинуть семью'}
+                    </div>
+                    <div className="settings-row__sub">
+                      {isFamilyOwner
+                        ? 'Все семейные счета, категории и история операций будут удалены безвозвратно. Личные данные участников не пострадают.'
+                        : 'Вы выйдете из семьи. Ваши личные счета и данные останутся нетронутыми.'}
+                    </div>
+                    {isFamilyOwner && dissolveError && <div className="settings-danger__error">{dissolveError}</div>}
+                    {!isFamilyOwner && leaveError && <div className="settings-danger__error">{leaveError}</div>}
+                  </div>
+                  <button
+                    className="btn btn--danger"
+                    type="button"
+                    onClick={isFamilyOwner ? handleDissolveFamily : handleLeaveFamily}
+                    disabled={leaveInProgress || dissolveInProgress}
+                  >
+                    {isFamilyOwner
+                      ? (dissolveInProgress ? 'Удаляем...' : 'Распустить')
+                      : (leaveInProgress ? 'Выходим...' : 'Покинуть')}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {activeTab === 'investments' && (
+        <section className="settings-section">
+          <div className="panel">
+            <div className="settings-row settings-row--first">
+              <div>
+                <div className="settings-row__title">Инвестиционные счета</div>
+                <div className="settings-row__sub">Отдельные счета и переводы cash ↔ investment</div>
+              </div>
+              <button className="btn" type="button" onClick={() => setShowCreateInvestmentForm((prev) => !prev)}>
+                {showCreateInvestmentForm ? 'Скрыть' : 'Новый счёт'}
+              </button>
+            </div>
+
+            {showCreateInvestmentForm && (
+              <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+                <div className="form-row">
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Название инвестиционного счёта"
+                    value={newInvestmentName}
+                    onChange={(event) => setNewInvestmentName(event.target.value)}
+                  />
+                </div>
+                <div className="form-row">
+                  <select
+                    className="input"
+                    value={newInvestmentOwnerType}
+                    onChange={(event) => setNewInvestmentOwnerType(event.target.value as 'user' | 'family')}
+                    disabled={!family}
+                  >
+                    <option value="user">Личный контур</option>
+                    {family && <option value="family">Семейный контур</option>}
+                  </select>
+                </div>
+                <div className="form-row">
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Провайдер (необязательно)"
+                    value={newInvestmentProvider}
+                    onChange={(event) => setNewInvestmentProvider(event.target.value)}
+                    onKeyDown={(event) => event.key === 'Enter' && !creatingInvestmentAccount && handleCreateInvestmentAccount()}
+                  />
+                </div>
+                {createInvestmentError && <div className="settings-danger__error">{createInvestmentError}</div>}
+                <div className="form-row">
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={handleCreateInvestmentAccount}
+                    disabled={creatingInvestmentAccount || !newInvestmentName.trim()}
+                  >
+                    {creatingInvestmentAccount ? 'Создаём...' : 'Создать счёт'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {accountsError && <div className="settings-danger__error">{accountsError}</div>}
+
+            {accountsLoading ? (
+              <div className="settings-row__sub">Загружаем счета...</div>
+            ) : investmentAccounts.length === 0 ? (
+              <div className="settings-row__sub">Инвестиционных счетов пока нет.</div>
+            ) : (
+              <ul>
+                {investmentAccounts.map((account) => (
+                  <li key={account.id} className="settings-row">
+                    <div>
+                      <div className="settings-row__title">{account.name}</div>
+                      <div className="settings-row__sub">
+                        {account.owner_type === 'family' ? 'Семейный' : 'Личный'} счёт
+                        {account.provider_name ? ` · ${account.provider_name}` : ''}
+                      </div>
+                    </div>
+                    <span className="tag tag--neutral">#{account.id}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'data' && (
+        <section className="settings-section">
+          <div className="panel">
+            <ul>
+              <li className="settings-row settings-row--first">
+                <div>
+                  <div className="settings-row__title">Экспорт операций</div>
+                  <div className="settings-row__sub">Скачать историю в CSV</div>
+                </div>
+                <button className="btn" type="button">Скачать</button>
+              </li>
+              <li className="settings-row">
+                <div>
+                  <div className="settings-row__title">Курсы валют</div>
+                  <div className="settings-row__sub">Источник и время последнего обновления</div>
+                </div>
+                <span className="tag tag--neutral">CBR</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+      )}
     </>
   );
 }
