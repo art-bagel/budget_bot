@@ -392,6 +392,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [summaryItems],
   );
 
+  const totalInvestmentCashInBase = useMemo(
+    () => summaryItems.reduce((sum, item) => sum + item.cash_balance_in_base, 0),
+    [summaryItems],
+  );
+
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
   );
@@ -966,7 +971,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
           <div className="portfolio-free-cash">
             <div className="portfolio-free-cash__total">
-              {formatAmount(totalHistoricalInBase, user.base_currency_code)}
+              {formatAmount(totalInvestmentCashInBase, user.base_currency_code)}
             </div>
             {accounts.length > 1 && (
               <div className="portfolio-free-cash__accounts">

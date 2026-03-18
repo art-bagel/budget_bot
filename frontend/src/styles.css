@@ -2025,10 +2025,6 @@ select.input option {
     grid-template-columns: 1fr;
   }
 
-  .portfolio-type-switcher__pill {
-    font-size: 1.05rem;
-  }
-
   .portfolio-type-switcher__total {
     font-size: 1.18rem;
   }

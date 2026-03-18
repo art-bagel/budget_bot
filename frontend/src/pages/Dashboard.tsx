@@ -432,6 +432,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     ),
     0,
   );
+  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal;
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
@@ -550,7 +551,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
       >
         <span className="hero-card__label">Банк по себестоимости</span>
         <strong className="hero-card__value">
-          {formatAmount(overview.total_bank_historical_in_base, overview.base_currency_code)}
+          {formatAmount(totalBankWithInvestments, overview.base_currency_code)}
         </strong>
         {hasFamily ? (
           <>
