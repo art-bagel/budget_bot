@@ -83,6 +83,13 @@ type PortfolioAssetTab = {
   principalInBase: number;
 };
 
+type PositionAccountGroup = {
+  accountId: number;
+  accountName: string;
+  ownerType: 'user' | 'family';
+  positions: PortfolioPosition[];
+};
+
 const ASSET_TYPE_OPTIONS = [
   { value: 'security', label: 'Ценные бумаги' },
   { value: 'deposit', label: 'Депозит' },
@@ -115,6 +122,14 @@ function assetTypeLabel(assetTypeCode: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatUnitPrice(amount: number, quantity: number | null | undefined, currencyCode: string): string | null {
+  if (!quantity || quantity <= 0) {
+    return null;
+  }
+
+  return formatAmount(amount / quantity, currencyCode);
 }
 
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
@@ -373,12 +388,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
   };
 
-  const handleToggleEvents = async (positionId: number) => {
-    if (selectedPositionId === positionId) {
-      setSelectedPositionId(null);
-      return;
-    }
-
+  const handleOpenPositionDetails = async (positionId: number) => {
     setSelectedPositionId(positionId);
     if (!eventsByPosition[positionId]) {
       await loadEventsForPosition(positionId);
@@ -767,6 +777,66 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
   };
 
+  const selectedPosition = useMemo(
+    () => positions.find((position) => position.id === selectedPositionId) ?? null,
+    [positions, selectedPositionId],
+  );
+
+  const selectedPositionEvents = selectedPosition ? (eventsByPosition[selectedPosition.id] ?? []) : [];
+
+  const selectedPositionCancelledIncomeIds = useMemo(
+    () => new Set(
+      selectedPositionEvents
+        .filter((item) => item.event_type === 'adjustment' && item.metadata?.action === 'cancel_income')
+        .map((item) => Number(item.metadata?.cancelled_event_id))
+        .filter((value) => Number.isFinite(value)),
+    ),
+    [selectedPositionEvents],
+  );
+
+  const filteredOpenPositionGroups = useMemo(() => {
+    const grouped = new Map<string, PositionAccountGroup>();
+
+    filteredOpenPositions
+      .slice()
+      .sort((left, right) => {
+        if (left.investment_account_owner_type !== right.investment_account_owner_type) {
+          return left.investment_account_owner_type === 'user' ? -1 : 1;
+        }
+
+        if (left.investment_account_name !== right.investment_account_name) {
+          return left.investment_account_name.localeCompare(right.investment_account_name, 'ru');
+        }
+
+        return left.title.localeCompare(right.title, 'ru');
+      })
+      .forEach((position) => {
+        const key = `${position.investment_account_owner_type}:${position.investment_account_id}`;
+        const group = grouped.get(key);
+
+        if (group) {
+          group.positions.push(position);
+          return;
+        }
+
+        grouped.set(key, {
+          accountId: position.investment_account_id,
+          accountName: position.investment_account_name,
+          ownerType: position.investment_account_owner_type,
+          positions: [position],
+        });
+      });
+
+    return Array.from(grouped.values());
+  }, [filteredOpenPositions]);
+
+  const hasMultipleOpenPositionOwners = useMemo(
+    () => new Set(filteredOpenPositionGroups.map((group) => group.ownerType)).size > 1,
+    [filteredOpenPositionGroups],
+  );
+
+  const hasMultipleOpenPositionAccounts = filteredOpenPositionGroups.length > 1;
+
   if (loading) {
     return (
       <div className="status-screen">
@@ -905,584 +975,66 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </p>
           ) : (
             <div className="dashboard-budget-sections">
-              {filteredOpenPositions.map((position) => {
-                const closeDraft = closeDrafts[position.id];
-                const incomeDraft = incomeDrafts[position.id];
-                const topUpDraft = topUpDrafts[position.id];
-                const partialCloseDraft = partialCloseDrafts[position.id];
-                const feeDraft = feeDrafts[position.id];
-                const events = eventsByPosition[position.id] ?? [];
-                const feeBalance = feeDraft ? getAccountBalanceForCurrency(position.investment_account_id, feeDraft.currencyCode) : 0;
-                const cancelledIncomeIds = new Set(
-                  events
-                    .filter((item) => item.event_type === 'adjustment' && item.metadata?.action === 'cancel_income')
-                    .map((item) => Number(item.metadata?.cancelled_event_id))
-                    .filter((value) => Number.isFinite(value)),
-                );
+              {filteredOpenPositionGroups.map((group, index) => {
+                const ownerDivider = hasMultipleOpenPositionOwners
+                  && group.ownerType === 'family'
+                  && filteredOpenPositionGroups[index - 1]?.ownerType !== 'family';
+                const showAccountHeader = hasMultipleOpenPositionAccounts || hasMultipleOpenPositionOwners;
 
                 return (
-                  <div className="dashboard-budget-section" key={position.id}>
-                    <div className="dashboard-budget-section__header">
-                      <div>
-                        <div className="section__eyebrow">
-                          {assetTypeLabel(position.asset_type_code)} · {position.investment_account_name}
-                        </div>
-                        <div className="section__title" style={{ fontSize: '1rem' }}>{position.title}</div>
-                      </div>
-                      <span className="tag tag--neutral">{position.investment_account_owner_name}</span>
-                    </div>
+                  <div className="dashboard-budget-section" key={`${group.ownerType}-${group.accountId}`}>
+                    {ownerDivider ? (
+                      <div className="cat-grid__divider" aria-hidden="true">Семейные</div>
+                    ) : null}
 
-                    <div className="bank-detail-list">
-                      <div className="bank-detail-row">
-                        <div className="bank-detail-row__main">
-                          <span className="pill">{position.currency_code}</span>
-                          <strong className="bank-detail-row__amount">
-                            {formatAmount(position.amount_in_currency, position.currency_code)}
-                          </strong>
-                        </div>
-                        <div className="bank-detail-row__sub">
-                          Дата входа: {formatDateLabel(position.opened_at)}
-                          {position.quantity ? ` · Количество: ${position.quantity}` : ''}
-                          {typeof position.metadata?.amount_in_base === 'number'
-                            ? ` · Себестоимость: ${formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}`
-                            : ''}
-                          {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0
-                            ? ` · Комиссии: ${formatAmount(Number(position.metadata.fees_in_base), user.base_currency_code)}`
-                            : ''}
+                    {showAccountHeader ? (
+                      <div className="dashboard-budget-section__header">
+                        <div>
+                          <div className="section__eyebrow">
+                            {group.ownerType === 'family' ? 'Семейный счет' : 'Личный счет'}
+                          </div>
+                          <div className="section__title" style={{ fontSize: '1rem' }}>{group.accountName}</div>
                         </div>
                       </div>
+                    ) : null}
+
+                    <div className="portfolio-position-grid">
+                      {group.positions.map((position) => {
+                        const unitPrice = formatUnitPrice(position.amount_in_currency, position.quantity, position.currency_code);
+
+                        return (
+                          <button
+                            key={position.id}
+                            className="portfolio-position-card"
+                            type="button"
+                            onClick={() => void handleOpenPositionDetails(position.id)}
+                          >
+                            <div className="portfolio-position-card__head">
+                              <span className="pill">{position.currency_code}</span>
+                              {typeof position.metadata?.fees_in_base === 'number' && Number(position.metadata.fees_in_base) > 0 ? (
+                                <span className="tag tag--neutral">Fee</span>
+                              ) : null}
+                            </div>
+                            <div className="portfolio-position-card__title">{position.title}</div>
+                            <div className="portfolio-position-card__amount">
+                              {formatAmount(position.amount_in_currency, position.currency_code)}
+                            </div>
+                            <div className="portfolio-position-card__meta">
+                              <span>Дата: {formatDateLabel(position.opened_at)}</span>
+                              {position.quantity ? <span>Кол-во: {position.quantity}</span> : null}
+                              {unitPrice ? <span>Цена: {unitPrice}</span> : null}
+                              {typeof position.metadata?.amount_in_base === 'number' ? (
+                                <span>Base: {formatAmount(Number(position.metadata.amount_in_base), user.base_currency_code)}</span>
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-
-                    {position.comment && (
-                      <p className="list-row__sub" style={{ marginTop: 12 }}>
-                        {position.comment}
-                      </p>
-                    )}
-
-                    <div className="form-row">
-                      <button
-                        className="btn btn--primary"
-                        type="button"
-                        onClick={() => handleOpenCloseForm(position)}
-                      >
-                        Закрыть позицию
-                      </button>
-                      {canRecordPositionIncome(position) && (
-                        <button
-                          className="btn"
-                          type="button"
-                          onClick={() => handleOpenIncomeForm(position)}
-                        >
-                          Начислить доход
-                        </button>
-                      )}
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => handleOpenPartialCloseForm(position)}
-                      >
-                        Частично закрыть
-                      </button>
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => handleOpenTopUpForm(position)}
-                      >
-                        Пополнить позицию
-                      </button>
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => handleOpenFeeForm(position)}
-                      >
-                        Списать комиссию
-                      </button>
-                      <button
-                        className="btn"
-                        type="button"
-                        disabled={deletingPositionId === position.id}
-                        onClick={() => void handleDeletePosition(position)}
-                      >
-                        {deletingPositionId === position.id ? 'Удаляем...' : 'Удалить позицию'}
-                      </button>
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => void handleToggleEvents(position.id)}
-                      >
-                        {selectedPositionId === position.id ? 'Скрыть события' : 'Показать события'}
-                      </button>
-                    </div>
-
-                    {closeDraft && (
-                      <form onSubmit={(event) => void handleClosePosition(position.id, event)}>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Сумма выхода"
-                            value={closeDraft.amount}
-                            onChange={(event) => handleCloseDraftChange(position.id, { amount: event.target.value })}
-                            disabled={submittingCloseId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          <select
-                            className="input"
-                            value={closeDraft.currencyCode}
-                            onChange={(event) => handleCloseDraftChange(position.id, { currencyCode: event.target.value })}
-                            disabled={submittingCloseId === position.id}
-                          >
-                            {currencies.map((currency) => (
-                              <option key={currency.code} value={currency.code}>
-                                {currency.code}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            className="input"
-                            type="date"
-                            value={closeDraft.closedAt}
-                            onChange={(event) => handleCloseDraftChange(position.id, { closedAt: event.target.value })}
-                            disabled={submittingCloseId === position.id}
-                          />
-                        </div>
-                        {closeDraft.currencyCode !== user.base_currency_code && (
-                          <div className="form-row">
-                            <input
-                              className="input"
-                              type="text"
-                              inputMode="decimal"
-                              placeholder={`Историческая стоимость в ${user.base_currency_code}`}
-                              value={closeDraft.baseAmount}
-                              onChange={(event) => handleCloseDraftChange(position.id, { baseAmount: event.target.value })}
-                              disabled={submittingCloseId === position.id}
-                              style={{ width: 260 }}
-                            />
-                            <span className="list-row__sub">
-                              Нужна, чтобы вернуть валюту на счет с корректной себестоимостью.
-                            </span>
-                          </div>
-                        )}
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Комментарий к закрытию"
-                            value={closeDraft.comment}
-                            onChange={(event) => handleCloseDraftChange(position.id, { comment: event.target.value })}
-                            disabled={submittingCloseId === position.id}
-                            style={{ flex: '1 1 280px' }}
-                          />
-                          <button
-                            className="btn btn--primary"
-                            type="submit"
-                            disabled={submittingCloseId === position.id}
-                          >
-                            {submittingCloseId === position.id ? 'Закрываем...' : 'Подтвердить закрытие'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {partialCloseDraft && (
-                      <form onSubmit={(event) => void handlePartialClosePosition(position, event)}>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Сумма возврата"
-                            value={partialCloseDraft.returnAmount}
-                            onChange={(event) => handlePartialCloseDraftChange(position.id, { returnAmount: event.target.value })}
-                            disabled={submittingPartialCloseId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          <select
-                            className="input"
-                            value={partialCloseDraft.returnCurrencyCode}
-                            onChange={(event) => handlePartialCloseDraftChange(position.id, { returnCurrencyCode: event.target.value })}
-                            disabled={submittingPartialCloseId === position.id}
-                          >
-                            {currencies.map((currency) => (
-                              <option key={currency.code} value={currency.code}>
-                                {currency.code}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Списать principal"
-                            value={partialCloseDraft.principalReduction}
-                            onChange={(event) => handlePartialCloseDraftChange(position.id, { principalReduction: event.target.value })}
-                            disabled={submittingPartialCloseId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          {position.quantity !== null && position.quantity !== undefined && (
-                            <input
-                              className="input"
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="Списать количество"
-                              value={partialCloseDraft.closedQuantity}
-                              onChange={(event) => handlePartialCloseDraftChange(position.id, { closedQuantity: event.target.value })}
-                              disabled={submittingPartialCloseId === position.id}
-                              style={{ width: 180 }}
-                            />
-                          )}
-                          <input
-                            className="input"
-                            type="date"
-                            value={partialCloseDraft.closedAt}
-                            onChange={(event) => handlePartialCloseDraftChange(position.id, { closedAt: event.target.value })}
-                            disabled={submittingPartialCloseId === position.id}
-                          />
-                        </div>
-                        {partialCloseDraft.returnCurrencyCode !== user.base_currency_code && (
-                          <div className="form-row">
-                            <input
-                              className="input"
-                              type="text"
-                              inputMode="decimal"
-                              placeholder={`Историческая стоимость возврата в ${user.base_currency_code}`}
-                              value={partialCloseDraft.returnBaseAmount}
-                              onChange={(event) => handlePartialCloseDraftChange(position.id, { returnBaseAmount: event.target.value })}
-                              disabled={submittingPartialCloseId === position.id}
-                              style={{ width: 320 }}
-                            />
-                            <span className="list-row__sub">
-                              Нужна для корректной себестоимости валюты, возвращенной на investment-счет.
-                            </span>
-                          </div>
-                        )}
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Комментарий к частичному закрытию"
-                            value={partialCloseDraft.comment}
-                            onChange={(event) => handlePartialCloseDraftChange(position.id, { comment: event.target.value })}
-                            disabled={submittingPartialCloseId === position.id}
-                            style={{ flex: '1 1 280px' }}
-                          />
-                          <button
-                            className="btn btn--primary"
-                            type="submit"
-                            disabled={submittingPartialCloseId === position.id}
-                          >
-                            {submittingPartialCloseId === position.id ? 'Проводим...' : 'Подтвердить частичное закрытие'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {incomeDraft && (
-                      <form onSubmit={(event) => void handleRecordIncome(position, event)}>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder={position.asset_type_code === 'deposit' ? 'Сумма процентов' : 'Сумма дивидендов'}
-                            value={incomeDraft.amount}
-                            onChange={(event) => handleIncomeDraftChange(position.id, { amount: event.target.value })}
-                            disabled={submittingIncomeId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          <select
-                            className="input"
-                            value={incomeDraft.currencyCode}
-                            onChange={(event) => handleIncomeDraftChange(position.id, { currencyCode: event.target.value })}
-                            disabled={submittingIncomeId === position.id}
-                          >
-                            {currencies.map((currency) => (
-                              <option key={currency.code} value={currency.code}>
-                                {currency.code}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            className="input"
-                            value={incomeDraft.incomeKind}
-                            onChange={(event) => handleIncomeDraftChange(position.id, { incomeKind: event.target.value })}
-                            disabled={submittingIncomeId === position.id}
-                          >
-                            {position.asset_type_code === 'deposit' ? (
-                              <>
-                                <option value="interest">Проценты</option>
-                                <option value="other">Другой доход</option>
-                              </>
-                            ) : (
-                              <>
-                                <option value="dividend">Дивиденды</option>
-                                <option value="coupon">Купон</option>
-                                <option value="other">Другой доход</option>
-                              </>
-                            )}
-                          </select>
-                          <input
-                            className="input"
-                            type="date"
-                            value={incomeDraft.receivedAt}
-                            onChange={(event) => handleIncomeDraftChange(position.id, { receivedAt: event.target.value })}
-                            disabled={submittingIncomeId === position.id}
-                          />
-                        </div>
-                        {incomeDraft.currencyCode !== user.base_currency_code && (
-                          <div className="form-row">
-                            <input
-                              className="input"
-                              type="text"
-                              inputMode="decimal"
-                              placeholder={`Историческая стоимость в ${user.base_currency_code}`}
-                              value={incomeDraft.baseAmount}
-                              onChange={(event) => handleIncomeDraftChange(position.id, { baseAmount: event.target.value })}
-                              disabled={submittingIncomeId === position.id}
-                              style={{ width: 260 }}
-                            />
-                            <span className="list-row__sub">
-                              Нужна для сохранения себестоимости дохода в базовой валюте.
-                            </span>
-                          </div>
-                        )}
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Комментарий к доходу"
-                            value={incomeDraft.comment}
-                            onChange={(event) => handleIncomeDraftChange(position.id, { comment: event.target.value })}
-                            disabled={submittingIncomeId === position.id}
-                            style={{ flex: '1 1 280px' }}
-                          />
-                          <button
-                            className="btn btn--primary"
-                            type="submit"
-                            disabled={submittingIncomeId === position.id}
-                          >
-                            {submittingIncomeId === position.id ? 'Начисляем...' : 'Подтвердить доход'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {topUpDraft && (
-                      <form onSubmit={(event) => void handleTopUpPosition(position, event)}>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Сумма пополнения"
-                            value={topUpDraft.amount}
-                            onChange={(event) => handleTopUpDraftChange(position.id, { amount: event.target.value })}
-                            disabled={submittingTopUpId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Количество, если есть"
-                            value={topUpDraft.quantity}
-                            onChange={(event) => handleTopUpDraftChange(position.id, { quantity: event.target.value })}
-                            disabled={submittingTopUpId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          <select
-                            className="input"
-                            value={topUpDraft.currencyCode}
-                            onChange={(event) => handleTopUpDraftChange(position.id, { currencyCode: event.target.value })}
-                            disabled={submittingTopUpId === position.id}
-                          >
-                            <option value={position.currency_code}>{position.currency_code}</option>
-                          </select>
-                          <input
-                            className="input"
-                            type="date"
-                            value={topUpDraft.toppedUpAt}
-                            onChange={(event) => handleTopUpDraftChange(position.id, { toppedUpAt: event.target.value })}
-                            disabled={submittingTopUpId === position.id}
-                          />
-                        </div>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Комментарий к пополнению"
-                            value={topUpDraft.comment}
-                            onChange={(event) => handleTopUpDraftChange(position.id, { comment: event.target.value })}
-                            disabled={submittingTopUpId === position.id}
-                            style={{ flex: '1 1 280px' }}
-                          />
-                          <button
-                            className="btn btn--primary"
-                            type="submit"
-                            disabled={submittingTopUpId === position.id}
-                          >
-                            {submittingTopUpId === position.id ? 'Пополняем...' : 'Подтвердить пополнение'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {feeDraft && (
-                      <form onSubmit={(event) => void handleRecordFee(position, event)}>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Сумма комиссии"
-                            value={feeDraft.amount}
-                            onChange={(event) => handleFeeDraftChange(position.id, { amount: event.target.value })}
-                            disabled={submittingFeeId === position.id}
-                            style={{ width: 180 }}
-                          />
-                          <select
-                            className="input"
-                            value={feeDraft.currencyCode}
-                            onChange={(event) => handleFeeDraftChange(position.id, { currencyCode: event.target.value })}
-                            disabled={submittingFeeId === position.id}
-                          >
-                            {currencies.map((currency) => (
-                              <option key={currency.code} value={currency.code}>
-                                {currency.code}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            className="input"
-                            type="date"
-                            value={feeDraft.chargedAt}
-                            onChange={(event) => handleFeeDraftChange(position.id, { chargedAt: event.target.value })}
-                            disabled={submittingFeeId === position.id}
-                          />
-                          <span className="list-row__sub">
-                            Доступно: {formatAmount(feeBalance, feeDraft.currencyCode)}
-                          </span>
-                        </div>
-                        <div className="form-row">
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Комментарий к комиссии"
-                            value={feeDraft.comment}
-                            onChange={(event) => handleFeeDraftChange(position.id, { comment: event.target.value })}
-                            disabled={submittingFeeId === position.id}
-                            style={{ flex: '1 1 280px' }}
-                          />
-                          <button
-                            className="btn btn--primary"
-                            type="submit"
-                            disabled={submittingFeeId === position.id}
-                          >
-                            {submittingFeeId === position.id ? 'Списываем...' : 'Подтвердить комиссию'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {selectedPositionId === position.id && (
-                      <div style={{ marginTop: 12 }}>
-                        {eventsError && (
-                          <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem' }}>
-                            {eventsError}
-                          </p>
-                        )}
-                        {eventsLoadingId === position.id ? (
-                          <p className="list-row__sub">Загружаем события...</p>
-                        ) : (
-                          <ul className="bank-detail-list">
-                            {events.map((item) => (
-                              <li className="bank-detail-row" key={item.id}>
-                                <div className="bank-detail-row__main">
-                                  <span className="pill">{getEventLabel(item)}</span>
-                                  <strong className="bank-detail-row__amount">
-                                    {item.amount !== null && item.amount !== undefined && item.currency_code
-                                      ? formatAmount(item.amount, item.currency_code)
-                                      : 'Без суммы'}
-                                  </strong>
-                                </div>
-                                <div className="bank-detail-row__sub">
-                                  {formatDateLabel(item.event_at)}
-                                  {item.quantity ? ` · Количество: ${item.quantity}` : ''}
-                                  {item.event_type === 'partial_close' && typeof item.metadata?.principal_amount_in_currency === 'number'
-                                    ? ` · Principal: ${formatAmount(Number(item.metadata.principal_amount_in_currency), position.currency_code)}`
-                                    : ''}
-                                  {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
-                                  {item.comment ? ` · ${item.comment}` : ''}
-                                </div>
-                                {item.event_type === 'income' && (
-                                  <div className="form-row" style={{ paddingTop: 8 }}>
-                                    {cancelledIncomeIds.has(item.id) ? (
-                                      <span className="tag tag--neutral">Уже отменен</span>
-                                    ) : (
-                                      <button
-                                        className="btn"
-                                        type="button"
-                                        disabled={cancellingIncomeEventId === item.id}
-                                        onClick={() => void handleCancelIncome(position.id, item.id)}
-                                      >
-                                        {cancellingIncomeEventId === item.id ? 'Отменяем...' : 'Отменить доход'}
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </div>
-          )}
-
-          {closeError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {closeError}
-            </p>
-          )}
-
-          {incomeError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {incomeError}
-            </p>
-          )}
-
-          {topUpError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {topUpError}
-            </p>
-          )}
-
-          {partialCloseError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {partialCloseError}
-            </p>
-          )}
-
-          {feeError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {feeError}
-            </p>
-          )}
-
-          {deleteError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {deleteError}
-            </p>
-          )}
-
-          {cancelIncomeError && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>
-              {cancelIncomeError}
-            </p>
           )}
         </div>
       </section>
