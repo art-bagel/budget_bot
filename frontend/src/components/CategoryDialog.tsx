@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import EmojiPicker from './EmojiPicker';
 import { parseCategoryIcon, buildCategoryName } from '../utils/categoryIcon';
+import { CategorySvgIcon } from './CategorySvgIcon';
 
 import {
   archiveCategory,
@@ -390,7 +391,11 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
               aria-label="Выбрать иконку"
               title="Выбрать иконку"
             >
-              {iconDraft ?? '＋'}
+              {iconDraft
+                ? /\p{Extended_Pictographic}/u.test(iconDraft)
+                  ? iconDraft
+                  : <CategorySvgIcon code={iconDraft} />
+                : '＋'}
             </button>
             <input
               className="input"

@@ -672,10 +672,16 @@ p { margin: 0; }
   position: absolute;
   top: 8px;
   right: 10px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.05rem;
   line-height: 1;
   pointer-events: none;
   user-select: none;
+  color: var(--text-tertiary);
 }
 
 /* ── Category icon button ─────────────────────────── */
@@ -751,6 +757,15 @@ p { margin: 0; }
 .emoji-picker__item--active {
   background: var(--tag-in-bg);
   border-color: var(--text-accent);
+}
+
+.emoji-picker__item--svg {
+  padding: 7px;
+  color: var(--text-secondary);
+}
+
+.emoji-picker__item--svg:hover {
+  color: var(--text-accent);
 }
 
 .cat-card--dragging {

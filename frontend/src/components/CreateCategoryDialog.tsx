@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createCategory, fetchCategories, fetchMyFamily, replaceGroupMembers } from '../api';
 import EmojiPicker from './EmojiPicker';
 import { buildCategoryName } from '../utils/categoryIcon';
+import { CategorySvgIcon } from './CategorySvgIcon';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { Category } from '../types';
 
@@ -168,7 +169,11 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
               aria-label="Выбрать иконку"
               title="Выбрать иконку"
             >
-              {icon ?? '＋'}
+              {icon
+                ? /\p{Extended_Pictographic}/u.test(icon)
+                  ? icon
+                  : <CategorySvgIcon code={icon} />
+                : '＋'}
             </button>
             <input
               className="input"

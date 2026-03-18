@@ -27,6 +27,7 @@ import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
 import { IconAnalyticsDonut, IconClock, IconPlusCircle } from '../components/Icons';
 import { parseCategoryIcon } from '../utils/categoryIcon';
+import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
 
@@ -824,14 +825,18 @@ export default function Dashboard({ user }: { user: UserContext }) {
                         }}
                       >
                         {(() => {
-                          const { icon, displayName } = parseCategoryIcon(category.name);
+                          const parsed = parseCategoryIcon(category.name);
                           return (
                             <>
-                              {icon && !isValidTarget && (
-                                <span className="cat-card__icon">{icon}</span>
+                              {parsed.icon && !isValidTarget && (
+                                <span className="cat-card__icon">
+                                  {parsed.kind === 'svg'
+                                    ? <CategorySvgIcon code={parsed.icon} />
+                                    : parsed.icon}
+                                </span>
                               )}
                               <span className="cat-card__name">
-                                {isValidTarget ? 'Перевести сюда' : displayName}
+                                {isValidTarget ? 'Перевести сюда' : parsed.displayName}
                               </span>
                               <strong className="cat-card__amount">
                                 {formatAmount(category.balance, category.currency_code)}
