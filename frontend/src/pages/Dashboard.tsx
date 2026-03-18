@@ -26,6 +26,7 @@ import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
 import { IconAnalyticsDonut, IconClock, IconPlusCircle } from '../components/Icons';
+import { parseCategoryIcon } from '../utils/categoryIcon';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
 
@@ -822,15 +823,25 @@ export default function Dashboard({ user }: { user: UserContext }) {
                           });
                         }}
                       >
-                        <span className="cat-card__name">
-                          {isValidTarget ? 'Перевести сюда' : category.name}
-                        </span>
-                        <strong className="cat-card__amount">
-                          {formatAmount(category.balance, category.currency_code)}
-                        </strong>
-                        {!isValidTarget && hintsEnabled && (
-                          <span className="cat-card__hint">← перевод · расход →</span>
-                        )}
+                        {(() => {
+                          const { icon, displayName } = parseCategoryIcon(category.name);
+                          return (
+                            <>
+                              {icon && !isValidTarget && (
+                                <span className="cat-card__icon">{icon}</span>
+                              )}
+                              <span className="cat-card__name">
+                                {isValidTarget ? 'Перевести сюда' : displayName}
+                              </span>
+                              <strong className="cat-card__amount">
+                                {formatAmount(category.balance, category.currency_code)}
+                              </strong>
+                              {!isValidTarget && hintsEnabled && (
+                                <span className="cat-card__hint">← перевод · расход →</span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </li>
                     );
                   })}

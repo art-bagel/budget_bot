@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import EmojiPicker from './EmojiPicker';
+import { parseCategoryIcon, buildCategoryName } from '../utils/categoryIcon';
 
 import {
   archiveCategory,
@@ -106,7 +108,10 @@ interface Props {
 
 export default function CategoryDialog({ category, onClose, onSuccess }: Props) {
   useModalOpen();
-  const [nameDraft, setNameDraft] = useState(category.name);
+  const { icon: initialIcon, displayName: initialDisplayName } = parseCategoryIcon(category.name);
+  const [nameDraft, setNameDraft] = useState(initialDisplayName);
+  const [iconDraft, setIconDraft] = useState<string | null>(initialIcon);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -286,7 +291,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
   );
   const groupRowsChanged = category.kind === 'group' &&
     serializeGroupRows(groupRows) !== initialGroupRowsSnapshot;
-  const hasNameChanged = nameDraft.trim() !== category.name;
+  const hasNameChanged = buildCategoryName(iconDraft, nameDraft) !== category.name;
   const canSaveGroupSettings = category.kind === 'group' &&
     !loadingGroupSettings &&
     validGroupRows.length > 0 &&
@@ -299,6 +304,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
   const handleSubmit = async () => {
     if (!nameDraft.trim()) return;
+    const fullName = buildCategoryName(iconDraft, nameDraft);
 
     if (category.kind === 'group' && groupRowsChanged && !canSaveGroupSettings) {
       setError('Для группы нужна хотя бы одна категория, а сумма долей должна быть ровно 100%.');
@@ -310,7 +316,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
     try {
       if (hasNameChanged) {
-        await updateCategory(category.category_id, nameDraft.trim());
+        await updateCategory(category.category_id, fullName);
       }
 
       if (category.kind === 'group' && groupRowsChanged) {
@@ -377,6 +383,15 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
           </div>
 
           <div className="form-row">
+            <button
+              type="button"
+              className="category-icon-btn"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              aria-label="Выбрать иконку"
+              title="Выбрать иконку"
+            >
+              {iconDraft ?? '＋'}
+            </button>
             <input
               className="input"
               type="text"
@@ -387,6 +402,12 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
               style={{ flex: 1 }}
             />
           </div>
+
+          {showEmojiPicker && (
+            <div className="form-row" style={{ display: 'block', paddingTop: 0 }}>
+              <EmojiPicker selected={iconDraft} onSelect={(e) => { setIconDraft(e); if (e) setShowEmojiPicker(false); }} />
+            </div>
+          )}
 
           {category.kind === 'group' && (
             <>

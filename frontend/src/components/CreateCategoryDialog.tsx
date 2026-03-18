@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { createCategory, fetchCategories, fetchMyFamily, replaceGroupMembers } from '../api';
+import EmojiPicker from './EmojiPicker';
+import { buildCategoryName } from '../utils/categoryIcon';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { Category } from '../types';
 
@@ -31,6 +33,8 @@ interface Props {
 export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props) {
   useModalOpen();
   const [name, setName] = useState('');
+  const [icon, setIcon] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [ownerType, setOwnerType] = useState<'user' | 'family'>('user');
@@ -117,7 +121,7 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
     setError(null);
 
     try {
-      const result = await createCategory(name.trim(), kind, ownerType);
+      const result = await createCategory(buildCategoryName(icon, name), kind, ownerType);
 
       if (kind === 'group' && validGroupRows.length > 0) {
         await replaceGroupMembers(
@@ -157,6 +161,15 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
           </div>
 
           <div className="form-row">
+            <button
+              type="button"
+              className="category-icon-btn"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              aria-label="Выбрать иконку"
+              title="Выбрать иконку"
+            >
+              {icon ?? '＋'}
+            </button>
             <input
               className="input"
               type="text"
@@ -167,6 +180,12 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
               style={{ flex: 1 }}
             />
           </div>
+
+          {showEmojiPicker && (
+            <div className="form-row" style={{ display: 'block', paddingTop: 0 }}>
+              <EmojiPicker selected={icon} onSelect={(e) => { setIcon(e); if (e) setShowEmojiPicker(false); }} />
+            </div>
+          )}
 
           {inFamily && (
             <div className="form-row">
