@@ -1,3 +1,7 @@
+-- Drop old put__create_credit_account overload that had _initial_debt as 5th param (from migration 013).
+-- CREATE OR REPLACE in migration 014 produced a second overload instead of replacing, causing ambiguity.
+DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(bigint, text, text, char(3), numeric, text, numeric, smallint, date, date, text, text, numeric, bigint);
+
 -- Add set__archive_credit_account function.
 -- Archives a credit account only when it has zero remaining debt.
 CREATE OR REPLACE FUNCTION budgeting.set__archive_credit_account(

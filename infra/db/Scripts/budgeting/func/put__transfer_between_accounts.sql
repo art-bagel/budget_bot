@@ -1,10 +1,10 @@
 CREATE OR REPLACE FUNCTION budgeting.put__transfer_between_accounts(
-    _user_id        bigint,
+    _user_id         bigint,
     _from_account_id bigint,
-    _to_account_id  bigint,
-    _currency_code  char(3),
-    _amount         numeric,
-    _comment        text DEFAULT NULL
+    _to_account_id   bigint,
+    _currency_code   char(3),
+    _amount          numeric,
+    _comment         text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -14,10 +14,12 @@ DECLARE
     _from_owner_user_id   bigint;
     _from_owner_family_id bigint;
     _from_account_kind    text;
+    _from_credit_limit    numeric(20, 2);
     _to_owner_type        text;
     _to_owner_user_id     bigint;
     _to_owner_family_id   bigint;
     _to_account_kind      text;
+    _to_credit_kind       text;
     _base_currency_code   char(3);
     _from_unallocated_id  bigint;
     _to_unallocated_id    bigint;
@@ -32,6 +34,8 @@ DECLARE
     _consume_amount       numeric(20, 8);
     _consume_cost         numeric(20, 2);
     _lot                  record;
+    -- True when paying off a credit card: expense already recorded in categories.
+    _is_cc_repayment      boolean;
 BEGIN
     SET search_path TO budgeting;
 
@@ -43,9 +47,8 @@ BEGIN
         RAISE EXCEPTION 'Source and target accounts must be different';
     END IF;
 
-    -- Validate source account and access
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind
-    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit
+    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind, _from_credit_limit
     FROM bank_accounts
     WHERE id = _from_account_id AND is_active;
 
@@ -57,9 +60,8 @@ BEGIN
         RAISE EXCEPTION 'Access denied to source bank account %', _from_account_id;
     END IF;
 
-    -- Validate target account and access
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind
-    INTO _to_owner_type, _to_owner_user_id, _to_owner_family_id, _to_account_kind
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_kind
+    INTO _to_owner_type, _to_owner_user_id, _to_owner_family_id, _to_account_kind, _to_credit_kind
     FROM bank_accounts
     WHERE id = _to_account_id AND is_active;
 
@@ -71,12 +73,15 @@ BEGIN
         RAISE EXCEPTION 'Access denied to target bank account %', _to_account_id;
     END IF;
 
-    -- Get base currency (same for both since family inherits user's base currency)
+    -- cash → credit_card is a repayment: expense already counted in categories.
+    _is_cc_repayment := (_from_account_kind = 'cash' AND _to_credit_kind = 'credit_card');
+
     _base_currency_code := budgeting.get__owner_base_currency(
         _from_owner_type, _from_owner_user_id, _from_owner_family_id
     );
 
-    IF _from_account_kind = 'cash' THEN
+    -- Only need Unallocated for cash source when it's NOT a CC repayment.
+    IF _from_account_kind = 'cash' AND NOT _is_cc_repayment THEN
         _from_unallocated_id := budgeting.get__owner_system_category_id(
             _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
         );
@@ -94,18 +99,21 @@ BEGIN
         END IF;
     END IF;
 
-    -- Check source balance
     SELECT COALESCE((
         SELECT amount FROM current_bank_balances
         WHERE bank_account_id = _from_account_id AND currency_code = _currency_code
     ), 0) INTO _bank_balance;
 
-    -- Credit accounts can go negative (drawing from credit line)
-    IF _bank_balance < _amount AND _from_account_kind <> 'credit' THEN
-        RAISE EXCEPTION 'Сумма превышает остаток';
+    IF _from_account_kind = 'credit' THEN
+        IF _from_credit_limit IS NOT NULL AND (_bank_balance - _amount) < -_from_credit_limit THEN
+            RAISE EXCEPTION 'Credit limit exceeded';
+        END IF;
+    ELSE
+        IF _bank_balance < _amount THEN
+            RAISE EXCEPTION 'Сумма превышает остаток';
+        END IF;
     END IF;
 
-    -- Calculate historical cost in base currency
     IF _currency_code = _base_currency_code THEN
         _cost_base := round(_amount, 2);
     ELSE
@@ -139,25 +147,22 @@ BEGIN
             RAISE EXCEPTION 'Сумма превышает остаток';
         END IF;
 
-        -- For credit accounts in foreign currency, use amount as cost_base (no lots)
         IF _from_account_kind = 'credit' AND _cost_base = 0 THEN
             _cost_base := round(_amount, 2);
         END IF;
     END IF;
 
-    -- Create operation (owned by the acting user)
     INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment)
     VALUES (_user_id, 'user', _user_id, NULL, 'account_transfer', _comment)
     RETURNING id INTO _operation_id;
 
-    -- Two bank entries: debit source, credit target
     INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
     VALUES
         (_operation_id, _from_account_id, _currency_code, -_amount),
         (_operation_id, _to_account_id,   _currency_code,  _amount);
 
-    -- Budget participates only when one of the accounts is a cash account.
-    IF _from_account_kind = 'cash' THEN
+    -- CC repayment: skip budget entry — expense was already recorded against the category.
+    IF _from_account_kind = 'cash' AND NOT _is_cc_repayment THEN
         INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
         VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_cost_base);
     END IF;
@@ -167,12 +172,10 @@ BEGIN
         VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _cost_base);
     END IF;
 
-    -- Update bank balances
     PERFORM budgeting.put__apply_current_bank_delta(_from_account_id, _currency_code, -_amount, -_cost_base);
     PERFORM budgeting.put__apply_current_bank_delta(_to_account_id,   _currency_code,  _amount,  _cost_base);
 
-    -- Update budget balances only for cash-side accounts.
-    IF _from_account_kind = 'cash' THEN
+    IF _from_account_kind = 'cash' AND NOT _is_cc_repayment THEN
         PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_cost_base);
     END IF;
 
@@ -180,9 +183,7 @@ BEGIN
         PERFORM budgeting.put__apply_current_budget_delta(_to_unallocated_id, _base_currency_code, _cost_base);
     END IF;
 
-    -- Handle FX lots for foreign currencies
     IF _currency_code <> _base_currency_code THEN
-        -- Consume lots from source
         IF array_length(_lot_ids, 1) IS NOT NULL THEN
             FOR _lot_idx IN 1..array_length(_lot_ids, 1) LOOP
                 UPDATE fx_lots
@@ -195,7 +196,6 @@ BEGIN
             END LOOP;
         END IF;
 
-        -- Open new lot in target at same historical cost
         INSERT INTO fx_lots (
             bank_account_id, currency_code,
             amount_initial, amount_remaining,
