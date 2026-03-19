@@ -170,8 +170,7 @@ export default function Credits({ user }: { user: UserContext }) {
     }
   };
 
-  const handleCreateCredit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleCreateCredit = async () => {
     if (!newName.trim() || submittingNew) return;
     setSubmittingNew(true);
     setNewError(null);
@@ -267,12 +266,10 @@ export default function Credits({ user }: { user: UserContext }) {
 
       {/* Credit list */}
       <section className="dashboard-section">
-        <div className="section__header-row">
-          <div className="section__header">
-            <div className="section__eyebrow">Счета</div>
-          </div>
+        <div className="section__header">
+          <div className="section__eyebrow">Счета</div>
           <button
-            className="icon-btn icon-btn--accent"
+            className="btn btn--icon btn--primary"
             type="button"
             onClick={() => setShowNewForm(true)}
           >
@@ -354,11 +351,10 @@ export default function Credits({ user }: { user: UserContext }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <div className="section__header">
+              <div>
                 <div className="section__eyebrow">{creditKindLabel(selectedCredit.account.credit_kind)}</div>
                 <div className="section__title">{selectedCredit.account.name}</div>
               </div>
-              <button className="icon-btn" type="button" onClick={handleCloseDetail}>✕</button>
             </div>
             <div className="modal-body">
               <div className="portfolio-position-detail">
@@ -477,6 +473,13 @@ export default function Credits({ user }: { user: UserContext }) {
                 </form>
               </div>
             </div>
+            <div className="modal-actions">
+              <div className="action-pill">
+                <button className="action-pill__cancel" type="button" onClick={handleCloseDetail}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -486,13 +489,10 @@ export default function Credits({ user }: { user: UserContext }) {
         <div className="modal-backdrop" onClick={() => !submittingNew && setShowNewForm(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="section__header">
-                <div className="section__title">Новый кредитный счёт</div>
-              </div>
-              <button className="icon-btn" type="button" onClick={() => setShowNewForm(false)}>✕</button>
+              <div className="section__title">Новый кредитный счёт</div>
             </div>
             <div className="modal-body">
-              <form onSubmit={(e) => void handleCreateCredit(e)}>
+              <form onSubmit={(e) => { e.preventDefault(); void handleCreateCredit(); }}>
                 <div className="form-row">
                   <select
                     className="input"
@@ -563,7 +563,7 @@ export default function Credits({ user }: { user: UserContext }) {
                 </div>
                 {hasTerm(newKind) && (
                   <div className="form-row" style={{ marginTop: 8, gap: 8 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
                       <label className="settings-row__sub" style={{ fontSize: '0.75rem' }}>Дата начала</label>
                       <input
                         className="input"
@@ -571,9 +571,10 @@ export default function Credits({ user }: { user: UserContext }) {
                         value={newStartedAt}
                         onChange={(e) => setNewStartedAt(e.target.value)}
                         disabled={submittingNew}
+                        style={{ width: '100%' }}
                       />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
                       <label className="settings-row__sub" style={{ fontSize: '0.75rem' }}>Дата окончания</label>
                       <input
                         className="input"
@@ -581,6 +582,7 @@ export default function Credits({ user }: { user: UserContext }) {
                         value={newEndsAt}
                         onChange={(e) => setNewEndsAt(e.target.value)}
                         disabled={submittingNew}
+                        style={{ width: '100%' }}
                       />
                     </div>
                   </div>
@@ -599,16 +601,27 @@ export default function Credits({ user }: { user: UserContext }) {
                 {newError && (
                   <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{newError}</p>
                 )}
-                <div className="form-row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-                  <button
-                    className="btn btn--primary"
-                    type="submit"
-                    disabled={submittingNew || !newName.trim()}
-                  >
-                    {submittingNew ? 'Создаём...' : 'Создать'}
-                  </button>
-                </div>
               </form>
+            </div>
+            <div className="modal-actions">
+              <div className="action-pill">
+                <button
+                  className="action-pill__cancel"
+                  type="button"
+                  disabled={submittingNew}
+                  onClick={() => setShowNewForm(false)}
+                >
+                  Отмена
+                </button>
+                <button
+                  className="action-pill__confirm"
+                  type="button"
+                  disabled={submittingNew || !newName.trim()}
+                  onClick={() => void handleCreateCredit()}
+                >
+                  {submittingNew ? 'Создаём...' : 'Создать'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

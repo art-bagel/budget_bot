@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -97,8 +98,8 @@ async def create_credit_account(
         owner_type=body.owner_type,
         interest_rate=body.interest_rate,
         payment_day=body.payment_day,
-        credit_started_at=body.credit_started_at,
-        credit_ends_at=body.credit_ends_at,
+        credit_started_at=date.fromisoformat(body.credit_started_at) if body.credit_started_at else None,
+        credit_ends_at=date.fromisoformat(body.credit_ends_at) if body.credit_ends_at else None,
         provider_name=body.provider_name,
     )
     return BankAccountItem(**result)
