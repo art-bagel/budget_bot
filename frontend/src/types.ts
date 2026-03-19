@@ -293,14 +293,13 @@ export interface CreateCreditAccountRequest {
   name: string;
   credit_kind: 'loan' | 'credit_card' | 'mortgage';
   currency_code: string;
-  initial_debt?: number;
+  credit_limit: number;
   target_account_id?: number;
   owner_type?: 'user' | 'family';
   interest_rate?: number;
   payment_day?: number;
   credit_started_at?: string;
   credit_ends_at?: string;
-  credit_limit?: number;
   provider_name?: string;
 }
 

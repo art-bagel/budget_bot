@@ -28,6 +28,7 @@ class Context(DataBase):
     F_SET__UPDATE_USER_SETTINGS = 'set__update_user_settings'
     F_SET__LEAVE_FAMILY = 'set__leave_family'
     F_SET__DISSOLVE_FAMILY = 'set__dissolve_family'
+    F_SET__ARCHIVE_CREDIT_ACCOUNT = 'set__archive_credit_account'
 
     async def put__register_user_context(
         self,
@@ -87,7 +88,8 @@ class Context(DataBase):
         name: str,
         credit_kind: str,
         currency_code: str,
-        initial_debt: float = 0,
+        credit_limit: float,
+        target_account_id: Optional[int] = None,
         owner_type: str = 'user',
         interest_rate: Optional[float] = None,
         payment_day: Optional[int] = None,
@@ -95,8 +97,6 @@ class Context(DataBase):
         credit_ends_at=None,
         provider_name: Optional[str] = None,
         provider_account_ref: Optional[str] = None,
-        credit_limit: Optional[float] = None,
-        target_account_id: Optional[int] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_CREDIT_ACCOUNT),
@@ -104,7 +104,8 @@ class Context(DataBase):
             name,
             credit_kind,
             currency_code,
-            initial_debt,
+            credit_limit,
+            target_account_id,
             owner_type,
             interest_rate,
             payment_day,
@@ -112,8 +113,13 @@ class Context(DataBase):
             credit_ends_at,
             provider_name,
             provider_account_ref,
-            credit_limit,
-            target_account_id,
+        )
+
+    async def set__archive_credit_account(self, user_id: int, bank_account_id: int) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__ARCHIVE_CREDIT_ACCOUNT),
+            user_id,
+            bank_account_id,
         )
 
     async def put__invite_family_member(self, user_id: int, username: str) -> dict:

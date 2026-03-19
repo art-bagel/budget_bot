@@ -67,6 +67,10 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Недостаточно денег';
   }
 
+  if (text.includes('Credit limit exceeded') || text.includes('Превышен кредитный лимит')) {
+    return 'Превышен кредитный лимит';
+  }
+
   if (text.includes('Insufficient budget in category')) {
     return 'Недостаточно бюджета в категории';
   }
@@ -382,6 +386,10 @@ export async function createCreditAccount(data: CreateCreditAccountRequest): Pro
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function archiveCreditAccount(bankAccountId: number): Promise<{ bank_account_id: number; name: string; is_active: boolean }> {
+  return apiFetch(`/bank-accounts/credit/${bankAccountId}/archive`, { method: 'POST' });
 }
 
 export async function fetchBankAccountSnapshot(bankAccountId: number): Promise<DashboardBankBalance[]> {

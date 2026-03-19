@@ -51,14 +51,13 @@ class CreateCreditAccountRequest(BaseModel):
     name: str
     credit_kind: Literal['loan', 'credit_card', 'mortgage']
     currency_code: str
-    initial_debt: Optional[float] = None
+    credit_limit: float
     target_account_id: Optional[int] = None
     owner_type: Literal['user', 'family'] = 'user'
     interest_rate: Optional[float] = None
     payment_day: Optional[int] = None
     credit_started_at: Optional[str] = None
     credit_ends_at: Optional[str] = None
-    credit_limit: Optional[float] = None
     provider_name: Optional[str] = None
 
 
@@ -97,17 +96,27 @@ async def create_credit_account(
         name=body.name,
         credit_kind=body.credit_kind,
         currency_code=body.currency_code,
-        initial_debt=body.initial_debt or 0,
+        credit_limit=body.credit_limit,
+        target_account_id=body.target_account_id,
         owner_type=body.owner_type,
         interest_rate=body.interest_rate,
         payment_day=body.payment_day,
         credit_started_at=date.fromisoformat(body.credit_started_at) if body.credit_started_at else None,
         credit_ends_at=date.fromisoformat(body.credit_ends_at) if body.credit_ends_at else None,
-        credit_limit=body.credit_limit,
-        target_account_id=body.target_account_id,
         provider_name=body.provider_name,
     )
     return BankAccountItem(**result)
+
+
+@router.post('/credit/{bank_account_id}/archive')
+async def archive_credit_account(
+    bank_account_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> dict:
+    return await context.set__archive_credit_account(
+        user_id=user.user_id,
+        bank_account_id=bank_account_id,
+    )
 
 
 @router.get('/{bank_account_id}/snapshot', response_model=List[BankAccountBalanceItem])

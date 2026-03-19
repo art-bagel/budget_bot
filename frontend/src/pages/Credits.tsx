@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  archiveCreditAccount,
   createCreditAccount,
   fetchBankAccountSnapshot,
   fetchBankAccounts,
@@ -71,13 +72,14 @@ export default function Credits({ user }: { user: UserContext }) {
   const [repayDrafts, setRepayDrafts] = useState<Record<number, RepayDraft>>({});
   const [submittingRepayId, setSubmittingRepayId] = useState<number | null>(null);
   const [repayError, setRepayError] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   // New credit form
   const [showNewForm, setShowNewForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newKind, setNewKind] = useState<CreditKind>('loan');
   const [newCurrency, setNewCurrency] = useState(user.base_currency_code);
-  const [newInitialDebt, setNewInitialDebt] = useState('');
   const [newOwnerType, setNewOwnerType] = useState<'user' | 'family'>('user');
   const [newInterestRate, setNewInterestRate] = useState('');
   const [newPaymentDay, setNewPaymentDay] = useState('');
@@ -125,6 +127,7 @@ export default function Credits({ user }: { user: UserContext }) {
 
   const handleOpenDetail = (id: number) => {
     setRepayError(null);
+    setArchiveError(null);
     setSelectedId(id);
     setRepayDrafts((prev) => {
       if (prev[id]) return prev;
@@ -139,7 +142,25 @@ export default function Credits({ user }: { user: UserContext }) {
     });
   };
 
-  const handleCloseDetail = () => setSelectedId(null);
+  const handleCloseDetail = () => {
+    setSelectedId(null);
+    setArchiveError(null);
+  };
+
+  const handleArchive = async (creditId: number) => {
+    if (archiving) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      await archiveCreditAccount(creditId);
+      setSelectedId(null);
+      await load();
+    } catch (err) {
+      setArchiveError(err instanceof Error ? err.message : 'Ошибка архивирования');
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const handleRepay = async (e: FormEvent, creditId: number) => {
     e.preventDefault();
@@ -178,21 +199,19 @@ export default function Credits({ user }: { user: UserContext }) {
         name: newName.trim(),
         credit_kind: newKind,
         currency_code: newCurrency,
-        initial_debt: newInitialDebt.trim() ? Number(newInitialDebt) : undefined,
+        credit_limit: Number(newCreditLimit),
         target_account_id: newTargetAccountId ? Number(newTargetAccountId) : undefined,
         owner_type: newOwnerType,
         interest_rate: newInterestRate.trim() ? Number(newInterestRate) : undefined,
         payment_day: newPaymentDay.trim() ? Number(newPaymentDay) : undefined,
         credit_started_at: newStartedAt.trim() || undefined,
         credit_ends_at: newEndsAt.trim() || undefined,
-        credit_limit: newCreditLimit.trim() ? Number(newCreditLimit) : undefined,
         provider_name: newProvider.trim() || undefined,
       });
       setShowNewForm(false);
       setNewName('');
       setNewKind('loan');
       setNewCurrency(user.base_currency_code);
-      setNewInitialDebt('');
       setNewInterestRate('');
       setNewPaymentDay('');
       setNewStartedAt('');
@@ -486,10 +505,23 @@ export default function Credits({ user }: { user: UserContext }) {
               </div>
             </div>
             <div className="modal-actions">
+              {archiveError && (
+                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', margin: '0 0 8px' }}>{archiveError}</p>
+              )}
               <div className="action-pill">
                 <button className="action-pill__cancel" type="button" onClick={handleCloseDetail}>
                   Закрыть
                 </button>
+                {getCreditDebt(selectedCredit) === 0 && (
+                  <button
+                    className="action-pill__cancel"
+                    type="button"
+                    disabled={archiving}
+                    onClick={() => void handleArchive(selectedCredit.account.id)}
+                  >
+                    {archiving ? 'Архивируем...' : 'В архив'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -534,9 +566,9 @@ export default function Credits({ user }: { user: UserContext }) {
                     className="input"
                     type="text"
                     inputMode="decimal"
-                    placeholder="Сумма долга"
-                    value={newInitialDebt}
-                    onChange={(e) => setNewInitialDebt(e.target.value)}
+                    placeholder="Кредитный лимит"
+                    value={newCreditLimit}
+                    onChange={(e) => setNewCreditLimit(e.target.value)}
                     disabled={submittingNew}
                     style={{ width: 160 }}
                   />
@@ -573,20 +605,6 @@ export default function Credits({ user }: { user: UserContext }) {
                     style={{ width: 160 }}
                   />
                 </div>
-                {newKind === 'credit_card' && (
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Кредитный лимит"
-                      value={newCreditLimit}
-                      onChange={(e) => setNewCreditLimit(e.target.value)}
-                      disabled={submittingNew}
-                      style={{ flex: '1 1 200px' }}
-                    />
-                  </div>
-                )}
                 {hasTerm(newKind) && (
                   <div className="form-row" style={{ marginTop: 8 }}>
                     <select
@@ -596,7 +614,7 @@ export default function Credits({ user }: { user: UserContext }) {
                       disabled={submittingNew}
                       style={{ flex: 1 }}
                     >
-                      <option value="">Не зачислять на счёт</option>
+                      <option value="">Выберите счёт зачисления</option>
                       {cashAccounts.map((a) => (
                         <option key={a.id} value={a.id}>{a.name}</option>
                       ))}
@@ -658,7 +676,7 @@ export default function Credits({ user }: { user: UserContext }) {
                 <button
                   className="action-pill__confirm"
                   type="button"
-                  disabled={submittingNew || !newName.trim()}
+                  disabled={submittingNew || !newName.trim() || !newCreditLimit.trim() || (hasTerm(newKind) && !newTargetAccountId)}
                   onClick={() => void handleCreateCredit()}
                 >
                   {submittingNew ? 'Создаём...' : 'Создать'}

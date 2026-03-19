@@ -3,16 +3,15 @@ CREATE OR REPLACE FUNCTION budgeting.put__create_credit_account(
     _name                 text,
     _credit_kind          text,
     _currency_code        char(3),
-    _initial_debt         numeric DEFAULT 0,
+    _credit_limit         numeric,
+    _target_account_id    bigint DEFAULT NULL,
     _owner_type           text DEFAULT 'user',
     _interest_rate        numeric DEFAULT NULL,
     _payment_day          smallint DEFAULT NULL,
     _credit_started_at    date DEFAULT NULL,
     _credit_ends_at       date DEFAULT NULL,
     _provider_name        text DEFAULT NULL,
-    _provider_account_ref text DEFAULT NULL,
-    _credit_limit         numeric DEFAULT NULL,
-    _target_account_id    bigint DEFAULT NULL
+    _provider_account_ref text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -33,8 +32,12 @@ BEGIN
         RAISE EXCEPTION 'Unsupported credit kind: %. Use loan, credit_card, or mortgage', _credit_kind;
     END IF;
 
-    IF _initial_debt < 0 THEN
-        RAISE EXCEPTION 'Initial debt cannot be negative';
+    IF _credit_limit IS NULL OR _credit_limit <= 0 THEN
+        RAISE EXCEPTION 'Credit limit must be positive';
+    END IF;
+
+    IF _credit_kind IN ('loan', 'mortgage') AND _target_account_id IS NULL THEN
+        RAISE EXCEPTION 'Target account is required for loan and mortgage';
     END IF;
 
     IF _payment_day IS NOT NULL AND (_payment_day < 1 OR _payment_day > 31) THEN
@@ -58,14 +61,10 @@ BEGIN
     END IF;
 
     IF EXISTS (
-        SELECT 1
-        FROM bank_accounts ba
+        SELECT 1 FROM bank_accounts ba
         WHERE ba.owner_type = _owner_type
-          AND (
-                (_owner_type = 'user'   AND ba.owner_user_id   = _owner_user_id)
-                OR
-                (_owner_type = 'family' AND ba.owner_family_id = _owner_family_id)
-              )
+          AND ((_owner_type = 'user'   AND ba.owner_user_id   = _owner_user_id)
+               OR (_owner_type = 'family' AND ba.owner_family_id = _owner_family_id))
           AND ba.name = _normalized_name
           AND ba.is_active
     ) THEN
@@ -89,15 +88,14 @@ BEGIN
     )
     RETURNING id INTO _account_id;
 
-    -- For loans/mortgages: disburse money to a target cash account.
-    -- This creates the debt (credit account goes negative) and funds the cash account.
-    IF _target_account_id IS NOT NULL AND _initial_debt > 0 THEN
+    -- For loans/mortgages: immediately disburse the full limit to the target cash account.
+    IF _credit_kind IN ('loan', 'mortgage') THEN
         PERFORM budgeting.put__transfer_between_accounts(
             _user_id,
             _account_id,
             _target_account_id,
             _currency_code,
-            _initial_debt,
+            _credit_limit,
             'Выдача кредита · ' || _normalized_name
         );
     END IF;

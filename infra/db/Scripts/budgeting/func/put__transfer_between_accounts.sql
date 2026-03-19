@@ -135,8 +135,13 @@ BEGIN
             _remaining   := _remaining - _consume_amount;
         END LOOP;
 
-        IF _remaining > 0 THEN
+        IF _remaining > 0 AND _from_account_kind <> 'credit' THEN
             RAISE EXCEPTION 'Сумма превышает остаток';
+        END IF;
+
+        -- For credit accounts in foreign currency, use amount as cost_base (no lots)
+        IF _from_account_kind = 'credit' AND _cost_base = 0 THEN
+            _cost_base := round(_amount, 2);
         END IF;
     END IF;
 
