@@ -9,6 +9,7 @@ class Context(DataBase):
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_FAMILY = 'put__create_family'
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
+    F_PUT__CREATE_CREDIT_ACCOUNT = 'put__create_credit_account'
     F_PUT__CREATE_PORTFOLIO_POSITION = 'put__create_portfolio_position'
     F_PUT__TOP_UP_PORTFOLIO_POSITION = 'put__top_up_portfolio_position'
     F_PUT__PARTIAL_CLOSE_PORTFOLIO_POSITION = 'put__partial_close_portfolio_position'
@@ -76,6 +77,37 @@ class Context(DataBase):
             name,
             owner_type,
             account_kind,
+            provider_name,
+            provider_account_ref,
+        )
+
+    async def put__create_credit_account(
+        self,
+        user_id: int,
+        name: str,
+        credit_kind: str,
+        currency_code: str,
+        initial_debt: float = 0,
+        owner_type: str = 'user',
+        interest_rate: Optional[float] = None,
+        payment_day: Optional[int] = None,
+        credit_started_at: Optional[str] = None,
+        credit_ends_at: Optional[str] = None,
+        provider_name: Optional[str] = None,
+        provider_account_ref: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_CREDIT_ACCOUNT),
+            user_id,
+            name,
+            credit_kind,
+            currency_code,
+            initial_debt,
+            owner_type,
+            interest_rate,
+            payment_day,
+            credit_started_at,
+            credit_ends_at,
             provider_name,
             provider_account_ref,
         )

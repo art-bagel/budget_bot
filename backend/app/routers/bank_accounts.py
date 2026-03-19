@@ -17,7 +17,12 @@ class BankAccountItem(BaseModel):
     owner_user_id: Optional[int] = None
     owner_family_id: Optional[int] = None
     owner_name: str
-    account_kind: Literal['cash', 'investment']
+    account_kind: Literal['cash', 'investment', 'credit']
+    credit_kind: Optional[Literal['loan', 'credit_card', 'mortgage']] = None
+    interest_rate: Optional[float] = None
+    payment_day: Optional[int] = None
+    credit_started_at: Optional[str] = None
+    credit_ends_at: Optional[str] = None
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
     is_primary: bool
@@ -40,11 +45,24 @@ class CreateBankAccountRequest(BaseModel):
     provider_account_ref: Optional[str] = None
 
 
+class CreateCreditAccountRequest(BaseModel):
+    name: str
+    credit_kind: Literal['loan', 'credit_card', 'mortgage']
+    currency_code: str
+    initial_debt: Optional[float] = None
+    owner_type: Literal['user', 'family'] = 'user'
+    interest_rate: Optional[float] = None
+    payment_day: Optional[int] = None
+    credit_started_at: Optional[str] = None
+    credit_ends_at: Optional[str] = None
+    provider_name: Optional[str] = None
+
+
 @router.get('', response_model=List[BankAccountItem])
 async def get_bank_accounts(
     user: TelegramUser = Depends(get_telegram_user),
     is_active: Optional[bool] = Query(True),
-    account_kind: Optional[Literal['cash', 'investment']] = Query('cash'),
+    account_kind: Optional[Literal['cash', 'investment', 'credit']] = Query('cash'),
 ) -> list:
     return await reports.get__bank_accounts(user.user_id, is_active, account_kind)
 
@@ -61,6 +79,27 @@ async def create_bank_account(
         account_kind=body.account_kind,
         provider_name=body.provider_name,
         provider_account_ref=body.provider_account_ref,
+    )
+    return BankAccountItem(**result)
+
+
+@router.post('/credit', response_model=BankAccountItem)
+async def create_credit_account(
+    body: CreateCreditAccountRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> BankAccountItem:
+    result = await context.put__create_credit_account(
+        user_id=user.user_id,
+        name=body.name,
+        credit_kind=body.credit_kind,
+        currency_code=body.currency_code,
+        initial_debt=body.initial_debt or 0,
+        owner_type=body.owner_type,
+        interest_rate=body.interest_rate,
+        payment_day=body.payment_day,
+        credit_started_at=body.credit_started_at,
+        credit_ends_at=body.credit_ends_at,
+        provider_name=body.provider_name,
     )
     return BankAccountItem(**result)
 
