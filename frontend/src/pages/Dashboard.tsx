@@ -41,6 +41,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
+  const [totalCreditDebtInBase, setTotalCreditDebtInBase] = useState(0);
   const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
@@ -285,18 +286,24 @@ export default function Dashboard({ user }: { user: UserContext }) {
     setError(null);
 
     try {
-      const [result, loadedInvestmentAccounts, loadedPortfolioSummary, loadedPositions] = await Promise.all([
+      const [result, loadedInvestmentAccounts, loadedCreditAccounts, loadedPortfolioSummary, loadedPositions] = await Promise.all([
         fetchDashboardOverview(user.bank_account_id),
         fetchBankAccounts('investment'),
+        fetchBankAccounts('credit'),
         fetchPortfolioSummary(),
         fetchPortfolioPositions(),
       ]);
-      const investmentSnapshots = await Promise.all(
-        loadedInvestmentAccounts.map(async (account) => ({
-          accountId: account.id,
-          balances: await fetchBankAccountSnapshot(account.id),
-        })),
-      );
+      const [investmentSnapshots, creditSnapshots] = await Promise.all([
+        Promise.all(
+          loadedInvestmentAccounts.map(async (account) => ({
+            accountId: account.id,
+            balances: await fetchBankAccountSnapshot(account.id),
+          })),
+        ),
+        Promise.all(
+          loadedCreditAccounts.map((account) => fetchBankAccountSnapshot(account.id)),
+        ),
+      ]);
       setOverview(result);
       setInvestmentAccounts(loadedInvestmentAccounts);
       setPortfolioSummaryItems(loadedPortfolioSummary);
@@ -307,6 +314,10 @@ export default function Dashboard({ user }: { user: UserContext }) {
           return acc;
         }, {}),
       );
+      const creditDebt = creditSnapshots
+        .flat()
+        .reduce((sum, b) => sum + b.historical_cost_in_base, 0);
+      setTotalCreditDebtInBase(creditDebt);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -503,7 +514,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
     (sum, account) => sum + getInvestmentAccountMarketTotal(account.id),
     0,
   );
-  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal;
+  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal - totalCreditDebtInBase;
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
@@ -639,6 +650,14 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <span>Инвестиции</span>
                 <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
               </div>
+              {totalCreditDebtInBase > 0 && (
+                <div className="hero-card__breakdown-row">
+                  <span>Кредиты</span>
+                  <strong style={{ color: 'var(--tag-out-fg)' }}>
+                    −{formatAmount(totalCreditDebtInBase, overview.base_currency_code)}
+                  </strong>
+                </div>
+              )}
             </div>
             {hintsEnabled && (
               <span className="hero-card__sub">← свайп для перевода между счетами</span>
@@ -655,6 +674,14 @@ export default function Dashboard({ user }: { user: UserContext }) {
                 <span>Инвестиции</span>
                 <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
               </div>
+              {totalCreditDebtInBase > 0 && (
+                <div className="hero-card__breakdown-row">
+                  <span>Кредиты</span>
+                  <strong style={{ color: 'var(--tag-out-fg)' }}>
+                    −{formatAmount(totalCreditDebtInBase, overview.base_currency_code)}
+                  </strong>
+                </div>
+              )}
             </div>
           </>
         )}

@@ -35,6 +35,7 @@ import type {
   RecordIncomeSplitRequest,
   RecordIncomeSplitResponse,
   CreateBankAccountRequest,
+  CreateCreditAccountRequest,
   DashboardBankBalance,
   PortfolioPosition,
   PortfolioEvent,
@@ -364,13 +365,20 @@ export async function createScheduledExpense(
 }
 
 export async function fetchBankAccounts(
-  accountKind: 'cash' | 'investment' = 'cash',
+  accountKind: 'cash' | 'investment' | 'credit' = 'cash',
 ): Promise<BankAccount[]> {
   return apiFetch<BankAccount[]>(`/bank-accounts?account_kind=${accountKind}`);
 }
 
 export async function createBankAccount(data: CreateBankAccountRequest): Promise<BankAccount> {
   return apiFetch<BankAccount>('/bank-accounts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createCreditAccount(data: CreateCreditAccountRequest): Promise<BankAccount> {
+  return apiFetch<BankAccount>('/bank-accounts/credit', {
     method: 'POST',
     body: JSON.stringify(data),
   });

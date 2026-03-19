@@ -100,7 +100,8 @@ BEGIN
         WHERE bank_account_id = _from_account_id AND currency_code = _currency_code
     ), 0) INTO _bank_balance;
 
-    IF _bank_balance < _amount THEN
+    -- Credit accounts can go negative (drawing from credit line)
+    IF _bank_balance < _amount AND _from_account_kind <> 'credit' THEN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 

@@ -26,7 +26,7 @@ ALTER TABLE budgeting.operations
 
 ALTER TABLE budgeting.operations
     ADD CONSTRAINT chk_operations_type
-    CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal'));
+    CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal', 'credit_taken'));
 
 CREATE INDEX IF NOT EXISTS idx_operations_actor_created_at_id
     ON budgeting.operations (actor_user_id, created_at DESC, id DESC);

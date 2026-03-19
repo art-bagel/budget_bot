@@ -16,7 +16,7 @@ BEGIN
     _family_id := budgeting.get__user_family_id(_user_id);
 
     IF _normalized_account_kind IS NOT NULL
-       AND _normalized_account_kind NOT IN ('cash', 'investment') THEN
+       AND _normalized_account_kind NOT IN ('cash', 'investment', 'credit') THEN
         RAISE EXCEPTION 'Unsupported bank account kind filter: %', _normalized_account_kind;
     END IF;
 
@@ -33,6 +33,11 @@ BEGIN
                     ELSE f.name
                 END,
                 'account_kind', ba.account_kind,
+                'credit_kind', ba.credit_kind,
+                'interest_rate', ba.interest_rate,
+                'payment_day', ba.payment_day,
+                'credit_started_at', ba.credit_started_at,
+                'credit_ends_at', ba.credit_ends_at,
                 'provider_name', ba.provider_name,
                 'provider_account_ref', ba.provider_account_ref,
                 'is_primary', ba.is_primary,

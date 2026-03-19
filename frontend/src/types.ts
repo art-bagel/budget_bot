@@ -163,7 +163,7 @@ export interface OperationHistoryBankEntry {
   bank_account_id: number;
   bank_account_name?: string | null;
   bank_account_owner_type?: string | null;
-  bank_account_kind?: 'cash' | 'investment' | null;
+  bank_account_kind?: 'cash' | 'investment' | 'credit' | null;
   currency_code: string;
   amount: number;
 }
@@ -267,7 +267,12 @@ export interface BankAccount {
   owner_user_id?: number | null;
   owner_family_id?: number | null;
   owner_name: string;
-  account_kind: 'cash' | 'investment';
+  account_kind: 'cash' | 'investment' | 'credit';
+  credit_kind?: 'loan' | 'credit_card' | 'mortgage' | null;
+  interest_rate?: number | null;
+  payment_day?: number | null;
+  credit_started_at?: string | null;
+  credit_ends_at?: string | null;
   provider_name?: string | null;
   provider_account_ref?: string | null;
   is_primary: boolean;
@@ -281,6 +286,24 @@ export interface CreateBankAccountRequest {
   account_kind?: 'cash' | 'investment';
   provider_name?: string;
   provider_account_ref?: string;
+}
+
+export interface CreateCreditAccountRequest {
+  name: string;
+  credit_kind: 'loan' | 'credit_card' | 'mortgage';
+  currency_code: string;
+  initial_debt?: number;
+  owner_type?: 'user' | 'family';
+  interest_rate?: number;
+  payment_day?: number;
+  credit_started_at?: string;
+  credit_ends_at?: string;
+  provider_name?: string;
+}
+
+export interface CreditAccountWithBalances {
+  account: BankAccount;
+  balances: DashboardBankBalance[];
 }
 
 export interface CreateBankAccountResponse extends BankAccount {}

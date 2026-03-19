@@ -68,6 +68,10 @@ export function IconMonitor() {
   return <svg viewBox="0 0 24 24" {...s}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>;
 }
 
+export function IconCredit() {
+  return <svg viewBox="0 0 24 24" {...s}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>;
+}
+
 export function IconFamily() {
   return <svg viewBox="0 0 24 24" {...s}><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a5 5 0 015-5h2"/><circle cx="17" cy="10" r="2.5"/><path d="M13 21v-1.5a3.5 3.5 0 017 0V21"/></svg>;
 }

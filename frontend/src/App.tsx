@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import Credits from './pages/Credits';
 import Dashboard from './pages/Dashboard';
 import Exchange from './pages/Exchange';
 import Portfolio from './pages/Portfolio';
@@ -9,13 +10,13 @@ import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 import { bindTelegramBackButton } from './telegram';
 
-const PAGE_IDS: Page[] = ['dashboard', 'exchange', 'portfolio', 'settings'];
+const PAGE_IDS: Page[] = ['dashboard', 'exchange', 'portfolio', 'credits', 'settings'];
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard');
   const [visited, setVisited] = useState<Set<Page>>(new Set(['dashboard']));
   const [refreshKeys, setRefreshKeys] = useState<Record<Page, number>>({
-    dashboard: 0, exchange: 0, portfolio: 0, settings: 0,
+    dashboard: 0, exchange: 0, portfolio: 0, credits: 0, settings: 0,
   });
   const [familyBadge, setFamilyBadge] = useState(0);
   const { user, loading, error } = useAuth();
@@ -64,6 +65,7 @@ export default function App() {
             {id === 'dashboard' && <Dashboard user={user} />}
             {id === 'exchange' && <Exchange user={user} />}
             {id === 'portfolio' && <Portfolio user={user} />}
+            {id === 'credits' && <Credits user={user} />}
             {id === 'settings' && <Settings user={user} onFamilyBadgeUpdate={setFamilyBadge} />}
           </ErrorBoundary>
         </div>
