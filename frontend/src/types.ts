@@ -273,6 +273,7 @@ export interface BankAccount {
   payment_day?: number | null;
   credit_started_at?: string | null;
   credit_ends_at?: string | null;
+  credit_limit?: number | null;
   provider_name?: string | null;
   provider_account_ref?: string | null;
   is_primary: boolean;
@@ -293,11 +294,13 @@ export interface CreateCreditAccountRequest {
   credit_kind: 'loan' | 'credit_card' | 'mortgage';
   currency_code: string;
   initial_debt?: number;
+  target_account_id?: number;
   owner_type?: 'user' | 'family';
   interest_rate?: number;
   payment_day?: number;
   credit_started_at?: string;
   credit_ends_at?: string;
+  credit_limit?: number;
   provider_name?: string;
 }
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { fetchCurrencies, recordExpense } from '../api';
+import { fetchBankAccounts, fetchCurrencies, recordExpense } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
-import type { Currency, DashboardBudgetCategory, UserContext } from '../types';
+import type { BankAccount, Currency, DashboardBudgetCategory, UserContext } from '../types';
 import { formatAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 
@@ -19,24 +19,39 @@ interface Props {
 export default function ExpenseDialog({ category, user, familyBankAccountId = null, onClose, onSuccess }: Props) {
   useModalOpen();
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
   const [comment, setComment] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const effectiveBankAccountId = category.owner_type === 'family'
+  const defaultCashAccountId = category.owner_type === 'family'
     ? familyBankAccountId
     : user.bank_account_id;
-  const effectiveBankAccountLabel = category.owner_type === 'family'
-    ? 'Семейный счет'
-    : 'Личный счет';
 
   useEffect(() => {
-    fetchCurrencies().then(setCurrencies).catch(() => {});
-  }, []);
+    setSelectedAccountId(defaultCashAccountId);
+  }, [defaultCashAccountId]);
 
-  const canSubmit = !submitting && parseFloat(amount) > 0 && effectiveBankAccountId !== null;
+  useEffect(() => {
+    Promise.all([
+      fetchCurrencies(),
+      fetchBankAccounts('cash'),
+      fetchBankAccounts('credit'),
+    ]).then(([loadedCurrencies, cashAccounts, creditAccounts]) => {
+      setCurrencies(loadedCurrencies);
+      const ownerAccounts = [...cashAccounts, ...creditAccounts].filter((a) =>
+        category.owner_type === 'family'
+          ? a.owner_type === 'family'
+          : a.owner_type === 'user',
+      );
+      setBankAccounts(ownerAccounts);
+    }).catch(() => {});
+  }, [category.owner_type]);
+
+  const canSubmit = !submitting && parseFloat(amount) > 0 && selectedAccountId !== null;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -46,7 +61,7 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
 
     try {
       await recordExpense({
-        bank_account_id: effectiveBankAccountId,
+        bank_account_id: selectedAccountId,
         category_id: category.category_id,
         amount: parseFloat(amount),
         currency_code: currencyCode,
@@ -82,10 +97,22 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
           </div>
 
           <div className="form-row">
-            <div className="input input--read-only">
-              Счет: {effectiveBankAccountLabel}
-              {effectiveBankAccountId !== null ? ` #${effectiveBankAccountId}` : ' не найден'}
-            </div>
+            <select
+              className="input"
+              value={selectedAccountId ?? ''}
+              onChange={(e) => setSelectedAccountId(Number(e.target.value))}
+              disabled={submitting}
+              style={{ flex: 1 }}
+            >
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}{a.account_kind === 'credit' ? ' · Кредитная карта' : ''}
+                </option>
+              ))}
+              {bankAccounts.length === 0 && (
+                <option value="">Счёт не найден</option>
+              )}
+            </select>
           </div>
 
           <div className="form-row">
@@ -127,7 +154,7 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
             </p>
           )}
 
-          {effectiveBankAccountId === null && (
+          {selectedAccountId === null && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
               Для этой категории не найден подходящий счет.
             </p>

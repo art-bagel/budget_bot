@@ -24,6 +24,7 @@ class BankAccountItem(BaseModel):
     payment_day: Optional[int] = None
     credit_started_at: Optional[str] = None
     credit_ends_at: Optional[str] = None
+    credit_limit: Optional[float] = None
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
     is_primary: bool
@@ -51,11 +52,13 @@ class CreateCreditAccountRequest(BaseModel):
     credit_kind: Literal['loan', 'credit_card', 'mortgage']
     currency_code: str
     initial_debt: Optional[float] = None
+    target_account_id: Optional[int] = None
     owner_type: Literal['user', 'family'] = 'user'
     interest_rate: Optional[float] = None
     payment_day: Optional[int] = None
     credit_started_at: Optional[str] = None
     credit_ends_at: Optional[str] = None
+    credit_limit: Optional[float] = None
     provider_name: Optional[str] = None
 
 
@@ -100,6 +103,8 @@ async def create_credit_account(
         payment_day=body.payment_day,
         credit_started_at=date.fromisoformat(body.credit_started_at) if body.credit_started_at else None,
         credit_ends_at=date.fromisoformat(body.credit_ends_at) if body.credit_ends_at else None,
+        credit_limit=body.credit_limit,
+        target_account_id=body.target_account_id,
         provider_name=body.provider_name,
     )
     return BankAccountItem(**result)

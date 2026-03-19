@@ -91,10 +91,12 @@ class Context(DataBase):
         owner_type: str = 'user',
         interest_rate: Optional[float] = None,
         payment_day: Optional[int] = None,
-        credit_started_at: Optional[str] = None,
-        credit_ends_at: Optional[str] = None,
+        credit_started_at=None,
+        credit_ends_at=None,
         provider_name: Optional[str] = None,
         provider_account_ref: Optional[str] = None,
+        credit_limit: Optional[float] = None,
+        target_account_id: Optional[int] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_CREDIT_ACCOUNT),
@@ -110,6 +112,8 @@ class Context(DataBase):
             credit_ends_at,
             provider_name,
             provider_account_ref,
+            credit_limit,
+            target_account_id,
         )
 
     async def put__invite_family_member(self, user_id: int, username: str) -> dict:

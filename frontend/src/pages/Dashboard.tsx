@@ -314,10 +314,11 @@ export default function Dashboard({ user }: { user: UserContext }) {
           return acc;
         }, {}),
       );
-      const creditDebt = creditSnapshots
+      // Credit balances are negative (debt = negative balance), so negate the sum
+      const creditDebt = -creditSnapshots
         .flat()
         .reduce((sum, b) => sum + b.historical_cost_in_base, 0);
-      setTotalCreditDebtInBase(creditDebt);
+      setTotalCreditDebtInBase(Math.max(0, creditDebt));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {

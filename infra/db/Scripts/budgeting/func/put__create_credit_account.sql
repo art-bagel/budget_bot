@@ -1,16 +1,18 @@
 CREATE OR REPLACE FUNCTION budgeting.put__create_credit_account(
-    _user_id           bigint,
-    _name              text,
-    _credit_kind       text,
-    _currency_code     char(3),
-    _initial_debt      numeric DEFAULT 0,
-    _owner_type        text DEFAULT 'user',
-    _interest_rate     numeric DEFAULT NULL,
-    _payment_day       smallint DEFAULT NULL,
-    _credit_started_at date DEFAULT NULL,
-    _credit_ends_at    date DEFAULT NULL,
-    _provider_name     text DEFAULT NULL,
-    _provider_account_ref text DEFAULT NULL
+    _user_id              bigint,
+    _name                 text,
+    _credit_kind          text,
+    _currency_code        char(3),
+    _initial_debt         numeric DEFAULT 0,
+    _owner_type           text DEFAULT 'user',
+    _interest_rate        numeric DEFAULT NULL,
+    _payment_day          smallint DEFAULT NULL,
+    _credit_started_at    date DEFAULT NULL,
+    _credit_ends_at       date DEFAULT NULL,
+    _provider_name        text DEFAULT NULL,
+    _provider_account_ref text DEFAULT NULL,
+    _credit_limit         numeric DEFAULT NULL,
+    _target_account_id    bigint DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -20,7 +22,6 @@ DECLARE
     _owner_user_id    bigint;
     _owner_family_id  bigint;
     _account_id       bigint;
-    _operation_id     bigint;
 BEGIN
     SET search_path TO budgeting;
 
@@ -72,67 +73,32 @@ BEGIN
     END IF;
 
     INSERT INTO bank_accounts (
-        owner_type,
-        owner_user_id,
-        owner_family_id,
-        name,
-        account_kind,
-        credit_kind,
-        interest_rate,
-        payment_day,
-        credit_started_at,
-        credit_ends_at,
-        provider_name,
-        provider_account_ref,
-        is_primary,
-        is_active
+        owner_type, owner_user_id, owner_family_id,
+        name, account_kind, credit_kind, interest_rate, payment_day,
+        credit_started_at, credit_ends_at, credit_limit,
+        provider_name, provider_account_ref,
+        is_primary, is_active
     )
     VALUES (
-        _owner_type,
-        _owner_user_id,
-        _owner_family_id,
-        _normalized_name,
-        'credit',
-        _credit_kind,
-        _interest_rate,
-        _payment_day,
-        _credit_started_at,
-        _credit_ends_at,
+        _owner_type, _owner_user_id, _owner_family_id,
+        _normalized_name, 'credit', _credit_kind, _interest_rate, _payment_day,
+        _credit_started_at, _credit_ends_at, _credit_limit,
         NULLIF(btrim(_provider_name), ''),
         NULLIF(btrim(_provider_account_ref), ''),
-        false,
-        true
+        false, true
     )
     RETURNING id INTO _account_id;
 
-    -- If initial debt provided, record a credit_taken operation and set the balance
-    IF _initial_debt > 0 THEN
-        INSERT INTO operations (
-            actor_user_id,
-            owner_type,
-            owner_user_id,
-            owner_family_id,
-            type,
-            comment
-        )
-        VALUES (
+    -- For loans/mortgages: disburse money to a target cash account.
+    -- This creates the debt (credit account goes negative) and funds the cash account.
+    IF _target_account_id IS NOT NULL AND _initial_debt > 0 THEN
+        PERFORM budgeting.put__transfer_between_accounts(
             _user_id,
-            _owner_type,
-            _owner_user_id,
-            _owner_family_id,
-            'credit_taken',
-            'Начальный долг · ' || _normalized_name
-        )
-        RETURNING id INTO _operation_id;
-
-        INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
-        VALUES (_operation_id, _account_id, _currency_code, _initial_debt);
-
-        PERFORM budgeting.put__apply_current_bank_delta(
             _account_id,
+            _target_account_id,
             _currency_code,
             _initial_debt,
-            _initial_debt  -- cost_base = amount for base currency; close enough for initial setup
+            'Выдача кредита · ' || _normalized_name
         );
     END IF;
 
@@ -153,6 +119,7 @@ BEGIN
             'payment_day',          ba.payment_day,
             'credit_started_at',    ba.credit_started_at,
             'credit_ends_at',       ba.credit_ends_at,
+            'credit_limit',         ba.credit_limit,
             'provider_name',        ba.provider_name,
             'provider_account_ref', ba.provider_account_ref,
             'is_primary',           ba.is_primary,

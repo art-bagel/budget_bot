@@ -80,8 +80,12 @@ BEGIN
         RAISE EXCEPTION 'Access denied to bank account %', _bank_account_id;
     END IF;
 
-    IF _bank_account_kind <> 'cash' THEN
-        RAISE EXCEPTION 'Expenses can only be recorded from cash accounts';
+    IF _bank_account_kind NOT IN ('cash', 'credit') THEN
+        RAISE EXCEPTION 'Expenses can only be recorded from cash or credit accounts';
+    END IF;
+
+    IF _bank_account_kind = 'credit' AND _currency_code <> _base_currency_code THEN
+        RAISE EXCEPTION 'Credit account expenses must be in base currency';
     END IF;
 
     IF _category_owner_type <> _bank_owner_type
@@ -107,11 +111,14 @@ BEGIN
     WHERE bank_account_id = _bank_account_id
       AND currency_code = _currency_code;
 
-    IF _bank_balance < _amount THEN
+    IF _bank_balance < _amount AND _bank_account_kind <> 'credit' THEN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
-    IF _currency_code = _base_currency_code THEN
+    -- For credit accounts, cost_base is always in base currency (foreign currency blocked above)
+    IF _bank_account_kind = 'credit' THEN
+        _expense_cost_base := round(_amount, 2);
+    ELSIF _currency_code = _base_currency_code THEN
         _expense_cost_base := round(_amount, 2);
     ELSE
         _remaining_to_consume := _amount;

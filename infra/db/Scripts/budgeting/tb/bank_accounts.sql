@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     payment_day smallint,
     credit_started_at date,
     credit_ends_at date,
+    credit_limit numeric(20, 2),
     provider_name varchar(150),
     provider_account_ref varchar(150),
     is_primary boolean NOT NULL DEFAULT false,
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
         CHECK (account_kind = 'cash' OR is_primary = false),
     CONSTRAINT chk_bank_accounts_credit_fields CHECK (
         account_kind = 'credit'
-        OR (credit_kind IS NULL AND interest_rate IS NULL AND payment_day IS NULL AND credit_started_at IS NULL AND credit_ends_at IS NULL)
+        OR (credit_kind IS NULL AND interest_rate IS NULL AND payment_day IS NULL AND credit_started_at IS NULL AND credit_ends_at IS NULL AND credit_limit IS NULL)
     ),
     CONSTRAINT chk_bank_accounts_payment_day CHECK (
         payment_day IS NULL OR (payment_day >= 1 AND payment_day <= 31)

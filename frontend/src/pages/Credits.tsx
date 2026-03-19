@@ -42,22 +42,19 @@ interface RepayDraft {
   comment: string;
 }
 
+// Balances are negative for credit accounts (debt = negative balance)
+function accountDebt(balances: { historical_cost_in_base: number }[]): number {
+  return Math.max(0, -balances.reduce((s, b) => s + b.historical_cost_in_base, 0));
+}
+
 function totalDebtInBase(credits: CreditWithBalances[]): number {
-  return credits.reduce(
-    (sum, { balances }) =>
-      sum + balances.reduce((s, b) => s + b.historical_cost_in_base, 0),
-    0,
-  );
+  return credits.reduce((sum, { balances }) => sum + accountDebt(balances), 0);
 }
 
 function debtByKind(credits: CreditWithBalances[], kind: CreditKind): number {
   return credits
     .filter(({ account }) => account.credit_kind === kind)
-    .reduce(
-      (sum, { balances }) =>
-        sum + balances.reduce((s, b) => s + b.historical_cost_in_base, 0),
-      0,
-    );
+    .reduce((sum, { balances }) => sum + accountDebt(balances), 0);
 }
 
 export default function Credits({ user }: { user: UserContext }) {
@@ -86,6 +83,8 @@ export default function Credits({ user }: { user: UserContext }) {
   const [newPaymentDay, setNewPaymentDay] = useState('');
   const [newStartedAt, setNewStartedAt] = useState('');
   const [newEndsAt, setNewEndsAt] = useState('');
+  const [newCreditLimit, setNewCreditLimit] = useState('');
+  const [newTargetAccountId, setNewTargetAccountId] = useState('');
   const [newProvider, setNewProvider] = useState('');
   const [submittingNew, setSubmittingNew] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
@@ -180,11 +179,13 @@ export default function Credits({ user }: { user: UserContext }) {
         credit_kind: newKind,
         currency_code: newCurrency,
         initial_debt: newInitialDebt.trim() ? Number(newInitialDebt) : undefined,
+        target_account_id: newTargetAccountId ? Number(newTargetAccountId) : undefined,
         owner_type: newOwnerType,
         interest_rate: newInterestRate.trim() ? Number(newInterestRate) : undefined,
         payment_day: newPaymentDay.trim() ? Number(newPaymentDay) : undefined,
         credit_started_at: newStartedAt.trim() || undefined,
         credit_ends_at: newEndsAt.trim() || undefined,
+        credit_limit: newCreditLimit.trim() ? Number(newCreditLimit) : undefined,
         provider_name: newProvider.trim() || undefined,
       });
       setShowNewForm(false);
@@ -196,6 +197,8 @@ export default function Credits({ user }: { user: UserContext }) {
       setNewPaymentDay('');
       setNewStartedAt('');
       setNewEndsAt('');
+      setNewCreditLimit('');
+      setNewTargetAccountId('');
       setNewProvider('');
       await load();
     } catch (err) {
@@ -216,8 +219,7 @@ export default function Credits({ user }: { user: UserContext }) {
 
   const hasTerm = (kind: CreditKind) => kind === 'loan' || kind === 'mortgage';
 
-  const getCreditDebt = ({ balances }: CreditWithBalances) =>
-    balances.reduce((s, b) => s + b.historical_cost_in_base, 0);
+  const getCreditDebt = ({ balances }: CreditWithBalances) => accountDebt(balances);
 
   if (loading) {
     return (
@@ -365,10 +367,20 @@ export default function Credits({ user }: { user: UserContext }) {
                     <div key={b.currency_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                       <span className="settings-row__sub">Остаток долга <span className="pill">{b.currency_code}</span></span>
                       <strong style={{ color: 'var(--tag-out-fg)' }}>
-                        −{formatAmount(b.amount, b.currency_code)}
+                        −{formatAmount(Math.abs(b.amount), b.currency_code)}
                       </strong>
                     </div>
                   ))}
+                  {selectedCredit.account.credit_kind === 'credit_card' && selectedCredit.account.credit_limit != null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span className="settings-row__sub">Использовано</span>
+                      <span>
+                        {formatAmount(getCreditDebt(selectedCredit), user.base_currency_code)}
+                        {' из '}
+                        {formatAmount(selectedCredit.account.credit_limit, user.base_currency_code)}
+                      </span>
+                    </div>
+                  )}
                   {selectedCredit.account.interest_rate != null && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span className="settings-row__sub">Ставка</span>
@@ -561,6 +573,36 @@ export default function Credits({ user }: { user: UserContext }) {
                     style={{ width: 160 }}
                   />
                 </div>
+                {newKind === 'credit_card' && (
+                  <div className="form-row" style={{ marginTop: 8 }}>
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Кредитный лимит"
+                      value={newCreditLimit}
+                      onChange={(e) => setNewCreditLimit(e.target.value)}
+                      disabled={submittingNew}
+                      style={{ flex: '1 1 200px' }}
+                    />
+                  </div>
+                )}
+                {hasTerm(newKind) && (
+                  <div className="form-row" style={{ marginTop: 8 }}>
+                    <select
+                      className="input"
+                      value={newTargetAccountId}
+                      onChange={(e) => setNewTargetAccountId(e.target.value)}
+                      disabled={submittingNew}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="">Не зачислять на счёт</option>
+                      {cashAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {hasTerm(newKind) && (
                   <div className="form-row" style={{ marginTop: 8, gap: 8 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>

@@ -38,6 +38,7 @@ BEGIN
                 'payment_day', ba.payment_day,
                 'credit_started_at', ba.credit_started_at,
                 'credit_ends_at', ba.credit_ends_at,
+                'credit_limit', ba.credit_limit,
                 'provider_name', ba.provider_name,
                 'provider_account_ref', ba.provider_account_ref,
                 'is_primary', ba.is_primary,
