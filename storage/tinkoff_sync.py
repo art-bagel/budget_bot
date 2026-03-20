@@ -451,24 +451,6 @@ class TinkoffSync:
         )
         return row['id'] if row else None
 
-    async def _create_operation(
-        self,
-        conn: asyncpg.Connection,
-        user_id: int,
-        owner_type: str,
-        owner_user_id: Optional[int],
-        owner_family_id: Optional[int],
-        op_type: str,
-        comment: str = '',
-    ) -> int:
-        return await conn.fetchval(
-            '''INSERT INTO budgeting.operations
-               (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               RETURNING id''',
-            user_id, owner_type, owner_user_id, owner_family_id, op_type, comment,
-        )
-
     async def _apply_deposit_resolution(
         self,
         conn: asyncpg.Connection,
@@ -486,54 +468,42 @@ class TinkoffSync:
         abs_amount = abs(amount)
 
         if resolution == 'external':
-            # Money arrives from outside — record as broker cash inflow
-            op_id = await self._create_operation(
-                conn, user_id, owner_type, owner_user_id, owner_family_id,
-                'broker_input', 'Tinkoff: пополнение счёта',
-            )
             await conn.execute(
-                '''INSERT INTO budgeting.bank_entries
-                   (operation_id, bank_account_id, currency_code, amount, external_id, import_source)
-                   VALUES ($1, $2, $3, $4, $5, 'tinkoff')
-                   ON CONFLICT DO NOTHING''',
-                op_id, linked_account_id, currency, abs_amount, tinkoff_op_id,
+                '''SELECT budgeting.put__record_broker_input(
+                    $1::bigint, $2::text, $3::bigint, $4::bigint,
+                    $5::bigint, $6::char(3), $7::numeric,
+                    $8::text, $9::varchar(30), $10::text
+                )''',
+                user_id, owner_type, owner_user_id, owner_family_id,
+                linked_account_id, currency, abs_amount,
+                tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение счёта',
             )
 
         elif resolution == 'transfer':
             if source_account_id is None:
                 raise ValueError('source_account_id required for transfer resolution')
-            op_id = await self._create_operation(
-                conn, user_id, owner_type, owner_user_id, owner_family_id,
-                'account_transfer', 'Tinkoff: перевод на брокерский счёт',
-            )
-            # Debit source account
             await conn.execute(
-                '''INSERT INTO budgeting.bank_entries
-                   (operation_id, bank_account_id, currency_code, amount)
-                   VALUES ($1, $2, $3, $4)''',
-                op_id, source_account_id, currency, -abs_amount,
-            )
-            # Credit investment account (idempotent via external_id)
-            await conn.execute(
-                '''INSERT INTO budgeting.bank_entries
-                   (operation_id, bank_account_id, currency_code, amount, external_id, import_source)
-                   VALUES ($1, $2, $3, $4, $5, 'tinkoff')
-                   ON CONFLICT DO NOTHING''',
-                op_id, linked_account_id, currency, abs_amount, tinkoff_op_id,
+                '''SELECT budgeting.put__record_broker_transfer_in(
+                    $1::bigint, $2::text, $3::bigint, $4::bigint,
+                    $5::bigint, $6::bigint, $7::char(3), $8::numeric,
+                    $9::text, $10::varchar(30), $11::text
+                )''',
+                user_id, owner_type, owner_user_id, owner_family_id,
+                source_account_id, linked_account_id, currency, abs_amount,
+                tinkoff_op_id, 'tinkoff', 'Tinkoff: перевод на брокерский счёт',
             )
 
         elif resolution == 'already_recorded':
-            # Money is already recorded — create a 0-amount marker entry for idempotency
-            op_id = await self._create_operation(
-                conn, user_id, owner_type, owner_user_id, owner_family_id,
-                'broker_input', 'Tinkoff: пополнение (уже учтено)',
-            )
+            # amount=0 → idempotency marker only, no balance change
             await conn.execute(
-                '''INSERT INTO budgeting.bank_entries
-                   (operation_id, bank_account_id, currency_code, amount, external_id, import_source)
-                   VALUES ($1, $2, $3, 0, $4, 'tinkoff')
-                   ON CONFLICT DO NOTHING''',
-                op_id, linked_account_id, currency, tinkoff_op_id,
+                '''SELECT budgeting.put__record_broker_input(
+                    $1::bigint, $2::text, $3::bigint, $4::bigint,
+                    $5::bigint, $6::char(3), $7::numeric,
+                    $8::text, $9::varchar(30), $10::text
+                )''',
+                user_id, owner_type, owner_user_id, owner_family_id,
+                linked_account_id, currency, 0,
+                tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение (уже учтено)',
             )
 
     async def _apply_auto_operation(
