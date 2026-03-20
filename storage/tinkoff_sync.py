@@ -537,7 +537,7 @@ class TinkoffSync:
                     )''',
                     user_id, linked_account_id, 'stock', figi,
                     quantity, amount, currency, op_date,
-                    json.dumps({'figi': figi, 'import_source': 'tinkoff'}),
+                    {'figi': figi, 'import_source': 'tinkoff'},
                 )
                 data = json.loads(result) if isinstance(result, str) else result
                 pos_id = data.get('id') if data else None
@@ -697,7 +697,7 @@ class TinkoffConnections:
                 owner_user_id   = user_id
                 owner_family_id = None
 
-            credentials = json.dumps({'token': token})
+            credentials = {'token': token}
             row = await conn.fetchrow(
                 '''INSERT INTO budgeting.external_connections
                    (owner_type, owner_user_id, owner_family_id, provider,
