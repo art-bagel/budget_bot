@@ -1,3 +1,4 @@
+import json
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -166,7 +167,10 @@ async def preview_tinkoff_sync(
     if row is None:
         raise HTTPException(status_code=404, detail='Connection not found')
 
-    token = row['credentials']['token']
+    creds = row['credentials']
+    if isinstance(creds, str):
+        creds = json.loads(creds)
+    token = creds['token']
     tinkoff_account_id = row['provider_account_id']
     linked_account_id = row['linked_account_id']
 

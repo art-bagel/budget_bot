@@ -213,7 +213,10 @@ class TinkoffSync:
     ) -> dict:
         """Apply synced operations in a single DB transaction."""
         conn_row = await self._get_connection(connection_id, user_id)
-        token              = conn_row['credentials']['token']
+        creds = conn_row['credentials']
+        if isinstance(creds, str):
+            creds = json.loads(creds)
+        token              = creds['token']
         tinkoff_account_id = conn_row['provider_account_id']
         linked_account_id  = conn_row['linked_account_id']
 
