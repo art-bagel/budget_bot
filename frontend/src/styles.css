@@ -2479,20 +2479,30 @@ select.input option {
    otherwise these provide a minimal baseline) */
 .dialog-overlay {
   position: fixed;
-  inset: 0;
+  inset: 0 0 auto 0;
+  top: var(--visual-viewport-offset-top, 0px);
+  height: var(--visual-viewport-height, 100svh);
   background: rgba(12, 16, 20, 0.72);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 200;
-  padding: 16px;
+  padding:
+    calc(var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px))) + 12px)
+    16px
+    max(12px, env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
 }
 
 .dialog {
   width: min(520px, 100%);
-  max-height: 90svh;
+  max-height: calc(
+    var(--visual-viewport-height, 100svh)
+    - var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)))
+    - 24px
+  );
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-l);

@@ -21,17 +21,69 @@ TINKOFF_REST_URL = 'https://invest-public-api.tinkoff.ru/rest'
 
 # Tinkoff operation type → our internal kind
 _OP_TYPE_MAP: dict[str, str] = {
-    'OPERATION_TYPE_INPUT':        'input',
-    'OPERATION_TYPE_OUTPUT':       'output',
-    'OPERATION_TYPE_BUY':          'buy',
-    'OPERATION_TYPE_SELL':         'sell',
-    'OPERATION_TYPE_DIVIDEND':     'dividend',
-    'OPERATION_TYPE_COUPON':       'coupon',
-    'OPERATION_TYPE_BROKER_FEE':   'broker_fee',
-    'OPERATION_TYPE_TAX':          'tax',
-    'OPERATION_TYPE_TAX_DIVIDEND': 'tax',
-    'OPERATION_TYPE_TAX_COUPON':   'tax',
-    'OPERATION_TYPE_TAX_LUCRE':    'tax',
+    # Cash flows
+    'OPERATION_TYPE_INPUT':                         'input',
+    'OPERATION_TYPE_OUTPUT':                        'output',
+    'OPERATION_TYPE_INPUT_SWIFT':                   'input',
+    'OPERATION_TYPE_OUTPUT_SWIFT':                  'output',
+    'OPERATION_TYPE_INPUT_ACQUIRING':               'input',
+    'OPERATION_TYPE_OUTPUT_ACQUIRING':              'output',
+    'OPERATION_TYPE_TRANSFER':                      'input',
+    'OPERATION_TYPE_DIV_EXT':                       'dividend',  # дивиденды на карту
+    # Trades
+    'OPERATION_TYPE_BUY':                           'buy',
+    'OPERATION_TYPE_BUY_CARD':                      'buy',
+    'OPERATION_TYPE_BUY_MARGIN':                    'buy',
+    'OPERATION_TYPE_SELL':                          'sell',
+    'OPERATION_TYPE_SELL_CARD':                     'sell',
+    'OPERATION_TYPE_SELL_MARGIN':                   'sell',
+    'OPERATION_TYPE_DELIVERY_BUY':                  'buy',
+    'OPERATION_TYPE_DELIVERY_SELL':                 'sell',
+    # Income
+    'OPERATION_TYPE_DIVIDEND':                      'dividend',
+    'OPERATION_TYPE_DIVIDEND_TRANSFER':             'dividend',
+    'OPERATION_TYPE_COUPON':                        'coupon',
+    'OPERATION_TYPE_BOND_REPAYMENT':                'coupon',
+    'OPERATION_TYPE_BOND_REPAYMENT_FULL':           'coupon',
+    'OPERATION_TYPE_ACCRUING_VARMARGIN':            'coupon',   # вариационная маржа зачисление
+    # Taxes
+    'OPERATION_TYPE_TAX':                           'tax',
+    'OPERATION_TYPE_DIVIDEND_TAX':                  'tax',      # удержание налога по дивидендам
+    'OPERATION_TYPE_BOND_TAX':                      'tax',      # удержание налога по купонам
+    'OPERATION_TYPE_BENEFIT_TAX':                   'tax',      # налог на матвыгоду
+    'OPERATION_TYPE_TAX_PROGRESSIVE':               'tax',
+    'OPERATION_TYPE_BOND_TAX_PROGRESSIVE':          'tax',
+    'OPERATION_TYPE_DIVIDEND_TAX_PROGRESSIVE':      'tax',
+    'OPERATION_TYPE_BENEFIT_TAX_PROGRESSIVE':       'tax',
+    'OPERATION_TYPE_TAX_CORRECTION':                'tax',
+    'OPERATION_TYPE_TAX_CORRECTION_PROGRESSIVE':    'tax',
+    'OPERATION_TYPE_TAX_CORRECTION_COUPON':         'tax',
+    'OPERATION_TYPE_TAX_REPO':                      'tax',
+    'OPERATION_TYPE_TAX_REPO_HOLD':                 'tax',
+    'OPERATION_TYPE_TAX_REPO_REFUND':               'tax',
+    'OPERATION_TYPE_TAX_REPO_PROGRESSIVE':          'tax',
+    'OPERATION_TYPE_TAX_REPO_HOLD_PROGRESSIVE':     'tax',
+    'OPERATION_TYPE_TAX_REPO_REFUND_PROGRESSIVE':   'tax',
+    'OPERATION_TYPE_TAX_BOND_COUPON':               'tax',
+    'OPERATION_TYPE_BENEFIT_TAX_COUPON':            'tax',
+    # Fees
+    'OPERATION_TYPE_BROKER_FEE':                    'broker_fee',
+    'OPERATION_TYPE_SERVICE_FEE':                   'broker_fee',
+    'OPERATION_TYPE_MARGIN_FEE':                    'broker_fee',
+    'OPERATION_TYPE_SUCCESS_FEE':                   'broker_fee',
+    'OPERATION_TYPE_TRACK_MFEE':                    'broker_fee',
+    'OPERATION_TYPE_TRACK_PFEE':                    'broker_fee',
+    'OPERATION_TYPE_CASH_FEE':                      'broker_fee',
+    'OPERATION_TYPE_OUT_FEE':                       'broker_fee',
+    'OPERATION_TYPE_OUT_STAMP_DUTY':                'broker_fee',
+    'OPERATION_TYPE_WRITING_OFF_VARMARGIN':         'broker_fee',  # списание вариационной маржи
+    # Securities in/out (no cash impact)
+    'OPERATION_TYPE_INPUT_SECURITIES':              'unknown',
+    'OPERATION_TYPE_OUTPUT_SECURITIES':             'unknown',
+    'OPERATION_TYPE_OVERNIGHT':                     'unknown',
+    'OPERATION_TYPE_EXTERNAL_CSE':                  'unknown',
+    'OPERATION_TYPE_COM_LIMIT_DELETE':              'unknown',
+    'OPERATION_TYPE_COM_LIMIT_EXECUTE':             'unknown',
 }
 
 
@@ -89,16 +141,36 @@ class TinkoffRestClient:
         since: datetime,
         to: datetime,
     ) -> list[dict]:
-        data = await self._post(
-            'tinkoff.public.invest.api.contract.v1.OperationsService/GetOperations',
-            {
+        """Fetch all executed operations using cursor-based pagination."""
+        all_items: list[dict] = []
+        cursor: str = ''
+
+        while True:
+            body: dict[str, Any] = {
                 'accountId': account_id,
                 'from': since.strftime('%Y-%m-%dT%H:%M:%SZ'),
                 'to': to.strftime('%Y-%m-%dT%H:%M:%SZ'),
                 'state': 'OPERATION_STATE_EXECUTED',
-            },
-        )
-        return data.get('operations', [])
+                'limit': 1000,
+            }
+            if cursor:
+                body['cursor'] = cursor
+
+            data = await self._post(
+                'tinkoff.public.invest.api.contract.v1.OperationsService/GetOperationsByCursor',
+                body,
+            )
+
+            items = data.get('items', [])
+            all_items.extend(items)
+
+            if not data.get('hasNext') or not items:
+                break
+            cursor = data.get('nextCursor', '')
+            if not cursor:
+                break
+
+        return all_items
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +192,9 @@ def _op_date(op: dict) -> date:
 
 
 def _map_operation(op: dict) -> dict:
-    kind = _OP_TYPE_MAP.get(op.get('operationType', ''), 'unknown')
+    # GetOperationsByCursor returns 'type'; GetOperations returns 'operationType'
+    op_type = op.get('type') or op.get('operationType', '')
+    kind = _OP_TYPE_MAP.get(op_type, 'unknown')
     return {
         'kind': kind,
         'figi': op.get('figi', ''),
@@ -219,6 +293,9 @@ class TinkoffSync:
         token              = creds['token']
         tinkoff_account_id = conn_row['provider_account_id']
         linked_account_id  = conn_row['linked_account_id']
+        owner_type         = conn_row['owner_type']
+        owner_user_id      = conn_row['owner_user_id']
+        owner_family_id    = conn_row['owner_family_id']
 
         client = TinkoffRestClient(token)
         since  = datetime.now(timezone.utc) - timedelta(days=365)
@@ -250,8 +327,8 @@ class TinkoffSync:
                     source_account_id = resolution.get('source_account_id')
 
                     await self._apply_deposit_resolution(
-                        conn, user_id, linked_account_id, op_id,
-                        float(payment), currency, op_date, kind, source_account_id,
+                        conn, user_id, owner_type, owner_user_id, owner_family_id,
+                        linked_account_id, op_id, float(payment), currency, kind, source_account_id,
                     )
                     applied_count += 1
 
@@ -339,62 +416,89 @@ class TinkoffSync:
         )
         return row['id'] if row else None
 
+    async def _create_operation(
+        self,
+        conn: asyncpg.Connection,
+        user_id: int,
+        owner_type: str,
+        owner_user_id: Optional[int],
+        owner_family_id: Optional[int],
+        op_type: str,
+        comment: str = '',
+    ) -> int:
+        return await conn.fetchval(
+            '''INSERT INTO budgeting.operations
+               (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               RETURNING id''',
+            user_id, owner_type, owner_user_id, owner_family_id, op_type, comment,
+        )
+
     async def _apply_deposit_resolution(
         self,
         conn: asyncpg.Connection,
         user_id: int,
+        owner_type: str,
+        owner_user_id: Optional[int],
+        owner_family_id: Optional[int],
         linked_account_id: int,
         tinkoff_op_id: str,
         amount: float,
         currency: str,
-        op_date: date,
         resolution: str,
         source_account_id: Optional[int],
     ) -> None:
         abs_amount = abs(amount)
 
         if resolution == 'external':
-            # Record as broker cash inflow — money arrives from outside, no account debited
+            # Money arrives from outside — record as broker cash inflow
+            op_id = await self._create_operation(
+                conn, user_id, owner_type, owner_user_id, owner_family_id,
+                'broker_input', 'Tinkoff: пополнение счёта',
+            )
             await conn.execute(
                 '''INSERT INTO budgeting.bank_entries
-                   (bank_account_id, amount, currency_code, entry_date,
-                    entry_type, external_id, import_source, created_by_user_id)
-                   VALUES ($1, $2, $3, $4, 'broker_input', $5, 'tinkoff', $6)
+                   (operation_id, bank_account_id, currency_code, amount, external_id, import_source)
+                   VALUES ($1, $2, $3, $4, $5, 'tinkoff')
                    ON CONFLICT DO NOTHING''',
-                linked_account_id, abs_amount, currency, op_date,
-                tinkoff_op_id, user_id,
+                op_id, linked_account_id, currency, abs_amount, tinkoff_op_id,
             )
 
         elif resolution == 'transfer':
             if source_account_id is None:
                 raise ValueError('source_account_id required for transfer resolution')
+            op_id = await self._create_operation(
+                conn, user_id, owner_type, owner_user_id, owner_family_id,
+                'account_transfer', 'Tinkoff: перевод на брокерский счёт',
+            )
             # Debit source account
             await conn.execute(
                 '''INSERT INTO budgeting.bank_entries
-                   (bank_account_id, amount, currency_code, entry_date, entry_type, created_by_user_id)
-                   VALUES ($1, $2, $3, $4, 'transfer_out', $5)''',
-                source_account_id, -abs_amount, currency, op_date, user_id,
+                   (operation_id, bank_account_id, currency_code, amount)
+                   VALUES ($1, $2, $3, $4)''',
+                op_id, source_account_id, currency, -abs_amount,
             )
-            # Credit investment account
+            # Credit investment account (idempotent via external_id)
             await conn.execute(
                 '''INSERT INTO budgeting.bank_entries
-                   (bank_account_id, amount, currency_code, entry_date,
-                    entry_type, external_id, import_source, created_by_user_id)
-                   VALUES ($1, $2, $3, $4, 'transfer_in', $5, 'tinkoff', $6)
+                   (operation_id, bank_account_id, currency_code, amount, external_id, import_source)
+                   VALUES ($1, $2, $3, $4, $5, 'tinkoff')
                    ON CONFLICT DO NOTHING''',
-                linked_account_id, abs_amount, currency, op_date,
-                tinkoff_op_id, user_id,
+                op_id, linked_account_id, currency, abs_amount, tinkoff_op_id,
             )
 
         elif resolution == 'already_recorded':
-            # Money is already in the investment account — just mark op as processed
+            # Money is already recorded — create a 0-amount marker entry for idempotency
+            op_id = await self._create_operation(
+                conn, user_id, owner_type, owner_user_id, owner_family_id,
+                'broker_input', 'Tinkoff: пополнение (уже учтено)',
+            )
             await conn.execute(
                 '''INSERT INTO budgeting.bank_entries
-                   (bank_account_id, amount, currency_code, entry_date,
-                    entry_type, external_id, import_source, created_by_user_id)
-                   VALUES ($1, 0, $2, $3, 'broker_input_ack', $4, 'tinkoff', $5)
+                   (operation_id, bank_account_id, currency_code, amount, external_id, import_source)
+                   VALUES ($1, $2, $3, 0, $4, 'tinkoff')
                    ON CONFLICT DO NOTHING''',
-                linked_account_id, currency, op_date, tinkoff_op_id, user_id,
+                op_id, linked_account_id, currency, tinkoff_op_id,
             )
 
     async def _apply_auto_operation(
