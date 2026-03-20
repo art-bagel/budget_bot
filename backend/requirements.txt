@@ -2,4 +2,4 @@ fastapi
 asyncpg
 python-dotenv
 uvicorn
-# tinkoff-investments  # optional: install manually to enable Tinkoff sync (pip install tinkoff-investments)
+tinkoff-investments @ git+https://github.com/RussianInvestments/invest-python.git
