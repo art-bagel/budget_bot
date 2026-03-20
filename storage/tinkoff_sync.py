@@ -213,6 +213,26 @@ class TinkoffSync:
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
 
+    # ── Helpers ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_since(conn_row: dict) -> datetime:
+        """Return sync start datetime from connection settings, or 5 years ago."""
+        settings = conn_row.get('settings') or {}
+        if isinstance(settings, str):
+            try:
+                settings = json.loads(settings)
+            except Exception:
+                settings = {}
+        sync_from = settings.get('sync_from')
+        if sync_from:
+            try:
+                d = date.fromisoformat(sync_from)
+                return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+            except Exception:
+                pass
+        return datetime.now(timezone.utc) - timedelta(days=5 * 365)
+
     # ── Public API ──────────────────────────────────────────────────────────
 
     async def preview(
@@ -221,10 +241,11 @@ class TinkoffSync:
         tinkoff_account_id: str,
         linked_account_id: int,
         user_id: int,
+        conn_row: Optional[dict] = None,
     ) -> dict:
         """Dry-run: classify operations without writing to DB."""
         client = TinkoffRestClient(token)
-        since = datetime.now(timezone.utc) - timedelta(days=365)
+        since = self._get_since(conn_row) if conn_row else datetime.now(timezone.utc) - timedelta(days=5 * 365)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
 
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
@@ -298,7 +319,7 @@ class TinkoffSync:
         owner_family_id    = conn_row['owner_family_id']
 
         client = TinkoffRestClient(token)
-        since  = datetime.now(timezone.utc) - timedelta(days=365)
+        since  = self._get_since(conn_row)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
 
         ops_by_id: dict[str, dict] = {op['id']: op for op in raw_ops}

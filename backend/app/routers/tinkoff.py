@@ -159,24 +159,24 @@ async def preview_tinkoff_sync(
     # Load credentials directly
     async with pool.acquire() as db_conn:
         row = await db_conn.fetchrow(
-            'SELECT credentials, provider_account_id, linked_account_id '
-            'FROM budgeting.external_connections WHERE id = $1',
+            'SELECT * FROM budgeting.external_connections WHERE id = $1',
             connection_id,
         )
 
     if row is None:
         raise HTTPException(status_code=404, detail='Connection not found')
 
-    creds = row['credentials']
+    conn_row = dict(row)
+    creds = conn_row['credentials']
     if isinstance(creds, str):
         creds = json.loads(creds)
     token = creds['token']
-    tinkoff_account_id = row['provider_account_id']
-    linked_account_id = row['linked_account_id']
+    tinkoff_account_id = conn_row['provider_account_id']
+    linked_account_id = conn_row['linked_account_id']
 
     sync = TinkoffSync(pool)
     try:
-        return await sync.preview(token, tinkoff_account_id, linked_account_id, user.user_id)
+        return await sync.preview(token, tinkoff_account_id, linked_account_id, user.user_id, conn_row=conn_row)
     except Exception as exc:
         raise _handle_tinkoff_error(exc) from exc
 

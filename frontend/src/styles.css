@@ -1848,12 +1848,12 @@ p { margin: 0; }
 }
 
 
-/* When modal is open, darken html+body so keyboard rounded corners
-   don't show the light page background (white-corner artefact).
-   Class is added via JS (useModalOpen hook) — more reliable than :has() in Telegram WebApp. */
+/* When modal is open, lock body scroll and darken background.
+   Class is added via JS (useModalOpen hook). */
 html:has(body.modal-open),
 body.modal-open {
   background-color: rgb(12, 16, 20) !important;
+  overflow: hidden !important;
 }
 
 .modal-backdrop {
@@ -2494,14 +2494,18 @@ select.input option {
     16px
     max(12px, env(safe-area-inset-bottom, 0px));
   overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .dialog {
   width: min(520px, 100%);
+  /* Вычитаем верхний отступ Telegram, верхний padding (12px) и нижний padding */
   max-height: calc(
     var(--visual-viewport-height, 100svh)
     - var(--tg-app-top-offset, var(--tg-content-safe-area-inset-top, env(safe-area-inset-top, 0px)))
     - 24px
+    - max(12px, env(safe-area-inset-bottom, 0px))
   );
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -2540,6 +2544,7 @@ select.input option {
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 16px 20px;
 }
 
