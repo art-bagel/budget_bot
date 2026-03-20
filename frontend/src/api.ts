@@ -101,10 +101,6 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Неверный токен Тинькофф — проверь и переподключи';
   }
 
-  if (text.includes('tinkoff-investments package is not installed')) {
-    return 'Интеграция с Тинькофф не установлена на сервере';
-  }
-
   if (
     text.includes('Connection not found')
     || text.includes('not found or not accessible')

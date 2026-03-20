@@ -60,17 +60,13 @@ async def _get_pool():
 
 
 def _handle_tinkoff_error(exc: Exception) -> HTTPException:
-    """Map Tinkoff SDK / internal errors to HTTP exceptions."""
+    """Map Tinkoff REST / internal errors to HTTP exceptions."""
     msg = str(exc)
-
-    if isinstance(exc, RuntimeError) and 'not installed' in msg:
-        return HTTPException(status_code=500, detail=msg)
 
     if isinstance(exc, ValueError):
         return HTTPException(status_code=404, detail=msg)
 
-    # Tinkoff SDK errors
-    if 'UNAUTHENTICATED' in msg or 'invalid token' in msg.lower():
+    if isinstance(exc, PermissionError) or 'UNAUTHENTICATED' in msg or 'invalid token' in msg.lower():
         return HTTPException(status_code=400, detail='Invalid token — check your Tinkoff API token')
 
     if 'PERMISSION_DENIED' in msg:
@@ -79,7 +75,7 @@ def _handle_tinkoff_error(exc: Exception) -> HTTPException:
     if 'RESOURCE_EXHAUSTED' in msg:
         return HTTPException(status_code=429, detail='Tinkoff API rate limit exceeded, try again later')
 
-    if 'UNAVAILABLE' in msg or 'StatusCode.UNAVAILABLE' in msg:
+    if 'UNAVAILABLE' in msg:
         return HTTPException(status_code=503, detail='Tinkoff API is temporarily unavailable')
 
     return HTTPException(status_code=400, detail=msg)

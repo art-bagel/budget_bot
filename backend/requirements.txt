@@ -2,4 +2,4 @@ fastapi
 asyncpg
 python-dotenv
 uvicorn
-# tinkoff-investments  # quarantined on PyPI (2026-03); install manually when available: pip install tinkoff-investments
+httpx
