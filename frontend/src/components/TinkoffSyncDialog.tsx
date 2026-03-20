@@ -148,6 +148,14 @@ export default function TinkoffSyncDialog({
   const totalNewAuto = (preview?.auto_operations ?? []).filter((o) => !o.already_imported).length;
   const totalNew = newDeposits.length + totalNewAuto;
 
+  const setAllResolutions = (resolution: DepositResolutionKind, sourceAccountId = '') => {
+    const next: Record<string, DepositState> = {};
+    for (const d of newDeposits) {
+      next[d.tinkoff_op_id] = { resolution, sourceAccountId };
+    }
+    setDepositStates((prev) => ({ ...prev, ...next }));
+  };
+
   const handleApply = async () => {
     if (!preview) return;
     setStage('applying');
@@ -314,6 +322,41 @@ export default function TinkoffSyncDialog({
                   <h3 className="tinkoff-sync__section-title">
                     Пополнения ({newDeposits.length}) — требуют решения
                   </h3>
+
+                  {newDeposits.length > 1 && (
+                    <div className="tinkoff-sync__bulk-actions">
+                      <span className="tinkoff-sync__bulk-label">Для всех:</span>
+                      <button
+                        type="button"
+                        className="tinkoff-sync__bulk-btn"
+                        onClick={() => setAllResolutions('external')}
+                      >
+                        Внешнее
+                      </button>
+                      <button
+                        type="button"
+                        className="tinkoff-sync__bulk-btn"
+                        onClick={() => setAllResolutions('already_recorded')}
+                      >
+                        Уже учтено
+                      </button>
+                      {cashAccounts.length > 0 && (
+                        <select
+                          className="tinkoff-sync__bulk-select"
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) setAllResolutions('transfer', e.target.value);
+                          }}
+                        >
+                          <option value="">Перевод со счёта…</option>
+                          {cashAccounts.map((acc) => (
+                            <option key={acc.id} value={String(acc.id)}>{acc.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
                   {newDeposits.map(renderDepositCard)}
                 </section>
               )}

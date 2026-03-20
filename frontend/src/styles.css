@@ -2634,6 +2634,50 @@ select.input option {
   margin-bottom: 10px;
 }
 
+/* Bulk-action bar */
+.tinkoff-sync__bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-s);
+}
+
+.tinkoff-sync__bulk-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-right: 2px;
+}
+
+.tinkoff-sync__bulk-btn {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tinkoff-sync__bulk-btn:active {
+  background: var(--bg-elevated);
+}
+
+.tinkoff-sync__bulk-select {
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  max-width: 160px;
+}
+
 /* Deposit card */
 .tinkoff-deposit-card {
   background: var(--bg-inset);

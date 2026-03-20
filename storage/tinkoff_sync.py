@@ -191,6 +191,15 @@ def _op_date(op: dict) -> date:
     return datetime.fromisoformat(raw.replace('Z', '+00:00')).date()
 
 
+def _op_currency(op: dict) -> str:
+    """Extract currency: top-level field first, then payment.currency."""
+    currency = (op.get('currency') or '').upper().strip()
+    if not currency:
+        payment = op.get('payment') or {}
+        currency = (payment.get('currency') or '').upper().strip()
+    return currency
+
+
 def _map_operation(op: dict) -> dict:
     # GetOperationsByCursor returns 'type'; GetOperations returns 'operationType'
     op_type = op.get('type') or op.get('operationType', '')
@@ -255,12 +264,15 @@ class TinkoffSync:
         auto_operations: list[dict] = []
 
         for op in raw_ops:
-            op_id   = op['id']
-            already = op_id in already_imported_ids
-            mapped  = _map_operation(op)
-            payment = _money_value_to_decimal(op.get('payment', {}))
-            currency = (op.get('currency') or '').upper()
-            qty = op.get('quantity')
+            op_id    = op['id']
+            already  = op_id in already_imported_ids
+            mapped   = _map_operation(op)
+            payment  = _money_value_to_decimal(op.get('payment', {}))
+            currency = _op_currency(op)
+            qty      = op.get('quantity')
+            # Пропускаем операции без валюты — некорректные данные от API
+            if not currency:
+                continue
 
             if mapped['kind'] == 'input':
                 deposits.append({
@@ -342,7 +354,9 @@ class TinkoffSync:
                         continue
 
                     payment  = _money_value_to_decimal(op.get('payment', {}))
-                    currency = (op.get('currency') or '').upper()
+                    currency = _op_currency(op)
+                    if not currency:
+                        continue
                     op_date  = _op_date(op)
                     kind     = resolution['resolution']
                     source_account_id = resolution.get('source_account_id')
@@ -534,7 +548,9 @@ class TinkoffSync:
         figi     = mapped['figi']
         payment  = _money_value_to_decimal(op.get('payment', {}))
         amount   = float(abs(payment))
-        currency = (op.get('currency') or '').upper()
+        currency = _op_currency(op)
+        if not currency:
+            return
         op_date  = _op_date(op)
         qty      = op.get('quantity')
         quantity = float(qty) if qty else None
