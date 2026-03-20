@@ -294,6 +294,13 @@ p { margin: 0; }
 .hero-card--clickable:hover { opacity: 0.9; }
 .hero-card--clickable:active { opacity: 0.75; }
 
+.hero-card__label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .hero-card__label {
   display: block;
   font-size: 0.72rem;
@@ -301,7 +308,29 @@ p { margin: 0; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 6px;
+}
+
+.hero-card__credit-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.hero-card__credit-toggle--active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .hero-card__value-row {

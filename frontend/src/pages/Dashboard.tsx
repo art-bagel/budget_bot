@@ -48,6 +48,17 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
+  const [includeCredits, setIncludeCredits] = useState<boolean>(() => {
+    try { return localStorage.getItem('dashboard_include_credits') !== 'false'; } catch { return true; }
+  });
+  const toggleIncludeCredits = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIncludeCredits((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('dashboard_include_credits', String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   const [showBankDetail, setShowBankDetail] = useState(false);
   const [showBankHub, setShowBankHub] = useState(false);
@@ -515,7 +526,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     (sum, account) => sum + getInvestmentAccountMarketTotal(account.id),
     0,
   );
-  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal - totalCreditDebtInBase;
+  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal - (includeCredits ? totalCreditDebtInBase : 0);
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
@@ -632,59 +643,45 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         onTouchMove={hasFamily ? handleHeroSwipeMove : undefined}
         onTouchEnd={hasFamily ? handleHeroSwipeEnd : undefined}
       >
-        <span className="hero-card__label">Банк по себестоимости</span>
+        <span className="hero-card__label-row">
+          <span className="hero-card__label">Чистый капитал</span>
+          <button
+            className={`hero-card__credit-toggle${includeCredits ? ' hero-card__credit-toggle--active' : ''}`}
+            type="button"
+            onClick={toggleIncludeCredits}
+          >
+            {includeCredits ? '−' : '+'}  кредиты
+          </button>
+        </span>
         <strong className="hero-card__value">
           {formatAmount(totalBankWithInvestments, overview.base_currency_code)}
         </strong>
-        {hasFamily ? (
-          <>
-            <div className="hero-card__breakdown">
-              <div className="hero-card__breakdown-row">
-                <span>Личный счет</span>
-                <strong>{formatAmount(personalBankTotal, overview.base_currency_code)}</strong>
-              </div>
-              <div className="hero-card__breakdown-row">
-                <span>Семейный счет</span>
-                <strong>{formatAmount(familyBankTotal, overview.base_currency_code)}</strong>
-              </div>
-              <div className="hero-card__breakdown-row">
-                <span>Инвестиции</span>
-                <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
-              </div>
-              {totalCreditDebtInBase > 0 && (
-                <div className="hero-card__breakdown-row">
-                  <span>Кредиты</span>
-                  <strong style={{ color: 'var(--tag-out-fg)' }}>
-                    −{formatAmount(totalCreditDebtInBase, overview.base_currency_code)}
-                  </strong>
-                </div>
-              )}
+        <div className="hero-card__breakdown">
+          <div className="hero-card__breakdown-row">
+            <span>Личный счёт</span>
+            <strong>{formatAmount(personalBankTotal, overview.base_currency_code)}</strong>
+          </div>
+          {hasFamily && (
+            <div className="hero-card__breakdown-row">
+              <span>Семейный счёт</span>
+              <strong>{formatAmount(familyBankTotal, overview.base_currency_code)}</strong>
             </div>
-            {hintsEnabled && (
-              <span className="hero-card__sub">← свайп для перевода между счетами</span>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="hero-card__breakdown">
-              <div className="hero-card__breakdown-row">
-                <span>Личный счет</span>
-                <strong>{formatAmount(personalBankTotal, overview.base_currency_code)}</strong>
-              </div>
-              <div className="hero-card__breakdown-row">
-                <span>Инвестиции</span>
-                <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
-              </div>
-              {totalCreditDebtInBase > 0 && (
-                <div className="hero-card__breakdown-row">
-                  <span>Кредиты</span>
-                  <strong style={{ color: 'var(--tag-out-fg)' }}>
-                    −{formatAmount(totalCreditDebtInBase, overview.base_currency_code)}
-                  </strong>
-                </div>
-              )}
-            </div>
-          </>
+          )}
+          <div className="hero-card__breakdown-row">
+            <span>Инвестиции</span>
+            <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
+          </div>
+          <div className="hero-card__breakdown-row">
+            <span>Кредиты</span>
+            <strong style={totalCreditDebtInBase > 0 ? { color: 'var(--tag-out-fg)' } : undefined}>
+              {totalCreditDebtInBase > 0
+                ? `−${formatAmount(totalCreditDebtInBase, overview.base_currency_code)}`
+                : formatAmount(0, overview.base_currency_code)}
+            </strong>
+          </div>
+        </div>
+        {hasFamily && hintsEnabled && (
+          <span className="hero-card__sub">← свайп для перевода между счетами</span>
         )}
         <div className="dashboard-bank-actions" onClick={(e) => e.stopPropagation()}>
           <button
