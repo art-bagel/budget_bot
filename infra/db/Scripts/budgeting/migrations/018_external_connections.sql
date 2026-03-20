@@ -1,4 +1,4 @@
--- Migration 018: external connections for broker integrations (Tinkoff, etc.)
+пр-- Migration 018: external connections for broker integrations (Tinkoff, etc.)
 -- Creates generic external_connections table and adds idempotency columns
 -- to portfolio_events and bank_entries. Also adds broker_input/broker_output
 -- operation types.

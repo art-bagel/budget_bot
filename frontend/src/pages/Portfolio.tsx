@@ -293,6 +293,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
   const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
+  const [showAccountsModal, setShowAccountsModal] = useState(false);
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -1033,7 +1034,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </p>
       )}
 
-      <article className="hero-card">
+      <article className="hero-card hero-card--clickable" onClick={() => setShowAccountsModal(true)} role="button" tabIndex={0}>
         <span className="hero-card__label">Инвестиционный портфель</span>
         <div className="hero-card__value-row">
           <strong className="hero-card__value">
@@ -1161,23 +1162,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           </div>
                           <div className="section__title" style={{ fontSize: '1rem' }}>{group.accountName}</div>
                         </div>
-                        {tinkoffConnections
-                          .filter((c) => c.linked_account_id === group.accountId)
-                          .map((conn) => (
-                            <button
-                              key={conn.id}
-                              type="button"
-                              className="tinkoff-sync-btn"
-                              onClick={() => setSyncDialogConnection(conn)}
-                            >
-                              ↻ Подтянуть данные
-                              {conn.last_synced_at && (
-                                <span className="tinkoff-sync-btn__last">
-                                  {new Date(conn.last_synced_at).toLocaleDateString('ru')}
-                                </span>
-                              )}
-                            </button>
-                          ))}
                       </div>
                     ) : null}
 
@@ -1862,6 +1846,82 @@ export default function Portfolio({ user }: { user: UserContext }) {
             void loadPortfolio();
           }}
         />
+      )}
+
+      {showAccountsModal && (
+        <div className="modal-backdrop" onClick={() => setShowAccountsModal(false)}>
+          <div className="modal-card modal-card--compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="section__title" style={{ fontSize: '1.05rem' }}>Инвестиционные счета</h2>
+            </div>
+            <div className="modal-body">
+              {accounts.map(({ account, balances }) => {
+                const summary = summaryItems.find((s) => s.investment_account_id === account.id);
+                const conn = tinkoffConnections.find((c) => c.linked_account_id === account.id);
+                return (
+                  <div key={account.id} className="portfolio-account-modal-item">
+                    <div className="portfolio-account-modal-item__header">
+                      <div>
+                        <div className="portfolio-account-modal-item__name">{account.name}</div>
+                        <div className="portfolio-account-modal-item__owner">
+                          {account.owner_type === 'family' ? 'Семейный' : 'Личный'}
+                          {account.provider_name ? ` · ${account.provider_name}` : ''}
+                        </div>
+                      </div>
+                      {conn && (
+                        <button
+                          type="button"
+                          className="tinkoff-sync-btn"
+                          onClick={() => {
+                            setShowAccountsModal(false);
+                            setSyncDialogConnection(conn);
+                          }}
+                        >
+                          ↻ Подтянуть
+                          {conn.last_synced_at && (
+                            <span className="tinkoff-sync-btn__last">
+                              {new Date(conn.last_synced_at).toLocaleDateString('ru')}
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    <div className="hero-card__breakdown" style={{ marginTop: 8 }}>
+                      {balances.map((b) => (
+                        <div key={b.currency_code} className="hero-card__breakdown-row">
+                          <span>Кэш {b.currency_code}</span>
+                          <strong>{formatAmount(b.amount, b.currency_code)}</strong>
+                        </div>
+                      ))}
+                      {summary && summary.invested_principal_in_base > 0 && (
+                        <div className="hero-card__breakdown-row">
+                          <span>Вложено</span>
+                          <strong>{formatAmount(summary.invested_principal_in_base, user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                      {summary && summary.realized_income_in_base !== 0 && (
+                        <div className="hero-card__breakdown-row">
+                          <span>Зафиксированный доход</span>
+                          <strong>{formatAmount(summary.realized_income_in_base, user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {accounts.length === 0 && (
+                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.88rem' }}>
+                  Инвестиционных счетов нет. Создай в Настройках → Инвестиции.
+                </p>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={() => setShowAccountsModal(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {syncDialogConnection && (
