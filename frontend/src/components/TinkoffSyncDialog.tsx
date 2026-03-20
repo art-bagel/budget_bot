@@ -43,27 +43,32 @@ export default function TinkoffSyncDialog({
   // Per-deposit resolution state keyed by tinkoff_op_id
   const [depositStates, setDepositStates] = useState<Record<string, DepositState>>({});
 
-  // Available cash accounts for "transfer" resolution
+  // Cash accounts for "transfer" resolution
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [accountBalances, setAccountBalances] = useState<Record<number, DashboardBankBalance[]>>({});
 
+  // Investment account balances for "already_recorded" validation
+  const [investmentBalances, setInvestmentBalances] = useState<DashboardBankBalance[]>([]);
+
   const [applyResult, setApplyResult] = useState<{ applied: number; skipped: number } | null>(null);
 
-  // Load preview on mount
+  // Load preview + account balances on mount
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       try {
-        const [previewData, accounts] = await Promise.all([
+        const [previewData, cashAccountList, investmentSnapshot] = await Promise.all([
           previewTinkoffSync(connectionId),
           fetchBankAccounts('cash'),
+          fetchBankAccountSnapshot(investmentAccountId),
         ]);
 
         if (cancelled) return;
 
         setPreview(previewData);
-        setCashAccounts(accounts);
+        setCashAccounts(cashAccountList);
+        setInvestmentBalances(investmentSnapshot);
 
         // Init deposit states
         const states: Record<string, DepositState> = {};
@@ -76,7 +81,7 @@ export default function TinkoffSyncDialog({
 
         // Load balances for all cash accounts
         const balanceEntries = await Promise.all(
-          accounts.map(async (acc) => {
+          cashAccountList.map(async (acc) => {
             const bal = await fetchBankAccountSnapshot(acc.id);
             return [acc.id, bal] as [number, DashboardBankBalance[]];
           }),
@@ -96,7 +101,7 @@ export default function TinkoffSyncDialog({
 
     void load();
     return () => { cancelled = true; };
-  }, [connectionId]);
+  }, [connectionId, investmentAccountId]);
 
   const setResolution = (opId: string, resolution: DepositResolutionKind) => {
     setDepositStates((prev) => ({
@@ -112,11 +117,31 @@ export default function TinkoffSyncDialog({
     }));
   };
 
+  const getAccountBalance = (accountId: number, currency: string): number | null => {
+    const bals = accountBalances[accountId];
+    if (!bals) return null;
+    const bal = bals.find((b) => b.currency_code === currency);
+    return bal !== undefined ? bal.amount : 0;
+  };
+
+  const getInvestmentBalance = (currency: string): number | null => {
+    const bal = investmentBalances.find((b) => b.currency_code === currency);
+    return bal !== undefined ? bal.amount : 0;
+  };
+
   const newDeposits = preview?.deposits.filter((d) => !d.already_imported) ?? [];
+
+  // Check if any "already_recorded" choice would fail balance check
+  const alreadyRecordedBalanceOk = (deposit: TinkoffDepositPreview): boolean => {
+    const bal = getInvestmentBalance(deposit.currency_code);
+    return bal === null || bal >= deposit.amount;
+  };
+
   const allResolved = newDeposits.every((d) => {
     const s = depositStates[d.tinkoff_op_id];
     if (!s || s.resolution === '') return false;
     if (s.resolution === 'transfer' && !s.sourceAccountId) return false;
+    if (s.resolution === 'already_recorded' && !alreadyRecordedBalanceOk(d)) return false;
     return true;
   });
 
@@ -147,18 +172,13 @@ export default function TinkoffSyncDialog({
     }
   };
 
-  const getAccountBalance = (accountId: number, currency: string): number | null => {
-    const bals = accountBalances[accountId];
-    if (!bals) return null;
-    const bal = bals.find((b) => b.currency_code === currency);
-    return bal ? bal.amount : 0;
-  };
-
   const renderDepositCard = (deposit: TinkoffDepositPreview) => {
     const state = depositStates[deposit.tinkoff_op_id];
     if (!state) return null;
 
     const amountFormatted = formatAmount(deposit.amount, deposit.currency_code, 2);
+    const investBal = getInvestmentBalance(deposit.currency_code);
+    const investEnough = investBal === null || investBal >= deposit.amount;
 
     return (
       <div key={deposit.tinkoff_op_id} className="tinkoff-deposit-card">
@@ -213,7 +233,7 @@ export default function TinkoffSyncDialog({
                 if (!enough && bal !== null) {
                   return (
                     <p className="tinkoff-deposit-card__warn">
-                      Недостаточно средств ({formatAmount(bal, deposit.currency_code, 2)})
+                      Недостаточно средств на счёте ({formatAmount(bal, deposit.currency_code, 2)})
                     </p>
                   );
                 }
@@ -229,14 +249,28 @@ export default function TinkoffSyncDialog({
               checked={state.resolution === 'already_recorded'}
               onChange={() => setResolution(deposit.tinkoff_op_id, 'already_recorded')}
             />
-            <span>Уже учтено в боте</span>
+            <span>
+              Уже учтено в боте
+              {investBal !== null && (
+                <span className="tinkoff-deposit-card__balance-hint">
+                  {' '}(на инвест-счёте: {formatAmount(investBal, deposit.currency_code, 2)})
+                </span>
+              )}
+            </span>
           </label>
+
+          {state.resolution === 'already_recorded' && !investEnough && (
+            <p className="tinkoff-deposit-card__warn">
+              На инвест-счёте недостаточно средств — деньги там ещё не учтены
+              {investBal !== null && ` (есть ${formatAmount(investBal, deposit.currency_code, 2)})`}
+            </p>
+          )}
         </div>
       </div>
     );
   };
 
-  // ── Render stages ──────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
@@ -256,12 +290,17 @@ export default function TinkoffSyncDialog({
           )}
 
           {stage === 'error' && (
-            <p className="tinkoff-sync__error">{error ?? 'Неизвестная ошибка'}</p>
+            <>
+              <p className="tinkoff-sync__error">{error ?? 'Неизвестная ошибка'}</p>
+              <p style={{ marginTop: 8, fontSize: '0.82rem', color: 'var(--text-tertiary)' }}>
+                Никакие данные не были изменены.
+              </p>
+            </>
           )}
 
           {stage === 'done' && applyResult && (
             <div className="tinkoff-sync__done">
-              <p>Готово! Применено операций: {applyResult.applied}</p>
+              <p>Готово! Применено операций: <strong>{applyResult.applied}</strong></p>
               {applyResult.skipped > 0 && (
                 <p className="tinkoff-sync__done-skipped">Пропущено (уже были): {applyResult.skipped}</p>
               )}
@@ -270,7 +309,6 @@ export default function TinkoffSyncDialog({
 
           {stage === 'review' && preview && (
             <>
-              {/* Section 1: Deposits requiring resolution */}
               {newDeposits.length > 0 && (
                 <section className="tinkoff-sync__section">
                   <h3 className="tinkoff-sync__section-title">
@@ -280,7 +318,6 @@ export default function TinkoffSyncDialog({
                 </section>
               )}
 
-              {/* Section 2: Auto operations (read-only) */}
               {totalNewAuto > 0 && (
                 <section className="tinkoff-sync__section">
                   <h3 className="tinkoff-sync__section-title">
@@ -332,7 +369,7 @@ export default function TinkoffSyncDialog({
             </button>
           )}
 
-          {stage === 'done' && (
+          {(stage === 'done' || stage === 'error') && (
             <button className="btn btn--primary" onClick={onClose} type="button">
               Закрыть
             </button>

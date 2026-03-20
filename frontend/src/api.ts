@@ -92,6 +92,34 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Нельзя переводить между личными и семейными категориями';
   }
 
+  if (
+    text.includes('UNAUTHENTICATED')
+    || text.includes('invalid token')
+    || text.includes('Invalid token')
+    || text.includes('token is invalid')
+  ) {
+    return 'Неверный токен Тинькофф — проверь и переподключи';
+  }
+
+  if (text.includes('tinkoff-investments package is not installed')) {
+    return 'Интеграция с Тинькофф не установлена на сервере';
+  }
+
+  if (
+    text.includes('Connection not found')
+    || text.includes('not found or not accessible')
+  ) {
+    return 'Подключение не найдено';
+  }
+
+  if (text.includes('source_account_id required')) {
+    return 'Не выбран счёт для перевода';
+  }
+
+  if (text.includes('Insufficient investment balance') || text.includes('investment account balance')) {
+    return 'Недостаточно средств на инвестиционном счёте';
+  }
+
   if (text) {
     return text;
   }

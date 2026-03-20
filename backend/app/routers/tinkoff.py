@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
@@ -59,6 +59,32 @@ async def _get_pool():
     return await app_storage.context._get_pool()
 
 
+def _handle_tinkoff_error(exc: Exception) -> HTTPException:
+    """Map Tinkoff SDK / internal errors to HTTP exceptions."""
+    msg = str(exc)
+
+    if isinstance(exc, RuntimeError) and 'not installed' in msg:
+        return HTTPException(status_code=500, detail=msg)
+
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=404, detail=msg)
+
+    # Tinkoff SDK errors
+    if 'UNAUTHENTICATED' in msg or 'invalid token' in msg.lower():
+        return HTTPException(status_code=400, detail='Invalid token — check your Tinkoff API token')
+
+    if 'PERMISSION_DENIED' in msg:
+        return HTTPException(status_code=400, detail='Access denied to this Tinkoff account')
+
+    if 'RESOURCE_EXHAUSTED' in msg:
+        return HTTPException(status_code=429, detail='Tinkoff API rate limit exceeded, try again later')
+
+    if 'UNAVAILABLE' in msg or 'StatusCode.UNAVAILABLE' in msg:
+        return HTTPException(status_code=503, detail='Tinkoff API is temporarily unavailable')
+
+    return HTTPException(status_code=400, detail=msg)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -68,13 +94,13 @@ async def get_tinkoff_accounts(
     body: GetAccountsRequest,
     _user: TelegramUser = Depends(get_telegram_user),
 ) -> list:
-    """
-    Step 1 of connection wizard: validate token and return list of Tinkoff accounts.
-    Nothing is saved.
-    """
+    """Validate token and return list of Tinkoff broker accounts. Nothing is saved."""
     pool = await _get_pool()
     tc = TinkoffConnections(pool)
-    return await tc.get_accounts_from_token(body.token)
+    try:
+        return await tc.get_accounts_from_token(body.token)
+    except Exception as exc:
+        raise _handle_tinkoff_error(exc) from exc
 
 
 @router.post('/connect', response_model=dict)
@@ -85,12 +111,15 @@ async def connect_tinkoff(
     """Save token + bind a Tinkoff account to our investment account."""
     pool = await _get_pool()
     tc = TinkoffConnections(pool)
-    return await tc.create_connection(
-        user_id=user.user_id,
-        token=body.token,
-        provider_account_id=body.provider_account_id,
-        linked_account_id=body.linked_account_id,
-    )
+    try:
+        return await tc.create_connection(
+            user_id=user.user_id,
+            token=body.token,
+            provider_account_id=body.provider_account_id,
+            linked_account_id=body.linked_account_id,
+        )
+    except Exception as exc:
+        raise _handle_tinkoff_error(exc) from exc
 
 
 @router.get('/connections', response_model=List[dict])
@@ -109,7 +138,10 @@ async def delete_connection(
 ) -> dict:
     pool = await _get_pool()
     tc = TinkoffConnections(pool)
-    await tc.delete_connection(connection_id, user.user_id)
+    try:
+        await tc.delete_connection(connection_id, user.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {'status': 'deleted', 'id': connection_id}
 
 
@@ -120,16 +152,14 @@ async def preview_tinkoff_sync(
 ) -> dict:
     """Dry-run: fetch new operations from Tinkoff without writing anything."""
     pool = await _get_pool()
-    # Load connection to get token + account
     tc = TinkoffConnections(pool)
+
+    # Access check: connection must belong to this user/family
     connections = await tc.list_connections(user.user_id)
-    conn_data = next((c for c in connections if c['id'] == connection_id), None)
-    if conn_data is None:
-        from fastapi import HTTPException
+    if not any(c['id'] == connection_id for c in connections):
         raise HTTPException(status_code=404, detail='Connection not found')
 
-    # Fetch raw connection with credentials
-    import asyncpg
+    # Load credentials directly
     async with pool.acquire() as db_conn:
         row = await db_conn.fetchrow(
             'SELECT credentials, provider_account_id, linked_account_id '
@@ -138,7 +168,6 @@ async def preview_tinkoff_sync(
         )
 
     if row is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail='Connection not found')
 
     token = row['credentials']['token']
@@ -146,7 +175,10 @@ async def preview_tinkoff_sync(
     linked_account_id = row['linked_account_id']
 
     sync = TinkoffSync(pool)
-    return await sync.preview(token, tinkoff_account_id, linked_account_id, user.user_id)
+    try:
+        return await sync.preview(token, tinkoff_account_id, linked_account_id, user.user_id)
+    except Exception as exc:
+        raise _handle_tinkoff_error(exc) from exc
 
 
 @router.post('/apply/{connection_id}', response_model=dict)
@@ -157,6 +189,18 @@ async def apply_tinkoff_sync(
 ) -> dict:
     """Apply synced operations with user resolutions for deposits."""
     pool = await _get_pool()
+    tc = TinkoffConnections(pool)
+
+    # Access check
+    connections = await tc.list_connections(user.user_id)
+    if not any(c['id'] == connection_id for c in connections):
+        raise HTTPException(status_code=404, detail='Connection not found')
+
     sync = TinkoffSync(pool)
     resolutions = [r.model_dump() for r in body.deposit_resolutions]
-    return await sync.apply(connection_id, resolutions, user.user_id)
+    try:
+        return await sync.apply(connection_id, resolutions, user.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise _handle_tinkoff_error(exc) from exc

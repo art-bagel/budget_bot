@@ -2831,3 +2831,9 @@ select.input option {
   font-size: 0.82rem;
   color: var(--tag-out-fg);
 }
+
+.tinkoff-deposit-card__balance-hint {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
