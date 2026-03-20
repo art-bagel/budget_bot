@@ -11,6 +11,7 @@ import type {
   AllocateGroupBudgetRequest,
 } from '../types';
 import { formatAmount } from '../utils/format';
+import { categoryDisplayName } from '../utils/categoryIcon';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -185,7 +186,7 @@ export default function TransferDialog({
               <option value="">Откуда перевести</option>
               {visibleSources.map((item) => (
                 <option key={item.category_id} value={item.category_id}>
-                  {item.name} · {formatAmount(item.balance, item.currency_code)}
+                  {categoryDisplayName(item.name)} · {formatAmount(item.balance, item.currency_code)}
                 </option>
               ))}
             </select>
@@ -193,7 +194,7 @@ export default function TransferDialog({
 
           <div className="form-row">
             <div className="input input--read-only" style={{ flex: 1 }}>
-              Куда: {activeTarget.name}
+              Куда: {categoryDisplayName(activeTarget.name)}
             </div>
           </div>
 

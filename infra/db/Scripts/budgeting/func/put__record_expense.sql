@@ -103,7 +103,10 @@ BEGIN
 
     IF _bank_account_kind = 'credit' THEN
         -- Enforce credit limit: balance cannot drop below -credit_limit.
-        IF _bank_credit_limit IS NOT NULL AND (_bank_balance - _amount) < -_bank_credit_limit THEN
+        IF _bank_credit_limit IS NULL THEN
+            RAISE EXCEPTION 'Credit limit is not configured for this account';
+        END IF;
+        IF (_bank_balance - _amount) < -_bank_credit_limit THEN
             RAISE EXCEPTION 'Credit limit exceeded';
         END IF;
         _expense_cost_base := round(_amount, 2);

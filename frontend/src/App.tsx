@@ -62,7 +62,7 @@ export default function App() {
       {PAGE_IDS.map((id) => visited.has(id) ? (
         <div key={id} style={id !== page ? { display: 'none' } : undefined}>
           <ErrorBoundary key={refreshKeys[id]}>
-            {id === 'dashboard' && <Dashboard user={user} />}
+            {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} />}
             {id === 'exchange' && <Exchange user={user} />}
             {id === 'portfolio' && <Portfolio user={user} />}
             {id === 'credits' && <Credits user={user} />}

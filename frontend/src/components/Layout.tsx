@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import {
   IconCredit,
   IconDashboard,
-  IconExchange,
   IconPortfolio,
   IconSettings,
 } from './Icons';
@@ -22,7 +21,6 @@ interface Props {
 
 const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
   { id: 'dashboard', label: 'Обзор', icon: IconDashboard },
-  { id: 'exchange', label: 'Обмен', icon: IconExchange },
   { id: 'portfolio', label: 'Портфель', icon: IconPortfolio },
   { id: 'credits', label: 'Кредиты', icon: IconCredit },
   { id: 'settings', label: 'Настройки', icon: IconSettings },

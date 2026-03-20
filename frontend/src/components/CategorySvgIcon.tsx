@@ -43,16 +43,34 @@ export const CATEGORY_SVG_ICONS: Record<string, () => ReactElement> = {
   gift:      () => <svg {...s}><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
   sun:       () => <svg {...s}><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
   leaf:      () => <svg {...s}><path d="M17 8C8 10 5.9 16.17 3.82 22"/><path d="M17 8c0 10-11 14-11 14"/><path d="M17 8c2-2 3-4 3-8-4 0-6 1-8 3"/></svg>,
+  // — новые иконки —
+  bag:        () => <svg {...s}><path d="M4 7h16v13a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>,
+  receipt:    () => <svg {...s}><path d="M4 2v18l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5 2-1.5V2z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>,
+  lightbulb:  () => <svg {...s}><path d="M9 18h6M10 21h4"/><path d="M12 2a7 7 0 015 11.9V17a1 1 0 01-1 1H8a1 1 0 01-1-1v-3.1A7 7 0 0112 2z"/></svg>,
+  sofa:       () => <svg {...s}><path d="M4 12V8a2 2 0 012-2h12a2 2 0 012 2v4"/><rect x="2" y="12" width="4" height="6" rx="1"/><rect x="18" y="12" width="4" height="6" rx="1"/><path d="M6 18h12v-4H6z"/><line x1="8" y1="22" x2="8" y2="18"/><line x1="16" y1="22" x2="16" y2="18"/></svg>,
+  door:       () => <svg {...s}><rect x="4" y="2" width="16" height="20" rx="1"/><line x1="1" y1="22" x2="23" y2="22"/><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none"/></svg>,
+  bus:        () => <svg {...s}><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="17" y1="4" x2="17" y2="10"/><circle cx="7" cy="20" r="2"/><circle cx="17" cy="20" r="2"/><path d="M5 18h14"/></svg>,
+  fuel:       () => <svg {...s}><path d="M3 22V6a2 2 0 012-2h8a2 2 0 012 2v16"/><line x1="1" y1="22" x2="15" y2="22"/><line x1="7" y1="10" x2="11" y2="10"/><path d="M15 10h1a3 3 0 013 3v2a2 2 0 004 0V9l-3-3"/></svg>,
+  headphones: () => <svg {...s}><path d="M3 18v-6a9 9 0 0118 0v6"/><path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3z"/><path d="M3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z"/></svg>,
+  camera:     () => <svg {...s}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+  tv:         () => <svg {...s}><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 2l4 5 4-5"/></svg>,
+  palette:    () => <svg {...s}><path d="M12 2a10 10 0 100 20c2.21 0 3-1.34 3-3 0-1.3-.67-1.72-1-2.5-.4-.95 0-2 1-2.5C16 13.5 22 13 22 8a10 10 0 00-10-6z"/><circle cx="8" cy="9" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="9" r="1" fill="currentColor" stroke="none"/></svg>,
+  graduation: () => <svg {...s}><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+  tooth:      () => <svg {...s}><path d="M12 5c-1.7-1.7-4-3-5.5-3A4.5 4.5 0 002 6.5C2 10 4 12 5 14s1.5 5 2 5 1.5-2 2-4c.5-2 1-2.5 3-2.5s2.5.5 3 2.5c.5 2 1 4 2 4s1-3 2-5 3-4 3-7.5A4.5 4.5 0 0017.5 2C16 2 13.7 3.3 12 5z"/></svg>,
+  stethoscope:() => <svg {...s}><path d="M4.5 8.5A4.5 4.5 0 009 13v4a5 5 0 0010 0v-3"/><circle cx="19" cy="14" r="3"/><path d="M4.5 8.5c0-2 1.3-4 3.5-4s3.5 2 3.5 4"/></svg>,
+  coins:      () => <svg {...s}><ellipse cx="12" cy="8" rx="9" ry="3"/><path d="M3 8v4c0 1.66 4.03 3 9 3s9-1.34 9-3V8"/><path d="M3 12v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"/></svg>,
+  shirt:      () => <svg {...s}><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg>,
+  umbrella:   () => <svg {...s}><path d="M23 12a11.05 11.05 0 00-22 0zm-5 7a3 3 0 01-6 0v-7"/></svg>,
 };
 
 export const CATEGORY_SVG_ICON_GROUPS: { label: string; codes: string[] }[] = [
-  { label: 'Покупки', codes: ['cart', 'basket', 'utensils', 'coffee', 'gift'] },
-  { label: 'Жильё', codes: ['home', 'building', 'key', 'wrench', 'leaf'] },
-  { label: 'Транспорт', codes: ['car', 'plane', 'bike', 'train'] },
-  { label: 'Здоровье', codes: ['heart', 'pill', 'dumbbell', 'sparkle'] },
-  { label: 'Досуг', codes: ['film', 'music', 'book', 'gamepad', 'scissors'] },
-  { label: 'Финансы', codes: ['wallet', 'chart', 'star', 'sun'] },
-  { label: 'Прочее', codes: ['phone', 'globe', 'paw', 'baby'] },
+  { label: 'Покупки', codes: ['cart', 'basket', 'bag', 'receipt', 'utensils', 'coffee', 'gift'] },
+  { label: 'Жильё', codes: ['home', 'building', 'door', 'sofa', 'lightbulb', 'key', 'wrench', 'leaf'] },
+  { label: 'Транспорт', codes: ['car', 'bus', 'fuel', 'plane', 'bike', 'train'] },
+  { label: 'Здоровье', codes: ['heart', 'tooth', 'stethoscope', 'pill', 'dumbbell', 'sparkle'] },
+  { label: 'Досуг', codes: ['film', 'music', 'headphones', 'camera', 'tv', 'book', 'gamepad', 'palette', 'scissors'] },
+  { label: 'Финансы', codes: ['wallet', 'coins', 'chart', 'star', 'sun'] },
+  { label: 'Прочее', codes: ['shirt', 'umbrella', 'graduation', 'phone', 'globe', 'paw', 'baby'] },
 ];
 
 export function CategorySvgIcon({ code, className }: { code: string; className?: string }) {

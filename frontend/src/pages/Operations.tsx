@@ -7,6 +7,7 @@ import {
   reverseOperation,
 } from '../api';
 import { hapticLight } from '../telegram';
+import { categoryDisplayName } from '../utils/categoryIcon';
 import { useHints } from '../hooks/useHints';
 import type {
   OperationAnalyticsItem,
@@ -329,7 +330,7 @@ function getBankEntryLabel(
 function getBudgetEntryLabel(name: string): string {
   if (name === 'Личный свободный остаток') return 'Личный остаток';
   if (name === 'Семейный свободный остаток') return 'Семейный остаток';
-  return name;
+  return categoryDisplayName(name);
 }
 
 

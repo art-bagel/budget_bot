@@ -71,6 +71,10 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Превышен кредитный лимит';
   }
 
+  if (text.includes('Credit limit is not configured')) {
+    return 'Кредитный лимит не настроен для этого счёта';
+  }
+
   if (text.includes('Insufficient budget in category')) {
     return 'Недостаточно бюджета в категории';
   }

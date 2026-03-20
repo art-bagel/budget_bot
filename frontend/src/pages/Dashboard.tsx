@@ -29,7 +29,7 @@ import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
-import { IconAnalyticsDonut, IconClock, IconPlusCircle } from '../components/Icons';
+import { IconAnalyticsDonut, IconClock, IconExchange, IconPlusCircle } from '../components/Icons';
 import { parseCategoryIcon } from '../utils/categoryIcon';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
@@ -37,7 +37,7 @@ import { hapticRigid } from '../telegram';
 
 type DashboardBankHubMode = 'history' | 'analytics';
 
-export default function Dashboard({ user }: { user: UserContext }) {
+export default function Dashboard({ user, onNavigate }: { user: UserContext; onNavigate?: (page: 'exchange') => void }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
@@ -688,7 +688,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
         )}
         <div className="dashboard-bank-actions" onClick={(e) => e.stopPropagation()}>
           <button
-            className="dashboard-bank-action"
+            className="dashboard-bank-action dashboard-bank-action--lg"
             type="button"
             onClick={() => openBankHub('history')}
           >
@@ -698,7 +698,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
             <span className="dashboard-bank-action__label">Операции</span>
           </button>
           <button
-            className="dashboard-bank-action"
+            className="dashboard-bank-action dashboard-bank-action--lg"
             type="button"
             onClick={() => setShowIncomeDialog(true)}
           >
@@ -708,7 +708,7 @@ export default function Dashboard({ user }: { user: UserContext }) {
             <span className="dashboard-bank-action__label">Пополнить</span>
           </button>
           <button
-            className="dashboard-bank-action"
+            className="dashboard-bank-action dashboard-bank-action--lg"
             type="button"
             onClick={() => openBankHub('analytics')}
           >
@@ -716,6 +716,16 @@ export default function Dashboard({ user }: { user: UserContext }) {
               <IconAnalyticsDonut />
             </span>
             <span className="dashboard-bank-action__label">Аналитика</span>
+          </button>
+          <button
+            className="dashboard-bank-action"
+            type="button"
+            onClick={() => onNavigate?.('exchange')}
+          >
+            <span className="dashboard-bank-action__icon">
+              <IconExchange />
+            </span>
+            <span className="dashboard-bank-action__label">Обмен</span>
           </button>
         </div>
       </article>

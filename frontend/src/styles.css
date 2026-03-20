@@ -348,7 +348,7 @@ p { margin: 0; }
 
 .dashboard-bank-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   padding-top: 16px;
@@ -388,6 +388,11 @@ p { margin: 0; }
 .dashboard-bank-action__icon svg {
   width: 30px;
   height: 30px;
+}
+
+.dashboard-bank-action--lg .dashboard-bank-action__icon svg {
+  width: 36px;
+  height: 36px;
 }
 
 .dashboard-bank-action__label {

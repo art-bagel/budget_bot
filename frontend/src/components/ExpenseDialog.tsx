@@ -4,6 +4,7 @@ import { fetchBankAccounts, fetchCurrencies, recordExpense } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, Currency, DashboardBudgetCategory, UserContext } from '../types';
 import { formatAmount } from '../utils/format';
+import { categoryDisplayName } from '../utils/categoryIcon';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -89,11 +90,11 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
 
         <div className="modal-body">
           <div className="operations-note">
-            Списать из <strong>{category.name}</strong> ({formatAmount(category.balance, category.currency_code)}).
+            Списать из <strong>{categoryDisplayName(category.name)}</strong> ({formatAmount(category.balance, category.currency_code)}).
           </div>
 
           <div className="form-row">
-            <div className="input input--read-only">Категория: {category.name}</div>
+            <div className="input input--read-only">Категория: {categoryDisplayName(category.name)}</div>
           </div>
 
           <div className="form-row">

@@ -20,6 +20,10 @@ export function parseCategoryIcon(name: string): ParsedIcon {
   return { icon: null, kind: null, displayName: name };
 }
 
+export function categoryDisplayName(name: string): string {
+  return parseCategoryIcon(name).displayName;
+}
+
 export function buildCategoryName(icon: string | null, displayName: string): string {
   const trimmed = displayName.trim();
   if (!icon) return trimmed;
