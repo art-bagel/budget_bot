@@ -586,8 +586,11 @@ class TinkoffSync:
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
                        SET external_id = $1, import_source = 'tinkoff'
-                       WHERE position_id = $2 AND event_type = $3 AND external_id IS NULL
-                       ORDER BY id DESC LIMIT 1''',
+                       WHERE id = (
+                           SELECT id FROM budgeting.portfolio_events
+                           WHERE position_id = $2 AND event_type = $3 AND external_id IS NULL
+                           ORDER BY id DESC LIMIT 1
+                       )''',
                     op_id, pos_id, event_type,
                 )
 
@@ -605,8 +608,11 @@ class TinkoffSync:
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
                        SET external_id = $1, import_source = 'tinkoff'
-                       WHERE position_id = $2 AND event_type = 'income' AND external_id IS NULL
-                       ORDER BY id DESC LIMIT 1''',
+                       WHERE id = (
+                           SELECT id FROM budgeting.portfolio_events
+                           WHERE position_id = $2 AND event_type = 'income' AND external_id IS NULL
+                           ORDER BY id DESC LIMIT 1
+                       )''',
                     op_id, pos_id,
                 )
 
@@ -622,8 +628,11 @@ class TinkoffSync:
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
                        SET external_id = $1, import_source = 'tinkoff'
-                       WHERE position_id = $2 AND event_type = 'fee' AND external_id IS NULL
-                       ORDER BY id DESC LIMIT 1''',
+                       WHERE id = (
+                           SELECT id FROM budgeting.portfolio_events
+                           WHERE position_id = $2 AND event_type = 'fee' AND external_id IS NULL
+                           ORDER BY id DESC LIMIT 1
+                       )''',
                     op_id, pos_id,
                 )
 
@@ -642,10 +651,13 @@ class TinkoffSync:
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
                        SET external_id = $1, import_source = 'tinkoff'
-                       WHERE position_id = $2
-                         AND event_type IN ('partial_close','close')
-                         AND external_id IS NULL
-                       ORDER BY id DESC LIMIT 1''',
+                       WHERE id = (
+                           SELECT id FROM budgeting.portfolio_events
+                           WHERE position_id = $2
+                             AND event_type IN ('partial_close','close')
+                             AND external_id IS NULL
+                           ORDER BY id DESC LIMIT 1
+                       )''',
                     op_id, pos_id,
                 )
 
