@@ -561,7 +561,9 @@ class TinkoffSync:
             if pos_id is None:
                 result = await conn.fetchval(
                     '''SELECT budgeting.put__create_portfolio_position(
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb
+                        $1::bigint, $2::bigint, $3::text, $4::text,
+                        $5::numeric, $6::numeric, $7::char(3), $8::date,
+                        NULL::text, $9::jsonb
                     )''',
                     user_id, linked_account_id, 'stock', figi,
                     quantity, amount, currency, op_date,
@@ -572,7 +574,10 @@ class TinkoffSync:
                 event_type = 'open'
             else:
                 await conn.execute(
-                    '''SELECT budgeting.put__top_up_portfolio_position($1,$2,$3,$4,$5,$6)''',
+                    '''SELECT budgeting.put__top_up_portfolio_position(
+                        $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                        $5::numeric, $6::date
+                    )''',
                     user_id, pos_id, amount, currency, quantity, op_date,
                 )
                 event_type = 'top_up'
@@ -589,10 +594,13 @@ class TinkoffSync:
         elif kind in ('dividend', 'coupon'):
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id:
-                income_kind = kind  # 'dividend' or 'coupon'
+                income_kind = kind
                 await conn.execute(
-                    '''SELECT budgeting.put__record_portfolio_income($1,$2,$3,$4,$5,$6,$7)''',
-                    user_id, pos_id, amount, currency, None, income_kind, op_date,
+                    '''SELECT budgeting.put__record_portfolio_income(
+                        $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                        NULL::numeric, $5::text, $6::date
+                    )''',
+                    user_id, pos_id, amount, currency, income_kind, op_date,
                 )
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
@@ -606,7 +614,9 @@ class TinkoffSync:
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id:
                 await conn.execute(
-                    '''SELECT budgeting.put__record_portfolio_fee($1,$2,$3,$4,$5)''',
+                    '''SELECT budgeting.put__record_portfolio_fee(
+                        $1::bigint, $2::bigint, $3::numeric, $4::char(3), $5::date
+                    )''',
                     user_id, pos_id, amount, currency, op_date,
                 )
                 await conn.execute(
@@ -621,8 +631,13 @@ class TinkoffSync:
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id:
                 await conn.execute(
-                    '''SELECT budgeting.put__partial_close_portfolio_position($1,$2,$3,$4,$5,$6,$7)''',
-                    user_id, pos_id, amount, currency, amount, quantity, op_date,
+                    # параметры: user, pos, return_amount, currency, principal_reduction,
+                    #            return_amount_in_base (NULL), closed_quantity, closed_at
+                    '''SELECT budgeting.put__partial_close_portfolio_position(
+                        $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                        $3::numeric, NULL::numeric, $5::numeric, $6::date
+                    )''',
+                    user_id, pos_id, amount, currency, quantity, op_date,
                 )
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
