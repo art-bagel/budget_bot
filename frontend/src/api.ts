@@ -50,6 +50,11 @@ import type {
   CancelPortfolioIncomeRequest,
   CancelPortfolioIncomeResponse,
   PortfolioSummaryItem,
+  TinkoffBrokerAccount,
+  ExternalConnection,
+  TinkoffPreviewResponse,
+  DepositResolution,
+  ApplyTinkoffSyncResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -535,5 +540,53 @@ export async function deleteScheduledExpense(
 ): Promise<{ status: string; id: number }> {
   return apiFetch<{ status: string; id: number }>(`/scheduled-expenses/${scheduleId}`, {
     method: 'DELETE',
+  });
+}
+
+// ── Tinkoff integration ──────────────────────────────────────────────────────
+
+export async function getTinkoffAccounts(token: string): Promise<TinkoffBrokerAccount[]> {
+  return apiFetch<TinkoffBrokerAccount[]>('/tinkoff/accounts', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export async function connectTinkoff(
+  token: string,
+  providerAccountId: string,
+  linkedAccountId: number,
+): Promise<{ id: number }> {
+  return apiFetch<{ id: number }>('/tinkoff/connect', {
+    method: 'POST',
+    body: JSON.stringify({
+      token,
+      provider_account_id: providerAccountId,
+      linked_account_id: linkedAccountId,
+    }),
+  });
+}
+
+export async function getTinkoffConnections(): Promise<ExternalConnection[]> {
+  return apiFetch<ExternalConnection[]>('/tinkoff/connections');
+}
+
+export async function deleteTinkoffConnection(connectionId: number): Promise<{ status: string; id: number }> {
+  return apiFetch<{ status: string; id: number }>(`/tinkoff/connections/${connectionId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function previewTinkoffSync(connectionId: number): Promise<TinkoffPreviewResponse> {
+  return apiFetch<TinkoffPreviewResponse>(`/tinkoff/preview/${connectionId}`);
+}
+
+export async function applyTinkoffSync(
+  connectionId: number,
+  depositResolutions: DepositResolution[],
+): Promise<ApplyTinkoffSyncResponse> {
+  return apiFetch<ApplyTinkoffSyncResponse>(`/tinkoff/apply/${connectionId}`, {
+    method: 'POST',
+    body: JSON.stringify({ deposit_resolutions: depositResolutions }),
   });
 }

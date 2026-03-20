@@ -295,59 +295,59 @@ class TinkoffSync:
 ## Чек-лист реализации
 
 ### База данных
-- [ ] Написать миграцию `018_external_connections.sql`
-  - [ ] Таблица `external_connections`
-  - [ ] `portfolio_events.external_id` + `import_source` + уникальный индекс
-  - [ ] `bank_entries.external_id` + `import_source` + уникальный индекс
-  - [ ] Добавить `broker_input`, `broker_output` в CHECK constraint `operations.type`
+- [x] Написать миграцию `018_external_connections.sql`
+  - [x] Таблица `external_connections`
+  - [x] `portfolio_events.external_id` + `import_source` + уникальный индекс
+  - [x] `bank_entries.external_id` + `import_source` + уникальный индекс
+  - [x] Добавить `broker_input`, `broker_output` в CHECK constraint `operations.type`
 - [ ] Применить миграцию к БД
 
 ### Backend
-- [ ] Добавить зависимость `tinkoff-investments` в requirements
-- [ ] Написать `storage/tinkoff_sync.py`
-  - [ ] `_money_value_to_decimal()` — конвертер MoneyValue
-  - [ ] `_fetch_operations()` — получить операции из Тинькофф API с фильтром по дате
-  - [ ] `_map_operation()` — смаппить тип операции Тинькофф → наш тип
-  - [ ] `_find_or_create_position()` — найти позицию по FIGI или создать новую
-  - [ ] `preview()` — dry run, только читаем
-  - [ ] `apply()` — применить с решениями, одна транзакция
-- [ ] SQL функция `put__apply_broker_sync()` или вызывать существующие функции из Python
-- [ ] Новый роутер `backend/app/routers/tinkoff.py`
-  - [ ] `POST /tinkoff/connect`
-  - [ ] `GET /tinkoff/connections`
-  - [ ] `DELETE /tinkoff/connections/{id}`
-  - [ ] `GET /tinkoff/preview/{connection_id}`
-  - [ ] `POST /tinkoff/apply/{connection_id}`
-- [ ] Подключить роутер в `main.py`
+- [x] Добавить зависимость `tinkoff-investments` в requirements
+- [x] Написать `storage/tinkoff_sync.py`
+  - [x] `_money_value_to_decimal()` — конвертер MoneyValue
+  - [x] `_fetch_operations()` — получить операции из Тинькофф API с фильтром по дате
+  - [x] `_map_operation()` — смаппить тип операции Тинькофф → наш тип
+  - [x] `_find_or_create_position()` — найти позицию по FIGI или создать новую
+  - [x] `preview()` — dry run, только читаем
+  - [x] `apply()` — применить с решениями, одна транзакция
+- [x] SQL функция `put__apply_broker_sync()` или вызывать существующие функции из Python (вызываем существующие из Python)
+- [x] Новый роутер `backend/app/routers/tinkoff.py`
+  - [x] `POST /tinkoff/connect`
+  - [x] `GET /tinkoff/connections`
+  - [x] `DELETE /tinkoff/connections/{id}`
+  - [x] `GET /tinkoff/preview/{connection_id}`
+  - [x] `POST /tinkoff/apply/{connection_id}`
+- [x] Подключить роутер в `main.py`
 - [ ] Обработка ошибок Тинькофф API (невалидный токен, недоступен счёт, etc.)
 - [ ] Добавить нормализацию ошибок в `normalizeApiErrorMessage` на фронте
 
 ### Frontend
-- [ ] Добавить типы в `types.ts`
-  - [ ] `ExternalConnection`
-  - [ ] `TinkoffPreviewResponse`
-  - [ ] `DepositResolution`
-- [ ] Добавить API функции в `api.ts`
-  - [ ] `connectTinkoff()`
-  - [ ] `getTinkoffConnections()`
-  - [ ] `deleteTinkoffConnection()`
-  - [ ] `previewTinkoffSync()`
-  - [ ] `applyTinkoffSync()`
-- [ ] Компонент `TinkoffSyncDialog.tsx`
-  - [ ] Состояния: loading / review / applying / done / error
-  - [ ] Карточка для каждого пополнения с radio-вариантами
-  - [ ] Dropdown выбора счёта + показ баланса + валидация
-  - [ ] Валидация "Уже учтено" — проверка баланса инвест счёта
-  - [ ] Блокировка кнопки "Применить" пока есть нерешённые пополнения
-  - [ ] Кнопка "Отмена" закрывает без изменений
-  - [ ] Секция автоматических операций (read-only список)
-- [ ] Страница настроек — раздел "Интеграции"
-  - [ ] Форма подключения Тинькофф (токен + выбор счёта)
-  - [ ] Список подключений
-  - [ ] Кнопка удаления подключения
-- [ ] Страница портфеля — кнопка синка
-  - [ ] Кнопка "Подтянуть данные" рядом с названием инвест счёта
-  - [ ] Показывать время последней синхронизации
+- [x] Добавить типы в `types.ts`
+  - [x] `ExternalConnection`
+  - [x] `TinkoffPreviewResponse`
+  - [x] `DepositResolution`
+- [x] Добавить API функции в `api.ts`
+  - [x] `connectTinkoff()`
+  - [x] `getTinkoffConnections()`
+  - [x] `deleteTinkoffConnection()`
+  - [x] `previewTinkoffSync()`
+  - [x] `applyTinkoffSync()`
+- [x] Компонент `TinkoffSyncDialog.tsx`
+  - [x] Состояния: loading / review / applying / done / error
+  - [x] Карточка для каждого пополнения с radio-вариантами
+  - [x] Dropdown выбора счёта + показ баланса + валидация
+  - [ ] Валидация "Уже учтено" — проверка баланса инвест счёта (серверная, на фронте не реализована)
+  - [x] Блокировка кнопки "Применить" пока есть нерешённые пополнения
+  - [x] Кнопка "Отмена" закрывает без изменений
+  - [x] Секция автоматических операций (read-only список)
+- [x] Страница настроек — раздел "Интеграции"
+  - [x] Форма подключения Тинькофф (токен + выбор счёта)
+  - [x] Список подключений
+  - [x] Кнопка удаления подключения
+- [x] Страница портфеля — кнопка синка
+  - [x] Кнопка "Подтянуть данные" рядом с названием инвест счёта
+  - [x] Показывать время последней синхронизации
 
 ### Тестирование
 - [ ] Проверить идемпотентность — повторный применить не создаёт дублей

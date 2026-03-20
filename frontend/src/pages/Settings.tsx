@@ -8,22 +8,26 @@ import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
 import {
   createBankAccount,
   deleteAccount,
+  deleteTinkoffConnection,
   dissolveFamily,
   fetchBankAccounts,
   fetchMyFamily,
+  getTinkoffConnections,
   leaveFamily,
 } from '../api';
 import Family from './Family';
-import type { BankAccount, FamilyInfo, UserContext } from '../types';
+import TinkoffConnectDialog from '../components/TinkoffConnectDialog';
+import type { BankAccount, ExternalConnection, FamilyInfo, UserContext } from '../types';
 
-type SettingsTab = 'appearance' | 'account' | 'family' | 'investments' | 'data';
+type SettingsTab = 'appearance' | 'account' | 'family' | 'investments' | 'integrations' | 'data';
 
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'appearance', label: 'Оформление' },
-  { id: 'account',    label: 'Аккаунт' },
-  { id: 'family',     label: 'Семья' },
-  { id: 'investments',label: 'Инвестиции' },
-  { id: 'data',       label: 'Данные' },
+  { id: 'appearance',   label: 'Оформление' },
+  { id: 'account',      label: 'Аккаунт' },
+  { id: 'family',       label: 'Семья' },
+  { id: 'investments',  label: 'Инвестиции' },
+  { id: 'integrations', label: 'Интеграции' },
+  { id: 'data',         label: 'Данные' },
 ];
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: ComponentType }[] = [
@@ -59,6 +63,43 @@ export default function Settings({
   const [newInvestmentProvider, setNewInvestmentProvider] = useState('');
   const [creatingInvestmentAccount, setCreatingInvestmentAccount] = useState(false);
   const [createInvestmentError, setCreateInvestmentError] = useState<string | null>(null);
+
+  // Integrations tab state
+  const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
+  const [showTinkoffConnectDialog, setShowTinkoffConnectDialog] = useState(false);
+  const [deletingConnectionId, setDeletingConnectionId] = useState<number | null>(null);
+
+  const loadConnections = async () => {
+    setConnectionsLoading(true);
+    try {
+      const conns = await getTinkoffConnections();
+      setTinkoffConnections(conns);
+    } catch {
+      // ignore
+    } finally {
+      setConnectionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'integrations') {
+      void loadConnections();
+    }
+  }, [activeTab]);
+
+  const handleDeleteConnection = async (connId: number) => {
+    if (!window.confirm('Удалить подключение к Тинькофф?')) return;
+    setDeletingConnectionId(connId);
+    try {
+      await deleteTinkoffConnection(connId);
+      setTinkoffConnections((prev) => prev.filter((c) => c.id !== connId));
+    } catch {
+      // ignore
+    } finally {
+      setDeletingConnectionId(null);
+    }
+  };
 
   useEffect(() => {
     void fetchMyFamily()
@@ -421,6 +462,67 @@ export default function Settings({
               </ul>
             )}
           </div>
+        </section>
+      )}
+
+      {activeTab === 'integrations' && (
+        <section className="settings-section">
+          <div className="panel">
+            <div className="settings-row settings-row--first">
+              <div>
+                <div className="settings-row__title">Тинькофф Инвестиции</div>
+                <div className="settings-row__sub">Подтягивать операции из Тинькофф вручную</div>
+              </div>
+              <button className="btn" type="button" onClick={() => setShowTinkoffConnectDialog(true)}>
+                Подключить
+              </button>
+            </div>
+
+            {connectionsLoading ? (
+              <div className="settings-row__sub">Загружаем подключения…</div>
+            ) : tinkoffConnections.length > 0 ? (
+              <ul style={{ marginTop: 8 }}>
+                {tinkoffConnections.map((conn) => (
+                  <li key={conn.id} className="integrations-connection-item">
+                    <div className="integrations-connection-item__info">
+                      <div className="integrations-connection-item__name">
+                        {conn.linked_account_name ?? `Счёт #${conn.linked_account_id}`}
+                      </div>
+                      <div className="integrations-connection-item__sub">
+                        Тинькофф {conn.provider_account_id}
+                        {conn.last_synced_at
+                          ? ` · последний синк ${new Date(conn.last_synced_at).toLocaleDateString('ru')}`
+                          : ' · ещё не синхронизировано'}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn--danger btn--icon"
+                      type="button"
+                      title="Удалить подключение"
+                      disabled={deletingConnectionId === conn.id}
+                      onClick={() => handleDeleteConnection(conn.id)}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="settings-row__sub" style={{ marginTop: 8 }}>
+                Подключений пока нет.
+              </div>
+            )}
+          </div>
+
+          {showTinkoffConnectDialog && (
+            <TinkoffConnectDialog
+              onClose={() => setShowTinkoffConnectDialog(false)}
+              onSuccess={() => {
+                setShowTinkoffConnectDialog(false);
+                void loadConnections();
+              }}
+            />
+          )}
         </section>
       )}
 

@@ -505,3 +505,64 @@ export interface CreateFamilyResponse {
   unallocated_category_id: number;
   fx_result_category_id: number;
 }
+
+// ── Tinkoff integration ──────────────────────────────────────────────────────
+
+export interface TinkoffBrokerAccount {
+  provider_account_id: string;
+  name: string;
+  type: string;
+}
+
+export interface ExternalConnection {
+  id: number;
+  provider: string;
+  provider_account_id: string;
+  linked_account_id: number | null;
+  linked_account_name: string | null;
+  last_synced_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TinkoffDepositPreview {
+  tinkoff_op_id: string;
+  amount: number;
+  currency_code: string;
+  date: string;
+  already_imported: boolean;
+}
+
+export interface TinkoffAutoOperationPreview {
+  tinkoff_op_id: string;
+  type: string;
+  ticker: string;
+  figi: string;
+  amount: number;
+  quantity: number | null;
+  currency_code: string;
+  date: string;
+  already_imported: boolean;
+}
+
+export interface TinkoffPreviewResponse {
+  deposits: TinkoffDepositPreview[];
+  withdrawals: TinkoffDepositPreview[];
+  auto_operations: TinkoffAutoOperationPreview[];
+  total_new: number;
+  total_already_imported: number;
+}
+
+export type DepositResolutionKind = 'external' | 'transfer' | 'already_recorded';
+
+export interface DepositResolution {
+  tinkoff_op_id: string;
+  resolution: DepositResolutionKind;
+  source_account_id: number | null;
+}
+
+export interface ApplyTinkoffSyncResponse {
+  status: string;
+  applied: number;
+  skipped_already_imported: number;
+}

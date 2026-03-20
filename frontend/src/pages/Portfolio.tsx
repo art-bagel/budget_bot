@@ -10,16 +10,19 @@ import {
   fetchPortfolioEvents,
   fetchPortfolioPositions,
   fetchPortfolioSummary,
+  getTinkoffConnections,
   partialClosePortfolioPosition,
   recordPortfolioFee,
   recordPortfolioIncome,
   topUpPortfolioPosition,
 } from '../api';
 import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
+import TinkoffSyncDialog from '../components/TinkoffSyncDialog';
 import type {
   BankAccount,
   Currency,
   DashboardBankBalance,
+  ExternalConnection,
   PortfolioEvent,
   PortfolioPosition,
   PortfolioSummaryItem,
@@ -288,17 +291,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
+  const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
+  const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
 
   const loadPortfolio = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const [investmentAccounts, loadedPositions, loadedCurrencies, loadedSummary] = await Promise.all([
+      const [investmentAccounts, loadedPositions, loadedCurrencies, loadedSummary, loadedConnections] = await Promise.all([
         fetchBankAccounts('investment'),
         fetchPortfolioPositions(),
         fetchCurrencies(),
         fetchPortfolioSummary(),
+        getTinkoffConnections().catch(() => [] as ExternalConnection[]),
       ]);
       const snapshots = await Promise.all(
         investmentAccounts.map(async (account) => ({
@@ -311,6 +317,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setPositions(loadedPositions);
       setCurrencies(loadedCurrencies);
       setSummaryItems(loadedSummary);
+      setTinkoffConnections(loadedConnections);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -1154,6 +1161,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           </div>
                           <div className="section__title" style={{ fontSize: '1rem' }}>{group.accountName}</div>
                         </div>
+                        {tinkoffConnections
+                          .filter((c) => c.linked_account_id === group.accountId)
+                          .map((conn) => (
+                            <button
+                              key={conn.id}
+                              type="button"
+                              className="tinkoff-sync-btn"
+                              onClick={() => setSyncDialogConnection(conn)}
+                            >
+                              ↻ Подтянуть данные
+                              {conn.last_synced_at && (
+                                <span className="tinkoff-sync-btn__last">
+                                  {new Date(conn.last_synced_at).toLocaleDateString('ru')}
+                                </span>
+                              )}
+                            </button>
+                          ))}
                       </div>
                     ) : null}
 
@@ -1835,6 +1859,19 @@ export default function Portfolio({ user }: { user: UserContext }) {
           onClose={() => setIsCreateDialogOpen(false)}
           onSuccess={() => {
             setIsCreateDialogOpen(false);
+            void loadPortfolio();
+          }}
+        />
+      )}
+
+      {syncDialogConnection && (
+        <TinkoffSyncDialog
+          connectionId={syncDialogConnection.id}
+          investmentAccountId={syncDialogConnection.linked_account_id ?? 0}
+          baseCurrencyCode={user.base_currency_code}
+          onClose={() => setSyncDialogConnection(null)}
+          onSuccess={() => {
+            setSyncDialogConnection(null);
             void loadPortfolio();
           }}
         />
