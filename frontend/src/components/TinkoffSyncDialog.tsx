@@ -176,7 +176,7 @@ export default function TinkoffSyncDialog({
     const state = depositStates[deposit.tinkoff_op_id];
     if (!state) return null;
 
-    const amountFormatted = formatAmount(deposit.amount, deposit.currency_code, 2);
+    const amountFormatted = formatAmount(deposit.amount, deposit.currency_code);
     const investBal = getInvestmentBalance(deposit.currency_code);
     const investEnough = investBal === null || investBal >= deposit.amount;
 
@@ -222,7 +222,7 @@ export default function TinkoffSyncDialog({
                   return (
                     <option key={acc.id} value={String(acc.id)}>
                       {acc.name}
-                      {bal !== null ? ` (${formatAmount(bal, deposit.currency_code, 2)}${enough ? '' : ' ⚠'})` : ''}
+                      {bal !== null ? ` (${formatAmount(bal, deposit.currency_code)}${enough ? '' : ' ⚠'})` : ''}
                     </option>
                   );
                 })}
@@ -233,7 +233,7 @@ export default function TinkoffSyncDialog({
                 if (!enough && bal !== null) {
                   return (
                     <p className="tinkoff-deposit-card__warn">
-                      Недостаточно средств на счёте ({formatAmount(bal, deposit.currency_code, 2)})
+                      Недостаточно средств на счёте ({formatAmount(bal, deposit.currency_code)})
                     </p>
                   );
                 }
@@ -253,7 +253,7 @@ export default function TinkoffSyncDialog({
               Уже учтено в боте
               {investBal !== null && (
                 <span className="tinkoff-deposit-card__balance-hint">
-                  {' '}(на инвест-счёте: {formatAmount(investBal, deposit.currency_code, 2)})
+                  {' '}(на инвест-счёте: {formatAmount(investBal, deposit.currency_code)})
                 </span>
               )}
             </span>
@@ -262,7 +262,7 @@ export default function TinkoffSyncDialog({
           {state.resolution === 'already_recorded' && !investEnough && (
             <p className="tinkoff-deposit-card__warn">
               На инвест-счёте недостаточно средств — деньги там ещё не учтены
-              {investBal !== null && ` (есть ${formatAmount(investBal, deposit.currency_code, 2)})`}
+              {investBal !== null && ` (есть ${formatAmount(investBal, deposit.currency_code)})`}
             </p>
           )}
         </div>
@@ -331,7 +331,7 @@ export default function TinkoffSyncDialog({
                           <span className="tinkoff-sync__auto-type">{op.type}</span>
                           <span className="tinkoff-sync__auto-ticker">{op.ticker || op.figi}</span>
                           <span className="tinkoff-sync__auto-amount">
-                            {formatAmount(op.amount, op.currency_code, 2)}
+                            {formatAmount(op.amount, op.currency_code)}
                           </span>
                           <span className="tinkoff-sync__auto-date">{op.date}</span>
                         </div>
