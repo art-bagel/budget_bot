@@ -191,7 +191,7 @@ class TinkoffRestClient:
             if not cursor:
                 break
 
-        return _sort_operations_chronologically(all_items)
+        return _dedupe_synthetic_operations(_sort_operations_chronologically(all_items))
 
     async def get_positions(self, account_id: str) -> dict:
         return await self._post(
@@ -391,9 +391,74 @@ def _op_date(op: dict) -> date:
 
 def _sort_operations_chronologically(ops: list[dict]) -> list[dict]:
     # Historical import must apply cash movements before trades that spend them.
-    # Tinkoff response order is not guaranteed for our business logic, so we
-    # normalize it explicitly by operation timestamp.
-    return sorted(ops, key=lambda op: (_op_datetime(op), str(op.get('id', ''))))
+    # Tinkoff response order is not guaranteed for our business logic. In some
+    # products (for example Invest Box) the real INPUT can land a few seconds
+    # after the corresponding BUY, so inside a tight 10-second bucket we prefer
+    # cash inflows before cash outflows.
+    def sort_key(op: dict) -> tuple[int, int, datetime, str]:
+        op_dt = _op_datetime(op)
+        try:
+            time_bucket = int(op_dt.timestamp()) // 10
+        except Exception:
+            time_bucket = -1
+
+        kind = _map_operation(op)['kind']
+        if kind == 'input':
+            priority = 0
+        elif kind in ('dividend', 'coupon', 'sell'):
+            priority = 1
+        elif kind == 'buy':
+            priority = 2
+        elif kind in ('broker_fee', 'tax'):
+            priority = 3
+        elif kind == 'output':
+            priority = 4
+        else:
+            priority = 5
+
+        return (time_bucket, priority, op_dt, str(op.get('id', '')))
+
+    return sorted(ops, key=sort_key)
+
+
+def _is_synthetic_ees_operation(op: dict) -> bool:
+    return _op_field(op, 'classCode', 'class_code').upper().startswith('EES_')
+
+
+def _operation_dedupe_key(op: dict) -> tuple[str, str, str, str, str, str]:
+    op_dt_second = _op_datetime(op).replace(microsecond=0).isoformat()
+    payment = op.get('payment') or {}
+    payment_amount = str(_money_value_to_decimal(payment))
+    quantity = str(op.get('quantity') or '')
+    return (
+        op_dt_second,
+        op.get('type') or op.get('operationType', ''),
+        _op_field(op, 'instrumentUid', 'instrument_uid'),
+        _op_field(op, 'positionUid', 'position_uid'),
+        _op_field(op, 'figi'),
+        f'{payment_amount}:{quantity}',
+    )
+
+
+def _dedupe_synthetic_operations(ops: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+
+    for op in ops:
+        if deduped and _operation_dedupe_key(deduped[-1]) == _operation_dedupe_key(op):
+            prev = deduped[-1]
+            prev_is_synthetic = _is_synthetic_ees_operation(prev)
+            current_is_synthetic = _is_synthetic_ees_operation(op)
+
+            if prev_is_synthetic and not current_is_synthetic:
+                deduped[-1] = op
+                continue
+
+            if current_is_synthetic and not prev_is_synthetic:
+                continue
+
+        deduped.append(op)
+
+    return deduped
 
 
 def _op_currency(op: dict) -> str:
@@ -550,6 +615,75 @@ async def _build_live_price_payload(
     }
 
 
+async def _record_unmatched_cash_only(
+    conn: asyncpg.Connection,
+    user_id: int,
+    owner_type: str,
+    owner_user_id: Optional[int],
+    owner_family_id: Optional[int],
+    linked_account_id: int,
+    signed_amount: Decimal,
+    currency: str,
+    external_id: str,
+    comment: str,
+    operation_type: str,
+) -> None:
+    base_currency = await conn.fetchval(
+        'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+    )
+    if str(base_currency or '').upper() != currency.upper():
+        raise ValueError(
+            'Cannot record unmatched Tinkoff cash flow in non-base currency without a linked position'
+        )
+
+    operation_id = await conn.fetchval(
+        '''INSERT INTO budgeting.operations (
+               actor_user_id,
+               owner_type,
+               owner_user_id,
+               owner_family_id,
+               type,
+               comment
+           )
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id''',
+        user_id,
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        operation_type,
+        comment,
+    )
+
+    await conn.execute(
+        '''INSERT INTO budgeting.bank_entries (
+               operation_id,
+               bank_account_id,
+               currency_code,
+               amount,
+               external_id,
+               import_source
+           )
+           VALUES ($1, $2, $3, $4, $5, 'tinkoff')''',
+        operation_id,
+        linked_account_id,
+        currency,
+        signed_amount,
+        external_id,
+    )
+
+    await conn.execute(
+        'SELECT budgeting.put__apply_current_bank_delta($1::bigint, $2::char(3), $3::numeric, $4::numeric)',
+        linked_account_id,
+        currency,
+        signed_amount,
+        signed_amount,
+    )
+
+
 def _map_operation(op: dict) -> dict:
     # GetOperationsByCursor returns 'type'; GetOperations returns 'operationType'
     op_type = op.get('type') or op.get('operationType', '')
@@ -574,9 +708,13 @@ class TinkoffSync:
 
     # ── Helpers ─────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _get_since(conn_row: dict) -> datetime:
-        """Return sync start datetime from connection settings, or 5 years ago."""
+    async def _get_since(
+        self,
+        client: TinkoffRestClient,
+        tinkoff_account_id: str,
+        conn_row: Optional[dict] = None,
+    ) -> datetime:
+        """Return sync start datetime from settings or the broker account opened date."""
         settings = conn_row.get('settings') or {}
         if isinstance(settings, str):
             try:
@@ -590,7 +728,31 @@ class TinkoffSync:
                 return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
             except Exception:
                 pass
-        return datetime.now(timezone.utc) - timedelta(days=5 * 365)
+
+        try:
+            accounts = await client.get_accounts()
+        except Exception as exc:
+            logger.warning(
+                'Failed to load T-Bank accounts for sync start fallback on account %s: %s',
+                tinkoff_account_id,
+                exc,
+            )
+            accounts = []
+
+        for account in accounts:
+            if str(account.get('id', '')).strip() != str(tinkoff_account_id).strip():
+                continue
+            opened_raw = account.get('openedDate') or account.get('opened_date')
+            if not opened_raw:
+                break
+            try:
+                opened_at = datetime.fromisoformat(str(opened_raw).replace('Z', '+00:00'))
+                return datetime(opened_at.year, opened_at.month, opened_at.day, tzinfo=timezone.utc)
+            except Exception:
+                break
+
+        fallback = datetime.now(timezone.utc) - timedelta(days=10 * 365)
+        return datetime(fallback.year, fallback.month, fallback.day, tzinfo=timezone.utc)
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -604,7 +766,7 @@ class TinkoffSync:
     ) -> dict:
         """Dry-run: classify operations without writing to DB."""
         client = TinkoffRestClient(token)
-        since = self._get_since(conn_row) if conn_row else datetime.now(timezone.utc) - timedelta(days=5 * 365)
+        since = await self._get_since(client, tinkoff_account_id, conn_row=conn_row)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
         instrument_map = await self._resolve_instrument_map(client, raw_ops)
 
@@ -684,7 +846,7 @@ class TinkoffSync:
         owner_family_id    = conn_row['owner_family_id']
 
         client = TinkoffRestClient(token)
-        since  = self._get_since(conn_row)
+        since  = await self._get_since(client, tinkoff_account_id, conn_row=conn_row)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
         instrument_map = await self._resolve_instrument_map(client, raw_ops)
 
@@ -1284,6 +1446,7 @@ class TinkoffSync:
             or instrument_meta.get('ticker')
             or figi
         )
+        unmatched_comment = f'Tinkoff: операция без найденной позиции · {instrument_title}'
         position_metadata = {
             'figi': instrument_meta.get('figi') or figi,
             'instrument_uid': instrument_meta.get('instrument_uid', ''),
@@ -1356,8 +1519,28 @@ class TinkoffSync:
                            SELECT id FROM budgeting.portfolio_events
                            WHERE position_id = $2 AND event_type = 'income' AND external_id IS NULL
                            ORDER BY id DESC LIMIT 1
-                       )''',
+                        )''',
                     op_id, pos_id,
+                )
+            else:
+                await _record_unmatched_cash_only(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    amount,
+                    currency,
+                    op_id,
+                    unmatched_comment,
+                    'investment_income',
+                )
+                logger.warning(
+                    'Recorded unmatched %s as cash-only import for %s (%s)',
+                    kind,
+                    instrument_title,
+                    op_id,
                 )
 
         elif kind in ('broker_fee', 'tax'):
@@ -1377,22 +1560,84 @@ class TinkoffSync:
                            SELECT id FROM budgeting.portfolio_events
                            WHERE position_id = $2 AND event_type = 'fee' AND external_id IS NULL
                            ORDER BY id DESC LIMIT 1
-                       )''',
+                        )''',
                     op_id, pos_id,
+                )
+            else:
+                await _record_unmatched_cash_only(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    -amount,
+                    currency,
+                    op_id,
+                    unmatched_comment,
+                    'investment_adjustment',
+                )
+                logger.warning(
+                    'Recorded unmatched %s as cash-only import for %s (%s)',
+                    kind,
+                    instrument_title,
+                    op_id,
                 )
 
         elif kind == 'sell':
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
                 pos_row = await conn.fetchrow(
-                    '''SELECT quantity
+                    '''SELECT quantity,
+                              amount_in_currency,
+                              COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base
                        FROM budgeting.portfolio_positions
                        WHERE id = $1''',
                     pos_id,
                 )
                 current_quantity = None
+                current_amount_in_currency = None
+                current_amount_in_base = None
                 if pos_row is not None and pos_row['quantity'] is not None:
                     current_quantity = Decimal(str(pos_row['quantity']))
+                if pos_row is not None and pos_row['amount_in_currency'] is not None:
+                    current_amount_in_currency = Decimal(str(pos_row['amount_in_currency']))
+                if pos_row is not None and pos_row['amount_in_base'] is not None:
+                    current_amount_in_base = Decimal(str(pos_row['amount_in_base']))
+
+                base_currency = await conn.fetchval(
+                    'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                )
+                close_amount_in_base: Optional[Decimal] = None
+                if (
+                    str(base_currency or '').upper() != currency.upper()
+                    and amount > 0
+                    and current_amount_in_currency is not None
+                    and current_amount_in_currency > 0
+                    and current_amount_in_base is not None
+                    and current_amount_in_base > 0
+                ):
+                    close_amount_in_base = round(
+                        current_amount_in_base * amount / current_amount_in_currency,
+                        2,
+                    )
+
+                principal_reduction = amount
+                if (
+                    current_quantity is not None
+                    and current_quantity > 0
+                    and quantity is not None
+                    and quantity > 0
+                    and current_amount_in_currency is not None
+                    and current_amount_in_currency > 0
+                ):
+                    principal_reduction = round(
+                        current_amount_in_currency * quantity / current_quantity,
+                        8,
+                    )
 
                 is_full_close = (
                     current_quantity is not None
@@ -1404,9 +1649,9 @@ class TinkoffSync:
                     await conn.execute(
                         '''SELECT budgeting.put__close_portfolio_position(
                             $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                            NULL::numeric, $5::date
+                            $5::numeric, $6::date
                         )''',
-                        user_id, pos_id, amount, currency, op_date,
+                        user_id, pos_id, amount, currency, close_amount_in_base, op_date,
                     )
                     event_types = ('close',)
                 else:
@@ -1415,9 +1660,16 @@ class TinkoffSync:
                         #            return_amount_in_base (NULL), closed_quantity, closed_at
                         '''SELECT budgeting.put__partial_close_portfolio_position(
                             $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                            $3::numeric, NULL::numeric, $5::numeric, $6::date
+                            $5::numeric, $6::numeric, $7::numeric, $8::date
                         )''',
-                        user_id, pos_id, amount, currency, quantity, op_date,
+                        user_id,
+                        pos_id,
+                        amount,
+                        currency,
+                        principal_reduction,
+                        close_amount_in_base,
+                        quantity,
+                        op_date,
                     )
                     event_types = ('partial_close', 'close')
 
@@ -1430,8 +1682,27 @@ class TinkoffSync:
                              AND event_type = ANY($3::varchar[])
                              AND external_id IS NULL
                            ORDER BY id DESC LIMIT 1
-                       )''',
+                        )''',
                     op_id, pos_id, list(event_types),
+                )
+            else:
+                await _record_unmatched_cash_only(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    amount,
+                    currency,
+                    op_id,
+                    unmatched_comment,
+                    'investment_adjustment',
+                )
+                logger.warning(
+                    'Recorded unmatched sell as cash-only import for %s (%s)',
+                    instrument_title,
+                    op_id,
                 )
 
 

@@ -99,6 +99,14 @@ type PositionAccountGroup = {
   positions: PortfolioPosition[];
 };
 
+type PositionAccountTab = {
+  key: string;
+  accountName: string;
+  ownerLabel: string | null;
+  openCount: number;
+  estimatedValue: number;
+};
+
 type SecuritySection = {
   code: string;
   label: string;
@@ -170,6 +178,10 @@ function getSecurityKindLabel(code: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getPositionAccountKey(position: Pick<PortfolioPosition, 'investment_account_owner_type' | 'investment_account_id'>): string {
+  return `${position.investment_account_owner_type}:${position.investment_account_id}`;
 }
 
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
@@ -292,12 +304,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
+  const [accountSwipeStartX, setAccountSwipeStartX] = useState<number | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
   const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
   const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
+  const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -465,6 +479,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
     };
   };
 
+  const getResolvedPositionEstimatedValue = (position: PortfolioPosition) => (
+    getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency
+  );
+
+  const summaryByAccountId = useMemo(
+    () => summaryItems.reduce<Record<number, PortfolioSummaryItem>>((acc, item) => {
+      acc[item.investment_account_id] = item;
+      return acc;
+    }, {}),
+    [summaryItems],
+  );
+
   const totalInvestedPrincipalInBase = useMemo(
     () => summaryItems.reduce((sum, item) => sum + item.invested_principal_in_base, 0),
     [summaryItems],
@@ -488,15 +514,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
     let count = 0;
     for (const pos of openPositions) {
       const quote = getResolvedPositionQuote(pos);
+      total += getResolvedPositionEstimatedValue(pos);
       if (quote.currentTotalValue !== null) {
-        total += quote.currentTotalValue;
         pricedMarket += quote.currentTotalValue;
         pricedEntry += pos.amount_in_currency;
         count++;
-        continue;
       }
-      // No ticker, no price, or bond — use cost basis
-      total += pos.amount_in_currency;
     }
     return {
       totalPositionsValue: total,
@@ -510,6 +533,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
   // Total = positions at market/cost + uninvested cash
   // Realized income is NOT added separately — it's already in cash or reinvested in positions
   const totalRealPortfolioValue = totalPositionsValue + totalInvestmentCashInBase;
+
+  const accountEstimatedValueById = useMemo(
+    () => openPositions.reduce<Record<number, number>>((acc, position) => {
+      acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + getResolvedPositionEstimatedValue(position);
+      return acc;
+    }, {}),
+    [openPositions, moexPrices, tinkoffLivePrices],
+  );
 
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
@@ -1046,12 +1077,99 @@ export default function Portfolio({ user }: { user: UserContext }) {
     return Array.from(grouped.values());
   }, [filteredOpenPositions]);
 
-  const hasMultipleOpenPositionOwners = useMemo(
-    () => new Set(filteredOpenPositionGroups.map((group) => group.ownerType)).size > 1,
-    [filteredOpenPositionGroups],
+  const accountTabs = useMemo<PositionAccountTab[]>(() => {
+    const scopedTabs = filteredOpenPositionGroups.map((group) => ({
+      key: `${group.ownerType}:${group.accountId}`,
+      accountName: group.accountName,
+      ownerLabel: group.ownerType === 'family' ? 'Семейный счет' : 'Личный счет',
+      openCount: group.positions.length,
+      estimatedValue: group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
+    }));
+
+    if (scopedTabs.length <= 1) {
+      return scopedTabs;
+    }
+
+    return [{
+      key: 'all',
+      accountName: 'Все счета',
+      ownerLabel: null,
+      openCount: filteredOpenPositions.length,
+      estimatedValue: filteredOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
+    }, ...scopedTabs];
+  }, [filteredOpenPositionGroups, filteredOpenPositions, moexPrices, tinkoffLivePrices]);
+
+  useEffect(() => {
+    const fallbackKey = accountTabs[0]?.key ?? 'all';
+    if (!accountTabs.some((tab) => tab.key === activeAccountTabKey)) {
+      setActiveAccountTabKey(fallbackKey);
+    }
+  }, [activeAccountTabKey, accountTabs]);
+
+  const activeAccountTab = useMemo(
+    () => accountTabs.find((tab) => tab.key === activeAccountTabKey) ?? accountTabs[0] ?? null,
+    [activeAccountTabKey, accountTabs],
   );
 
-  const hasMultipleOpenPositionAccounts = filteredOpenPositionGroups.length > 1;
+  const visibleOpenPositions = useMemo(
+    () => (
+      activeAccountTabKey === 'all'
+        ? filteredOpenPositions
+        : filteredOpenPositions.filter((position) => getPositionAccountKey(position) === activeAccountTabKey)
+    ),
+    [activeAccountTabKey, filteredOpenPositions],
+  );
+
+  const visibleClosedPositions = useMemo(
+    () => (
+      activeAccountTabKey === 'all'
+        ? filteredClosedPositions
+        : filteredClosedPositions.filter((position) => getPositionAccountKey(position) === activeAccountTabKey)
+    ),
+    [activeAccountTabKey, filteredClosedPositions],
+  );
+
+  const visibleAssetPositions = useMemo(
+    () => (
+      activeAccountTabKey === 'all'
+        ? positions.filter((position) => position.asset_type_code === activeAssetTypeCode)
+        : positions.filter(
+          (position) => position.asset_type_code === activeAssetTypeCode && getPositionAccountKey(position) === activeAccountTabKey,
+        )
+    ),
+    [activeAccountTabKey, activeAssetTypeCode, positions],
+  );
+
+  const visibleOpenPositionGroups = useMemo(
+    () => (
+      activeAccountTabKey === 'all'
+        ? filteredOpenPositionGroups
+        : filteredOpenPositionGroups.filter((group) => `${group.ownerType}:${group.accountId}` === activeAccountTabKey)
+    ),
+    [activeAccountTabKey, filteredOpenPositionGroups],
+  );
+
+  const activeScopePrincipalInBase = useMemo(
+    () => visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
+    [visibleOpenPositions],
+  );
+
+  const activeScopeIncomeInBase = useMemo(
+    () => visibleAssetPositions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
+    [visibleAssetPositions],
+  );
+
+  const activeScopeEstimatedValue = useMemo(
+    () => visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
+    [visibleOpenPositions, moexPrices, tinkoffLivePrices],
+  );
+
+  const hasMultipleOpenPositionOwners = useMemo(
+    () => new Set(visibleOpenPositionGroups.map((group) => group.ownerType)).size > 1,
+    [visibleOpenPositionGroups],
+  );
+
+  const hasMultipleOpenPositionAccounts = visibleOpenPositionGroups.length > 1;
 
   const getOpenPositionSections = (positionsForGroup: PortfolioPosition[]): SecuritySection[] => {
     if (activeAssetTypeCode !== 'security') {
@@ -1113,6 +1231,44 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
 
     switchAssetTab('prev');
+  };
+
+  const switchAccountTab = (direction: 'prev' | 'next') => {
+    if (accountTabs.length <= 1) {
+      return;
+    }
+
+    const currentIndex = accountTabs.findIndex((tab) => tab.key === activeAccountTabKey);
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = direction === 'next'
+      ? (safeIndex + 1) % accountTabs.length
+      : (safeIndex - 1 + accountTabs.length) % accountTabs.length;
+
+    setActiveAccountTabKey(accountTabs[nextIndex].key);
+  };
+
+  const handleAccountSwipeStart = (clientX: number) => {
+    setAccountSwipeStartX(clientX);
+  };
+
+  const handleAccountSwipeEnd = (clientX: number) => {
+    if (accountSwipeStartX === null) {
+      return;
+    }
+
+    const deltaX = clientX - accountSwipeStartX;
+    setAccountSwipeStartX(null);
+
+    if (Math.abs(deltaX) < 36) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      switchAccountTab('next');
+      return;
+    }
+
+    switchAccountTab('prev');
   };
 
   if (loading) {
@@ -1222,21 +1378,61 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
           )}
 
-          {activeAssetTab && (activeAssetTab.principalInBase > 0 || activeAssetTab.incomeInBase > 0) && (
+          {accountTabs.length > 1 && (
+            <div className="portfolio-account-tabs-wrap">
+              <div className="section__eyebrow" style={{ marginBottom: 8 }}>Счета</div>
+              <div
+                className="portfolio-account-tabs"
+                onTouchStart={(event) => handleAccountSwipeStart(event.touches[0].clientX)}
+                onTouchEnd={(event) => handleAccountSwipeEnd(event.changedTouches[0].clientX)}
+              >
+                {accountTabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={[
+                      'portfolio-account-tabs__item',
+                      activeAccountTab?.key === tab.key ? 'portfolio-account-tabs__item--active' : '',
+                    ].filter(Boolean).join(' ')}
+                    onClick={() => setActiveAccountTabKey(tab.key)}
+                  >
+                    <span className="portfolio-account-tabs__copy">
+                      <span className="portfolio-account-tabs__name">{tab.accountName}</span>
+                      {tab.ownerLabel && <span className="portfolio-account-tabs__meta">{tab.ownerLabel}</span>}
+                      <span className="portfolio-account-tabs__value">
+                        {formatAmount(tab.estimatedValue, user.base_currency_code)}
+                      </span>
+                    </span>
+                    <span className="portfolio-account-tabs__count">{tab.openCount}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(activeScopeEstimatedValue > 0 || activeScopePrincipalInBase > 0 || activeScopeIncomeInBase > 0) && (
             <div className="portfolio-type-stats">
-              {activeAssetTab.principalInBase > 0 && (
+              {activeScopeEstimatedValue > 0 && (
                 <div className="portfolio-type-stats__row">
-                  <span className="portfolio-type-stats__label">Вложено</span>
+                  <span className="portfolio-type-stats__label">Оценочная стоимость</span>
                   <span className="portfolio-type-stats__value">
-                    {formatAmount(activeAssetTab.principalInBase, user.base_currency_code)}
+                    {formatAmount(activeScopeEstimatedValue, user.base_currency_code)}
                   </span>
                 </div>
               )}
-              {activeAssetTab.incomeInBase > 0 && (
+              {activeScopePrincipalInBase > 0 && (
+                <div className="portfolio-type-stats__row">
+                  <span className="portfolio-type-stats__label">Вложено</span>
+                  <span className="portfolio-type-stats__value">
+                    {formatAmount(activeScopePrincipalInBase, user.base_currency_code)}
+                  </span>
+                </div>
+              )}
+              {activeScopeIncomeInBase > 0 && (
                 <div className="portfolio-type-stats__row">
                   <span className="portfolio-type-stats__label">Доход</span>
                   <span className="portfolio-type-stats__value">
-                    {formatAmount(activeAssetTab.incomeInBase, user.base_currency_code)}
+                    {formatAmount(activeScopeIncomeInBase, user.base_currency_code)}
                   </span>
                 </div>
               )}
@@ -1249,15 +1445,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <p className="list-row__sub">
               Сначала создай инвестиционный счет в настройках и переведи на него деньги с главного экрана.
             </p>
-          ) : filteredOpenPositions.length === 0 ? (
+          ) : visibleOpenPositions.length === 0 ? (
             <p className="list-row__sub">Открытых позиций пока нет.</p>
           ) : (
             <div className="dashboard-budget-sections">
-              {filteredOpenPositionGroups.map((group, index) => {
+              {visibleOpenPositionGroups.map((group, index) => {
                 const ownerDivider = hasMultipleOpenPositionOwners
                   && group.ownerType === 'family'
-                  && filteredOpenPositionGroups[index - 1]?.ownerType !== 'family';
-                const showAccountHeader = hasMultipleOpenPositionAccounts || hasMultipleOpenPositionOwners;
+                  && visibleOpenPositionGroups[index - 1]?.ownerType !== 'family';
+                const showAccountHeader = visibleOpenPositionGroups.length > 1
+                  && (hasMultipleOpenPositionAccounts || hasMultipleOpenPositionOwners);
                 const sections = getOpenPositionSections(group.positions);
 
                 return (
@@ -1358,18 +1555,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
           )}
 
-          {filteredClosedPositions.length > 0 && (
+          {visibleClosedPositions.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <button
                 className="btn"
                 type="button"
                 onClick={() => setShowClosedPositions((prev) => !prev)}
               >
-                {showClosedPositions ? 'Скрыть закрытые' : `Закрытые (${filteredClosedPositions.length})`}
+                {showClosedPositions ? 'Скрыть закрытые' : `Закрытые (${visibleClosedPositions.length})`}
               </button>
               {showClosedPositions && (
                 <ul className="bank-detail-list" style={{ marginTop: 12 }}>
-                  {filteredClosedPositions.map((position) => (
+                  {visibleClosedPositions.map((position) => (
                     <li className="bank-detail-row" key={position.id}>
                       <div className="bank-detail-row__main">
                         <div>
@@ -1967,8 +2164,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
             <div className="modal-body">
               {accounts.map(({ account, balances }) => {
-                const summary = summaryItems.find((s) => s.investment_account_id === account.id);
+                const summary = summaryByAccountId[account.id];
                 const conn = tinkoffConnections.find((c) => c.linked_account_id === account.id);
+                const estimatedValue = accountEstimatedValueById[account.id] ?? 0;
                 return (
                   <div key={account.id} className="portfolio-account-modal-item">
                     <div className="portfolio-account-modal-item__header">
@@ -2004,6 +2202,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           <strong>{formatAmount(b.amount, b.currency_code)}</strong>
                         </div>
                       ))}
+                      {estimatedValue > 0 && (
+                        <div className="hero-card__breakdown-row">
+                          <span>Оценочная стоимость</span>
+                          <strong>{formatAmount(estimatedValue, user.base_currency_code)}</strong>
+                        </div>
+                      )}
                       {summary && summary.invested_principal_in_base > 0 && (
                         <div className="hero-card__breakdown-row">
                           <span>Вложено</span>
