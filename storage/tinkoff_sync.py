@@ -191,6 +191,12 @@ class TinkoffRestClient:
 
         return _sort_operations_chronologically(all_items)
 
+    async def get_positions(self, account_id: str) -> dict:
+        return await self._post(
+            'tinkoff.public.invest.api.contract.v1.OperationsService/GetPositions',
+            {'accountId': account_id},
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -203,6 +209,20 @@ def _money_value_to_decimal(mv: dict) -> Decimal:
     units = int(mv.get('units') or 0)
     nano  = int(mv.get('nano')  or 0)
     return Decimal(units) + Decimal(nano) / Decimal('1000000000')
+
+
+def _api_number_to_decimal(value: Any) -> Decimal:
+    """Convert scalar/Quotation-like API values to Decimal."""
+    if value in (None, ''):
+        return Decimal('0')
+
+    if isinstance(value, dict):
+        if 'units' in value or 'nano' in value:
+            return _money_value_to_decimal(value)
+        if 'value' in value:
+            return Decimal(str(value.get('value') or 0))
+
+    return Decimal(str(value))
 
 
 def _op_field(op: dict, *names: str) -> str:
@@ -451,6 +471,7 @@ class TinkoffSync:
 
         applied_count = 0
         skipped_count = 0
+        reconciled_positions = 0
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -495,6 +516,13 @@ class TinkoffSync:
                     )
                     applied_count += 1
 
+                reconciled_positions = await self._reconcile_current_quantities(
+                    conn,
+                    client,
+                    tinkoff_account_id,
+                    linked_account_id,
+                )
+
                 # Update last_synced_at
                 await conn.execute(
                     'UPDATE budgeting.external_connections SET last_synced_at = now() WHERE id = $1',
@@ -505,6 +533,7 @@ class TinkoffSync:
             'status': 'ok',
             'applied': applied_count,
             'skipped_already_imported': skipped_count,
+            'reconciled_open_positions': reconciled_positions,
         }
 
     # ── DB helpers ───────────────────────────────────────────────────────────
@@ -593,6 +622,7 @@ class TinkoffSync:
         meta = instrument_meta or {}
         lookup_candidates = [
             ('position_uid', meta.get('position_uid')),
+            ('instrument_uid', meta.get('instrument_uid')),
             ('asset_uid', meta.get('asset_uid')),
             ('figi', meta.get('figi')),
         ]
@@ -640,6 +670,63 @@ class TinkoffSync:
                 return row['id']
 
         return None
+
+    async def _reconcile_current_quantities(
+        self,
+        conn: asyncpg.Connection,
+        client: TinkoffRestClient,
+        tinkoff_account_id: str,
+        linked_account_id: int,
+    ) -> int:
+        current_positions = await client.get_positions(tinkoff_account_id)
+        securities = current_positions.get('securities', [])
+        if not isinstance(securities, list):
+            return 0
+
+        updated_count = 0
+        updated_position_ids: set[int] = set()
+
+        for security in securities:
+            if not isinstance(security, dict):
+                continue
+
+            # GetPositions returns free and blocked balances separately.
+            # For real holdings we need the total quantity on the broker account.
+            quantity = _api_number_to_decimal(security.get('balance')) + _api_number_to_decimal(security.get('blocked'))
+            if quantity <= 0:
+                continue
+
+            instrument_meta = _normalize_instrument_meta({}, security)
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            if pos_id is None or pos_id in updated_position_ids:
+                continue
+
+            metadata_patch = {
+                key: value
+                for key, value in {
+                    'figi': instrument_meta.get('figi', ''),
+                    'instrument_uid': instrument_meta.get('instrument_uid', ''),
+                    'position_uid': instrument_meta.get('position_uid', ''),
+                    'ticker': instrument_meta.get('ticker', ''),
+                    'class_code': instrument_meta.get('class_code', ''),
+                }.items()
+                if isinstance(value, str) and value
+            }
+
+            await conn.execute(
+                '''UPDATE budgeting.portfolio_positions
+                   SET asset_type_code = 'security',
+                       quantity = $2::numeric,
+                       metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+                   WHERE id = $1''',
+                pos_id,
+                quantity,
+                json.dumps(metadata_patch),
+            )
+            updated_position_ids.add(pos_id)
+            updated_count += 1
+
+        return updated_count
 
     async def _apply_deposit_resolution(
         self,
@@ -786,7 +873,7 @@ class TinkoffSync:
                         $5::numeric, $6::numeric, $7::char(3), $8::date,
                         NULL::text, $9::jsonb
                     )''',
-                    user_id, linked_account_id, 'stock', instrument_title,
+                    user_id, linked_account_id, 'security', instrument_title,
                     quantity, amount, currency, op_date,
                     position_metadata,
                 )
