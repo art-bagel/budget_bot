@@ -520,6 +520,7 @@ async def _build_live_price_payload(
     quantity: Decimal,
     *,
     current_nkd: Decimal = Decimal('0'),
+    quoted_price_is_percent_of_nominal: bool = False,
     source: str = 'tinkoff',
 ) -> Optional[dict[str, Any]]:
     if quantity <= 0 or quoted_price <= 0:
@@ -529,11 +530,15 @@ async def _build_live_price_payload(
     per_unit_price = quoted_price
 
     if _is_bond_position(instrument_meta, meta):
-        nominal = await _resolve_bond_nominal(client, bond_nominals, instrument_meta, meta)
-        if nominal <= 0:
-            return None
-        clean_price = quoted_price / Decimal('100') * nominal
-        per_unit_price = clean_price + current_nkd
+        if quoted_price_is_percent_of_nominal:
+            nominal = await _resolve_bond_nominal(client, bond_nominals, instrument_meta, meta)
+            if nominal <= 0:
+                return None
+            clean_price = quoted_price / Decimal('100') * nominal
+            per_unit_price = clean_price + current_nkd
+        else:
+            # GetPortfolio already returns the bond price in account currency.
+            per_unit_price = quoted_price + current_nkd
 
     current_value = per_unit_price * quantity
     return {
@@ -887,6 +892,7 @@ class TinkoffSync:
                     current_nkd=_api_number_to_decimal(
                         portfolio_position.get('currentNkd') or portfolio_position.get('current_nkd'),
                     ),
+                    quoted_price_is_percent_of_nominal=False,
                     source='tinkoff',
                 )
                 if live_price is None:
@@ -943,6 +949,7 @@ class TinkoffSync:
                             or last_price.get('last_price'),
                         ),
                         matched_row['quantity'],
+                        quoted_price_is_percent_of_nominal=True,
                         source='tinkoff',
                     )
                     if live_price is None:
