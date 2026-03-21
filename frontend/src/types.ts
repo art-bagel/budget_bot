@@ -537,6 +537,7 @@ export interface TinkoffAutoOperationPreview {
   tinkoff_op_id: string;
   type: string;
   ticker: string;
+  title?: string;
   figi: string;
   amount: number;
   quantity: number | null;

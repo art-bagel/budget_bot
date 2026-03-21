@@ -372,7 +372,7 @@ export default function TinkoffSyncDialog({
                       .map((op) => (
                         <div key={op.tinkoff_op_id} className="tinkoff-sync__auto-item">
                           <span className="tinkoff-sync__auto-type">{op.type}</span>
-                          <span className="tinkoff-sync__auto-ticker">{op.ticker || op.figi}</span>
+                          <span className="tinkoff-sync__auto-ticker">{op.ticker || op.title || op.figi}</span>
                           <span className="tinkoff-sync__auto-amount">
                             {formatAmount(op.amount, op.currency_code)}
                           </span>

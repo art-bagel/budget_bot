@@ -135,6 +135,25 @@ class TinkoffRestClient:
         )
         return data.get('accounts', [])
 
+    async def get_instrument_by(
+        self,
+        instrument_id: str,
+        id_type: str,
+        class_code: Optional[str] = None,
+    ) -> dict:
+        body: dict[str, Any] = {
+            'idType': id_type,
+            'id': instrument_id,
+        }
+        if class_code:
+            body['classCode'] = class_code
+        data = await self._post(
+            'tinkoff.public.invest.api.contract.v1.InstrumentsService/GetInstrumentBy',
+            body,
+        )
+        instrument = data.get('instrument')
+        return instrument if isinstance(instrument, dict) else data
+
     async def get_operations(
         self,
         account_id: str,
@@ -186,6 +205,14 @@ def _money_value_to_decimal(mv: dict) -> Decimal:
     return Decimal(units) + Decimal(nano) / Decimal('1000000000')
 
 
+def _op_field(op: dict, *names: str) -> str:
+    for name in names:
+        value = op.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ''
+
+
 def _op_datetime(op: dict) -> datetime:
     raw = op.get('date', '')
     try:
@@ -212,6 +239,73 @@ def _op_currency(op: dict) -> str:
         payment = op.get('payment') or {}
         currency = (payment.get('currency') or '').upper().strip()
     return currency
+
+
+def _infer_moex_market(class_code: str, exchange: str) -> Optional[str]:
+    normalized_class_code = class_code.upper().strip()
+    normalized_exchange = exchange.upper().strip()
+
+    if normalized_class_code.startswith('TQO'):
+        return 'bonds'
+
+    if normalized_class_code in {'TQBR', 'TQTF', 'TQIF', 'TQPI', 'TQTD'}:
+        return 'shares'
+
+    if 'MOEX' in normalized_exchange and normalized_class_code:
+        return 'shares'
+
+    return None
+
+
+def _infer_security_kind(instrument_type: str, class_code: str) -> str:
+    normalized_type = instrument_type.lower().strip()
+    normalized_class_code = class_code.upper().strip()
+
+    if normalized_class_code.startswith('TQO') or 'bond' in normalized_type:
+        return 'bond'
+
+    if any(token in normalized_type for token in ('etf', 'fund', 'share_type_etf', 'share_type_bpif')):
+        return 'fund'
+
+    return 'stock'
+
+
+def _operation_instrument_cache_key(op: dict) -> str:
+    return _op_field(op, 'positionUid', 'position_uid', 'instrumentUid', 'instrument_uid', 'figi')
+
+
+def _normalize_instrument_meta(op: dict, raw: Optional[dict] = None) -> dict:
+    raw = raw or {}
+
+    figi = _op_field(raw, 'figi') or _op_field(op, 'figi')
+    instrument_uid = _op_field(raw, 'uid', 'instrumentUid', 'instrument_uid') or _op_field(op, 'instrumentUid', 'instrument_uid')
+    position_uid = _op_field(raw, 'positionUid', 'position_uid') or _op_field(op, 'positionUid', 'position_uid')
+    asset_uid = _op_field(raw, 'assetUid', 'asset_uid') or _op_field(op, 'assetUid', 'asset_uid')
+    ticker = (_op_field(raw, 'ticker') or _op_field(op, 'ticker')).upper()
+    class_code = (_op_field(raw, 'classCode', 'class_code') or _op_field(op, 'classCode', 'class_code')).upper()
+    exchange = _op_field(raw, 'exchange', 'realExchange', 'real_exchange')
+    instrument_type = _op_field(raw, 'instrumentType', 'instrument_type', 'instrumentKind', 'instrument_kind')
+    name = _op_field(raw, 'name', 'shortName', 'short_name')
+
+    if not name:
+        name = ticker or figi or position_uid or instrument_uid
+
+    moex_market = _infer_moex_market(class_code, exchange)
+    security_kind = _infer_security_kind(instrument_type, class_code)
+
+    return {
+        'figi': figi,
+        'instrument_uid': instrument_uid,
+        'position_uid': position_uid,
+        'asset_uid': asset_uid,
+        'ticker': ticker,
+        'class_code': class_code,
+        'exchange': exchange,
+        'instrument_type': instrument_type.lower(),
+        'name': name,
+        'moex_market': moex_market,
+        'security_kind': security_kind,
+    }
 
 
 def _map_operation(op: dict) -> dict:
@@ -270,6 +364,7 @@ class TinkoffSync:
         client = TinkoffRestClient(token)
         since = self._get_since(conn_row) if conn_row else datetime.now(timezone.utc) - timedelta(days=5 * 365)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
+        instrument_map = await self._resolve_instrument_map(client, raw_ops)
 
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
 
@@ -305,11 +400,13 @@ class TinkoffSync:
                     'already_imported': already,
                 })
             else:
+                instrument_meta = self._get_instrument_meta(instrument_map, op)
                 auto_operations.append({
                     'tinkoff_op_id': op_id,
                     'type': mapped['kind'],
-                    'ticker': '',
-                    'figi': mapped['figi'],
+                    'ticker': instrument_meta.get('ticker', ''),
+                    'title': instrument_meta.get('name', ''),
+                    'figi': instrument_meta.get('figi', mapped['figi']),
                     'amount': float(abs(payment)),
                     'quantity': float(qty) if qty else None,
                     'currency_code': currency,
@@ -347,8 +444,8 @@ class TinkoffSync:
         client = TinkoffRestClient(token)
         since  = self._get_since(conn_row)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
+        instrument_map = await self._resolve_instrument_map(client, raw_ops)
 
-        ops_by_id: dict[str, dict] = {op['id']: op for op in raw_ops}
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
         resolutions_map = {r['tinkoff_op_id']: r for r in deposit_resolutions}
 
@@ -391,8 +488,9 @@ class TinkoffSync:
                         continue
 
                     # Auto operations (buy, sell, dividend, fee, tax, etc.)
+                    instrument_meta = self._get_instrument_meta(instrument_map, op)
                     await self._apply_auto_operation(
-                        conn, user_id, linked_account_id, op, mapped,
+                        conn, user_id, linked_account_id, op, mapped, instrument_meta,
                         owner_type, owner_user_id, owner_family_id,
                     )
                     applied_count += 1
@@ -448,21 +546,100 @@ class TinkoffSync:
             )
         return {r['external_id'] for r in pe_rows} | {r['external_id'] for r in be_rows}
 
+    async def _resolve_instrument_map(
+        self,
+        client: TinkoffRestClient,
+        raw_ops: list[dict],
+    ) -> dict[str, dict]:
+        resolved: dict[str, dict] = {}
+
+        for op in raw_ops:
+            cache_key = _operation_instrument_cache_key(op)
+            if not cache_key or cache_key in resolved:
+                continue
+
+            raw_instrument: Optional[dict] = None
+            resolution_attempts = [
+                ('INSTRUMENT_ID_TYPE_POSITION_UID', _op_field(op, 'positionUid', 'position_uid')),
+                ('INSTRUMENT_ID_TYPE_UID', _op_field(op, 'instrumentUid', 'instrument_uid')),
+                ('INSTRUMENT_ID_TYPE_FIGI', _op_field(op, 'figi')),
+            ]
+
+            for id_type, instrument_id in resolution_attempts:
+                if not instrument_id:
+                    continue
+                try:
+                    raw_instrument = await client.get_instrument_by(instrument_id, id_type)
+                    break
+                except Exception:
+                    continue
+
+            resolved[cache_key] = _normalize_instrument_meta(op, raw_instrument)
+
+        return resolved
+
+    def _get_instrument_meta(self, instrument_map: dict[str, dict], op: dict) -> dict:
+        cache_key = _operation_instrument_cache_key(op)
+        if cache_key and cache_key in instrument_map:
+            return instrument_map[cache_key]
+        return _normalize_instrument_meta(op)
+
     async def _find_position(
         self,
         conn: asyncpg.Connection,
         linked_account_id: int,
-        figi: str,
+        instrument_meta: Optional[dict],
     ) -> Optional[int]:
-        row = await conn.fetchrow(
-            '''SELECT id FROM budgeting.portfolio_positions
-               WHERE investment_account_id = $1
-                 AND status = 'open'
-                 AND (metadata->>'figi' = $2 OR title = $2)
-               LIMIT 1''',
-            linked_account_id, figi,
-        )
-        return row['id'] if row else None
+        meta = instrument_meta or {}
+        lookup_candidates = [
+            ('position_uid', meta.get('position_uid')),
+            ('asset_uid', meta.get('asset_uid')),
+            ('figi', meta.get('figi')),
+        ]
+
+        for metadata_key, metadata_value in lookup_candidates:
+            if not metadata_value:
+                continue
+            row = await conn.fetchrow(
+                f'''SELECT id FROM budgeting.portfolio_positions
+                    WHERE investment_account_id = $1
+                      AND status = 'open'
+                      AND metadata->>$2 = $3
+                    LIMIT 1''',
+                linked_account_id, metadata_key, metadata_value,
+            )
+            if row:
+                return row['id']
+
+        ticker = meta.get('ticker')
+        class_code = meta.get('class_code')
+        if ticker and class_code:
+            row = await conn.fetchrow(
+                '''SELECT id FROM budgeting.portfolio_positions
+                   WHERE investment_account_id = $1
+                     AND status = 'open'
+                     AND metadata->>'ticker' = $2
+                     AND metadata->>'class_code' = $3
+                   LIMIT 1''',
+                linked_account_id, ticker, class_code,
+            )
+            if row:
+                return row['id']
+
+        title = meta.get('name')
+        if title:
+            row = await conn.fetchrow(
+                '''SELECT id FROM budgeting.portfolio_positions
+                   WHERE investment_account_id = $1
+                     AND status = 'open'
+                     AND title = $2
+                   LIMIT 1''',
+                linked_account_id, title,
+            )
+            if row:
+                return row['id']
+
+        return None
 
     async def _apply_deposit_resolution(
         self,
@@ -562,12 +739,14 @@ class TinkoffSync:
         linked_account_id: int,
         op: dict,
         mapped: dict,
+        instrument_meta: Optional[dict] = None,
         owner_type: str = 'user',
         owner_user_id: Optional[int] = None,
         owner_family_id: Optional[int] = None,
     ) -> None:
+        instrument_meta = instrument_meta or {}
         kind     = mapped['kind']
-        figi     = mapped['figi']
+        figi     = instrument_meta.get('figi') or mapped['figi']
         payment  = _money_value_to_decimal(op.get('payment', {}))
         amount   = abs(payment)  # Decimal — avoids float precision issues
         currency = _op_currency(op)
@@ -577,10 +756,29 @@ class TinkoffSync:
         qty      = op.get('quantity')
         quantity = Decimal(str(qty)) if qty else None
         op_id    = op['id']
+        instrument_title = (
+            instrument_meta.get('name')
+            or instrument_meta.get('ticker')
+            or figi
+        )
+        position_metadata = {
+            'figi': instrument_meta.get('figi') or figi,
+            'instrument_uid': instrument_meta.get('instrument_uid', ''),
+            'position_uid': instrument_meta.get('position_uid', ''),
+            'asset_uid': instrument_meta.get('asset_uid', ''),
+            'ticker': instrument_meta.get('ticker', ''),
+            'class_code': instrument_meta.get('class_code', ''),
+            'exchange': instrument_meta.get('exchange', ''),
+            'security_kind': instrument_meta.get('security_kind', 'stock'),
+            'import_source': 'tinkoff',
+        }
+        moex_market = instrument_meta.get('moex_market')
+        if moex_market:
+            position_metadata['moex_market'] = moex_market
 
         if kind == 'buy':
             await self._require_investment_balance(conn, linked_account_id, currency, amount)
-            pos_id = await self._find_position(conn, linked_account_id, figi)
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id is None:
                 result = await conn.fetchval(
                     '''SELECT budgeting.put__create_portfolio_position(
@@ -588,9 +786,9 @@ class TinkoffSync:
                         $5::numeric, $6::numeric, $7::char(3), $8::date,
                         NULL::text, $9::jsonb
                     )''',
-                    user_id, linked_account_id, 'stock', figi,
+                    user_id, linked_account_id, 'stock', instrument_title,
                     quantity, amount, currency, op_date,
-                    {'figi': figi, 'import_source': 'tinkoff'},
+                    position_metadata,
                 )
                 data = json.loads(result) if isinstance(result, str) else result
                 pos_id = data.get('id') if data else None
@@ -618,7 +816,7 @@ class TinkoffSync:
                 )
 
         elif kind in ('dividend', 'coupon'):
-            pos_id = await self._find_position(conn, linked_account_id, figi)
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
                 income_kind = kind
                 await conn.execute(
@@ -640,7 +838,7 @@ class TinkoffSync:
                 )
 
         elif kind in ('broker_fee', 'tax'):
-            pos_id = await self._find_position(conn, linked_account_id, figi)
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
                 await self._require_investment_balance(conn, linked_account_id, currency, amount)
                 await conn.execute(
@@ -661,7 +859,7 @@ class TinkoffSync:
                 )
 
         elif kind == 'sell':
-            pos_id = await self._find_position(conn, linked_account_id, figi)
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
                 pos_row = await conn.fetchrow(
                     '''SELECT quantity
