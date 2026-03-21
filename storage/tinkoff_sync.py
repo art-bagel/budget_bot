@@ -170,7 +170,7 @@ class TinkoffRestClient:
             if not cursor:
                 break
 
-        return all_items
+        return _sort_operations_chronologically(all_items)
 
 
 # ---------------------------------------------------------------------------
@@ -186,9 +186,23 @@ def _money_value_to_decimal(mv: dict) -> Decimal:
     return Decimal(units) + Decimal(nano) / Decimal('1000000000')
 
 
-def _op_date(op: dict) -> date:
+def _op_datetime(op: dict) -> datetime:
     raw = op.get('date', '')
-    return datetime.fromisoformat(raw.replace('Z', '+00:00')).date()
+    try:
+        return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _op_date(op: dict) -> date:
+    return _op_datetime(op).date()
+
+
+def _sort_operations_chronologically(ops: list[dict]) -> list[dict]:
+    # Historical import must apply cash movements before trades that spend them.
+    # Tinkoff response order is not guaranteed for our business logic, so we
+    # normalize it explicitly by operation timestamp.
+    return sorted(ops, key=lambda op: (_op_datetime(op), str(op.get('id', ''))))
 
 
 def _op_currency(op: dict) -> str:
@@ -467,7 +481,7 @@ class TinkoffSync:
         abs_amount = abs(amount)
 
         if resolution == 'external':
-            result = await conn.fetchval(
+            await conn.fetchval(
                 '''SELECT budgeting.put__record_broker_input(
                     $1::bigint, $2::text, $3::bigint, $4::bigint,
                     $5::bigint, $6::char(3), $7::numeric,
@@ -477,25 +491,11 @@ class TinkoffSync:
                 linked_account_id, currency, abs_amount,
                 tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение счёта',
             )
-            # If the bank_entry insert was skipped (duplicate external_id),
-            # the balance was NOT updated. Ensure balance directly.
-            skipped = False
-            if result:
-                parsed = json.loads(result) if isinstance(result, str) else result
-                skipped = parsed.get('skipped', False)
-            if skipped:
-                await self._ensure_investment_balance(
-                    conn, user_id, linked_account_id, currency, abs_amount,
-                    owner_type, owner_user_id, owner_family_id,
-                )
 
         elif resolution == 'transfer':
             if source_account_id is None:
                 raise ValueError('source_account_id required for transfer resolution')
 
-            # Ensure the source account has enough balance for the transfer.
-            # During historical import the source account may have already been
-            # spent down, so we top it up with a broker_input if needed.
             src_row = await conn.fetchrow(
                 '''SELECT COALESCE(amount, 0) AS amount
                    FROM budgeting.current_bank_balances
@@ -504,17 +504,9 @@ class TinkoffSync:
             )
             src_balance = Decimal(str(src_row['amount'])) if src_row else Decimal('0')
             if src_balance < abs_amount:
-                shortfall = abs_amount - src_balance + Decimal('0.01')
-                await conn.execute(
-                    '''SELECT budgeting.put__record_broker_input(
-                        $1::bigint, $2::text, $3::bigint, $4::bigint,
-                        $5::bigint, $6::char(3), $7::numeric,
-                        NULL::text, 'tinkoff'::varchar(30),
-                        $8::text
-                    )''',
-                    user_id, owner_type, owner_user_id, owner_family_id,
-                    source_account_id, currency, shortfall,
-                    'Tinkoff: автопополнение при импорте (источник перевода)',
+                raise ValueError(
+                    'Недостаточно денег на счёте-источнике для этого исторического перевода. '
+                    'Выберите "Внешнее пополнение" или сначала отразите перевод в боте.'
                 )
 
             await conn.execute(
@@ -541,28 +533,14 @@ class TinkoffSync:
                 tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение (уже учтено)',
             )
 
-    async def _ensure_investment_balance(
+    async def _require_investment_balance(
         self,
         conn: asyncpg.Connection,
-        user_id: int,
         linked_account_id: int,
         currency: str,
         required_amount: Decimal,
-        owner_type: str,
-        owner_user_id: Optional[int],
-        owner_family_id: Optional[int],
     ) -> None:
-        """Top up the investment account balance if needed during broker import.
-
-        When importing historical trades from Tinkoff, the internal balance
-        may be insufficient (e.g. deposit was marked 'already_recorded').
-        We inject the missing amount via put__record_broker_input so that
-        downstream portfolio functions don't fail on balance checks.
-
-        Uses Decimal throughout to avoid float precision issues.
-        Falls back to direct balance update if put__record_broker_input
-        silently skips the insert (ON CONFLICT DO NOTHING).
-        """
+        """Validate that imported broker cash movements cover downstream trades."""
         row = await conn.fetchrow(
             '''SELECT COALESCE(amount, 0) AS amount
                FROM budgeting.current_bank_balances
@@ -570,60 +548,12 @@ class TinkoffSync:
             linked_account_id, currency,
         )
         current_balance = Decimal(str(row['amount'])) if row else Decimal('0')
-        shortfall = required_amount - current_balance
-        if shortfall <= 0:
-            return
-
-        # Add a small margin to cover any rounding differences between
-        # Python Decimal and PostgreSQL numeric arithmetic.
-        top_up = shortfall + Decimal('0.01')
-
-        result = await conn.fetchval(
-            '''SELECT budgeting.put__record_broker_input(
-                $1::bigint, $2::text, $3::bigint, $4::bigint,
-                $5::bigint, $6::char(3), $7::numeric,
-                NULL::text, 'tinkoff'::varchar(30),
-                $8::text
-            )''',
-            user_id, owner_type, owner_user_id, owner_family_id,
-            linked_account_id, currency, top_up,
-            'Tinkoff: автопополнение при импорте',
-        )
-
-        # Check if the insert was silently skipped by ON CONFLICT DO NOTHING.
-        # If so, fall back to direct balance/fx_lot update.
-        skipped = False
-        operation_id = None
-        if result:
-            parsed = json.loads(result) if isinstance(result, str) else result
-            skipped = parsed.get('skipped', False)
-            operation_id = parsed.get('operation_id')
-
-        if skipped and operation_id:
-            base_currency = await conn.fetchval(
-                '''SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)''',
-                owner_type, owner_user_id, owner_family_id,
+        if current_balance < required_amount:
+            raise ValueError(
+                'Недостаточно средств на инвестиционном счёте для исторической операции из Тинькофф. '
+                'Проверьте, что предыдущие пополнения импортируются как "Внешнее пополнение" '
+                'или "Перевод со счёта".'
             )
-            cost_in_base = round(top_up, 2)
-
-            await conn.execute(
-                '''SELECT budgeting.put__apply_current_bank_delta(
-                    $1::bigint, $2::char(3), $3::numeric, $4::numeric
-                )''',
-                linked_account_id, currency, top_up, cost_in_base,
-            )
-
-            if currency != base_currency:
-                await conn.execute(
-                    '''INSERT INTO budgeting.fx_lots (
-                        bank_account_id, currency_code,
-                        amount_initial, amount_remaining,
-                        buy_rate_in_base,
-                        cost_base_initial, cost_base_remaining,
-                        opened_by_operation_id
-                    ) VALUES ($1, $2, $3, $3, $4 / $3, $4, $4, $5)''',
-                    linked_account_id, currency, top_up, cost_in_base, operation_id,
-                )
 
     async def _apply_auto_operation(
         self,
@@ -649,11 +579,7 @@ class TinkoffSync:
         op_id    = op['id']
 
         if kind == 'buy':
-            # Ensure enough cash on the investment account before buying
-            await self._ensure_investment_balance(
-                conn, user_id, linked_account_id, currency, amount,
-                owner_type, owner_user_id, owner_family_id,
-            )
+            await self._require_investment_balance(conn, linked_account_id, currency, amount)
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id is None:
                 result = await conn.fetchval(
@@ -716,11 +642,7 @@ class TinkoffSync:
         elif kind in ('broker_fee', 'tax'):
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id:
-                # Ensure enough cash on the investment account before charging fee
-                await self._ensure_investment_balance(
-                    conn, user_id, linked_account_id, currency, amount,
-                    owner_type, owner_user_id, owner_family_id,
-                )
+                await self._require_investment_balance(conn, linked_account_id, currency, amount)
                 await conn.execute(
                     '''SELECT budgeting.put__record_portfolio_fee(
                         $1::bigint, $2::bigint, $3::numeric, $4::char(3), $5::date
