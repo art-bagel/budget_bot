@@ -213,6 +213,15 @@ class TinkoffRestClient:
         prices = data.get('last_prices')
         return prices if isinstance(prices, list) else []
 
+    async def get_portfolio(self, account_id: str, currency: str = 'RUB') -> dict:
+        return await self._post(
+            'tinkoff.public.invest.api.contract.v1.OperationsService/GetPortfolio',
+            {
+                'accountId': account_id,
+                'currency': currency,
+            },
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -274,6 +283,50 @@ def _best_tinkoff_instrument_id(meta: dict[str, Any]) -> Optional[tuple[str, str
     class_code = str(meta.get('class_code', '')).strip()
     if ticker and class_code:
         return ('INSTRUMENT_ID_TYPE_TICKER', f'{ticker}_{class_code}')
+
+    return None
+
+
+def _match_position_id_from_rows(
+    instrument_meta: dict[str, Any],
+    position_rows: list[dict[str, Any]],
+    used_position_ids: set[int],
+) -> Optional[dict[str, Any]]:
+    candidates = [
+        ('position_uid', instrument_meta.get('position_uid')),
+        ('instrument_uid', instrument_meta.get('instrument_uid')),
+        ('asset_uid', instrument_meta.get('asset_uid')),
+        ('figi', instrument_meta.get('figi')),
+    ]
+
+    for metadata_key, metadata_value in candidates:
+        if not metadata_value:
+            continue
+        for row in position_rows:
+            if row['position_id'] in used_position_ids:
+                continue
+            if str(row['metadata'].get(metadata_key, '')).strip() == str(metadata_value).strip():
+                return row
+
+    ticker = str(instrument_meta.get('ticker', '')).strip()
+    class_code = str(instrument_meta.get('class_code', '')).strip()
+    if ticker and class_code:
+        for row in position_rows:
+            if row['position_id'] in used_position_ids:
+                continue
+            if (
+                str(row['metadata'].get('ticker', '')).strip() == ticker
+                and str(row['metadata'].get('class_code', '')).strip() == class_code
+            ):
+                return row
+
+    title = str(instrument_meta.get('name', '')).strip()
+    if title:
+        for row in position_rows:
+            if row['position_id'] in used_position_ids:
+                continue
+            if str(row['title']).strip() == title:
+                return row
 
     return None
 
@@ -598,6 +651,7 @@ class TinkoffSync:
                        ec.linked_account_id,
                        ec.credentials,
                        pp.id AS position_id,
+                       pp.title,
                        pp.quantity,
                        pp.currency_code,
                        pp.metadata
@@ -652,118 +706,98 @@ class TinkoffSync:
                 continue
 
             client = TinkoffRestClient(token)
-            request_ids: list[str] = []
-            positions_by_uid: dict[str, list[dict[str, Any]]] = {}
-            positions_by_figi: dict[str, list[dict[str, Any]]] = {}
-            bond_meta_by_id: dict[str, dict[str, Any]] = {}
+            normalized_position_rows: list[dict[str, Any]] = []
 
             for position in position_rows:
                 meta = _normalize_metadata_object(position.get('metadata'))
-                identifier = _best_tinkoff_instrument_id(meta)
-                if identifier is None:
-                    continue
-
-                id_type, instrument_id = identifier
-                if id_type not in {'INSTRUMENT_ID_TYPE_UID', 'INSTRUMENT_ID_TYPE_FIGI'}:
-                    continue
-
-                if instrument_id not in request_ids:
-                    request_ids.append(instrument_id)
-
-                quantity = position.get('quantity')
-                if quantity in (None, ''):
-                    continue
-
-                item = {
+                normalized_position_rows.append({
                     'position_id': int(position['position_id']),
-                    'quantity': Decimal(str(quantity)),
+                    'title': str(position.get('title') or ''),
+                    'quantity': Decimal(str(position['quantity'])) if position.get('quantity') not in (None, '') else Decimal('0'),
                     'currency_code': position['currency_code'],
                     'metadata': meta,
-                }
+                })
 
-                instrument_uid = str(meta.get('instrument_uid', '')).strip()
-                figi = str(meta.get('figi', '')).strip()
-                if instrument_uid:
-                    positions_by_uid.setdefault(instrument_uid, []).append(item)
-                if figi:
-                    positions_by_figi.setdefault(figi, []).append(item)
-
-                if (
-                    meta.get('security_kind') == 'bond'
-                    or meta.get('moex_market') == 'bonds'
-                    or str(meta.get('class_code', '')).upper().startswith('TQO')
-                ):
-                    bond_meta_by_id[instrument_id] = meta
-
-            if not request_ids:
+            if not normalized_position_rows:
                 continue
 
             try:
-                live_prices = await client.get_last_prices(request_ids)
+                portfolio = await client.get_portfolio(provider_account_id, 'RUB')
             except Exception:
                 continue
 
+            portfolio_positions = portfolio.get('positions', [])
+            if not isinstance(portfolio_positions, list):
+                continue
+
             bond_nominals: dict[str, Decimal] = {}
+            used_position_ids: set[int] = set()
 
-            for instrument_id, meta in bond_meta_by_id.items():
-                nominal = Decimal('0')
-                identifier = _best_tinkoff_instrument_id(meta)
-                if identifier is None:
+            for portfolio_position in portfolio_positions:
+                if not isinstance(portfolio_position, dict):
                     continue
 
-                try:
-                    raw_instrument = await client.get_instrument_by(identifier[1], identifier[0])
-                except Exception:
-                    continue
-
-                nominal = _api_number_to_decimal(raw_instrument.get('nominal'))
-                if nominal > 0:
-                    bond_nominals[instrument_id] = nominal
-
-            for price_row in live_prices:
-                if not isinstance(price_row, dict):
-                    continue
-
-                instrument_uid = _op_field(price_row, 'instrumentUid', 'instrument_uid')
-                figi = _op_field(price_row, 'figi')
-                matched_positions = (
-                    positions_by_uid.get(instrument_uid, [])
-                    or positions_by_figi.get(figi, [])
+                instrument_meta = _normalize_instrument_meta({}, portfolio_position)
+                matched_row = _match_position_id_from_rows(
+                    instrument_meta,
+                    normalized_position_rows,
+                    used_position_ids,
                 )
-                if not matched_positions:
+                if matched_row is None:
                     continue
 
-                quoted_price = _api_number_to_decimal(price_row.get('price'))
+                quantity = _api_number_to_decimal(portfolio_position.get('quantity'))
+                if quantity <= 0:
+                    quantity = matched_row['quantity']
+                if quantity <= 0:
+                    continue
+
+                quoted_price = _api_number_to_decimal(
+                    portfolio_position.get('currentPrice') or portfolio_position.get('current_price'),
+                )
                 if quoted_price <= 0:
                     continue
 
-                for position in matched_positions:
-                    meta = position['metadata']
-                    quantity = position['quantity']
-                    if quantity <= 0:
+                meta = matched_row['metadata']
+                per_unit_price = quoted_price
+
+                if (
+                    instrument_meta.get('security_kind') == 'bond'
+                    or instrument_meta.get('moex_market') == 'bonds'
+                    or meta.get('security_kind') == 'bond'
+                    or meta.get('moex_market') == 'bonds'
+                    or str(instrument_meta.get('class_code', '')).upper().startswith('TQO')
+                    or str(meta.get('class_code', '')).upper().startswith('TQO')
+                ):
+                    nominal_identifier = _best_tinkoff_instrument_id(instrument_meta) or _best_tinkoff_instrument_id(meta)
+                    nominal_key = nominal_identifier[1] if nominal_identifier else ''
+                    nominal = bond_nominals.get(nominal_key, Decimal('0'))
+                    if nominal <= 0 and nominal_identifier is not None:
+                        try:
+                            raw_instrument = await client.get_instrument_by(nominal_identifier[1], nominal_identifier[0])
+                        except Exception:
+                            raw_instrument = {}
+                        nominal = _api_number_to_decimal(raw_instrument.get('nominal'))
+                        if nominal > 0:
+                            bond_nominals[nominal_key] = nominal
+                    if nominal <= 0:
                         continue
 
-                    per_unit_price = quoted_price
-                    if (
-                        meta.get('security_kind') == 'bond'
-                        or meta.get('moex_market') == 'bonds'
-                        or str(meta.get('class_code', '')).upper().startswith('TQO')
-                    ):
-                        nominal_identifier = _best_tinkoff_instrument_id(meta)
-                        nominal_key = nominal_identifier[1] if nominal_identifier else (instrument_uid or figi)
-                        nominal = bond_nominals.get(nominal_key, Decimal('0'))
-                        if nominal <= 0:
-                            continue
-                        per_unit_price = quoted_price / Decimal('100') * nominal
+                    current_nkd = _api_number_to_decimal(
+                        portfolio_position.get('currentNkd') or portfolio_position.get('current_nkd'),
+                    )
+                    clean_price = quoted_price / Decimal('100') * nominal
+                    per_unit_price = clean_price + current_nkd
 
-                    current_value = per_unit_price * quantity
-                    result.append({
-                        'position_id': position['position_id'],
-                        'price': float(per_unit_price),
-                        'currency_code': position['currency_code'],
-                        'current_value': float(current_value),
-                        'source': 'tinkoff',
-                    })
+                current_value = per_unit_price * quantity
+                used_position_ids.add(matched_row['position_id'])
+                result.append({
+                    'position_id': matched_row['position_id'],
+                    'price': float(per_unit_price),
+                    'currency_code': matched_row['currency_code'],
+                    'current_value': float(current_value),
+                    'source': 'tinkoff',
+                })
 
         return result
 
