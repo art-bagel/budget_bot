@@ -108,6 +108,14 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Подключение не найдено';
   }
 
+  if (text.includes('Cannot delete user account while user belongs to a family')) {
+    return 'Сначала выйдите из семьи или распустите её, затем удалите аккаунт';
+  }
+
+  if (text.includes('Family owner cannot leave')) {
+    return 'Владелец семьи не может выйти: сначала распустите семью';
+  }
+
   if (text.includes('source_account_id required')) {
     return 'Не выбран счёт для перевода';
   }

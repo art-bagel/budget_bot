@@ -129,7 +129,19 @@ export default function Settings({
     void loadAccounts();
   }, []);
 
+  const isFamilyOwner = family?.created_by_user_id === user.user_id;
+  const deleteBlockedByFamily = family
+    ? (isFamilyOwner
+      ? 'Сначала распустите семью, затем удалите аккаунт.'
+      : 'Сначала покиньте семью, затем удалите аккаунт.')
+    : null;
+
   const handleDeleteAccount = async () => {
+    if (deleteBlockedByFamily) {
+      setDeleteError(deleteBlockedByFamily);
+      return;
+    }
+
     const isConfirmed = window.confirm(
       'Удалить аккаунт и все данные? Это действие необратимо: будут удалены категории, операции, группы, банк и история обменов.',
     );
@@ -149,8 +161,6 @@ export default function Settings({
       setDeleteInProgress(false);
     }
   };
-
-  const isFamilyOwner = family?.created_by_user_id === user.user_id;
 
   const handleLeaveFamily = async () => {
     if (!window.confirm('Покинуть семью? Ваши личные данные не пострадают.')) {
@@ -320,7 +330,9 @@ export default function Settings({
               <div>
                 <div className="settings-row__title">Удалить аккаунт</div>
                 <div className="settings-row__sub">
-                  Полностью очистить все данные пользователя: банк, операции, категории, группы и историю обменов.
+                  {deleteBlockedByFamily
+                    ? deleteBlockedByFamily
+                    : 'Полностью очистить все данные пользователя: банк, операции, категории, группы и историю обменов.'}
                 </div>
                 {deleteError && <div className="settings-danger__error">{deleteError}</div>}
               </div>
@@ -328,9 +340,13 @@ export default function Settings({
                 className="btn btn--danger"
                 type="button"
                 onClick={handleDeleteAccount}
-                disabled={deleteInProgress}
+                disabled={deleteInProgress || Boolean(deleteBlockedByFamily)}
               >
-                {deleteInProgress ? 'Удаляем...' : 'Удалить аккаунт'}
+                {deleteInProgress
+                  ? 'Удаляем...'
+                  : deleteBlockedByFamily
+                    ? 'Недоступно'
+                    : 'Удалить аккаунт'}
               </button>
             </div>
           </div>

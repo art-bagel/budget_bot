@@ -10,11 +10,12 @@ AS $function$
 DECLARE
     _family_id bigint;
     _role text;
+    _family_owner_user_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    SELECT fm.family_id, fm.role
-    INTO _family_id, _role
+    SELECT fm.family_id, fm.role, f.created_by_user_id
+    INTO _family_id, _role, _family_owner_user_id
     FROM family_members fm
     JOIN families f ON f.id = fm.family_id
     WHERE fm.user_id = _user_id
@@ -27,6 +28,28 @@ BEGIN
     IF _role = 'owner' THEN
         RAISE EXCEPTION 'Family owner cannot leave — use set__dissolve_family to dissolve the family';
     END IF;
+
+    -- Family data should stay intact after a member leaves, so move audit links
+    -- away from the departing user before removing their membership.
+    UPDATE scheduled_expenses
+    SET created_by_user_id = _family_owner_user_id
+    WHERE owner_type = 'family'
+      AND owner_family_id = _family_id
+      AND created_by_user_id = _user_id;
+
+    UPDATE portfolio_positions
+    SET created_by_user_id = _family_owner_user_id
+    WHERE owner_type = 'family'
+      AND owner_family_id = _family_id
+      AND created_by_user_id = _user_id;
+
+    UPDATE portfolio_events pe
+    SET created_by_user_id = _family_owner_user_id
+    FROM portfolio_positions pp
+    WHERE pe.position_id = pp.id
+      AND pp.owner_type = 'family'
+      AND pp.owner_family_id = _family_id
+      AND pe.created_by_user_id = _user_id;
 
     DELETE FROM family_members
     WHERE family_id = _family_id

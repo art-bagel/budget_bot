@@ -88,7 +88,12 @@ BEGIN
         WHERE owner_type = 'family' AND owner_family_id = _family_id
     );
 
-    -- 10. Bank accounts (cascades current_bank_balances)
+    -- 10. External connections referencing family accounts / family ownership — no CASCADE
+    DELETE FROM external_connections
+    WHERE owner_type = 'family'
+      AND owner_family_id = _family_id;
+
+    -- 11. Bank accounts (cascades current_bank_balances)
     DELETE FROM bank_accounts
     WHERE owner_type = 'family' AND owner_family_id = _family_id;
 
