@@ -663,26 +663,54 @@ class TinkoffSync:
         elif kind == 'sell':
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id:
-                await conn.execute(
-                    # параметры: user, pos, return_amount, currency, principal_reduction,
-                    #            return_amount_in_base (NULL), closed_quantity, closed_at
-                    '''SELECT budgeting.put__partial_close_portfolio_position(
-                        $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                        $3::numeric, NULL::numeric, $5::numeric, $6::date
-                    )''',
-                    user_id, pos_id, amount, currency, quantity, op_date,
+                pos_row = await conn.fetchrow(
+                    '''SELECT quantity
+                       FROM budgeting.portfolio_positions
+                       WHERE id = $1''',
+                    pos_id,
                 )
+                current_quantity = None
+                if pos_row is not None and pos_row['quantity'] is not None:
+                    current_quantity = Decimal(str(pos_row['quantity']))
+
+                is_full_close = (
+                    current_quantity is not None
+                    and quantity is not None
+                    and quantity >= current_quantity
+                )
+
+                if is_full_close:
+                    await conn.execute(
+                        '''SELECT budgeting.put__close_portfolio_position(
+                            $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                            NULL::numeric, $5::date
+                        )''',
+                        user_id, pos_id, amount, currency, op_date,
+                    )
+                    event_types = ('close',)
+                else:
+                    await conn.execute(
+                        # параметры: user, pos, return_amount, currency, principal_reduction,
+                        #            return_amount_in_base (NULL), closed_quantity, closed_at
+                        '''SELECT budgeting.put__partial_close_portfolio_position(
+                            $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                            $3::numeric, NULL::numeric, $5::numeric, $6::date
+                        )''',
+                        user_id, pos_id, amount, currency, quantity, op_date,
+                    )
+                    event_types = ('partial_close', 'close')
+
                 await conn.execute(
                     '''UPDATE budgeting.portfolio_events
                        SET external_id = $1, import_source = 'tinkoff'
                        WHERE id = (
                            SELECT id FROM budgeting.portfolio_events
                            WHERE position_id = $2
-                             AND event_type IN ('partial_close','close')
+                             AND event_type = ANY($3::varchar[])
                              AND external_id IS NULL
                            ORDER BY id DESC LIMIT 1
                        )''',
-                    op_id, pos_id,
+                    op_id, pos_id, list(event_types),
                 )
 
 
