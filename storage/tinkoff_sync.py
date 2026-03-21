@@ -45,8 +45,8 @@ _OP_TYPE_MAP: dict[str, str] = {
     'OPERATION_TYPE_DIVIDEND':                      'dividend',
     'OPERATION_TYPE_DIVIDEND_TRANSFER':             'dividend',
     'OPERATION_TYPE_COUPON':                        'coupon',
-    'OPERATION_TYPE_BOND_REPAYMENT':                'coupon',
-    'OPERATION_TYPE_BOND_REPAYMENT_FULL':           'coupon',
+    'OPERATION_TYPE_BOND_REPAYMENT':                'bond_repayment',
+    'OPERATION_TYPE_BOND_REPAYMENT_FULL':           'bond_repayment_full',
     'OPERATION_TYPE_ACCRUING_VARMARGIN':            'coupon',   # вариационная маржа зачисление
     # Taxes
     'OPERATION_TYPE_TAX':                           'tax',
@@ -405,7 +405,7 @@ def _sort_operations_chronologically(ops: list[dict]) -> list[dict]:
         kind = _map_operation(op)['kind']
         if kind == 'input':
             priority = 0
-        elif kind in ('dividend', 'coupon', 'sell'):
+        elif kind in ('dividend', 'coupon', 'sell', 'bond_repayment', 'bond_repayment_full'):
             priority = 1
         elif kind == 'buy':
             priority = 2
@@ -468,6 +468,22 @@ def _op_currency(op: dict) -> str:
         payment = op.get('payment') or {}
         currency = (payment.get('currency') or '').upper().strip()
     return currency
+
+
+def _money_values_to_balance_map(items: Any) -> dict[str, Decimal]:
+    balances: dict[str, Decimal] = {}
+    if not isinstance(items, list):
+        return balances
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        currency = str(item.get('currency') or '').upper().strip()
+        if not currency:
+            continue
+        balances[currency] = balances.get(currency, Decimal('0')) + _money_value_to_decimal(item)
+
+    return balances
 
 
 def _infer_moex_market(class_code: str, exchange: str) -> Optional[str]:
@@ -634,10 +650,66 @@ async def _record_unmatched_cash_only(
         owner_user_id,
         owner_family_id,
     )
-    if str(base_currency or '').upper() != currency.upper():
-        raise ValueError(
-            'Cannot record unmatched Tinkoff cash flow in non-base currency without a linked position'
-        )
+    normalized_base_currency = str(base_currency or '').upper()
+    normalized_currency = currency.upper()
+    signed_cost_in_base = round(signed_amount, 2)
+    fx_consumptions: list[tuple[int, Decimal, Decimal]] = []
+
+    if normalized_base_currency != normalized_currency:
+        abs_amount = abs(signed_amount)
+        if signed_amount > 0:
+            signed_cost_in_base = round(signed_amount, 2)
+        else:
+            balance_row = await conn.fetchrow(
+                '''SELECT COALESCE(amount, 0) AS amount
+                   FROM budgeting.current_bank_balances
+                   WHERE bank_account_id = $1 AND currency_code = $2''',
+                linked_account_id,
+                normalized_currency,
+            )
+            current_balance = Decimal(str(balance_row['amount'])) if balance_row else Decimal('0')
+            if current_balance < abs_amount:
+                raise ValueError(
+                    f'Cannot record unmatched Tinkoff cash outflow of {abs_amount} {normalized_currency}: '
+                    'insufficient balance on investment account'
+                )
+
+            remaining_to_consume = abs_amount
+            consumed_cost_base = Decimal('0')
+            lot_rows = await conn.fetch(
+                '''SELECT id, amount_remaining, cost_base_remaining
+                   FROM budgeting.fx_lots
+                   WHERE bank_account_id = $1
+                     AND currency_code = $2
+                     AND amount_remaining > 0
+                   ORDER BY created_at, id''',
+                linked_account_id,
+                normalized_currency,
+            )
+
+            for lot_row in lot_rows:
+                if remaining_to_consume <= 0:
+                    break
+
+                lot_amount_remaining = Decimal(str(lot_row['amount_remaining']))
+                lot_cost_remaining = Decimal(str(lot_row['cost_base_remaining']))
+                consume_amount = min(remaining_to_consume, lot_amount_remaining)
+                if consume_amount == lot_amount_remaining:
+                    consume_cost = lot_cost_remaining
+                else:
+                    consume_cost = round(lot_cost_remaining * consume_amount / lot_amount_remaining, 2)
+
+                fx_consumptions.append((int(lot_row['id']), consume_amount, consume_cost))
+                consumed_cost_base += consume_cost
+                remaining_to_consume -= consume_amount
+
+            if remaining_to_consume > 0:
+                # Historical FX rates are unavailable from T-Bank cash-only movements,
+                # so the uncovered remainder falls back to the same 1:1 base-cost rule
+                # that we already use for imported broker inputs.
+                consumed_cost_base += round(remaining_to_consume, 2)
+
+            signed_cost_in_base = -consumed_cost_base
 
     operation_id = await conn.fetchval(
         '''INSERT INTO budgeting.operations (
@@ -680,7 +752,219 @@ async def _record_unmatched_cash_only(
         linked_account_id,
         currency,
         signed_amount,
-        signed_amount,
+        signed_cost_in_base,
+    )
+
+    if normalized_base_currency != normalized_currency:
+        abs_amount = abs(signed_amount)
+        if signed_amount > 0:
+            positive_cost_in_base = round(abs_amount, 2)
+            await conn.execute(
+                '''INSERT INTO budgeting.fx_lots (
+                       bank_account_id,
+                       currency_code,
+                       amount_initial,
+                       amount_remaining,
+                       buy_rate_in_base,
+                       cost_base_initial,
+                       cost_base_remaining,
+                       opened_by_operation_id
+                   )
+                   VALUES ($1, $2, $3, $3, $4, $5, $5, $6)''',
+                linked_account_id,
+                normalized_currency,
+                abs_amount,
+                positive_cost_in_base / abs_amount,
+                positive_cost_in_base,
+                operation_id,
+            )
+        else:
+            for lot_id, consume_amount, consume_cost in fx_consumptions:
+                await conn.execute(
+                    '''UPDATE budgeting.fx_lots
+                       SET amount_remaining = amount_remaining - $2,
+                           cost_base_remaining = cost_base_remaining - $3
+                       WHERE id = $1''',
+                    lot_id,
+                    consume_amount,
+                    consume_cost,
+                )
+                await conn.execute(
+                    '''INSERT INTO budgeting.lot_consumptions (operation_id, lot_id, amount, cost_base)
+                       VALUES ($1, $2, $3, $4)''',
+                    operation_id,
+                    lot_id,
+                    consume_amount,
+                    consume_cost,
+                )
+
+
+async def _record_position_principal_repayment(
+    conn: asyncpg.Connection,
+    user_id: int,
+    position_id: int,
+    return_amount_in_currency: Decimal,
+    currency: str,
+    principal_reduction_in_currency: Decimal,
+    repaid_at: date,
+    external_id: str,
+    comment: str,
+) -> None:
+    row = await conn.fetchrow(
+        '''SELECT
+               owner_type,
+               owner_user_id,
+               owner_family_id,
+               status,
+               quantity,
+               amount_in_currency,
+               COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base,
+               COALESCE((metadata ->> 'returned_amount_in_base')::numeric, 0) AS returned_amount_in_base,
+               investment_account_id,
+               title
+           FROM budgeting.portfolio_positions
+           WHERE id = $1''',
+        position_id,
+    )
+    if row is None:
+        raise ValueError(f'Unknown portfolio position {position_id}')
+
+    if row['status'] != 'open':
+        raise ValueError(f'Portfolio position {position_id} must be open for bond repayment')
+
+    current_amount_in_currency = Decimal(str(row['amount_in_currency'] or 0))
+    current_amount_in_base = Decimal(str(row['amount_in_base'] or 0))
+    current_returned_amount_in_base = Decimal(str(row['returned_amount_in_base'] or 0))
+    if principal_reduction_in_currency <= 0 or principal_reduction_in_currency >= current_amount_in_currency:
+        raise ValueError(
+            'Bond repayment must leave a positive remaining principal; use full repayment for final close'
+        )
+
+    owner_type = str(row['owner_type'])
+    owner_user_id = row['owner_user_id']
+    owner_family_id = row['owner_family_id']
+    investment_account_id = int(row['investment_account_id'])
+    title = str(row['title'] or '')
+
+    base_currency = await conn.fetchval(
+        'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+    )
+    if str(base_currency or '').upper() != currency.upper():
+        raise ValueError('Non-base currency bond repayment is not supported yet')
+
+    effective_return_amount_in_base = round(return_amount_in_currency, 2)
+    released_principal_in_base = round(
+        current_amount_in_base * principal_reduction_in_currency / current_amount_in_currency,
+        2,
+    )
+    remaining_amount_in_base = current_amount_in_base - released_principal_in_base
+    next_returned_amount_in_base = current_returned_amount_in_base + effective_return_amount_in_base
+
+    operation_id = await conn.fetchval(
+        '''INSERT INTO budgeting.operations (
+               actor_user_id,
+               owner_type,
+               owner_user_id,
+               owner_family_id,
+               type,
+               comment
+           )
+           VALUES ($1, $2, $3, $4, 'investment_adjustment', $5)
+           RETURNING id''',
+        user_id,
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        comment or f'Погашение облигации · {title}',
+    )
+
+    await conn.execute(
+        '''INSERT INTO budgeting.bank_entries (
+               operation_id,
+               bank_account_id,
+               currency_code,
+               amount,
+               external_id,
+               import_source
+           )
+           VALUES ($1, $2, $3, $4, $5, 'tinkoff')''',
+        operation_id,
+        investment_account_id,
+        currency,
+        return_amount_in_currency,
+        external_id,
+    )
+
+    await conn.execute(
+        'SELECT budgeting.put__apply_current_bank_delta($1::bigint, $2::char(3), $3::numeric, $4::numeric)',
+        investment_account_id,
+        currency,
+        return_amount_in_currency,
+        released_principal_in_base,
+    )
+
+    await conn.execute(
+        '''UPDATE budgeting.portfolio_positions
+           SET amount_in_currency = amount_in_currency - $2::numeric,
+               metadata = jsonb_set(
+                   jsonb_set(
+                       COALESCE(metadata, '{}'::jsonb),
+                       '{amount_in_base}',
+                       to_jsonb($3::numeric),
+                       true
+                   ),
+                   '{returned_amount_in_base}',
+                   to_jsonb($4::numeric),
+                   true
+               )
+           WHERE id = $1''',
+        position_id,
+        principal_reduction_in_currency,
+        remaining_amount_in_base,
+        next_returned_amount_in_base,
+    )
+
+    await conn.execute(
+        '''INSERT INTO budgeting.portfolio_events (
+               position_id,
+               event_type,
+               event_at,
+               amount,
+               currency_code,
+               linked_operation_id,
+               comment,
+               metadata,
+               created_by_user_id
+           )
+           VALUES (
+               $1::bigint,
+               'adjustment',
+               $2::date,
+               $3::numeric,
+               $4::char(3),
+               $5::bigint,
+               $6::text,
+               jsonb_build_object(
+                   'action', 'bond_repayment',
+                   'amount_in_base', $7::numeric,
+                   'principal_amount_in_currency', $8::numeric,
+                   'principal_amount_in_base', $9::numeric
+               ),
+               $10::bigint
+           )''',
+        position_id,
+        repaid_at,
+        return_amount_in_currency,
+        currency,
+        operation_id,
+        comment or f'Погашение облигации · {title}',
+        effective_return_amount_in_base,
+        principal_reduction_in_currency,
+        released_principal_in_base,
+        user_id,
     )
 
 
@@ -753,6 +1037,57 @@ class TinkoffSync:
 
         fallback = datetime.now(timezone.utc) - timedelta(days=10 * 365)
         return datetime(fallback.year, fallback.month, fallback.day, tzinfo=timezone.utc)
+
+    async def _get_current_cash_balances(
+        self,
+        client: TinkoffRestClient,
+        tinkoff_account_id: str,
+    ) -> dict[str, Decimal]:
+        positions = await client.get_positions(tinkoff_account_id)
+        balances = _money_values_to_balance_map(positions.get('money'))
+        blocked_balances = _money_values_to_balance_map(positions.get('blocked'))
+
+        for currency, amount in blocked_balances.items():
+            balances[currency] = balances.get(currency, Decimal('0')) + amount
+
+        return balances
+
+    async def _infer_opening_cash_seeds(
+        self,
+        client: TinkoffRestClient,
+        tinkoff_account_id: str,
+        raw_ops: list[dict],
+    ) -> dict[str, Decimal]:
+        current_balances = await self._get_current_cash_balances(client, tinkoff_account_id)
+        history_balances: dict[str, Decimal] = {}
+
+        for op in raw_ops:
+            currency = _op_currency(op)
+            if not currency:
+                continue
+            history_balances[currency] = history_balances.get(currency, Decimal('0')) + _money_value_to_decimal(
+                op.get('payment', {})
+            )
+
+        seeds: dict[str, Decimal] = {}
+        for currency in sorted(set(current_balances) | set(history_balances)):
+            difference = current_balances.get(currency, Decimal('0')) - history_balances.get(currency, Decimal('0'))
+            normalized_difference = round(difference, 2)
+            if abs(normalized_difference) < Decimal('0.01'):
+                continue
+            if normalized_difference > 0:
+                seeds[currency] = normalized_difference
+                continue
+
+            logger.warning(
+                'T-Bank history cash exceeds current cash on account %s for %s by %s; '
+                'negative opening balance seed was skipped',
+                tinkoff_account_id,
+                currency,
+                abs(normalized_difference),
+            )
+
+        return seeds
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -852,6 +1187,11 @@ class TinkoffSync:
 
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
         resolutions_map = {r['tinkoff_op_id']: r for r in deposit_resolutions}
+        opening_cash_seeds = (
+            await self._infer_opening_cash_seeds(client, tinkoff_account_id, raw_ops)
+            if not already_imported_ids
+            else {}
+        )
 
         applied_count = 0
         skipped_count = 0
@@ -859,6 +1199,26 @@ class TinkoffSync:
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
+                for currency, amount in opening_cash_seeds.items():
+                    await _record_unmatched_cash_only(
+                        conn,
+                        user_id,
+                        owner_type,
+                        owner_user_id,
+                        owner_family_id,
+                        linked_account_id,
+                        amount,
+                        currency,
+                        f'tinkoff-opening-seed:{tinkoff_account_id}:{currency}',
+                        'Tinkoff: начальный остаток, отсутствующий в истории API',
+                        'investment_adjustment',
+                    )
+                    logger.info(
+                        'Recorded inferred opening T-Bank cash seed for account %s (%s %s)',
+                        tinkoff_account_id,
+                        amount,
+                        currency,
+                    )
 
                 # Process ALL operations in chronological order (by date from Tinkoff API).
                 # This ensures deposits are applied before the buys that spend the cash.
@@ -870,13 +1230,13 @@ class TinkoffSync:
                         continue
 
                     mapped = _map_operation(op)
+                    payment = _money_value_to_decimal(op.get('payment', {}))
                     currency = _op_currency(op)
                     if not currency:
                         continue
 
                     # Deposit/withdrawal with manual resolution
                     if op_id in resolutions_map:
-                        payment = _money_value_to_decimal(op.get('payment', {}))
                         resolution = resolutions_map[op_id]
                         kind = resolution['resolution']
                         source_account_id = resolution.get('source_account_id')
@@ -888,8 +1248,25 @@ class TinkoffSync:
                         applied_count += 1
                         continue
 
-                    # Skip unresolved deposits/withdrawals and unknown operations
-                    if mapped['kind'] in ('input', 'output', 'unknown'):
+                    if mapped['kind'] == 'output':
+                        await _record_unmatched_cash_only(
+                            conn,
+                            user_id,
+                            owner_type,
+                            owner_user_id,
+                            owner_family_id,
+                            linked_account_id,
+                            -abs(payment),
+                            currency,
+                            op_id,
+                            'Tinkoff: вывод со счёта',
+                            'investment_adjustment',
+                        )
+                        applied_count += 1
+                        continue
+
+                    # Skip unresolved deposits and unknown operations
+                    if mapped['kind'] in ('input', 'unknown'):
                         continue
 
                     # Auto operations (buy, sell, dividend, fee, tax, etc.)
@@ -1543,7 +1920,157 @@ class TinkoffSync:
                     op_id,
                 )
 
+        elif kind == 'bond_repayment':
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            if pos_id:
+                pos_row = await conn.fetchrow(
+                    '''SELECT amount_in_currency
+                       FROM budgeting.portfolio_positions
+                       WHERE id = $1''',
+                    pos_id,
+                )
+                current_amount_in_currency = Decimal(str(pos_row['amount_in_currency'])) if pos_row else Decimal('0')
+                if amount >= current_amount_in_currency:
+                    await conn.execute(
+                        '''SELECT budgeting.put__close_portfolio_position(
+                            $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                            NULL::numeric, $5::date, $6::text
+                        )''',
+                        user_id,
+                        pos_id,
+                        amount,
+                        currency,
+                        op_date,
+                        'Tinkoff: полное погашение облигации',
+                    )
+                    await conn.execute(
+                        '''UPDATE budgeting.portfolio_events
+                           SET external_id = $1, import_source = 'tinkoff'
+                           WHERE id = (
+                               SELECT id FROM budgeting.portfolio_events
+                               WHERE position_id = $2 AND event_type = 'close' AND external_id IS NULL
+                               ORDER BY id DESC LIMIT 1
+                           )''',
+                        op_id,
+                        pos_id,
+                    )
+                else:
+                    await _record_position_principal_repayment(
+                        conn,
+                        user_id,
+                        pos_id,
+                        amount,
+                        currency,
+                        amount,
+                        op_date,
+                        op_id,
+                        'Tinkoff: частичное погашение облигации',
+                    )
+                    await conn.execute(
+                        '''UPDATE budgeting.portfolio_events
+                           SET external_id = $1, import_source = 'tinkoff'
+                           WHERE id = (
+                               SELECT id FROM budgeting.portfolio_events
+                               WHERE position_id = $2
+                                 AND event_type = 'adjustment'
+                                 AND COALESCE(metadata ->> 'action', '') = 'bond_repayment'
+                                 AND external_id IS NULL
+                               ORDER BY id DESC LIMIT 1
+                           )''',
+                        op_id,
+                        pos_id,
+                    )
+            else:
+                await _record_unmatched_cash_only(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    amount,
+                    currency,
+                    op_id,
+                    unmatched_comment,
+                    'investment_adjustment',
+                )
+                logger.warning(
+                    'Recorded unmatched %s as cash-only import for %s (%s)',
+                    kind,
+                    instrument_title,
+                    op_id,
+                )
+
+        elif kind == 'bond_repayment_full':
+            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            if pos_id:
+                await conn.execute(
+                    '''SELECT budgeting.put__close_portfolio_position(
+                        $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+                        NULL::numeric, $5::date, $6::text
+                    )''',
+                    user_id,
+                    pos_id,
+                    amount,
+                    currency,
+                    op_date,
+                    'Tinkoff: полное погашение облигации',
+                )
+                await conn.execute(
+                    '''UPDATE budgeting.portfolio_events
+                       SET external_id = $1, import_source = 'tinkoff'
+                       WHERE id = (
+                           SELECT id FROM budgeting.portfolio_events
+                           WHERE position_id = $2 AND event_type = 'close' AND external_id IS NULL
+                           ORDER BY id DESC LIMIT 1
+                       )''',
+                    op_id,
+                    pos_id,
+                )
+            else:
+                await _record_unmatched_cash_only(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    amount,
+                    currency,
+                    op_id,
+                    unmatched_comment,
+                    'investment_adjustment',
+                )
+                logger.warning(
+                    'Recorded unmatched %s as cash-only import for %s (%s)',
+                    kind,
+                    instrument_title,
+                    op_id,
+                )
+
         elif kind in ('broker_fee', 'tax'):
+            if payment > 0:
+                await _record_unmatched_cash_only(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    amount,
+                    currency,
+                    op_id,
+                    f'Tinkoff: возврат удержания · {instrument_title}' if instrument_title else 'Tinkoff: возврат удержания',
+                    'investment_adjustment',
+                )
+                logger.warning(
+                    'Recorded positive %s correction as cash-only import for %s (%s)',
+                    kind,
+                    instrument_title,
+                    op_id,
+                )
+                return
+
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
                 await self._require_investment_balance(conn, linked_account_id, currency, amount)

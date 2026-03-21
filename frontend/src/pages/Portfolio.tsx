@@ -389,16 +389,22 @@ export default function Portfolio({ user }: { user: UserContext }) {
         .map((connection) => connection.linked_account_id)
         .filter((value): value is number => typeof value === 'number'),
     );
+    const hasConnectedAccounts = connectedAccountIds.size > 0;
     const hasConnectedOpenPositions = openPositions.some((position) => connectedAccountIds.has(position.investment_account_id));
 
-    if (!hasConnectedOpenPositions) {
+    if (!hasConnectedAccounts) {
       setTinkoffLivePrices(new Map());
       return;
     }
 
-    void fetchTinkoffLivePrices()
-      .then((items) => setTinkoffLivePrices(new Map(items.map((item) => [item.position_id, item]))))
-      .catch(() => setTinkoffLivePrices(new Map()));
+    void (hasConnectedOpenPositions
+      ? fetchTinkoffLivePrices().catch(() => [] as TinkoffLivePrice[])
+      : Promise.resolve([] as TinkoffLivePrice[])
+    ).then((prices) => {
+      setTinkoffLivePrices(new Map(prices.map((item) => [item.position_id, item])));
+    }).catch(() => {
+      setTinkoffLivePrices(new Map());
+    });
   }, [openPositions, tinkoffConnections]);
 
   const closedPositions = useMemo(
@@ -541,6 +547,27 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }, {}),
     [openPositions, moexPrices, tinkoffLivePrices],
   );
+
+  const accountOpenPrincipalById = useMemo(
+    () => openPositions.reduce<Record<number, number>>((acc, position) => {
+      acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + Number(position.metadata?.amount_in_base ?? 0);
+      return acc;
+    }, {}),
+    [openPositions],
+  );
+
+  const getConnectedSecurityMetrics = (accountId: number) => {
+    const estimatedValue = accountEstimatedValueById[accountId] ?? 0;
+    const investedPrincipal = summaryByAccountId[accountId]?.invested_principal_in_base
+      ?? accountOpenPrincipalById[accountId]
+      ?? 0;
+    return {
+      estimatedValue,
+      investedPrincipal,
+      currentResult: estimatedValue - investedPrincipal,
+      cashValue: summaryByAccountId[accountId]?.cash_balance_in_base ?? 0,
+    };
+  };
 
   const getAccountBalanceForCurrency = (bankAccountId: number, currencyCode: string): number => (
     accounts.find(({ account }) => account.id === bankAccountId)?.balances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0
@@ -1078,12 +1105,19 @@ export default function Portfolio({ user }: { user: UserContext }) {
   }, [filteredOpenPositions]);
 
   const accountTabs = useMemo<PositionAccountTab[]>(() => {
+    const getGroupEstimatedValue = (group: PositionAccountGroup): number => {
+      if (activeAssetTypeCode === 'security') {
+        return getConnectedSecurityMetrics(group.accountId).estimatedValue;
+      }
+      return group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+    };
+
     const scopedTabs = filteredOpenPositionGroups.map((group) => ({
       key: `${group.ownerType}:${group.accountId}`,
       accountName: group.accountName,
       ownerLabel: group.ownerType === 'family' ? 'Семейный счет' : 'Личный счет',
       openCount: group.positions.length,
-      estimatedValue: group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
+      estimatedValue: getGroupEstimatedValue(group),
     }));
 
     if (scopedTabs.length <= 1) {
@@ -1095,9 +1129,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
       accountName: 'Все счета',
       ownerLabel: null,
       openCount: filteredOpenPositions.length,
-      estimatedValue: filteredOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
+      estimatedValue: filteredOpenPositionGroups.reduce((sum, group) => sum + getGroupEstimatedValue(group), 0),
     }, ...scopedTabs];
-  }, [filteredOpenPositionGroups, filteredOpenPositions, moexPrices, tinkoffLivePrices]);
+  }, [
+    accountEstimatedValueById,
+    accountOpenPrincipalById,
+    activeAssetTypeCode,
+    filteredOpenPositionGroups,
+    filteredOpenPositions.length,
+    moexPrices,
+    summaryByAccountId,
+    tinkoffLivePrices,
+  ]);
 
   useEffect(() => {
     const fallbackKey = accountTabs[0]?.key ?? 'all';
@@ -1149,20 +1192,44 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [activeAccountTabKey, filteredOpenPositionGroups],
   );
 
-  const activeScopePrincipalInBase = useMemo(
-    () => visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
-    [visibleOpenPositions],
-  );
+  const activeScopeDisplayMetrics = useMemo(() => {
+    if (activeAssetTypeCode === 'security') {
+      let estimatedValue = 0;
+      let investedPrincipal = 0;
+      let currentResult = 0;
 
-  const activeScopeIncomeInBase = useMemo(
-    () => visibleAssetPositions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
-    [visibleAssetPositions],
-  );
+      for (const group of visibleOpenPositionGroups) {
+        const metrics = getConnectedSecurityMetrics(group.accountId);
+        estimatedValue += metrics.estimatedValue;
+        investedPrincipal += metrics.investedPrincipal;
+        currentResult += metrics.currentResult;
+      }
 
-  const activeScopeEstimatedValue = useMemo(
-    () => visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
-    [visibleOpenPositions, moexPrices, tinkoffLivePrices],
-  );
+      return {
+        estimatedValue,
+        investedPrincipal,
+        resultValue: currentResult,
+        resultLabel: 'Текущий результат',
+      };
+    }
+
+    return {
+      estimatedValue: visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
+      investedPrincipal: visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
+      resultValue: visibleAssetPositions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
+      resultLabel: 'Доход',
+    };
+  }, [
+    activeAssetTypeCode,
+    accountEstimatedValueById,
+    accountOpenPrincipalById,
+    moexPrices,
+    summaryByAccountId,
+    tinkoffLivePrices,
+    visibleAssetPositions,
+    visibleOpenPositionGroups,
+    visibleOpenPositions,
+  ]);
 
   const hasMultipleOpenPositionOwners = useMemo(
     () => new Set(visibleOpenPositionGroups.map((group) => group.ownerType)).size > 1,
@@ -1410,29 +1477,29 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
           )}
 
-          {(activeScopeEstimatedValue > 0 || activeScopePrincipalInBase > 0 || activeScopeIncomeInBase > 0) && (
+          {(activeScopeDisplayMetrics.estimatedValue > 0 || activeScopeDisplayMetrics.investedPrincipal > 0 || activeScopeDisplayMetrics.resultValue !== 0) && (
             <div className="portfolio-type-stats">
-              {activeScopeEstimatedValue > 0 && (
+              {activeScopeDisplayMetrics.estimatedValue > 0 && (
                 <div className="portfolio-type-stats__row">
                   <span className="portfolio-type-stats__label">Оценочная стоимость</span>
                   <span className="portfolio-type-stats__value">
-                    {formatAmount(activeScopeEstimatedValue, user.base_currency_code)}
+                    {formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
                   </span>
                 </div>
               )}
-              {activeScopePrincipalInBase > 0 && (
+              {activeScopeDisplayMetrics.investedPrincipal > 0 && (
                 <div className="portfolio-type-stats__row">
                   <span className="portfolio-type-stats__label">Вложено</span>
                   <span className="portfolio-type-stats__value">
-                    {formatAmount(activeScopePrincipalInBase, user.base_currency_code)}
+                    {formatAmount(activeScopeDisplayMetrics.investedPrincipal, user.base_currency_code)}
                   </span>
                 </div>
               )}
-              {activeScopeIncomeInBase > 0 && (
+              {activeScopeDisplayMetrics.resultValue !== 0 && (
                 <div className="portfolio-type-stats__row">
-                  <span className="portfolio-type-stats__label">Доход</span>
+                  <span className="portfolio-type-stats__label">{activeScopeDisplayMetrics.resultLabel}</span>
                   <span className="portfolio-type-stats__value">
-                    {formatAmount(activeScopeIncomeInBase, user.base_currency_code)}
+                    {formatAmount(activeScopeDisplayMetrics.resultValue, user.base_currency_code)}
                   </span>
                 </div>
               )}
@@ -2166,7 +2233,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
               {accounts.map(({ account, balances }) => {
                 const summary = summaryByAccountId[account.id];
                 const conn = tinkoffConnections.find((c) => c.linked_account_id === account.id);
-                const estimatedValue = accountEstimatedValueById[account.id] ?? 0;
+                const liveMetrics = getConnectedSecurityMetrics(account.id);
+                const estimatedValue = liveMetrics.estimatedValue;
+                const investedPrincipal = summary?.invested_principal_in_base ?? liveMetrics.investedPrincipal;
+                const currentResult = liveMetrics.currentResult;
                 return (
                   <div key={account.id} className="portfolio-account-modal-item">
                     <div className="portfolio-account-modal-item__header">
@@ -2208,10 +2278,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           <strong>{formatAmount(estimatedValue, user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {summary && summary.invested_principal_in_base > 0 && (
+                      {investedPrincipal > 0 && (
                         <div className="hero-card__breakdown-row">
                           <span>Вложено</span>
-                          <strong>{formatAmount(summary.invested_principal_in_base, user.base_currency_code)}</strong>
+                          <strong>{formatAmount(investedPrincipal, user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                      {currentResult !== 0 && (
+                        <div className="hero-card__breakdown-row">
+                          <span>Текущий результат</span>
+                          <strong>{formatAmount(currentResult, user.base_currency_code)}</strong>
                         </div>
                       )}
                       {summary && summary.realized_income_in_base !== 0 && (
