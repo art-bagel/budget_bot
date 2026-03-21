@@ -59,6 +59,11 @@ BEGIN
 
     _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
+    -- Lock the balance row to prevent concurrent over-spend.
+    PERFORM 1 FROM current_bank_balances
+    WHERE bank_account_id = _from_account_id AND currency_code = _currency_code
+    FOR UPDATE;
+
     SELECT COALESCE(amount, 0)
     INTO _bank_balance
     FROM current_bank_balances

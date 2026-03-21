@@ -344,47 +344,46 @@ class TinkoffSync:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
 
-                # 1. Deposits/withdrawals with manual resolution
-                for op_id, resolution in resolutions_map.items():
+                # Process ALL operations in chronological order (by date from Tinkoff API).
+                # This ensures deposits are applied before the buys that spend the cash.
+                for op in raw_ops:
+                    op_id = op['id']
+
                     if op_id in already_imported_ids:
                         skipped_count += 1
                         continue
-                    op = ops_by_id.get(op_id)
-                    if op is None:
-                        continue
 
-                    payment  = _money_value_to_decimal(op.get('payment', {}))
+                    mapped = _map_operation(op)
                     currency = _op_currency(op)
                     if not currency:
                         continue
-                    op_date  = _op_date(op)
-                    kind     = resolution['resolution']
-                    source_account_id = resolution.get('source_account_id')
 
-                    await self._apply_deposit_resolution(
-                        conn, user_id, owner_type, owner_user_id, owner_family_id,
-                        linked_account_id, op_id, float(payment), currency, kind, source_account_id,
-                    )
-                    applied_count += 1
+                    # Deposit/withdrawal with manual resolution
+                    if op_id in resolutions_map:
+                        payment = _money_value_to_decimal(op.get('payment', {}))
+                        resolution = resolutions_map[op_id]
+                        kind = resolution['resolution']
+                        source_account_id = resolution.get('source_account_id')
 
-                # 2. Auto operations
-                for op in raw_ops:
-                    if op['id'] in already_imported_ids:
-                        skipped_count += 1
-                        continue
-                    if op['id'] in resolutions_map:
+                        await self._apply_deposit_resolution(
+                            conn, user_id, owner_type, owner_user_id, owner_family_id,
+                            linked_account_id, op_id, float(payment), currency, kind, source_account_id,
+                        )
+                        applied_count += 1
                         continue
 
-                    mapped = _map_operation(op)
+                    # Skip unresolved deposits/withdrawals and unknown operations
                     if mapped['kind'] in ('input', 'output', 'unknown'):
                         continue
 
+                    # Auto operations (buy, sell, dividend, fee, tax, etc.)
                     await self._apply_auto_operation(
                         conn, user_id, linked_account_id, op, mapped,
+                        owner_type, owner_user_id, owner_family_id,
                     )
                     applied_count += 1
 
-                # 3. Update last_synced_at
+                # Update last_synced_at
                 await conn.execute(
                     'UPDATE budgeting.external_connections SET last_synced_at = now() WHERE id = $1',
                     connection_id,
@@ -482,6 +481,31 @@ class TinkoffSync:
         elif resolution == 'transfer':
             if source_account_id is None:
                 raise ValueError('source_account_id required for transfer resolution')
+
+            # Ensure the source account has enough balance for the transfer.
+            # During historical import the source account may have already been
+            # spent down, so we top it up with a broker_input if needed.
+            src_row = await conn.fetchrow(
+                '''SELECT COALESCE(amount, 0) AS amount
+                   FROM budgeting.current_bank_balances
+                   WHERE bank_account_id = $1 AND currency_code = $2''',
+                source_account_id, currency,
+            )
+            src_balance = float(src_row['amount']) if src_row else 0.0
+            if src_balance < abs_amount:
+                shortfall = abs_amount - src_balance
+                await conn.execute(
+                    '''SELECT budgeting.put__record_broker_input(
+                        $1::bigint, $2::text, $3::bigint, $4::bigint,
+                        $5::bigint, $6::char(3), $7::numeric,
+                        NULL::text, 'tinkoff'::varchar(30),
+                        $8::text
+                    )''',
+                    user_id, owner_type, owner_user_id, owner_family_id,
+                    source_account_id, currency, shortfall,
+                    'Tinkoff: автопополнение при импорте (источник перевода)',
+                )
+
             await conn.execute(
                 '''SELECT budgeting.put__record_broker_transfer_in(
                     $1::bigint, $2::text, $3::bigint, $4::bigint,
@@ -506,6 +530,47 @@ class TinkoffSync:
                 tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение (уже учтено)',
             )
 
+    async def _ensure_investment_balance(
+        self,
+        conn: asyncpg.Connection,
+        user_id: int,
+        linked_account_id: int,
+        currency: str,
+        required_amount: float,
+        owner_type: str,
+        owner_user_id: Optional[int],
+        owner_family_id: Optional[int],
+    ) -> None:
+        """Top up the investment account balance if needed during broker import.
+
+        When importing historical trades from Tinkoff, the internal balance
+        may be insufficient (e.g. deposit was marked 'already_recorded').
+        We inject the missing amount via put__record_broker_input so that
+        downstream portfolio functions don't fail on balance checks.
+        """
+        row = await conn.fetchrow(
+            '''SELECT COALESCE(amount, 0) AS amount
+               FROM budgeting.current_bank_balances
+               WHERE bank_account_id = $1 AND currency_code = $2''',
+            linked_account_id, currency,
+        )
+        current_balance = float(row['amount']) if row else 0.0
+        shortfall = required_amount - current_balance
+        if shortfall <= 0:
+            return
+
+        await conn.execute(
+            '''SELECT budgeting.put__record_broker_input(
+                $1::bigint, $2::text, $3::bigint, $4::bigint,
+                $5::bigint, $6::char(3), $7::numeric,
+                NULL::text, 'tinkoff'::varchar(30),
+                $8::text
+            )''',
+            user_id, owner_type, owner_user_id, owner_family_id,
+            linked_account_id, currency, shortfall,
+            'Tinkoff: автопополнение при импорте',
+        )
+
     async def _apply_auto_operation(
         self,
         conn: asyncpg.Connection,
@@ -513,6 +578,9 @@ class TinkoffSync:
         linked_account_id: int,
         op: dict,
         mapped: dict,
+        owner_type: str = 'user',
+        owner_user_id: Optional[int] = None,
+        owner_family_id: Optional[int] = None,
     ) -> None:
         kind     = mapped['kind']
         figi     = mapped['figi']
@@ -527,6 +595,11 @@ class TinkoffSync:
         op_id    = op['id']
 
         if kind == 'buy':
+            # Ensure enough cash on the investment account before buying
+            await self._ensure_investment_balance(
+                conn, user_id, linked_account_id, currency, amount,
+                owner_type, owner_user_id, owner_family_id,
+            )
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id is None:
                 result = await conn.fetchval(
@@ -589,6 +662,11 @@ class TinkoffSync:
         elif kind in ('broker_fee', 'tax'):
             pos_id = await self._find_position(conn, linked_account_id, figi)
             if pos_id:
+                # Ensure enough cash on the investment account before charging fee
+                await self._ensure_investment_balance(
+                    conn, user_id, linked_account_id, currency, amount,
+                    owner_type, owner_user_id, owner_family_id,
+                )
                 await conn.execute(
                     '''SELECT budgeting.put__record_portfolio_fee(
                         $1::bigint, $2::bigint, $3::numeric, $4::char(3), $5::date
