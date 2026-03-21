@@ -28,15 +28,38 @@ class Reports(DataBase):
     F_GET__PORTFOLIO_EVENTS = 'get__portfolio_events'
 
     @staticmethod
+    def _repair_metadata(value: dict) -> dict:
+        normalized = dict(value)
+        class_code = str(normalized.get('class_code', '')).upper().strip()
+        exchange = str(normalized.get('exchange', '')).upper().strip()
+        instrument_type = str(normalized.get('instrument_type', '')).lower().strip()
+        security_kind = str(normalized.get('security_kind', '')).lower().strip()
+
+        is_bond = (
+            security_kind == 'bond'
+            or str(normalized.get('moex_market', '')).lower().strip() == 'bonds'
+            or class_code.startswith('TQO')
+            or class_code == 'TQCB'
+            or 'bond' in instrument_type
+            or 'BOND' in exchange
+        )
+
+        if is_bond:
+            normalized['security_kind'] = 'bond'
+            normalized['moex_market'] = 'bonds'
+
+        return normalized
+
+    @staticmethod
     def _normalize_metadata(value: Any) -> dict:
         if isinstance(value, dict):
-            return value
+            return Reports._repair_metadata(value)
 
         if isinstance(value, list):
             merged: dict = {}
             for item in value:
                 merged.update(Reports._normalize_metadata(item))
-            return merged
+            return Reports._repair_metadata(merged)
 
         if isinstance(value, str):
             try:

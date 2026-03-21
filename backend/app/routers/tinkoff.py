@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +10,7 @@ from backend.app import storage as app_storage
 from storage.tinkoff_sync import TinkoffConnections, TinkoffSync
 
 router = APIRouter(prefix='/api/v1/tinkoff', tags=['tinkoff'])
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +224,8 @@ async def get_tinkoff_live_prices(
     sync = TinkoffSync(pool)
     try:
         return await sync.get_live_position_prices(user.user_id)
-    except Exception:
+    except Exception as exc:
         # Live prices are a best-effort enhancement for UI valuation,
         # so gracefully degrade to MOEX/cost basis when T-Bank is unavailable.
+        logger.exception('Failed to resolve T-Bank live prices for user %s: %s', user.user_id, exc)
         return []

@@ -9,6 +9,7 @@ REST base: https://invest-public-api.tinkoff.ru/rest
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -18,6 +19,7 @@ import httpx
 
 
 TINKOFF_REST_URL = 'https://invest-public-api.tinkoff.ru/rest'
+logger = logging.getLogger(__name__)
 
 # Tinkoff operation type → our internal kind
 _OP_TYPE_MAP: dict[str, str] = {
@@ -287,6 +289,42 @@ def _best_tinkoff_instrument_id(meta: dict[str, Any]) -> Optional[tuple[str, str
     return None
 
 
+def _looks_like_bond_board(class_code: str, exchange: str = '') -> bool:
+    normalized_class_code = class_code.upper().strip()
+    normalized_exchange = exchange.upper().strip()
+
+    if normalized_class_code.startswith('TQO'):
+        return True
+
+    if normalized_class_code in {'TQCB'}:
+        return True
+
+    return 'BOND' in normalized_exchange
+
+
+def _is_bond_position(*metas: Any) -> bool:
+    for meta in metas:
+        if not isinstance(meta, dict):
+            continue
+
+        if str(meta.get('security_kind', '')).lower().strip() == 'bond':
+            return True
+
+        if str(meta.get('moex_market', '')).lower().strip() == 'bonds':
+            return True
+
+        if 'bond' in str(meta.get('instrument_type', '')).lower().strip():
+            return True
+
+        if _looks_like_bond_board(
+            str(meta.get('class_code', '')),
+            str(meta.get('exchange', '')),
+        ):
+            return True
+
+    return False
+
+
 def _match_position_id_from_rows(
     instrument_meta: dict[str, Any],
     position_rows: list[dict[str, Any]],
@@ -371,7 +409,7 @@ def _infer_moex_market(class_code: str, exchange: str) -> Optional[str]:
     normalized_class_code = class_code.upper().strip()
     normalized_exchange = exchange.upper().strip()
 
-    if normalized_class_code.startswith('TQO'):
+    if _looks_like_bond_board(normalized_class_code, normalized_exchange):
         return 'bonds'
 
     if normalized_class_code in {'TQBR', 'TQTF', 'TQIF', 'TQPI', 'TQTD'}:
@@ -387,7 +425,7 @@ def _infer_security_kind(instrument_type: str, class_code: str) -> str:
     normalized_type = instrument_type.lower().strip()
     normalized_class_code = class_code.upper().strip()
 
-    if normalized_class_code.startswith('TQO') or 'bond' in normalized_type:
+    if _looks_like_bond_board(normalized_class_code) or 'bond' in normalized_type:
         return 'bond'
 
     if any(token in normalized_type for token in ('etf', 'fund', 'share_type_etf', 'share_type_bpif')):
@@ -431,6 +469,79 @@ def _normalize_instrument_meta(op: dict, raw: Optional[dict] = None) -> dict:
         'name': name,
         'moex_market': moex_market,
         'security_kind': security_kind,
+    }
+
+
+async def _resolve_bond_nominal(
+    client: TinkoffRestClient,
+    bond_nominals: dict[str, Decimal],
+    *metas: Any,
+) -> Decimal:
+    nominal_identifier: Optional[tuple[str, str]] = None
+
+    for meta in metas:
+        if not isinstance(meta, dict):
+            continue
+        nominal_identifier = _best_tinkoff_instrument_id(meta)
+        if nominal_identifier is not None:
+            break
+
+    if nominal_identifier is None:
+        return Decimal('0')
+
+    nominal_key = nominal_identifier[1]
+    nominal = bond_nominals.get(nominal_key, Decimal('0'))
+    if nominal > 0:
+        return nominal
+
+    try:
+        raw_instrument = await client.get_instrument_by(nominal_identifier[1], nominal_identifier[0])
+    except Exception as exc:
+        logger.warning(
+            'Failed to load bond nominal for %s via %s: %s',
+            nominal_identifier[1],
+            nominal_identifier[0],
+            exc,
+        )
+        return Decimal('0')
+
+    nominal = _api_number_to_decimal(raw_instrument.get('nominal'))
+    if nominal > 0:
+        bond_nominals[nominal_key] = nominal
+    return nominal
+
+
+async def _build_live_price_payload(
+    client: TinkoffRestClient,
+    bond_nominals: dict[str, Decimal],
+    matched_row: dict[str, Any],
+    instrument_meta: dict[str, Any],
+    quoted_price: Decimal,
+    quantity: Decimal,
+    *,
+    current_nkd: Decimal = Decimal('0'),
+    source: str = 'tinkoff',
+) -> Optional[dict[str, Any]]:
+    if quantity <= 0 or quoted_price <= 0:
+        return None
+
+    meta = matched_row['metadata']
+    per_unit_price = quoted_price
+
+    if _is_bond_position(instrument_meta, meta):
+        nominal = await _resolve_bond_nominal(client, bond_nominals, instrument_meta, meta)
+        if nominal <= 0:
+            return None
+        clean_price = quoted_price / Decimal('100') * nominal
+        per_unit_price = clean_price + current_nkd
+
+    current_value = per_unit_price * quantity
+    return {
+        'position_id': matched_row['position_id'],
+        'price': float(per_unit_price),
+        'currency_code': matched_row['currency_code'],
+        'current_value': float(current_value),
+        'source': source,
     }
 
 
@@ -721,22 +832,30 @@ class TinkoffSync:
             if not normalized_position_rows:
                 continue
 
-            try:
-                portfolio = await client.get_portfolio(provider_account_id, 'RUB')
-            except Exception:
-                continue
-
-            portfolio_positions = portfolio.get('positions', [])
-            if not isinstance(portfolio_positions, list):
-                continue
-
             bond_nominals: dict[str, Decimal] = {}
             used_position_ids: set[int] = set()
+            portfolio_positions: list[dict[str, Any]] = []
+
+            try:
+                portfolio = await client.get_portfolio(provider_account_id, 'RUB')
+                raw_positions = portfolio.get('positions', [])
+                if isinstance(raw_positions, list):
+                    portfolio_positions = [item for item in raw_positions if isinstance(item, dict)]
+                else:
+                    logger.warning(
+                        'T-Bank GetPortfolio returned invalid positions payload for connection %s account %s',
+                        connection_id,
+                        provider_account_id,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    'T-Bank GetPortfolio failed for connection %s account %s: %s',
+                    connection_id,
+                    provider_account_id,
+                    exc,
+                )
 
             for portfolio_position in portfolio_positions:
-                if not isinstance(portfolio_position, dict):
-                    continue
-
                 instrument_meta = _normalize_instrument_meta({}, portfolio_position)
                 matched_row = _match_position_id_from_rows(
                     instrument_meta,
@@ -758,46 +877,96 @@ class TinkoffSync:
                 if quoted_price <= 0:
                     continue
 
-                meta = matched_row['metadata']
-                per_unit_price = quoted_price
+                live_price = await _build_live_price_payload(
+                    client,
+                    bond_nominals,
+                    matched_row,
+                    instrument_meta,
+                    quoted_price,
+                    quantity,
+                    current_nkd=_api_number_to_decimal(
+                        portfolio_position.get('currentNkd') or portfolio_position.get('current_nkd'),
+                    ),
+                    source='tinkoff',
+                )
+                if live_price is None:
+                    continue
 
-                if (
-                    instrument_meta.get('security_kind') == 'bond'
-                    or instrument_meta.get('moex_market') == 'bonds'
-                    or meta.get('security_kind') == 'bond'
-                    or meta.get('moex_market') == 'bonds'
-                    or str(instrument_meta.get('class_code', '')).upper().startswith('TQO')
-                    or str(meta.get('class_code', '')).upper().startswith('TQO')
-                ):
-                    nominal_identifier = _best_tinkoff_instrument_id(instrument_meta) or _best_tinkoff_instrument_id(meta)
-                    nominal_key = nominal_identifier[1] if nominal_identifier else ''
-                    nominal = bond_nominals.get(nominal_key, Decimal('0'))
-                    if nominal <= 0 and nominal_identifier is not None:
-                        try:
-                            raw_instrument = await client.get_instrument_by(nominal_identifier[1], nominal_identifier[0])
-                        except Exception:
-                            raw_instrument = {}
-                        nominal = _api_number_to_decimal(raw_instrument.get('nominal'))
-                        if nominal > 0:
-                            bond_nominals[nominal_key] = nominal
-                    if nominal <= 0:
+                used_position_ids.add(matched_row['position_id'])
+                result.append(live_price)
+
+            unresolved_rows = [
+                row for row in normalized_position_rows
+                if row['position_id'] not in used_position_ids
+            ]
+            fallback_ids: list[str] = []
+
+            for unresolved_row in unresolved_rows:
+                identifier = _best_tinkoff_instrument_id(unresolved_row['metadata'])
+                if identifier is None:
+                    continue
+                fallback_ids.append(identifier[1])
+
+            if fallback_ids:
+                try:
+                    last_prices = await client.get_last_prices(list(dict.fromkeys(fallback_ids)))
+                except Exception as exc:
+                    logger.warning(
+                        'T-Bank GetLastPrices failed for connection %s account %s: %s',
+                        connection_id,
+                        provider_account_id,
+                        exc,
+                    )
+                    last_prices = []
+
+                for last_price in last_prices:
+                    if not isinstance(last_price, dict):
                         continue
 
-                    current_nkd = _api_number_to_decimal(
-                        portfolio_position.get('currentNkd') or portfolio_position.get('current_nkd'),
+                    instrument_meta = _normalize_instrument_meta({}, last_price)
+                    matched_row = _match_position_id_from_rows(
+                        instrument_meta,
+                        normalized_position_rows,
+                        used_position_ids,
                     )
-                    clean_price = quoted_price / Decimal('100') * nominal
-                    per_unit_price = clean_price + current_nkd
+                    if matched_row is None:
+                        continue
 
-                current_value = per_unit_price * quantity
-                used_position_ids.add(matched_row['position_id'])
-                result.append({
-                    'position_id': matched_row['position_id'],
-                    'price': float(per_unit_price),
-                    'currency_code': matched_row['currency_code'],
-                    'current_value': float(current_value),
-                    'source': 'tinkoff',
-                })
+                    live_price = await _build_live_price_payload(
+                        client,
+                        bond_nominals,
+                        matched_row,
+                        instrument_meta,
+                        _api_number_to_decimal(
+                            last_price.get('price')
+                            or last_price.get('lastPrice')
+                            or last_price.get('last_price'),
+                        ),
+                        matched_row['quantity'],
+                        source='tinkoff',
+                    )
+                    if live_price is None:
+                        continue
+
+                    used_position_ids.add(matched_row['position_id'])
+                    result.append(live_price)
+
+            unresolved_labels = []
+            for unresolved_row in normalized_position_rows:
+                if unresolved_row['position_id'] in used_position_ids:
+                    continue
+                meta = unresolved_row['metadata']
+                unresolved_labels.append(
+                    f"{unresolved_row['position_id']}:{meta.get('ticker') or meta.get('figi') or unresolved_row['title']}"
+                )
+
+            if unresolved_labels:
+                logger.warning(
+                    'T-Bank live prices unresolved for connection %s account %s: %s',
+                    connection_id,
+                    provider_account_id,
+                    ', '.join(unresolved_labels[:10]),
+                )
 
         return result
 
