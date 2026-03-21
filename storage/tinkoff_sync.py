@@ -225,6 +225,26 @@ def _api_number_to_decimal(value: Any) -> Decimal:
     return Decimal(str(value))
 
 
+def _normalize_metadata_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, list):
+        merged: dict[str, Any] = {}
+        for item in value:
+            merged.update(_normalize_metadata_object(item))
+        return merged
+
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return {}
+        return _normalize_metadata_object(parsed)
+
+    return {}
+
+
 def _op_field(op: dict, *names: str) -> str:
     for name in names:
         value = op.get(name)
@@ -620,6 +640,19 @@ class TinkoffSync:
         instrument_meta: Optional[dict],
     ) -> Optional[int]:
         meta = instrument_meta or {}
+        rows = await conn.fetch(
+            '''SELECT id, title, metadata
+               FROM budgeting.portfolio_positions
+               WHERE investment_account_id = $1
+                 AND status = 'open' ''',
+            linked_account_id,
+        )
+
+        normalized_rows = [
+            (row['id'], row['title'], _normalize_metadata_object(row['metadata']))
+            for row in rows
+        ]
+
         lookup_candidates = [
             ('position_uid', meta.get('position_uid')),
             ('instrument_uid', meta.get('instrument_uid')),
@@ -630,44 +663,26 @@ class TinkoffSync:
         for metadata_key, metadata_value in lookup_candidates:
             if not metadata_value:
                 continue
-            row = await conn.fetchrow(
-                f'''SELECT id FROM budgeting.portfolio_positions
-                    WHERE investment_account_id = $1
-                      AND status = 'open'
-                      AND metadata->>$2 = $3
-                    LIMIT 1''',
-                linked_account_id, metadata_key, metadata_value,
-            )
-            if row:
-                return row['id']
+            for position_id, _title, position_meta in normalized_rows:
+                if str(position_meta.get(metadata_key, '')).strip() == str(metadata_value).strip():
+                    return position_id
 
         ticker = meta.get('ticker')
         class_code = meta.get('class_code')
         if ticker and class_code:
-            row = await conn.fetchrow(
-                '''SELECT id FROM budgeting.portfolio_positions
-                   WHERE investment_account_id = $1
-                     AND status = 'open'
-                     AND metadata->>'ticker' = $2
-                     AND metadata->>'class_code' = $3
-                   LIMIT 1''',
-                linked_account_id, ticker, class_code,
-            )
-            if row:
-                return row['id']
+            for position_id, _title, position_meta in normalized_rows:
+                if (
+                    str(position_meta.get('ticker', '')).strip() == str(ticker).strip()
+                    and str(position_meta.get('class_code', '')).strip() == str(class_code).strip()
+                ):
+                    return position_id
 
         title = meta.get('name')
         if title:
-            row = await conn.fetchrow(
-                '''SELECT id FROM budgeting.portfolio_positions
-                   WHERE investment_account_id = $1
-                     AND status = 'open'
-                     AND title = $2
-                   LIMIT 1''',
-                linked_account_id, title,
-            )
-            if row:
-                return row['id']
+            normalized_title = str(title).strip()
+            for position_id, position_title, _position_meta in normalized_rows:
+                if str(position_title).strip() == normalized_title:
+                    return position_id
 
         return None
 
@@ -721,7 +736,7 @@ class TinkoffSync:
                    WHERE id = $1''',
                 pos_id,
                 quantity,
-                json.dumps(metadata_patch),
+                metadata_patch,
             )
             updated_position_ids.add(pos_id)
             updated_count += 1

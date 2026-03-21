@@ -1,5 +1,6 @@
+import json
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from storage.databases import DataBase
 
@@ -25,6 +26,26 @@ class Reports(DataBase):
     F_GET__PORTFOLIO_POSITION = 'get__portfolio_position'
     F_GET__PORTFOLIO_POSITIONS = 'get__portfolio_positions'
     F_GET__PORTFOLIO_EVENTS = 'get__portfolio_events'
+
+    @staticmethod
+    def _normalize_metadata(value: Any) -> dict:
+        if isinstance(value, dict):
+            return value
+
+        if isinstance(value, list):
+            merged: dict = {}
+            for item in value:
+                merged.update(Reports._normalize_metadata(item))
+            return merged
+
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except Exception:
+                return {}
+            return Reports._normalize_metadata(parsed)
+
+        return {}
 
     async def get__currencies(self) -> list[dict]:
         result = await self.call_function(
@@ -258,11 +279,14 @@ class Reports(DataBase):
         user_id: int,
         position_id: int,
     ) -> Optional[dict]:
-        return await self.call_function(
+        result = await self.call_function(
             self._fn(self.F_GET__PORTFOLIO_POSITION),
             user_id,
             position_id,
         )
+        if result:
+            result['metadata'] = self._normalize_metadata(result.get('metadata'))
+        return result
 
     async def get__portfolio_positions(
         self,
@@ -276,7 +300,11 @@ class Reports(DataBase):
             status,
             investment_account_id,
         )
-        return result if result else []
+        if not result:
+            return []
+        for item in result:
+            item['metadata'] = self._normalize_metadata(item.get('metadata'))
+        return result
 
     async def get__portfolio_events(
         self,
@@ -288,4 +316,8 @@ class Reports(DataBase):
             user_id,
             position_id,
         )
-        return result if result else []
+        if not result:
+            return []
+        for item in result:
+            item['metadata'] = self._normalize_metadata(item.get('metadata'))
+        return result
