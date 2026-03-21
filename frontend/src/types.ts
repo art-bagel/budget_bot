@@ -567,3 +567,11 @@ export interface ApplyTinkoffSyncResponse {
   applied: number;
   skipped_already_imported: number;
 }
+
+export interface TinkoffLivePrice {
+  position_id: number;
+  price: number;
+  currency_code: string;
+  current_value: number;
+  source: string;
+}

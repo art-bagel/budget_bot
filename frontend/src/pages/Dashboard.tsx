@@ -7,6 +7,7 @@ import {
   fetchGroupMembers,
   fetchPortfolioPositions,
   fetchPortfolioSummary,
+  fetchTinkoffLivePrices,
 } from '../api';
 import type {
   BankAccount,
@@ -16,6 +17,7 @@ import type {
   GroupMember,
   PortfolioPosition,
   PortfolioSummaryItem,
+  TinkoffLivePrice,
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
@@ -45,6 +47,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
+  const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
@@ -342,6 +345,17 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   }, [user.bank_account_id]);
 
   useEffect(() => {
+    if (openPositions.length === 0) {
+      setTinkoffLivePrices(new Map());
+      return;
+    }
+
+    void fetchTinkoffLivePrices()
+      .then((items) => setTinkoffLivePrices(new Map(items.map((item) => [item.position_id, item]))))
+      .catch(() => setTinkoffLivePrices(new Map()));
+  }, [openPositions]);
+
+  useEffect(() => {
     const sharesTickers: string[] = [];
     const bondsTickers: string[] = [];
     for (const pos of openPositions) {
@@ -494,6 +508,24 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     acc[item.investment_account_id] = item;
     return acc;
   }, {});
+  const getResolvedPositionValue = (position: PortfolioPosition): number | null => {
+    const tinkoffPrice = tinkoffLivePrices.get(position.id);
+    if (tinkoffPrice) {
+      return tinkoffPrice.current_value;
+    }
+
+    const ticker = position.metadata?.ticker;
+    const isBond = position.metadata?.moex_market === 'bonds';
+    if (typeof ticker === 'string' && ticker && !isBond) {
+      const price = moexPrices.get(ticker);
+      const currentPrice = price?.last ?? price?.prevClose ?? null;
+      if (currentPrice !== null && position.quantity) {
+        return currentPrice * position.quantity;
+      }
+    }
+
+    return null;
+  };
   const getInvestmentCashInBase = (accountId: number) => (
     investmentBalancesByAccountId[accountId] ?? []
   ).reduce((sum, balance) => sum + balance.historical_cost_in_base, 0);
@@ -507,15 +539,10 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     const accountPositions = openPositions.filter((p) => p.investment_account_id === accountId);
     let marketValue = 0;
     for (const pos of accountPositions) {
-      const t = pos.metadata?.ticker;
-      const isBond = pos.metadata?.moex_market === 'bonds';
-      if (typeof t === 'string' && t && !isBond) {
-        const price = moexPrices.get(t);
-        const currentPrice = price?.last ?? price?.prevClose ?? null;
-        if (currentPrice !== null && pos.quantity) {
-          marketValue += currentPrice * pos.quantity;
-          continue;
-        }
+      const resolvedValue = getResolvedPositionValue(pos);
+      if (resolvedValue !== null) {
+        marketValue += resolvedValue;
+        continue;
       }
       marketValue += pos.amount_in_currency;
     }

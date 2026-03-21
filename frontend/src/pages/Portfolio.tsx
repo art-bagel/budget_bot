@@ -10,6 +10,7 @@ import {
   fetchPortfolioEvents,
   fetchPortfolioPositions,
   fetchPortfolioSummary,
+  fetchTinkoffLivePrices,
   getTinkoffConnections,
   partialClosePortfolioPosition,
   recordPortfolioFee,
@@ -26,6 +27,7 @@ import type {
   PortfolioEvent,
   PortfolioPosition,
   PortfolioSummaryItem,
+  TinkoffLivePrice,
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
@@ -292,6 +294,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
+  const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
   const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
@@ -366,6 +369,24 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [positions],
   );
 
+  useEffect(() => {
+    const connectedAccountIds = new Set(
+      tinkoffConnections
+        .map((connection) => connection.linked_account_id)
+        .filter((value): value is number => typeof value === 'number'),
+    );
+    const hasConnectedOpenPositions = openPositions.some((position) => connectedAccountIds.has(position.investment_account_id));
+
+    if (!hasConnectedOpenPositions) {
+      setTinkoffLivePrices(new Map());
+      return;
+    }
+
+    void fetchTinkoffLivePrices()
+      .then((items) => setTinkoffLivePrices(new Map(items.map((item) => [item.position_id, item]))))
+      .catch(() => setTinkoffLivePrices(new Map()));
+  }, [openPositions, tinkoffConnections]);
+
   const closedPositions = useMemo(
     () => positions.filter((position) => position.status === 'closed'),
     [positions],
@@ -417,6 +438,33 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [activeAssetTypeCode, closedPositions],
   );
 
+  const getResolvedPositionQuote = (position: PortfolioPosition) => {
+    const tinkoffPrice = tinkoffLivePrices.get(position.id) ?? null;
+    if (tinkoffPrice) {
+      return {
+        currentPrice: tinkoffPrice.price,
+        currentTotalValue: tinkoffPrice.current_value,
+        isPreviousClose: false,
+        source: 'tinkoff' as const,
+      };
+    }
+
+    const ticker = typeof position.metadata?.ticker === 'string' ? position.metadata.ticker : null;
+    const isBond = position.metadata?.moex_market === 'bonds';
+    const moexPrice = ticker ? moexPrices.get(ticker) : null;
+    const currentPrice = moexPrice?.last ?? moexPrice?.prevClose ?? null;
+    const currentTotalValue = !isBond && currentPrice !== null && position.quantity
+      ? currentPrice * position.quantity
+      : null;
+
+    return {
+      currentPrice,
+      currentTotalValue,
+      isPreviousClose: moexPrice?.last === null && moexPrice?.prevClose !== null,
+      source: currentPrice !== null ? 'moex' as const : null,
+    };
+  };
+
   const totalInvestedPrincipalInBase = useMemo(
     () => summaryItems.reduce((sum, item) => sum + item.invested_principal_in_base, 0),
     [summaryItems],
@@ -439,18 +487,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
     let pricedEntry = 0;
     let count = 0;
     for (const pos of openPositions) {
-      const t = pos.metadata?.ticker;
-      const isBond = pos.metadata?.moex_market === 'bonds';
-      if (typeof t === 'string' && t && !isBond) {
-        const price = moexPrices.get(t);
-        const cp = price?.last ?? price?.prevClose ?? null;
-        if (cp !== null && pos.quantity) {
-          total += cp * pos.quantity;
-          pricedMarket += cp * pos.quantity;
-          pricedEntry += pos.amount_in_currency;
-          count++;
-          continue;
-        }
+      const quote = getResolvedPositionQuote(pos);
+      if (quote.currentTotalValue !== null) {
+        total += quote.currentTotalValue;
+        pricedMarket += quote.currentTotalValue;
+        pricedEntry += pos.amount_in_currency;
+        count++;
+        continue;
       }
       // No ticker, no price, or bond — use cost basis
       total += pos.amount_in_currency;
@@ -462,7 +505,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       totalUnrealizedPnl: pricedMarket - pricedEntry,
       hasPricedPositions: count > 0,
     };
-  }, [openPositions, moexPrices]);
+  }, [openPositions, moexPrices, tinkoffLivePrices]);
 
   // Total = positions at market/cost + uninvested cash
   // Realized income is NOT added separately — it's already in cash or reinvested in positions
@@ -1244,10 +1287,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             const posTicker = typeof position.metadata?.ticker === 'string' ? position.metadata.ticker : null;
                             const isBond = position.metadata?.moex_market === 'bonds';
                             const moexPrice = posTicker ? moexPrices.get(posTicker) : null;
-                            const currentPrice = moexPrice?.last ?? moexPrice?.prevClose ?? null;
-                            const currentTotalValue = !isBond && currentPrice !== null && position.quantity
-                              ? currentPrice * position.quantity
-                              : null;
+                            const quote = getResolvedPositionQuote(position);
+                            const currentPrice = quote.currentPrice;
+                            const currentTotalValue = quote.currentTotalValue;
                             const unrealizedPnl = currentTotalValue !== null
                               ? currentTotalValue - position.amount_in_currency
                               : null;
@@ -1286,11 +1328,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 <div className="portfolio-position-card__sub-row">
                                   {currentPrice !== null && position.quantity ? (
                                     <span>
-                                      {isBond
+                                      {quote.source === 'tinkoff'
+                                        ? formatAmount(currentPrice, position.currency_code)
+                                        : isBond
                                         ? `${currentPrice.toFixed(2)}% от ном.`
                                         : formatAmount(currentPrice, position.currency_code)}
                                       {' · '}{position.quantity} шт.
-                                      {moexPrice?.last === null && <span className="portfolio-position-card__price-hint"> посл. закр.</span>}
+                                      {quote.source === 'moex' && moexPrice?.last === null && <span className="portfolio-position-card__price-hint"> посл. закр.</span>}
                                     </span>
                                   ) : (
                                     <>
@@ -1369,12 +1413,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
               <div className="portfolio-position-detail">
                 {(() => {
                   const detailTicker = typeof selectedPosition.metadata?.ticker === 'string' ? selectedPosition.metadata.ticker : null;
-                  const detailIsBond = selectedPosition.metadata?.moex_market === 'bonds';
                   const detailMoexPrice = detailTicker ? moexPrices.get(detailTicker) : null;
-                  const detailCurrentPrice = detailMoexPrice?.last ?? detailMoexPrice?.prevClose ?? null;
-                  const detailCurrentTotal = !detailIsBond && detailCurrentPrice !== null && selectedPosition.quantity
-                    ? detailCurrentPrice * selectedPosition.quantity
-                    : null;
+                  const detailQuote = getResolvedPositionQuote(selectedPosition);
+                  const detailCurrentPrice = detailQuote.currentPrice;
+                  const detailCurrentTotal = detailQuote.currentTotalValue;
                   const detailPnl = detailCurrentTotal !== null
                     ? detailCurrentTotal - selectedPosition.amount_in_currency
                     : null;
@@ -1389,7 +1431,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             {detailTicker}
                           </span>
                           <span className="pill">{selectedPosition.currency_code}</span>
-                          {detailMoexPrice?.last === null && detailMoexPrice?.prevClose !== null && (
+                          {detailQuote.source === 'moex' && detailMoexPrice?.last === null && detailMoexPrice?.prevClose !== null && (
                             <span className="portfolio-position-card__price-hint">цена закрытия</span>
                           )}
                         </div>

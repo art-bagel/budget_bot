@@ -52,6 +52,14 @@ class ApplyTinkoffSyncRequest(BaseModel):
     deposit_resolutions: List[DepositResolution]
 
 
+class TinkoffLivePrice(BaseModel):
+    position_id: int
+    price: float
+    currency_code: str
+    current_value: float
+    source: str
+
+
 # ---------------------------------------------------------------------------
 # Helper: get pool from existing storage
 # ---------------------------------------------------------------------------
@@ -204,3 +212,17 @@ async def apply_tinkoff_sync(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise _handle_tinkoff_error(exc) from exc
+
+
+@router.get('/live-prices', response_model=List[TinkoffLivePrice])
+async def get_tinkoff_live_prices(
+    user: TelegramUser = Depends(get_telegram_user),
+) -> list:
+    pool = await _get_pool()
+    sync = TinkoffSync(pool)
+    try:
+        return await sync.get_live_position_prices(user.user_id)
+    except Exception:
+        # Live prices are a best-effort enhancement for UI valuation,
+        # so gracefully degrade to MOEX/cost basis when T-Bank is unavailable.
+        return []

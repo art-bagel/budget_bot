@@ -55,6 +55,7 @@ import type {
   TinkoffPreviewResponse,
   DepositResolution,
   ApplyTinkoffSyncResponse,
+  TinkoffLivePrice,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -621,4 +622,8 @@ export async function applyTinkoffSync(
     method: 'POST',
     body: JSON.stringify({ deposit_resolutions: depositResolutions }),
   });
+}
+
+export async function fetchTinkoffLivePrices(): Promise<TinkoffLivePrice[]> {
+  return apiFetch<TinkoffLivePrice[]>('/tinkoff/live-prices');
 }
