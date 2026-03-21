@@ -367,7 +367,7 @@ class TinkoffSync:
 
                         await self._apply_deposit_resolution(
                             conn, user_id, owner_type, owner_user_id, owner_family_id,
-                            linked_account_id, op_id, float(payment), currency, kind, source_account_id,
+                            linked_account_id, op_id, payment, currency, kind, source_account_id,
                         )
                         applied_count += 1
                         continue
@@ -459,7 +459,7 @@ class TinkoffSync:
         owner_family_id: Optional[int],
         linked_account_id: int,
         tinkoff_op_id: str,
-        amount: float,
+        amount: Decimal,
         currency: str,
         resolution: str,
         source_account_id: Optional[int],
@@ -467,7 +467,7 @@ class TinkoffSync:
         abs_amount = abs(amount)
 
         if resolution == 'external':
-            await conn.execute(
+            result = await conn.fetchval(
                 '''SELECT budgeting.put__record_broker_input(
                     $1::bigint, $2::text, $3::bigint, $4::bigint,
                     $5::bigint, $6::char(3), $7::numeric,
@@ -477,6 +477,17 @@ class TinkoffSync:
                 linked_account_id, currency, abs_amount,
                 tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение счёта',
             )
+            # If the bank_entry insert was skipped (duplicate external_id),
+            # the balance was NOT updated. Ensure balance directly.
+            skipped = False
+            if result:
+                parsed = json.loads(result) if isinstance(result, str) else result
+                skipped = parsed.get('skipped', False)
+            if skipped:
+                await self._ensure_investment_balance(
+                    conn, user_id, linked_account_id, currency, abs_amount,
+                    owner_type, owner_user_id, owner_family_id,
+                )
 
         elif resolution == 'transfer':
             if source_account_id is None:
@@ -491,9 +502,9 @@ class TinkoffSync:
                    WHERE bank_account_id = $1 AND currency_code = $2''',
                 source_account_id, currency,
             )
-            src_balance = float(src_row['amount']) if src_row else 0.0
+            src_balance = Decimal(str(src_row['amount'])) if src_row else Decimal('0')
             if src_balance < abs_amount:
-                shortfall = abs_amount - src_balance
+                shortfall = abs_amount - src_balance + Decimal('0.01')
                 await conn.execute(
                     '''SELECT budgeting.put__record_broker_input(
                         $1::bigint, $2::text, $3::bigint, $4::bigint,
@@ -536,7 +547,7 @@ class TinkoffSync:
         user_id: int,
         linked_account_id: int,
         currency: str,
-        required_amount: float,
+        required_amount: Decimal,
         owner_type: str,
         owner_user_id: Optional[int],
         owner_family_id: Optional[int],
@@ -547,6 +558,10 @@ class TinkoffSync:
         may be insufficient (e.g. deposit was marked 'already_recorded').
         We inject the missing amount via put__record_broker_input so that
         downstream portfolio functions don't fail on balance checks.
+
+        Uses Decimal throughout to avoid float precision issues.
+        Falls back to direct balance update if put__record_broker_input
+        silently skips the insert (ON CONFLICT DO NOTHING).
         """
         row = await conn.fetchrow(
             '''SELECT COALESCE(amount, 0) AS amount
@@ -554,12 +569,16 @@ class TinkoffSync:
                WHERE bank_account_id = $1 AND currency_code = $2''',
             linked_account_id, currency,
         )
-        current_balance = float(row['amount']) if row else 0.0
+        current_balance = Decimal(str(row['amount'])) if row else Decimal('0')
         shortfall = required_amount - current_balance
         if shortfall <= 0:
             return
 
-        await conn.execute(
+        # Add a small margin to cover any rounding differences between
+        # Python Decimal and PostgreSQL numeric arithmetic.
+        top_up = shortfall + Decimal('0.01')
+
+        result = await conn.fetchval(
             '''SELECT budgeting.put__record_broker_input(
                 $1::bigint, $2::text, $3::bigint, $4::bigint,
                 $5::bigint, $6::char(3), $7::numeric,
@@ -567,9 +586,44 @@ class TinkoffSync:
                 $8::text
             )''',
             user_id, owner_type, owner_user_id, owner_family_id,
-            linked_account_id, currency, shortfall,
+            linked_account_id, currency, top_up,
             'Tinkoff: автопополнение при импорте',
         )
+
+        # Check if the insert was silently skipped by ON CONFLICT DO NOTHING.
+        # If so, fall back to direct balance/fx_lot update.
+        skipped = False
+        operation_id = None
+        if result:
+            parsed = json.loads(result) if isinstance(result, str) else result
+            skipped = parsed.get('skipped', False)
+            operation_id = parsed.get('operation_id')
+
+        if skipped and operation_id:
+            base_currency = await conn.fetchval(
+                '''SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)''',
+                owner_type, owner_user_id, owner_family_id,
+            )
+            cost_in_base = round(top_up, 2)
+
+            await conn.execute(
+                '''SELECT budgeting.put__apply_current_bank_delta(
+                    $1::bigint, $2::char(3), $3::numeric, $4::numeric
+                )''',
+                linked_account_id, currency, top_up, cost_in_base,
+            )
+
+            if currency != base_currency:
+                await conn.execute(
+                    '''INSERT INTO budgeting.fx_lots (
+                        bank_account_id, currency_code,
+                        amount_initial, amount_remaining,
+                        buy_rate_in_base,
+                        cost_base_initial, cost_base_remaining,
+                        opened_by_operation_id
+                    ) VALUES ($1, $2, $3, $3, $4 / $3, $4, $4, $5)''',
+                    linked_account_id, currency, top_up, cost_in_base, operation_id,
+                )
 
     async def _apply_auto_operation(
         self,
@@ -585,13 +639,13 @@ class TinkoffSync:
         kind     = mapped['kind']
         figi     = mapped['figi']
         payment  = _money_value_to_decimal(op.get('payment', {}))
-        amount   = float(abs(payment))
+        amount   = abs(payment)  # Decimal — avoids float precision issues
         currency = _op_currency(op)
         if not currency:
             return
         op_date  = _op_date(op)
         qty      = op.get('quantity')
-        quantity = float(qty) if qty else None
+        quantity = Decimal(str(qty)) if qty else None
         op_id    = op['id']
 
         if kind == 'buy':

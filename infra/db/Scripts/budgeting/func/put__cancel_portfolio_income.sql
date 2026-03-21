@@ -106,6 +106,8 @@ BEGIN
     WHERE bank_account_id = _investment_account_id
       AND currency_code = _currency_code;
 
+    _bank_balance := COALESCE(_bank_balance, 0);
+
     IF _bank_balance < _amount THEN
         RAISE EXCEPTION 'Insufficient bank balance for cancelling portfolio income';
     END IF;

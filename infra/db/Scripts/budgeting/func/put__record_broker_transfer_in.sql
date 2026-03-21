@@ -69,6 +69,9 @@ BEGIN
     FROM current_bank_balances
     WHERE bank_account_id = _from_account_id AND currency_code = _currency_code;
 
+    -- If no row exists, _bank_balance is NULL; treat as zero.
+    _bank_balance := COALESCE(_bank_balance, 0);
+
     IF _from_account_kind = 'credit' THEN
         IF _from_credit_limit IS NULL THEN
             RAISE EXCEPTION 'Credit limit is not configured for this account';

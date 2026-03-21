@@ -93,6 +93,9 @@ BEGIN
     WHERE bank_account_id = _investment_account_id
       AND currency_code = _currency_code;
 
+    -- If no row exists, _bank_balance is NULL; treat as zero.
+    _bank_balance := COALESCE(_bank_balance, 0);
+
     IF _bank_balance < _amount_in_currency THEN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;

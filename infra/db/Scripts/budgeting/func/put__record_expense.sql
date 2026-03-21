@@ -101,6 +101,8 @@ BEGIN
     FROM current_bank_balances
     WHERE bank_account_id = _bank_account_id AND currency_code = _currency_code;
 
+    _bank_balance := COALESCE(_bank_balance, 0);
+
     IF _bank_account_kind = 'credit' THEN
         -- Enforce credit limit: balance cannot drop below -credit_limit.
         IF _bank_credit_limit IS NULL THEN
