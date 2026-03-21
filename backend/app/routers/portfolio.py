@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import context, ledger, reports
@@ -59,6 +59,20 @@ class CreatePortfolioPositionRequest(BaseModel):
     comment: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator('amount_in_currency')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('title', 'asset_type_code')
+    @classmethod
+    def strings_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Поле не может быть пустым')
+        return v.strip()
+
 
 class TopUpPortfolioPositionRequest(BaseModel):
     amount_in_currency: float
@@ -67,6 +81,13 @@ class TopUpPortfolioPositionRequest(BaseModel):
     topped_up_at: date | None = None
     comment: str | None = None
 
+    @field_validator('amount_in_currency')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
 
 class ClosePortfolioPositionRequest(BaseModel):
     close_amount_in_currency: float
@@ -74,6 +95,13 @@ class ClosePortfolioPositionRequest(BaseModel):
     close_amount_in_base: float | None = None
     closed_at: date | None = None
     comment: str | None = None
+
+    @field_validator('close_amount_in_currency')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
 
 
 class PartialClosePortfolioPositionRequest(BaseModel):
@@ -94,6 +122,13 @@ class RecordPortfolioIncomeRequest(BaseModel):
     received_at: date | None = None
     comment: str | None = None
 
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
 
 class RecordPortfolioIncomeResponse(BaseModel):
     operation_id: int
@@ -106,6 +141,13 @@ class RecordPortfolioFeeRequest(BaseModel):
     currency_code: str
     charged_at: date | None = None
     comment: str | None = None
+
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
 
 
 class DeletePortfolioPositionResponse(BaseModel):

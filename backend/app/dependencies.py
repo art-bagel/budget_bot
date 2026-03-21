@@ -73,6 +73,9 @@ async def get_telegram_user(
             if auth_timestamp <= 0:
                 raise HTTPException(status_code=401, detail='Missing Telegram auth date')
 
+            if auth_timestamp > time.time() + 60:
+                raise HTTPException(status_code=401, detail='Telegram auth date is in the future')
+
             if time.time() - auth_timestamp > settings.telegram_init_data_ttl_seconds:
                 raise HTTPException(status_code=401, detail='Telegram init data is expired')
 
@@ -93,6 +96,11 @@ async def get_telegram_user(
             first_name=user.get('first_name'),
             last_name=user.get('last_name'),
         )
+
+    # Dev-only fallback: accept user ID from header without signature.
+    # Only allowed when Telegram bot token is not configured (local dev).
+    if settings.telegram_bot_token:
+        raise HTTPException(status_code=401, detail='Missing Telegram init data')
 
     if x_telegram_user_id is None:
         raise HTTPException(status_code=401, detail='Missing Telegram user context')

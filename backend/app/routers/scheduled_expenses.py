@@ -1,7 +1,7 @@
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import ledger
@@ -38,6 +38,27 @@ class CreateScheduledExpenseRequest(BaseModel):
     day_of_week: Optional[int] = None
     day_of_month: Optional[int] = None
     comment: Optional[str] = None
+
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @model_validator(mode='after')
+    def validate_frequency_fields(self):
+        if self.frequency == 'weekly':
+            if self.day_of_week is None:
+                raise ValueError('day_of_week обязателен для еженедельной частоты')
+            if not (1 <= self.day_of_week <= 7):
+                raise ValueError('day_of_week должен быть от 1 до 7')
+        elif self.frequency == 'monthly':
+            if self.day_of_month is None:
+                raise ValueError('day_of_month обязателен для ежемесячной частоты')
+            if not (1 <= self.day_of_month <= 31):
+                raise ValueError('day_of_month должен быть от 1 до 31')
+        return self
 
 
 class CreateScheduledExpenseResponse(BaseModel):

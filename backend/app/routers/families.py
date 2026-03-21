@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import context, reports
@@ -42,6 +42,13 @@ class FamilyMemberItem(BaseModel):
 
 class InviteFamilyMemberRequest(BaseModel):
     username: str
+
+    @field_validator('username')
+    @classmethod
+    def username_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Username не может быть пустым')
+        return v.strip()
 
 
 class InviteFamilyMemberResponse(BaseModel):

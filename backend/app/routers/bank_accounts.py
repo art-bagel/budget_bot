@@ -2,7 +2,7 @@ from datetime import date
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import context, reports
@@ -46,6 +46,13 @@ class CreateBankAccountRequest(BaseModel):
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
 
+    @field_validator('name')
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Название не может быть пустым')
+        return v.strip()
+
 
 class CreateCreditAccountRequest(BaseModel):
     name: str
@@ -56,9 +63,30 @@ class CreateCreditAccountRequest(BaseModel):
     owner_type: Literal['user', 'family'] = 'user'
     interest_rate: Optional[float] = None
     payment_day: Optional[int] = None
-    credit_started_at: Optional[str] = None
-    credit_ends_at: Optional[str] = None
+    credit_started_at: Optional[date] = None
+    credit_ends_at: Optional[date] = None
     provider_name: Optional[str] = None
+
+    @field_validator('name')
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Название не может быть пустым')
+        return v.strip()
+
+    @field_validator('credit_limit')
+    @classmethod
+    def credit_limit_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Кредитный лимит должен быть положительным')
+        return v
+
+    @field_validator('payment_day')
+    @classmethod
+    def payment_day_must_be_valid(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (1 <= v <= 31):
+            raise ValueError('День платежа должен быть от 1 до 31')
+        return v
 
 
 @router.get('', response_model=List[BankAccountItem])
@@ -101,8 +129,8 @@ async def create_credit_account(
         owner_type=body.owner_type,
         interest_rate=body.interest_rate,
         payment_day=body.payment_day,
-        credit_started_at=date.fromisoformat(body.credit_started_at) if body.credit_started_at else None,
-        credit_ends_at=date.fromisoformat(body.credit_ends_at) if body.credit_ends_at else None,
+        credit_started_at=body.credit_started_at,
+        credit_ends_at=body.credit_ends_at,
         provider_name=body.provider_name,
     )
     return BankAccountItem(**result)

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ router = APIRouter(prefix='/api/v1/user', tags=['user'])
 
 class UpdateSettingsRequest(BaseModel):
     hints_enabled: Optional[bool] = None
-    theme: Optional[str] = None
+    theme: Optional[Literal['light', 'dark', 'system']] = None
 
 
 class UpdateSettingsResponse(BaseModel):

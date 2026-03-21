@@ -1,7 +1,7 @@
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import context, reports
@@ -27,6 +27,13 @@ class CreateCategoryRequest(BaseModel):
     kind: Literal['regular', 'group']
     owner_type: Literal['user', 'family'] = 'user'
 
+    @field_validator('name')
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Название не может быть пустым')
+        return v.strip()
+
 
 class CreateCategoryResponse(BaseModel):
     id: int
@@ -34,6 +41,13 @@ class CreateCategoryResponse(BaseModel):
 
 class UpdateCategoryRequest(BaseModel):
     name: str
+
+    @field_validator('name')
+    @classmethod
+    def name_must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError('Название не может быть пустым')
+        return v.strip()
 
 
 class ArchiveCategoryResponse(BaseModel):

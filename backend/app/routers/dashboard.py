@@ -1,3 +1,4 @@
+import asyncio
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
@@ -50,11 +51,13 @@ async def get_dashboard_overview(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> DashboardOverviewResponse:
     all_bank_accounts = await reports.get__bank_accounts(user.user_id)
-    account_snapshots: dict[int, list[dict]] = {}
 
-    for account in all_bank_accounts:
-        account_id = int(account['id'])
-        account_snapshots[account_id] = await reports.get__bank_snapshot(user.user_id, account_id)
+    snapshot_tasks = {
+        int(account['id']): reports.get__bank_snapshot(user.user_id, int(account['id']))
+        for account in all_bank_accounts
+    }
+    snapshot_results = await asyncio.gather(*snapshot_tasks.values())
+    account_snapshots: dict[int, list[dict]] = dict(zip(snapshot_tasks.keys(), snapshot_results))
 
     bank_balances = account_snapshots.get(bank_account_id, [])
     budget_categories = await reports.get__budget_snapshot(user.user_id, True)

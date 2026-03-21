@@ -99,6 +99,11 @@ BEGIN
         END IF;
     END IF;
 
+    -- Lock the balance row to prevent concurrent over-spend.
+    PERFORM 1 FROM current_bank_balances
+    WHERE bank_account_id = _from_account_id AND currency_code = _currency_code
+    FOR UPDATE;
+
     SELECT COALESCE((
         SELECT amount FROM current_bank_balances
         WHERE bank_account_id = _from_account_id AND currency_code = _currency_code
@@ -156,7 +161,7 @@ BEGIN
     END IF;
 
     INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment)
-    VALUES (_user_id, 'user', _user_id, NULL, 'account_transfer', _comment)
+    VALUES (_user_id, _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'account_transfer', _comment)
     RETURNING id INTO _operation_id;
 
     INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)

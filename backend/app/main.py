@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -6,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
+
+logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
 from backend.app.routers import auth, bank_accounts, categories, currencies, dashboard, families, groups, income_sources, operations, portfolio, user_settings, scheduled_expenses, tinkoff
@@ -38,8 +41,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.frontend_origins,
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allow_headers=['Content-Type', 'X-Telegram-Init-Data', 'X-Telegram-User-Id'],
 )
 
 app.include_router(auth.router)
@@ -59,7 +62,10 @@ app.include_router(tinkoff.router)
 
 @app.exception_handler(asyncpg.PostgresError)
 async def postgres_exception_handler(_request: Request, exc: asyncpg.PostgresError) -> PlainTextResponse:
-    return PlainTextResponse(str(exc), status_code=400)
+    if isinstance(exc, asyncpg.RaiseError):
+        return PlainTextResponse(str(exc), status_code=400)
+    logger.error('Database error: %s', exc)
+    return PlainTextResponse('Внутренняя ошибка сервера', status_code=500)
 
 
 @app.get('/health')

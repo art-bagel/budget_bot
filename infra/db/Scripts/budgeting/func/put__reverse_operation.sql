@@ -65,12 +65,14 @@ BEGIN
         END IF;
     END LOOP;
 
+    -- Check bank balances: reversal negates original entries.
+    -- If original amount > 0 (was receiving money), reversal will subtract → check balance.
     FOR _bank_entry IN
         SELECT bank_account_id, currency_code, amount
         FROM bank_entries
         WHERE operation_id = _operation_id
     LOOP
-        IF -_bank_entry.amount < 0 THEN
+        IF _bank_entry.amount > 0 THEN
             SELECT COALESCE((
                 SELECT amount
                 FROM current_bank_balances
@@ -79,7 +81,7 @@ BEGIN
             ), 0)
             INTO _current_balance;
 
-            IF _current_balance < abs(_bank_entry.amount) THEN
+            IF _current_balance < _bank_entry.amount THEN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient bank balance in currency %',
                     _operation_id,
                     _bank_entry.currency_code;
@@ -87,12 +89,13 @@ BEGIN
         END IF;
     END LOOP;
 
+    -- Check budget balances: if original amount > 0 (was adding budget), reversal will subtract → check balance.
     FOR _budget_entry IN
         SELECT category_id, currency_code, amount
         FROM budget_entries
         WHERE operation_id = _operation_id
     LOOP
-        IF -_budget_entry.amount < 0 THEN
+        IF _budget_entry.amount > 0 THEN
             SELECT COALESCE((
                 SELECT amount
                 FROM current_budget_balances
@@ -101,7 +104,7 @@ BEGIN
             ), 0)
             INTO _current_budget;
 
-            IF _current_budget < abs(_budget_entry.amount) THEN
+            IF _current_budget < _budget_entry.amount THEN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient budget in category %',
                     _operation_id,
                     _budget_entry.category_id;

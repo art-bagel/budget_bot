@@ -2,7 +2,7 @@ from datetime import date
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import ledger, reports
@@ -19,6 +19,21 @@ class RecordIncomeRequest(BaseModel):
     budget_amount_in_base: Optional[float] = None
     comment: Optional[str] = None
 
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('currency_code')
+    @classmethod
+    def currency_code_must_be_valid(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) != 3 or not v.isalpha():
+            raise ValueError('Код валюты должен состоять из 3 букв')
+        return v
+
 
 class RecordIncomeResponse(BaseModel):
     operation_id: int
@@ -32,6 +47,21 @@ class RecordExpenseRequest(BaseModel):
     amount: float
     currency_code: str
     comment: Optional[str] = None
+
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('currency_code')
+    @classmethod
+    def currency_code_must_be_valid(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) != 3 or not v.isalpha():
+            raise ValueError('Код валюты должен состоять из 3 букв')
+        return v
 
 
 class RecordExpenseResponse(BaseModel):
@@ -48,6 +78,21 @@ class ExchangeCurrencyRequest(BaseModel):
     to_amount: float
     comment: Optional[str] = None
 
+    @field_validator('from_amount', 'to_amount')
+    @classmethod
+    def amounts_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('from_currency_code', 'to_currency_code')
+    @classmethod
+    def currency_code_must_be_valid(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) != 3 or not v.isalpha():
+            raise ValueError('Код валюты должен состоять из 3 букв')
+        return v
+
 
 class ExchangeCurrencyResponse(BaseModel):
     operation_id: int
@@ -62,6 +107,13 @@ class AllocateBudgetRequest(BaseModel):
     amount_in_base: float
     comment: Optional[str] = None
 
+    @field_validator('amount_in_base')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
 
 class AllocateBudgetResponse(BaseModel):
     operation_id: int
@@ -72,6 +124,13 @@ class AllocateGroupBudgetRequest(BaseModel):
     group_id: int
     amount_in_base: float
     comment: Optional[str] = None
+
+    @field_validator('amount_in_base')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
 
 
 class AllocateGroupBudgetResponse(BaseModel):
@@ -85,6 +144,21 @@ class AccountTransferRequest(BaseModel):
     currency_code: str
     amount: float
     comment: Optional[str] = None
+
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('currency_code')
+    @classmethod
+    def currency_code_must_be_valid(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) != 3 or not v.isalpha():
+            raise ValueError('Код валюты должен состоять из 3 букв')
+        return v
 
 
 class AccountTransferResponse(BaseModel):
@@ -209,6 +283,21 @@ class RecordIncomeSplitRequest(BaseModel):
     currency_code: str
     budget_amount_in_base: Optional[float] = None
     comment: Optional[str] = None
+
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('currency_code')
+    @classmethod
+    def currency_code_must_be_valid(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) != 3 or not v.isalpha():
+            raise ValueError('Код валюты должен состоять из 3 букв')
+        return v
 
 
 class RecordIncomeSplitResponse(BaseModel):
