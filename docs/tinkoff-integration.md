@@ -1,375 +1,318 @@
-# Интеграция с Тинькофф Инвестиции
+# Интеграция с T-Bank / Тинькофф Инвестиции
 
-## Цель
+## Что реализовано сейчас
 
-Возможность вручную подтягивать операции из Тинькофф Инвестиции через API.
-При импорте пополнений — всегда спрашивать пользователя как учесть операцию.
-Все остальные операции (покупки, продажи, дивиденды, комиссии) — обрабатываются автоматически.
+Интеграция работает как ручной импорт истории и текущих котировок по инвестиционным счетам T-Bank.
 
----
+Поддерживаются:
 
-## Ключевые решения
+- подключение нескольких T-Bank счетов одним токеном;
+- независимая привязка каждого broker account к нашему `bank_accounts.account_kind = 'investment'`;
+- preview перед записью в БД;
+- ручная разметка пополнений и выводов;
+- автоматический импорт покупок, продаж, дивидендов, купонов, комиссий, налогов и погашений облигаций;
+- идемпотентность через `external_id + import_source`;
+- live-цены по открытым позициям;
+- локальный кэш логотипов инструментов;
+- debug-дамп сырых ответов API в отдельные таблицы.
 
-### Ручные позиции остаются
+Интеграция не заменяет ручной портфель. Ручные и импортированные позиции могут сосуществовать на одном инвестиционном счете.
 
-Интеграция с Тинькофф не заменяет ручной ввод — только дополняет.
-Все существующие функции портфеля (создать позицию, пополнить, записать доход, комиссию,
-частично/полностью закрыть) работают как прежде.
-
-Ручные и импортированные позиции сосуществуют на одном инвест счёте.
-Различаются по полю `import_source`: `null` = ручной, `'tinkoff'` = импортирован.
-
-> При первом подключении Тинькофф к счёту с уже существующими ручными позициями —
-> система предложит сматчить позиции по тикеру, чтобы не создавать дубли.
-
-### Несколько счетов Тинькофф (ИИС + брокерский)
-
-Один токен Тинькофф даёт доступ ко всем счетам через `GetAccounts`.
-При подключении пользователь выбирает какие счета подключать и к каким
-нашим investment account их привязать.
-
-В базе создаётся **один `external_connection` на каждый счёт Тинькофф**:
-
-```
-provider: 'tinkoff',  provider_account_id: '2000111111' → linked_account_id: [Мой ИИС]
-provider: 'tinkoff',  provider_account_id: '2000222222' → linked_account_id: [Брокерский]
-```
-
-Токен хранится один раз. Синкать можно независимо по каждому счёту.
-ИИС и брокерский не смешиваются — разный налоговый режим.
-
-### UI подключения (шаг за шагом)
-
-```
-Шаг 1: Введи токен API
-        [t.xxxxxxxxxxxxxxxxxx]
-
-Шаг 2: Найдены счета Тинькофф:
-
-        ИИС (2000111111)
-        Привязать к: [Мой ИИС ▾]  или  [+ Создать новый счёт]
-
-        Брокерский счёт (2000222222)
-        Привязать к: [Брокерский ▾]  или  [+ Создать новый счёт]
-        □ Не подключать этот счёт
-
-        [Сохранить]
-```
-
----
-
-## Концепция
-
-### Ручной запуск
-
-Синхронизация запускается только вручную кнопкой "Подтянуть данные" на странице портфеля.
-Автоматического/фонового синка нет.
-
-### Поток синхронизации
-
-```
-[Подтянуть данные]
-  → GET /tinkoff/preview/{connection_id}
-  → показываем экран ревью (ничего в БД не пишем)
-  → пользователь решает каждое пополнение
-  → [Применить] → POST /tinkoff/apply/{connection_id}  (одна транзакция)
-  → [Отмена]    → ничего не меняется
-```
-
-### Три варианта для каждого пополнения (INPUT)
-
-| Вариант | Что происходит | Валидация |
-|---|---|---|
-| Внешнее пополнение | `broker_input`: инвест +X, никакой счёт не затрагивается | — |
-| Перевод со счёта | `account_transfer`: выбранный счёт −X, инвест +X | баланс выбранного счёта ≥ X |
-| Уже учтено в боте | ничего не создаётся, операция помечается как обработанная | баланс инвест счёта ≥ X (деньги там уже должны быть) |
-
-### Маппинг операций Тинькофф → наша модель
-
-| Тинькофф тип | Наша операция |
-|---|---|
-| `OPERATION_TYPE_INPUT` | требует решения пользователя (см. выше) |
-| `OPERATION_TYPE_OUTPUT` | требует решения пользователя (симметрично) |
-| `OPERATION_TYPE_BUY` | `portfolio_position.open` или `top_up` |
-| `OPERATION_TYPE_SELL` (частичная) | `portfolio_position.partial_close` |
-| `OPERATION_TYPE_SELL` (полная) | `portfolio_position.close` |
-| `OPERATION_TYPE_DIVIDEND` | `portfolio_event.income` (income_kind='dividend') |
-| `OPERATION_TYPE_COUPON` | `portfolio_event.income` (income_kind='coupon') |
-| `OPERATION_TYPE_BROKER_FEE` | `portfolio_event.fee` |
-| `OPERATION_TYPE_TAX_DIVIDEND` | `portfolio_event.fee` (налог) |
-
-Идемпотентность: все операции хранят `external_id = tinkoff_operation_id` + `import_source = 'tinkoff'`.
-Повторный синк одних и тех же операций не создаёт дублей.
-
----
-
-## Изменения в базе данных
-
-### Миграция 018: универсальные интеграции
-
-```sql
--- Подключения к внешним брокерам/источникам данных
-CREATE TABLE budgeting.external_connections (
-    id                    bigserial PRIMARY KEY,
-    owner_type            varchar(20) NOT NULL,
-    owner_user_id         bigint REFERENCES users(id),
-    owner_family_id       bigint REFERENCES families(id),
-    provider              varchar(30) NOT NULL,        -- 'tinkoff', 'interactive_brokers', ...
-    provider_account_id   text NOT NULL,               -- ID счёта на стороне брокера
-    linked_account_id     bigint REFERENCES bank_accounts(id),
-    credentials           jsonb NOT NULL DEFAULT '{}', -- токен (шифруется на уровне приложения)
-    settings              jsonb NOT NULL DEFAULT '{}', -- {"sync_from": "2024-01-01"}
-    last_synced_at        timestamptz,
-    is_active             boolean NOT NULL DEFAULT true,
-    created_at            timestamptz DEFAULT now(),
-    CONSTRAINT chk_ext_conn_owner CHECK (
-        (owner_type = 'user'   AND owner_user_id   IS NOT NULL AND owner_family_id IS NULL) OR
-        (owner_type = 'family' AND owner_family_id IS NOT NULL AND owner_user_id   IS NULL)
-    ),
-    CONSTRAINT uq_ext_conn UNIQUE (provider, provider_account_id, owner_user_id, owner_family_id)
-);
-
--- Идемпотентность: внешний ID на событиях портфеля
-ALTER TABLE budgeting.portfolio_events
-    ADD COLUMN external_id   text,
-    ADD COLUMN import_source varchar(30);
-
-CREATE UNIQUE INDEX uq_portfolio_events_external
-    ON budgeting.portfolio_events (import_source, external_id)
-    WHERE external_id IS NOT NULL;
-
--- Идемпотентность: внешний ID на банковских проводках (пополнения/выводы)
-ALTER TABLE budgeting.bank_entries
-    ADD COLUMN external_id   text,
-    ADD COLUMN import_source varchar(30);
-
-CREATE UNIQUE INDEX uq_bank_entries_external
-    ON budgeting.bank_entries (import_source, external_id)
-    WHERE external_id IS NOT NULL;
-
--- Новые типы операций для кэш-потоков брокера
--- Добавить в CHECK constraint на operations.type:
--- 'broker_input', 'broker_output'
-```
-
----
-
-## Новые API эндпоинты
-
-### `POST /tinkoff/connect`
-Сохранить токен + выбрать брокерский счёт → привязать к нашему investment account.
-
-**Body:**
-```json
-{
-  "token": "t.xxxxx",
-  "provider_account_id": "2000123456",
-  "linked_account_id": 7
-}
-```
-
-### `GET /tinkoff/connections`
-Список подключений пользователя.
-
-### `DELETE /tinkoff/connections/{id}`
-Удалить подключение.
-
-### `GET /tinkoff/preview/{connection_id}`
-Получить список операций из Тинькофф без записи в БД.
-
-**Response:**
-```json
-{
-  "deposits": [
-    {
-      "tinkoff_op_id": "xxx",
-      "amount": 50000,
-      "currency_code": "RUB",
-      "date": "2024-03-18",
-      "already_imported": false
-    }
-  ],
-  "auto_operations": [
-    {
-      "tinkoff_op_id": "yyy",
-      "type": "buy",
-      "ticker": "SBER",
-      "amount": 30000,
-      "quantity": 10,
-      "already_imported": false
-    }
-  ],
-  "total_new": 12,
-  "total_already_imported": 3
-}
-```
-
-### `POST /tinkoff/apply/{connection_id}`
-Применить синк с решениями по каждому пополнению. Всё в одной транзакции.
-
-**Body:**
-```json
-{
-  "deposit_resolutions": [
-    {
-      "tinkoff_op_id": "xxx",
-      "resolution": "external",
-      "source_account_id": null
-    },
-    {
-      "tinkoff_op_id": "yyy",
-      "resolution": "transfer",
-      "source_account_id": 42
-    },
-    {
-      "tinkoff_op_id": "zzz",
-      "resolution": "already_recorded",
-      "source_account_id": null
-    }
-  ]
-}
-```
-
-**Валидация на сервере:**
-- `transfer`: баланс `source_account_id` ≥ amount
-- `already_recorded`: баланс investment account ≥ amount
-- Любой сбой → rollback всего
-
----
-
-## Новый Python модуль
-
-`storage/tinkoff_sync.py` — изолированный класс, не трогает существующий `Ledger`.
-
-```python
-class TinkoffSync:
-    def preview(self, token, tinkoff_account_id, linked_account_id, user_id) -> dict
-    def apply(self, connection_id, deposit_resolutions, user_id) -> dict
-
-    def _fetch_operations(self, token, account_id, since) -> list
-    def _map_operation(self, op) -> dict        # тип + поля
-    def _find_or_create_position(self, ...)     # по FIGI/ticker
-    def _money_value_to_decimal(self, mv)       # units + nanos → Decimal
-```
-
-Зависимости: `tinkoff-investments` (официальный Python SDK).
-
----
-
-## Фронтенд
-
-### Страница настроек — новый раздел "Интеграции"
-
-- Кнопка "Подключить Тинькофф"
-- Форма: поле для токена + выбор брокерского счёта + привязка к нашему investment account
-- Список подключений с кнопкой удаления
-
-### Страница портфеля — кнопка синка
-
-```
-Мой брокерский счёт   [↻ Подтянуть данные]
-                        последний раз: 20 мин назад
-```
-
-### Компонент TinkoffSyncDialog
-
-Экран ревью с двумя секциями:
-
-**Секция 1 — Пополнения (требуют решения)**
-
-Для каждого пополнения — карточка с тремя radio-вариантами.
-При выборе "Перевод со счёта" — dropdown со счетами + баланс + маркер хватает/не хватает.
-При выборе "Уже учтено в боте" — проверка что на инвест счёте достаточно средств.
-Кнопка "Применить" заблокирована пока есть нерешённые пополнения.
-
-**Секция 2 — Автоматические операции**
-
-Список: X покупок, Y дивидендов, Z комиссий — без интерактива.
-
-**Кнопки:**
-- `[Отмена]` — закрыть диалог без изменений
-- `[Применить N операций]` — активна только когда все решены
-
----
-
-## Чек-лист реализации
-
-### База данных
-- [x] Написать миграцию `018_external_connections.sql`
-  - [x] Таблица `external_connections`
-  - [x] `portfolio_events.external_id` + `import_source` + уникальный индекс
-  - [x] `bank_entries.external_id` + `import_source` + уникальный индекс
-  - [x] Добавить `broker_input`, `broker_output` в CHECK constraint `operations.type`
-- [ ] Применить миграцию к БД
+## Архитектура
 
 ### Backend
-- [x] Добавить зависимость `tinkoff-investments` в requirements
-- [x] Написать `storage/tinkoff_sync.py`
-  - [x] `_money_value_to_decimal()` — конвертер MoneyValue
-  - [x] `_fetch_operations()` — получить операции из Тинькофф API с фильтром по дате
-  - [x] `_map_operation()` — смаппить тип операции Тинькофф → наш тип
-  - [x] `_find_or_create_position()` — найти позицию по FIGI или создать новую
-  - [x] `preview()` — dry run, только читаем
-  - [x] `apply()` — применить с решениями, одна транзакция
-- [x] SQL функция `put__apply_broker_sync()` или вызывать существующие функции из Python (вызываем существующие из Python)
-- [x] Новый роутер `backend/app/routers/tinkoff.py`
-  - [x] `POST /tinkoff/connect`
-  - [x] `GET /tinkoff/connections`
-  - [x] `DELETE /tinkoff/connections/{id}`
-  - [x] `GET /tinkoff/preview/{connection_id}`
-  - [x] `POST /tinkoff/apply/{connection_id}`
-- [x] Подключить роутер в `main.py`
-- [x] Обработка ошибок Тинькофф API (невалидный токен, недоступен счёт, etc.)
-- [x] Добавить нормализацию ошибок в `normalizeApiErrorMessage` на фронте
 
-### Frontend
-- [x] Добавить типы в `types.ts`
-  - [x] `ExternalConnection`
-  - [x] `TinkoffPreviewResponse`
-  - [x] `DepositResolution`
-- [x] Добавить API функции в `api.ts`
-  - [x] `connectTinkoff()`
-  - [x] `getTinkoffConnections()`
-  - [x] `deleteTinkoffConnection()`
-  - [x] `previewTinkoffSync()`
-  - [x] `applyTinkoffSync()`
-- [x] Компонент `TinkoffSyncDialog.tsx`
-  - [x] Состояния: loading / review / applying / done / error
-  - [x] Карточка для каждого пополнения с radio-вариантами
-  - [x] Dropdown выбора счёта + показ баланса + валидация
-  - [x] Валидация "Уже учтено" — проверка баланса инвест счёта (фронт показывает баланс + блокирует кнопку; сервер тоже валидирует)
-  - [x] Блокировка кнопки "Применить" пока есть нерешённые пополнения
-  - [x] Кнопка "Отмена" закрывает без изменений
-  - [x] Секция автоматических операций (read-only список)
-- [x] Страница настроек — раздел "Интеграции"
-  - [x] Форма подключения Тинькофф (токен + выбор счёта)
-  - [x] Список подключений
-  - [x] Кнопка удаления подключения
-- [x] Страница портфеля — кнопка синка
-  - [x] Кнопка "Подтянуть данные" рядом с названием инвест счёта
-  - [x] Показывать время последней синхронизации
+- REST-клиент T-Bank реализован в [storage/tinkoff_sync.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff_sync.py)
+- HTTP-роуты находятся в [backend/app/routers/tinkoff.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend/app/routers/tinkoff.py)
+- SQL read/write-path для T-Bank вынесен в [storage/tinkoff.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff.py)
 
-### Тестирование
-- [ ] Проверить идемпотентность — повторный применить не создаёт дублей
-- [ ] Проверить валидацию баланса для "Перевод со счёта"
-- [ ] Проверить валидацию баланса для "Уже учтено в боте"
-- [ ] Проверить отмену — ничего не меняется в БД
-- [ ] Проверить rollback при ошибке в середине применения
-- [ ] Проверить синк ИИС и брокерского независимо друг от друга
-- [ ] Проверить что ручные позиции не затронуты после синка
-- [ ] Проверить матчинг ручных позиций по тикеру при первом подключении
+Интеграция использует T-Bank REST API напрямую через `httpx`. Официальный Python SDK сейчас не используется.
 
----
+### Storage / SQL
 
-## Порядок реализации
+Python оркестрирует sync, но запись и чтение ключевых доменных данных идут через PostgreSQL-функции.
 
-1. **Миграция 018** — база всего, без неё ничего не работает
-2. **`storage/tinkoff_sync.py` preview()** — можно проверить без UI что API отдаёт
-3. **Роутер preview эндпоинт** — можно тестировать через curl/Postman
-4. **`TinkoffSyncDialog` без apply** — показываем что нашли, кнопка заблокирована
-5. **`storage/tinkoff_sync.py` apply()** — основная логика записи
-6. **Роутер apply эндпоинт** — подключаем apply
-7. **TinkoffSyncDialog apply** — полный поток работает
-8. **Настройки: форма подключения** — пользователь может сохранить токен
-9. **Полировка** — ошибки, edge cases, UX деталей
+Актуальные T-Bank/read-side функции:
 
+- `get__tinkoff_connections`
+- `get__tinkoff_connection`
+- `get__tinkoff_imported_ids`
+- `get__tinkoff_live_price_rows`
+- `get__open_portfolio_positions_for_account`
+- `get__current_bank_balance_amount`
+- `get__portfolio_position_trade_context`
+
+Актуальные write-side функции:
+
+- `put__upsert_tinkoff_connection`
+- `set__deactivate_tinkoff_connection`
+- `put__record_broker_input`
+- `put__record_broker_transfer_in`
+- `put__record_imported_cash_only`
+- `put__record_bond_principal_repayment`
+- `put__recover_portfolio_position_from_import`
+- `set__mark_bank_entry_imported`
+- `set__mark_portfolio_event_imported`
+- `set__merge_portfolio_position_metadata`
+- `set__reconcile_portfolio_position_quantity`
+- `set__touch_external_connection_last_synced`
+- `set__ensure_portfolio_position_clean_amount`
+- `set__increment_portfolio_bond_cost_metadata`
+
+## Пользовательский поток
+
+### 1. Подключение
+
+1. На странице настроек пользователь вводит токен.
+2. Backend вызывает `GetAccounts`.
+3. Пользователь выбирает, какие broker accounts привязать к каким нашим investment accounts.
+4. Для каждого broker account создается или обновляется запись в `budgeting.external_connections`.
+
+Текущее удаление подключения мягкое: запись не удаляется физически, а деактивируется через `is_active = false`.
+
+### 2. Preview
+
+`GET /api/v1/tinkoff/preview/{connection_id}`
+
+Preview ничего не пишет в БД. Он:
+
+- получает историю операций по счету;
+- сортирует операции по времени;
+- дедуплицирует синтетические дубли;
+- проверяет, какие `external_id` уже были импортированы;
+- делит результат на:
+  - `deposits`
+  - `withdrawals`
+  - `auto_operations`
+
+В UI ручные движения сейчас разбиты на две вкладки:
+
+- `Вводы`
+- `Выводы`
+
+Для каждой вкладки можно применить решение ко всем операциям сразу или разметить каждую отдельно.
+
+### 3. Apply
+
+`POST /api/v1/tinkoff/apply/{connection_id}`
+
+`apply` работает в одной транзакции и делает:
+
+1. повторно тянет историю из T-Bank;
+2. подгружает метаданные инструментов;
+3. рассчитывает стартовый cash seed, если история не покрывает ранний остаток;
+4. применяет ручные решения по `input/output`;
+5. автоматически применяет остальные операции;
+6. переснимает текущие количества по открытым бумагам через `GetPositions/GetPortfolio`;
+7. обновляет `external_connections.last_synced_at`.
+
+Если что-то падает, транзакция откатывается целиком.
+
+## Ручные решения по движениям денег
+
+### Пополнения
+
+Для каждого `input` доступны варианты:
+
+- `external` — внешнее пополнение брокерского счета;
+- `transfer` — перевод с нашего cash-счета;
+- `already_recorded` — операция уже отражена в боте, нужен только idempotency marker.
+
+### Выводы
+
+Для каждого `output` доступны варианты:
+
+- `external` — внешний вывод с брокерского счета;
+- `transfer` — перевод на наш cash-счет;
+- `already_recorded` — операция уже отражена в боте.
+
+Если пользователь пытается нажать `Применить`, пока не выбраны все ручные решения, UI показывает отдельный warning popup внутри модалки.
+
+## Маппинг операций T-Bank
+
+### Ручные
+
+- `OPERATION_TYPE_INPUT` -> manual `deposit resolution`
+- `OPERATION_TYPE_OUTPUT` -> manual `withdrawal resolution`
+
+### Автоматические
+
+- `OPERATION_TYPE_BUY` -> открытие новой позиции или `top_up`
+- `OPERATION_TYPE_SELL` -> `partial_close` или `close`
+- `OPERATION_TYPE_DIVIDEND` -> `income`
+- `OPERATION_TYPE_COUPON` -> `income`
+- `OPERATION_TYPE_BROKER_FEE` и fee-like типы -> `fee`
+- `OPERATION_TYPE_TAX*` -> fee или cash-only adjustment в зависимости от контекста
+- `OPERATION_TYPE_BOND_REPAYMENT` -> частичное погашение principal
+- `OPERATION_TYPE_BOND_REPAYMENT_FULL` -> полное закрытие облигационной позиции
+
+### Частично поддержанные / служебные кейсы
+
+Некоторые корпоративные действия T-Bank не приходят как обычные `buy/sell/open/close`.
+Для таких кейсов есть recovery через текущее состояние портфеля брокера:
+
+- синк умеет восстанавливать недостающую открытую позицию из `GetPortfolio`;
+- после apply выполняется reconciliation количества;
+- это позволяет держать БД ближе к фактическому состоянию счета, даже если история API неполная.
+
+## Котировки и логотипы
+
+### Live prices
+
+Backend отдает live-цены через:
+
+- `GET /api/v1/tinkoff/live-prices`
+
+Логика такая:
+
+1. пытаемся взять цены по активным T-Bank подключениям;
+2. сначала используем `GetPortfolio`;
+3. если чего-то не хватило, используем `GetLastPrices`;
+4. на фронте это накладывается поверх MOEX fallback.
+
+Важно:
+
+- live prices используются только для оценки открытых позиций;
+- агрегаты по счету и история операций должны сходиться из нашей БД, а не из T-Bank account summary.
+
+### Облигации
+
+Для облигаций сейчас различаются:
+
+- `price/current_value` — текущая рыночная оценка;
+- `clean_price/clean_current_value` — чистая цена без накопленного купонного дохода, если она доступна.
+
+В БД для bond cost basis поддерживаются специальные metadata-поля:
+
+- `clean_amount_in_base`
+- `accrued_interest_in_base`
+
+### Логотипы
+
+Логотипы не тянутся напрямую с CDN на каждый рендер.
+
+Реализован локальный cache endpoint:
+
+- `GET /api/v1/tinkoff/instrument-logo/{logo_name}`
+
+Backend скачивает PNG один раз, сохраняет локально и дальше отдает из своего кэша.
+
+## Таблицы и колонки БД
+
+### Основные таблицы
+
+#### `budgeting.external_connections`
+
+Универсальная таблица внешних интеграций.
+
+Ключевые поля:
+
+- `provider`
+- `provider_account_id`
+- `linked_account_id`
+- `credentials`
+- `settings`
+- `last_synced_at`
+- `is_active`
+- `owner_type / owner_user_id / owner_family_id`
+
+Для T-Bank одна строка соответствует одному broker account.
+
+#### `budgeting.portfolio_positions`
+
+Открытые и закрытые позиции инвестиционного портфеля.
+
+Для импортированных T-Bank бумаг в `metadata` обычно лежат:
+
+- `figi`
+- `instrument_uid`
+- `position_uid`
+- `asset_uid`
+- `ticker`
+- `class_code`
+- `exchange`
+- `logo_name`
+- `security_kind`
+- `moex_market`
+- `import_source = "tinkoff"`
+- bond-specific cost metadata
+
+#### `budgeting.portfolio_events`
+
+Журнал событий по позициям.
+
+Для импортов используются:
+
+- `external_id`
+- `import_source`
+
+#### `budgeting.bank_entries`
+
+Bank ledger инвестиционного счета и cash-счетов, связанных с импортом пополнений/выводов.
+
+Для идемпотентности тоже используются:
+
+- `external_id`
+- `import_source`
+
+### Debug-таблицы
+
+Опциональные таблицы для raw-дампа T-Bank API:
+
+- `budgeting.tinkoff_api_debug_snapshots`
+- `budgeting.tinkoff_api_debug_items`
+
+Они создаются миграцией [019_tinkoff_api_debug_dump.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql).
+
+Используются только для расследования проблем импорта и не участвуют в обычном runtime.
+
+### Поддерживающие миграции
+
+Для уже существующих БД, кроме базового [018_external_connections.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/018_external_connections.sql), важны ещё:
+
+- [019_ensure_broker_op_types.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql) — гарантирует `broker_input/broker_output` и idempotency columns;
+- [019_tinkoff_api_debug_dump.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql) — создаёт debug-таблицы raw API dumps.
+
+## Эндпоинты
+
+Актуальные API-роуты:
+
+- `POST /api/v1/tinkoff/accounts`
+- `POST /api/v1/tinkoff/connect`
+- `GET /api/v1/tinkoff/connections`
+- `DELETE /api/v1/tinkoff/connections/{connection_id}`
+- `GET /api/v1/tinkoff/preview/{connection_id}`
+- `POST /api/v1/tinkoff/apply/{connection_id}`
+- `GET /api/v1/tinkoff/live-prices`
+- `GET /api/v1/tinkoff/instrument-logo/{logo_name}`
+
+## Debug / диагностика
+
+Для записи сырых ответов API есть скрипт:
+
+- [storage/tinkoff_api_debug_dump.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff_api_debug_dump.py)
+
+Он:
+
+- обеспечивает наличие debug-таблиц;
+- читает активные `external_connections`;
+- сохраняет raw payload по `GetAccounts`, `GetPositions`, `GetPortfolio`, `GetOperationsByCursor`, `GetInstrumentBy`.
+
+Пример запуска:
+
+```bash
+venv/bin/python storage/tinkoff_api_debug_dump.py \
+  --db-host 127.0.0.1 \
+  --db-port 5432 \
+  --db-name budget \
+  --db-user alex \
+  --db-password secret
+```
+
+## Известные ограничения
+
+- синк запускается только вручную;
+- account summary T-Bank намеренно не используется как source of truth для наших totals;
+- часть корпоративных действий восстанавливается через reconciliation, а не через полноценные domain events;
+- fresh init контейнера не прогоняет миграции из `migrations/` автоматически, только базовые таблицы и SQL-функции;
+- для уже импортированных данных некоторые исправления требуют переимпорта или targeted backfill.

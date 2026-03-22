@@ -322,7 +322,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [submittingPartialCloseId, setSubmittingPartialCloseId] = useState<number | null>(null);
   const [submittingFeeId, setSubmittingFeeId] = useState<number | null>(null);
   const [deletingPositionId, setDeletingPositionId] = useState<number | null>(null);
-  const [bulkDeletingPositions, setBulkDeletingPositions] = useState(false);
   const [cancellingIncomeEventId, setCancellingIncomeEventId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -1074,62 +1073,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
   };
 
-  const handleDeleteAllPositions = async () => {
-    if (bulkDeletingPositions) {
-      return;
-    }
-
-    const positionsToDelete = positions.filter((position) => position.status === 'open');
-
-    if (positionsToDelete.length === 0) {
-      setDeleteError('Нет открытых позиций для удаления.');
-      return;
-    }
-
-    const isConfirmed = window.confirm(
-      `Временно удалить все открытые позиции (${positionsToDelete.length})? `
-      + 'Удаление идёт по одной позиции через обычный API, поэтому позиции с доходами, частичными или полными закрытиями могут не удалиться.',
-    );
-
-    if (!isConfirmed) {
-      return;
-    }
-
-    setBulkDeletingPositions(true);
-    setDeleteError(null);
-
-    const failedTitles: string[] = [];
-
-    try {
-      for (const position of positionsToDelete) {
-        setDeletingPositionId(position.id);
-
-        try {
-          await deletePortfolioPosition(position.id);
-
-          if (selectedPositionId === position.id) {
-            setSelectedPositionId(null);
-          }
-        } catch (reason: unknown) {
-          failedTitles.push(
-            `${position.title}: ${reason instanceof Error ? reason.message : String(reason)}`,
-          );
-        }
-      }
-
-      await loadPortfolio();
-
-      if (failedTitles.length > 0) {
-        const preview = failedTitles.slice(0, 2).join(' | ');
-        const tail = failedTitles.length > 2 ? ` | и ещё ${failedTitles.length - 2}` : '';
-        setDeleteError(`Удалили не всё. ${preview}${tail}`);
-      }
-    } finally {
-      setDeletingPositionId(null);
-      setBulkDeletingPositions(false);
-    }
-  };
-
   const handleCancelIncome = async (positionId: number, eventId: number) => {
     const isConfirmed = window.confirm(
       'Отменить этот доход? На инвестиционном счете будет создана отдельная корректировка.',
@@ -1602,21 +1545,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <h2 className="section__title">Позиции</h2>
           </div>
           <div className="section__header-actions">
-            {openPositions.length > 0 && (
-              <button
-                className="btn btn--danger"
-                type="button"
-                onClick={() => void handleDeleteAllPositions()}
-                disabled={bulkDeletingPositions}
-              >
-                {bulkDeletingPositions ? 'Удаляем позиции...' : 'Удалить все открытые'}
-              </button>
-            )}
             <button
               className="btn btn--icon"
               type="button"
               onClick={() => setIsCreateDialogOpen(true)}
-              disabled={accounts.length === 0 || bulkDeletingPositions}
+              disabled={accounts.length === 0}
               aria-label="Добавить позицию"
               title="Добавить позицию"
             >
