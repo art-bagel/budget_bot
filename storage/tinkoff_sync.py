@@ -585,6 +585,23 @@ def _normalize_instrument_meta(op: dict, raw: Optional[dict] = None) -> dict:
     }
 
 
+def _is_placeholder_instrument_name(name: str, meta: dict[str, Any]) -> bool:
+    normalized_name = str(name or '').strip()
+    if not normalized_name:
+        return True
+
+    normalized_upper = normalized_name.upper()
+    candidates = {
+        str(meta.get('ticker') or '').strip().upper(),
+        str(meta.get('figi') or '').strip().upper(),
+        str(meta.get('position_uid') or '').strip().upper(),
+        str(meta.get('instrument_uid') or '').strip().upper(),
+        str(meta.get('asset_uid') or '').strip().upper(),
+    }
+    candidates.discard('')
+    return normalized_upper in candidates
+
+
 async def _resolve_bond_nominal(
     client: TinkoffRestClient,
     bond_nominals: dict[str, Decimal],
@@ -691,7 +708,7 @@ async def _refresh_position_metadata(
     }
     next_title = str(instrument_meta.get('name') or '').strip()
 
-    if next_title:
+    if next_title and not _is_placeholder_instrument_name(next_title, instrument_meta):
         await conn.execute(
             '''UPDATE budgeting.portfolio_positions
                SET title = $2,
@@ -711,6 +728,34 @@ async def _refresh_position_metadata(
             position_id,
             metadata_patch,
         )
+
+
+async def _enrich_instrument_meta(
+    client: TinkoffRestClient,
+    instrument_meta: dict[str, Any],
+) -> dict[str, Any]:
+    if (
+        instrument_meta.get('logo_name')
+        and not _is_placeholder_instrument_name(str(instrument_meta.get('name') or ''), instrument_meta)
+    ):
+        return instrument_meta
+
+    resolution_attempts = [
+        ('INSTRUMENT_ID_TYPE_POSITION_UID', str(instrument_meta.get('position_uid') or '').strip()),
+        ('INSTRUMENT_ID_TYPE_UID', str(instrument_meta.get('instrument_uid') or '').strip()),
+        ('INSTRUMENT_ID_TYPE_FIGI', str(instrument_meta.get('figi') or '').strip()),
+    ]
+
+    for id_type, instrument_id in resolution_attempts:
+        if not instrument_id:
+            continue
+        try:
+            raw_instrument = await client.get_instrument_by(instrument_id, id_type)
+        except Exception:
+            continue
+        return _normalize_instrument_meta(instrument_meta, raw_instrument)
+
+    return instrument_meta
 
 
 async def _apply_bond_cost_metadata_delta(
@@ -2109,8 +2154,9 @@ class TinkoffSync:
                 continue
 
             instrument_meta = _normalize_instrument_meta({}, security)
-            portfolio_position = _find_matching_portfolio_position(instrument_meta, portfolio_positions_raw)
-            pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            enriched_instrument_meta = await _enrich_instrument_meta(client, instrument_meta)
+            portfolio_position = _find_matching_portfolio_position(enriched_instrument_meta, portfolio_positions_raw)
+            pos_id = await self._find_position(conn, linked_account_id, enriched_instrument_meta)
             if pos_id is None:
                 pos_id = await _recover_missing_current_position(
                     conn,
@@ -2119,7 +2165,7 @@ class TinkoffSync:
                     owner_user_id,
                     owner_family_id,
                     linked_account_id,
-                    instrument_meta,
+                    enriched_instrument_meta,
                     portfolio_position or {},
                     quantity,
                 )
@@ -2134,11 +2180,11 @@ class TinkoffSync:
                 pos_id,
                 quantity,
             )
-            await _refresh_position_metadata(conn, pos_id, instrument_meta)
+            await _refresh_position_metadata(conn, pos_id, enriched_instrument_meta)
             await _backfill_bond_clean_amount_from_portfolio(
                 conn,
                 pos_id,
-                instrument_meta,
+                enriched_instrument_meta,
                 portfolio_position,
             )
             updated_position_ids.add(pos_id)
