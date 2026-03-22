@@ -69,6 +69,7 @@ class Context(DataBase):
         name: str,
         owner_type: str = 'user',
         account_kind: str = 'investment',
+        investment_asset_type: Optional[str] = None,
         provider_name: Optional[str] = None,
         provider_account_ref: Optional[str] = None,
     ) -> dict:
@@ -78,6 +79,7 @@ class Context(DataBase):
             name,
             owner_type,
             account_kind,
+            investment_asset_type,
             provider_name,
             provider_account_ref,
         )

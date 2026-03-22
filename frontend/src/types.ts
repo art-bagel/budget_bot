@@ -268,6 +268,7 @@ export interface BankAccount {
   owner_family_id?: number | null;
   owner_name: string;
   account_kind: 'cash' | 'investment' | 'credit';
+  investment_asset_type?: 'security' | 'deposit' | 'crypto' | null;
   credit_kind?: 'loan' | 'credit_card' | 'mortgage' | null;
   interest_rate?: number | null;
   payment_day?: number | null;
@@ -285,6 +286,7 @@ export interface CreateBankAccountRequest {
   name: string;
   owner_type?: 'user' | 'family';
   account_kind?: 'cash' | 'investment';
+  investment_asset_type?: 'security' | 'deposit' | 'crypto';
   provider_name?: string;
   provider_account_ref?: string;
 }

@@ -33,6 +33,7 @@ BEGIN
                     ELSE f.name
                 END,
                 'account_kind', ba.account_kind,
+                'investment_asset_type', ba.investment_asset_type,
                 'credit_kind', ba.credit_kind,
                 'interest_rate', ba.interest_rate,
                 'payment_day', ba.payment_day,

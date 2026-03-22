@@ -660,6 +660,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [activeAssetTypeCode, closedPositions],
   );
 
+  const filteredAccounts = useMemo(
+    () => accounts.filter(
+      ({ account }) => !account.investment_asset_type || account.investment_asset_type === activeAssetTypeCode,
+    ),
+    [accounts, activeAssetTypeCode],
+  );
+
   const getPositionMetadataNumber = (position: PortfolioPosition, key: string): number | null => {
     const value = position.metadata?.[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -2539,7 +2546,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       {isCreateDialogOpen && (
         <PortfolioPositionDialog
-          accounts={accounts}
+          accounts={filteredAccounts}
           currencies={currencies}
           user={user}
           defaultAssetTypeCode={activeAssetTypeCode}

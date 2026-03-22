@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     credit_started_at date,
     credit_ends_at date,
     credit_limit numeric(20, 2),
+    investment_asset_type varchar(20),
     provider_name varchar(150),
     provider_account_ref varchar(150),
     is_primary boolean NOT NULL DEFAULT false,
@@ -34,6 +35,11 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     ),
     CONSTRAINT chk_bank_accounts_credit_kind CHECK (
         credit_kind IS NULL OR credit_kind IN ('loan', 'credit_card', 'mortgage')
+    ),
+    CONSTRAINT chk_bank_accounts_investment_asset_type CHECK (
+        (account_kind != 'investment' AND investment_asset_type IS NULL)
+        OR
+        (account_kind = 'investment' AND investment_asset_type IN ('security', 'deposit', 'crypto'))
     )
 );
 

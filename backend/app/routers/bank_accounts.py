@@ -19,6 +19,7 @@ class BankAccountItem(BaseModel):
     owner_family_id: Optional[int] = None
     owner_name: str
     account_kind: Literal['cash', 'investment', 'credit']
+    investment_asset_type: Optional[Literal['security', 'deposit', 'crypto']] = None
     credit_kind: Optional[Literal['loan', 'credit_card', 'mortgage']] = None
     interest_rate: Optional[float] = None
     payment_day: Optional[int] = None
@@ -43,6 +44,7 @@ class CreateBankAccountRequest(BaseModel):
     name: str
     owner_type: Literal['user', 'family'] = 'user'
     account_kind: Literal['cash', 'investment'] = 'investment'
+    investment_asset_type: Optional[Literal['security', 'deposit', 'crypto']] = None
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
 
@@ -108,6 +110,7 @@ async def create_bank_account(
         name=body.name,
         owner_type=body.owner_type,
         account_kind=body.account_kind,
+        investment_asset_type=body.investment_asset_type,
         provider_name=body.provider_name,
         provider_account_ref=body.provider_account_ref,
     )

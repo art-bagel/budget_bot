@@ -61,6 +61,7 @@ export default function Settings({
   const [newInvestmentName, setNewInvestmentName] = useState('');
   const [newInvestmentOwnerType, setNewInvestmentOwnerType] = useState<'user' | 'family'>('user');
   const [newInvestmentProvider, setNewInvestmentProvider] = useState('');
+  const [newInvestmentAssetType, setNewInvestmentAssetType] = useState<'security' | 'deposit' | 'crypto'>('security');
   const [creatingInvestmentAccount, setCreatingInvestmentAccount] = useState(false);
   const [createInvestmentError, setCreateInvestmentError] = useState<string | null>(null);
 
@@ -222,6 +223,7 @@ export default function Settings({
         name: trimmedName,
         owner_type: newInvestmentOwnerType,
         account_kind: 'investment',
+        investment_asset_type: newInvestmentAssetType,
         provider_name: newInvestmentProvider.trim() || undefined,
       });
       setNewInvestmentName('');
@@ -432,6 +434,17 @@ export default function Settings({
                   </select>
                 </div>
                 <div className="form-row">
+                  <select
+                    className="input"
+                    value={newInvestmentAssetType}
+                    onChange={(event) => setNewInvestmentAssetType(event.target.value as 'security' | 'deposit' | 'crypto')}
+                  >
+                    <option value="security">Ценные бумаги</option>
+                    <option value="deposit">Депозиты</option>
+                    <option value="crypto">Криптовалюта</option>
+                  </select>
+                </div>
+                <div className="form-row">
                   <input
                     className="input"
                     type="text"
@@ -469,6 +482,7 @@ export default function Settings({
                       <div className="settings-row__title">{account.name}</div>
                       <div className="settings-row__sub">
                         {account.owner_type === 'family' ? 'Семейный' : 'Личный'} счёт
+                        {account.investment_asset_type === 'security' ? ' · Ценные бумаги' : account.investment_asset_type === 'deposit' ? ' · Депозиты' : account.investment_asset_type === 'crypto' ? ' · Криптовалюта' : ''}
                         {account.provider_name ? ` · ${account.provider_name}` : ''}
                       </div>
                     </div>

@@ -3,6 +3,7 @@ CREATE OR REPLACE FUNCTION budgeting.put__create_bank_account(
     _name text,
     _owner_type text DEFAULT 'user',
     _account_kind text DEFAULT 'investment',
+    _investment_asset_type text DEFAULT NULL,
     _provider_name text DEFAULT NULL,
     _provider_account_ref text DEFAULT NULL
 )
@@ -24,6 +25,10 @@ BEGIN
 
     IF _account_kind NOT IN ('cash', 'investment') THEN
         RAISE EXCEPTION 'Unsupported bank account kind: %', _account_kind;
+    END IF;
+
+    IF _account_kind = 'investment' AND COALESCE(NULLIF(BTRIM(_investment_asset_type), ''), '') NOT IN ('security', 'deposit', 'crypto') THEN
+        RAISE EXCEPTION 'Investment account requires asset type (security, deposit, crypto)';
     END IF;
 
     IF _owner_type = 'user' THEN
@@ -76,6 +81,7 @@ BEGIN
         owner_family_id,
         name,
         account_kind,
+        investment_asset_type,
         provider_name,
         provider_account_ref,
         is_primary,
@@ -87,6 +93,7 @@ BEGIN
         _owner_family_id,
         _normalized_name,
         _account_kind,
+        CASE WHEN _account_kind = 'investment' THEN NULLIF(btrim(_investment_asset_type), '') ELSE NULL END,
         NULLIF(btrim(_provider_name), ''),
         NULLIF(btrim(_provider_account_ref), ''),
         _is_primary,
@@ -107,6 +114,7 @@ BEGIN
                 ELSE f.name
             END,
             'account_kind', ba.account_kind,
+            'investment_asset_type', ba.investment_asset_type,
             'provider_name', ba.provider_name,
             'provider_account_ref', ba.provider_account_ref,
             'is_primary', ba.is_primary,
