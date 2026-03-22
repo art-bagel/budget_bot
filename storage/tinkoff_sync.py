@@ -8,8 +8,10 @@ REST base: https://invest-public-api.tinkoff.ru/rest
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -470,6 +472,12 @@ def _op_currency(op: dict) -> str:
     return currency
 
 
+def _normalize_lookup_token(value: str) -> str:
+    normalized = value.upper().strip()
+    normalized = normalized.replace('ИКС', 'X')
+    return re.sub(r'[^A-Z0-9]+', '', normalized)
+
+
 def _money_values_to_balance_map(items: Any) -> dict[str, Decimal]:
     balances: dict[str, Decimal] = {}
     if not isinstance(items, list):
@@ -484,6 +492,27 @@ def _money_values_to_balance_map(items: Any) -> dict[str, Decimal]:
         balances[currency] = balances.get(currency, Decimal('0')) + _money_value_to_decimal(item)
 
     return balances
+
+
+def _extract_bond_trade_components(
+    op: dict,
+    total_amount: Decimal,
+    quantity: Optional[Decimal],
+) -> tuple[Decimal, Decimal]:
+    if quantity is None or quantity <= 0:
+        return total_amount, Decimal('0')
+
+    clean_unit_price = _money_value_to_decimal(op.get('price', {}))
+    accrued_interest = abs(_money_value_to_decimal(op.get('accruedInt', {}) or {}))
+    clean_amount = abs(clean_unit_price * quantity) if clean_unit_price > 0 else Decimal('0')
+
+    if clean_amount <= 0 and accrued_interest > 0 and total_amount > accrued_interest:
+        clean_amount = total_amount - accrued_interest
+
+    if clean_amount <= 0:
+        clean_amount = total_amount
+
+    return clean_amount, accrued_interest
 
 
 def _infer_moex_market(class_code: str, exchange: str) -> Optional[str]:
@@ -604,31 +633,342 @@ async def _build_live_price_payload(
     quoted_price_is_percent_of_nominal: bool = False,
     source: str = 'tinkoff',
 ) -> Optional[dict[str, Any]]:
-    if quantity <= 0 or quoted_price <= 0:
+    if quantity <= 0 or quoted_price < 0:
         return None
 
     meta = matched_row['metadata']
     per_unit_price = quoted_price
+    clean_per_unit_price = quoted_price
 
     if _is_bond_position(instrument_meta, meta):
         if quoted_price_is_percent_of_nominal:
             nominal = await _resolve_bond_nominal(client, bond_nominals, instrument_meta, meta)
             if nominal <= 0:
                 return None
-            clean_price = quoted_price / Decimal('100') * nominal
-            per_unit_price = clean_price + current_nkd
+            clean_per_unit_price = quoted_price / Decimal('100') * nominal
+            per_unit_price = clean_per_unit_price + current_nkd
         else:
             # GetPortfolio already returns the bond price in account currency.
+            clean_per_unit_price = quoted_price
             per_unit_price = quoted_price + current_nkd
 
     current_value = per_unit_price * quantity
     return {
         'position_id': matched_row['position_id'],
         'price': float(per_unit_price),
+        'clean_price': float(clean_per_unit_price),
         'currency_code': matched_row['currency_code'],
         'current_value': float(current_value),
+        'clean_current_value': float(clean_per_unit_price * quantity),
         'source': source,
     }
+
+
+async def _refresh_position_metadata(
+    conn: asyncpg.Connection,
+    position_id: int,
+    instrument_meta: dict[str, Any],
+) -> None:
+    metadata_patch = {
+        key: value
+        for key, value in {
+            'figi': instrument_meta.get('figi', ''),
+            'instrument_uid': instrument_meta.get('instrument_uid', ''),
+            'position_uid': instrument_meta.get('position_uid', ''),
+            'asset_uid': instrument_meta.get('asset_uid', ''),
+            'ticker': instrument_meta.get('ticker', ''),
+            'class_code': instrument_meta.get('class_code', ''),
+            'exchange': instrument_meta.get('exchange', ''),
+            'security_kind': instrument_meta.get('security_kind', ''),
+            'moex_market': instrument_meta.get('moex_market', ''),
+            'import_source': 'tinkoff',
+        }.items()
+        if isinstance(value, str) and value
+    }
+    next_title = str(instrument_meta.get('name') or '').strip()
+
+    if next_title:
+        await conn.execute(
+            '''UPDATE budgeting.portfolio_positions
+               SET title = $2,
+                   metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+               WHERE id = $1''',
+            position_id,
+            next_title,
+            metadata_patch,
+        )
+        return
+
+    if metadata_patch:
+        await conn.execute(
+            '''UPDATE budgeting.portfolio_positions
+               SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+               WHERE id = $1''',
+            position_id,
+            metadata_patch,
+        )
+
+
+async def _apply_bond_cost_metadata_delta(
+    conn: asyncpg.Connection,
+    position_id: int,
+    clean_amount_delta: Decimal,
+    accrued_interest_delta: Decimal,
+) -> None:
+    if clean_amount_delta <= 0 and accrued_interest_delta <= 0:
+        return
+
+    row = await conn.fetchrow(
+        '''SELECT
+               (metadata ->> 'clean_amount_in_base')::numeric AS clean_amount_in_base,
+               (metadata ->> 'accrued_interest_paid_in_base')::numeric AS accrued_interest_paid_in_base
+           FROM budgeting.portfolio_positions
+           WHERE id = $1''',
+        position_id,
+    )
+    if row is None:
+        return
+
+    current_clean_amount_in_base = Decimal(str(row['clean_amount_in_base'] or 0))
+    current_accrued_interest_paid = Decimal(str(row['accrued_interest_paid_in_base'] or 0))
+
+    await conn.execute(
+        '''UPDATE budgeting.portfolio_positions
+           SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+               'clean_amount_in_base', $2::numeric,
+               'accrued_interest_paid_in_base', $3::numeric
+           )
+           WHERE id = $1''',
+        position_id,
+        current_clean_amount_in_base + round(clean_amount_delta, 2),
+        current_accrued_interest_paid + round(accrued_interest_delta, 2),
+    )
+
+
+def _money_value_currency(mv: Any) -> str:
+    if not isinstance(mv, dict):
+        return ''
+    currency = mv.get('currency')
+    if not isinstance(currency, str):
+        return ''
+    return currency.upper().strip()
+
+
+def _find_matching_portfolio_position(
+    instrument_meta: dict[str, Any],
+    portfolio_positions: list[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    for metadata_key, raw_names in (
+        ('position_uid', ('positionUid', 'position_uid')),
+        ('instrument_uid', ('instrumentUid', 'instrument_uid', 'uid')),
+        ('figi', ('figi',)),
+    ):
+        metadata_value = str(instrument_meta.get(metadata_key) or '').strip()
+        if not metadata_value:
+            continue
+        for portfolio_position in portfolio_positions:
+            for raw_name in raw_names:
+                raw_value = str(portfolio_position.get(raw_name) or '').strip()
+                if raw_value and raw_value == metadata_value:
+                    return portfolio_position
+
+    ticker = str(instrument_meta.get('ticker') or '').strip()
+    class_code = str(instrument_meta.get('class_code') or '').strip()
+    if ticker and class_code:
+        for portfolio_position in portfolio_positions:
+            if (
+                str(portfolio_position.get('ticker') or '').strip() == ticker
+                and str(portfolio_position.get('classCode') or portfolio_position.get('class_code') or '').strip() == class_code
+            ):
+                return portfolio_position
+
+    return None
+
+
+async def _recover_missing_current_position(
+    conn: asyncpg.Connection,
+    user_id: int,
+    owner_type: str,
+    owner_user_id: Optional[int],
+    owner_family_id: Optional[int],
+    linked_account_id: int,
+    instrument_meta: dict[str, Any],
+    portfolio_position: dict[str, Any],
+    quantity: Decimal,
+) -> Optional[int]:
+    average_price = _api_number_to_decimal(
+        portfolio_position.get('averagePositionPrice') or portfolio_position.get('average_position_price'),
+    )
+    if average_price <= 0:
+        average_price = _api_number_to_decimal(
+            portfolio_position.get('currentPrice') or portfolio_position.get('current_price'),
+        )
+
+    currency = _money_value_currency(
+        portfolio_position.get('averagePositionPrice') or portfolio_position.get('average_position_price'),
+    ) or _money_value_currency(
+        portfolio_position.get('currentPrice') or portfolio_position.get('current_price'),
+    )
+
+    if quantity <= 0 or average_price <= 0 or not currency:
+        return None
+
+    amount_in_currency = round(average_price * quantity, 8)
+    if amount_in_currency <= 0:
+        return None
+
+    title = str(instrument_meta.get('name') or instrument_meta.get('ticker') or instrument_meta.get('figi') or 'Tinkoff position').strip()
+    metadata: dict[str, Any] = {
+        key: value
+        for key, value in {
+            'figi': instrument_meta.get('figi', ''),
+            'instrument_uid': instrument_meta.get('instrument_uid', ''),
+            'position_uid': instrument_meta.get('position_uid', ''),
+            'asset_uid': instrument_meta.get('asset_uid', ''),
+            'ticker': instrument_meta.get('ticker', ''),
+            'class_code': instrument_meta.get('class_code', ''),
+            'exchange': instrument_meta.get('exchange', ''),
+            'security_kind': instrument_meta.get('security_kind', ''),
+            'moex_market': instrument_meta.get('moex_market', ''),
+            'import_source': 'tinkoff',
+            'recovery_source': 'current_portfolio',
+        }.items()
+        if value
+    }
+
+    base_currency = await conn.fetchval(
+        'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+    )
+    if str(base_currency or '').upper() == currency.upper():
+        metadata['amount_in_base'] = float(round(amount_in_currency, 2))
+        if _is_bond_position(instrument_meta, metadata):
+            metadata['clean_amount_in_base'] = float(round(amount_in_currency, 2))
+
+    position_id = await conn.fetchval(
+        '''INSERT INTO budgeting.portfolio_positions (
+               owner_type,
+               owner_user_id,
+               owner_family_id,
+               investment_account_id,
+               asset_type_code,
+               title,
+               status,
+               quantity,
+               amount_in_currency,
+               currency_code,
+               opened_at,
+               comment,
+               metadata,
+               created_by_user_id
+           )
+           VALUES (
+               $1::varchar,
+               $2::bigint,
+               $3::bigint,
+               $4::bigint,
+               'security',
+               $5::varchar,
+               'open',
+               $6::numeric,
+               $7::numeric,
+               $8::char(3),
+               CURRENT_DATE,
+               $9::text,
+               $10::jsonb,
+               $11::bigint
+           )
+           RETURNING id''',
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        linked_account_id,
+        title,
+        quantity,
+        amount_in_currency,
+        currency,
+        'Tinkoff: позиция восстановлена по текущему портфелю',
+        metadata,
+        user_id,
+    )
+
+    await conn.execute(
+        '''INSERT INTO budgeting.portfolio_events (
+               position_id,
+               event_type,
+               event_at,
+               quantity,
+               amount,
+               currency_code,
+               comment,
+               metadata,
+               created_by_user_id
+           )
+           VALUES (
+               $1::bigint,
+               'open',
+               CURRENT_DATE,
+               $2::numeric,
+               $3::numeric,
+               $4::char(3),
+               $5::text,
+               $6::jsonb,
+               $7::bigint
+           )''',
+        position_id,
+        quantity,
+        amount_in_currency,
+        currency,
+        'Tinkoff: позиция восстановлена по текущему портфелю',
+        {'action': 'recovered_current_position', 'import_source': 'tinkoff'},
+        user_id,
+    )
+
+    return position_id
+
+
+async def _backfill_bond_clean_amount_from_portfolio(
+    conn: asyncpg.Connection,
+    position_id: int,
+    instrument_meta: dict[str, Any],
+    portfolio_position: Optional[dict[str, Any]],
+) -> None:
+    if portfolio_position is None or not _is_bond_position(instrument_meta):
+        return
+
+    average_price = _api_number_to_decimal(
+        portfolio_position.get('averagePositionPrice') or portfolio_position.get('average_position_price'),
+    )
+    quantity = _api_number_to_decimal(
+        portfolio_position.get('quantity') or portfolio_position.get('quantityLots') or portfolio_position.get('quantity_lots'),
+    )
+    currency = _money_value_currency(
+        portfolio_position.get('averagePositionPrice') or portfolio_position.get('average_position_price'),
+    )
+
+    if average_price <= 0 or quantity <= 0 or currency != 'RUB':
+        return
+
+    clean_amount_in_base = round(average_price * quantity, 2)
+    await conn.execute(
+        """UPDATE budgeting.portfolio_positions
+           SET metadata = COALESCE(metadata, '{}'::jsonb)
+                          || jsonb_build_object('clean_amount_in_base', $2::numeric)
+           WHERE id = $1
+             AND COALESCE(metadata ->> 'clean_amount_in_base', '') = ''""",
+        position_id,
+        clean_amount_in_base,
+    )
+
+
+def _portfolio_position_quantity(portfolio_position: dict[str, Any]) -> Decimal:
+    return _api_number_to_decimal(
+        portfolio_position.get('quantity')
+        or portfolio_position.get('quantityLots')
+        or portfolio_position.get('quantity_lots'),
+    )
 
 
 async def _record_unmatched_cash_only(
@@ -819,6 +1159,7 @@ async def _record_position_principal_repayment(
                quantity,
                amount_in_currency,
                COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base,
+               (metadata ->> 'clean_amount_in_base')::numeric AS clean_amount_in_base,
                COALESCE((metadata ->> 'returned_amount_in_base')::numeric, 0) AS returned_amount_in_base,
                investment_account_id,
                title
@@ -834,6 +1175,11 @@ async def _record_position_principal_repayment(
 
     current_amount_in_currency = Decimal(str(row['amount_in_currency'] or 0))
     current_amount_in_base = Decimal(str(row['amount_in_base'] or 0))
+    current_clean_amount_in_base = (
+        Decimal(str(row['clean_amount_in_base']))
+        if row['clean_amount_in_base'] is not None
+        else None
+    )
     current_returned_amount_in_base = Decimal(str(row['returned_amount_in_base'] or 0))
     if principal_reduction_in_currency <= 0 or principal_reduction_in_currency >= current_amount_in_currency:
         raise ValueError(
@@ -861,6 +1207,13 @@ async def _record_position_principal_repayment(
         2,
     )
     remaining_amount_in_base = current_amount_in_base - released_principal_in_base
+    remaining_clean_amount_in_base = None
+    if current_clean_amount_in_base is not None:
+        released_clean_principal_in_base = round(
+            current_clean_amount_in_base * principal_reduction_in_currency / current_amount_in_currency,
+            2,
+        )
+        remaining_clean_amount_in_base = current_clean_amount_in_base - released_clean_principal_in_base
     next_returned_amount_in_base = current_returned_amount_in_base + effective_return_amount_in_base
 
     operation_id = await conn.fetchval(
@@ -909,22 +1262,21 @@ async def _record_position_principal_repayment(
     await conn.execute(
         '''UPDATE budgeting.portfolio_positions
            SET amount_in_currency = amount_in_currency - $2::numeric,
-               metadata = jsonb_set(
-                   jsonb_set(
-                       COALESCE(metadata, '{}'::jsonb),
-                       '{amount_in_base}',
-                       to_jsonb($3::numeric),
-                       true
-                   ),
-                   '{returned_amount_in_base}',
-                   to_jsonb($4::numeric),
-                   true
-               )
+               metadata = COALESCE(metadata, '{}'::jsonb)
+                          || jsonb_build_object(
+                              'amount_in_base', $3::numeric,
+                              'returned_amount_in_base', $4::numeric
+                          )
+                          || CASE
+                               WHEN $5::numeric IS NULL THEN '{}'::jsonb
+                               ELSE jsonb_build_object('clean_amount_in_base', $5::numeric)
+                             END
            WHERE id = $1''',
         position_id,
         principal_reduction_in_currency,
         remaining_amount_in_base,
         next_returned_amount_in_base,
+        remaining_clean_amount_in_base,
     )
 
     await conn.execute(
@@ -1103,9 +1455,26 @@ class TinkoffSync:
         client = TinkoffRestClient(token)
         since = await self._get_since(client, tinkoff_account_id, conn_row=conn_row)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
-        instrument_map = await self._resolve_instrument_map(client, raw_ops)
-
+        logger.info(
+            'T-Bank preview fetched %s operations for account %s since %s',
+            len(raw_ops),
+            tinkoff_account_id,
+            since.date().isoformat(),
+        )
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
+        preview_auto_ops = [
+            op for op in raw_ops
+            if op.get('id') not in already_imported_ids
+            and _map_operation(op)['kind'] not in ('input', 'output', 'unknown')
+        ]
+        # Preview should stay responsive, so we resolve metadata only for the
+        # new auto-operations that are actually displayed to the user.
+        instrument_map = await self._resolve_instrument_map(client, preview_auto_ops)
+        logger.info(
+            'T-Bank preview resolved metadata for %s unique instruments on account %s',
+            len(instrument_map),
+            tinkoff_account_id,
+        )
 
         deposits:        list[dict] = []
         withdrawals:     list[dict] = []
@@ -1183,7 +1552,30 @@ class TinkoffSync:
         client = TinkoffRestClient(token)
         since  = await self._get_since(client, tinkoff_account_id, conn_row=conn_row)
         raw_ops = await client.get_operations(tinkoff_account_id, since, datetime.now(timezone.utc))
+        logger.info(
+            'T-Bank apply fetched %s operations for account %s since %s',
+            len(raw_ops),
+            tinkoff_account_id,
+            since.date().isoformat(),
+        )
         instrument_map = await self._resolve_instrument_map(client, raw_ops)
+        logger.info(
+            'T-Bank apply resolved metadata for %s unique instruments on account %s',
+            len(instrument_map),
+            tinkoff_account_id,
+        )
+        current_portfolio_positions: list[dict[str, Any]] = []
+        try:
+            portfolio = await client.get_portfolio(tinkoff_account_id, 'RUB')
+            raw_positions = portfolio.get('positions', [])
+            if isinstance(raw_positions, list):
+                current_portfolio_positions = [item for item in raw_positions if isinstance(item, dict)]
+        except Exception as exc:
+            logger.warning(
+                'Failed to preload T-Bank portfolio for sync apply on account %s: %s',
+                tinkoff_account_id,
+                exc,
+            )
 
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
         resolutions_map = {r['tinkoff_op_id']: r for r in deposit_resolutions}
@@ -1273,7 +1665,7 @@ class TinkoffSync:
                     instrument_meta = self._get_instrument_meta(instrument_map, op)
                     await self._apply_auto_operation(
                         conn, user_id, linked_account_id, op, mapped, instrument_meta,
-                        owner_type, owner_user_id, owner_family_id,
+                        owner_type, owner_user_id, owner_family_id, current_portfolio_positions,
                     )
                     applied_count += 1
 
@@ -1282,6 +1674,10 @@ class TinkoffSync:
                     client,
                     tinkoff_account_id,
                     linked_account_id,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
                 )
 
                 # Update last_synced_at
@@ -1418,8 +1814,6 @@ class TinkoffSync:
                 quoted_price = _api_number_to_decimal(
                     portfolio_position.get('currentPrice') or portfolio_position.get('current_price'),
                 )
-                if quoted_price <= 0:
-                    continue
 
                 live_price = await _build_live_price_payload(
                     client,
@@ -1560,12 +1954,18 @@ class TinkoffSync:
         client: TinkoffRestClient,
         raw_ops: list[dict],
     ) -> dict[str, dict]:
-        resolved: dict[str, dict] = {}
-
+        unique_ops: dict[str, dict] = {}
         for op in raw_ops:
             cache_key = _operation_instrument_cache_key(op)
-            if not cache_key or cache_key in resolved:
-                continue
+            if cache_key and cache_key not in unique_ops:
+                unique_ops[cache_key] = op
+
+        semaphore = asyncio.Semaphore(6)
+
+        async def resolve_one(cache_key: str, op: dict) -> tuple[str, dict]:
+            normalized = _normalize_instrument_meta(op)
+            if normalized.get('ticker') and normalized.get('class_code') and normalized.get('name'):
+                return cache_key, normalized
 
             raw_instrument: Optional[dict] = None
             resolution_attempts = [
@@ -1574,18 +1974,25 @@ class TinkoffSync:
                 ('INSTRUMENT_ID_TYPE_FIGI', _op_field(op, 'figi')),
             ]
 
-            for id_type, instrument_id in resolution_attempts:
-                if not instrument_id:
-                    continue
-                try:
-                    raw_instrument = await client.get_instrument_by(instrument_id, id_type)
-                    break
-                except Exception:
-                    continue
+            async with semaphore:
+                for id_type, instrument_id in resolution_attempts:
+                    if not instrument_id:
+                        continue
+                    try:
+                        raw_instrument = await client.get_instrument_by(instrument_id, id_type)
+                        break
+                    except Exception:
+                        continue
 
-            resolved[cache_key] = _normalize_instrument_meta(op, raw_instrument)
+            return cache_key, _normalize_instrument_meta(op, raw_instrument)
 
-        return resolved
+        if not unique_ops:
+            return {}
+
+        resolved_items = await asyncio.gather(
+            *(resolve_one(cache_key, op) for cache_key, op in unique_ops.items())
+        )
+        return dict(resolved_items)
 
     def _get_instrument_meta(self, instrument_map: dict[str, dict], op: dict) -> dict:
         cache_key = _operation_instrument_cache_key(op)
@@ -1644,6 +2051,17 @@ class TinkoffSync:
                 if str(position_title).strip() == normalized_title:
                     return position_id
 
+        ticker = str(meta.get('ticker') or '').strip()
+        ticker_token = _normalize_lookup_token(ticker)
+        if len(ticker_token) >= 2:
+            ticker_candidates: list[int] = []
+            for position_id, position_title, position_meta in normalized_rows:
+                stored_ticker_token = _normalize_lookup_token(str(position_meta.get('ticker', '')))
+                if ticker_token == stored_ticker_token:
+                    ticker_candidates.append(position_id)
+            if len(ticker_candidates) == 1:
+                return ticker_candidates[0]
+
         return None
 
     async def _reconcile_current_quantities(
@@ -1652,11 +2070,28 @@ class TinkoffSync:
         client: TinkoffRestClient,
         tinkoff_account_id: str,
         linked_account_id: int,
+        user_id: int,
+        owner_type: str,
+        owner_user_id: Optional[int],
+        owner_family_id: Optional[int],
     ) -> int:
         current_positions = await client.get_positions(tinkoff_account_id)
         securities = current_positions.get('securities', [])
         if not isinstance(securities, list):
             return 0
+
+        portfolio_positions_raw: list[dict[str, Any]] = []
+        try:
+            portfolio = await client.get_portfolio(tinkoff_account_id, 'RUB')
+            raw_positions = portfolio.get('positions', [])
+            if isinstance(raw_positions, list):
+                portfolio_positions_raw = [item for item in raw_positions if isinstance(item, dict)]
+        except Exception as exc:
+            logger.warning(
+                'Failed to load T-Bank portfolio for quantity reconciliation on account %s: %s',
+                tinkoff_account_id,
+                exc,
+            )
 
         updated_count = 0
         updated_position_ids: set[int] = set()
@@ -1672,31 +2107,37 @@ class TinkoffSync:
                 continue
 
             instrument_meta = _normalize_instrument_meta({}, security)
+            portfolio_position = _find_matching_portfolio_position(instrument_meta, portfolio_positions_raw)
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            if pos_id is None:
+                pos_id = await _recover_missing_current_position(
+                    conn,
+                    user_id,
+                    owner_type,
+                    owner_user_id,
+                    owner_family_id,
+                    linked_account_id,
+                    instrument_meta,
+                    portfolio_position or {},
+                    quantity,
+                )
             if pos_id is None or pos_id in updated_position_ids:
                 continue
-
-            metadata_patch = {
-                key: value
-                for key, value in {
-                    'figi': instrument_meta.get('figi', ''),
-                    'instrument_uid': instrument_meta.get('instrument_uid', ''),
-                    'position_uid': instrument_meta.get('position_uid', ''),
-                    'ticker': instrument_meta.get('ticker', ''),
-                    'class_code': instrument_meta.get('class_code', ''),
-                }.items()
-                if isinstance(value, str) and value
-            }
 
             await conn.execute(
                 '''UPDATE budgeting.portfolio_positions
                    SET asset_type_code = 'security',
-                       quantity = $2::numeric,
-                       metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+                       quantity = $2::numeric
                    WHERE id = $1''',
                 pos_id,
                 quantity,
-                metadata_patch,
+            )
+            await _refresh_position_metadata(conn, pos_id, instrument_meta)
+            await _backfill_bond_clean_amount_from_portfolio(
+                conn,
+                pos_id,
+                instrument_meta,
+                portfolio_position,
             )
             updated_position_ids.add(pos_id)
             updated_count += 1
@@ -1805,6 +2246,7 @@ class TinkoffSync:
         owner_type: str = 'user',
         owner_user_id: Optional[int] = None,
         owner_family_id: Optional[int] = None,
+        current_portfolio_positions: Optional[list[dict[str, Any]]] = None,
     ) -> None:
         instrument_meta = instrument_meta or {}
         kind     = mapped['kind']
@@ -1838,6 +2280,41 @@ class TinkoffSync:
         moex_market = instrument_meta.get('moex_market')
         if moex_market:
             position_metadata['moex_market'] = moex_market
+
+        async def recover_current_position_if_needed() -> Optional[int]:
+            if not current_portfolio_positions:
+                return None
+
+            portfolio_position = _find_matching_portfolio_position(instrument_meta, current_portfolio_positions)
+            if portfolio_position is None:
+                return None
+
+            recovered_quantity = _portfolio_position_quantity(portfolio_position)
+            if recovered_quantity <= 0:
+                return None
+
+            pos_id = await _recover_missing_current_position(
+                conn,
+                user_id,
+                owner_type,
+                owner_user_id,
+                owner_family_id,
+                linked_account_id,
+                instrument_meta,
+                portfolio_position,
+                recovered_quantity,
+            )
+            if pos_id is None:
+                return None
+
+            await _refresh_position_metadata(conn, pos_id, instrument_meta)
+            await _backfill_bond_clean_amount_from_portfolio(
+                conn,
+                pos_id,
+                instrument_meta,
+                portfolio_position,
+            )
+            return pos_id
 
         if kind == 'buy':
             await self._require_investment_balance(conn, linked_account_id, currency, amount)
@@ -1877,9 +2354,21 @@ class TinkoffSync:
                        )''',
                     op_id, pos_id, event_type,
                 )
+                await _refresh_position_metadata(conn, pos_id, instrument_meta)
+
+                if _is_bond_position(instrument_meta, position_metadata):
+                    clean_amount, accrued_interest = _extract_bond_trade_components(op, amount, quantity)
+                    await _apply_bond_cost_metadata_delta(
+                        conn,
+                        pos_id,
+                        clean_amount,
+                        accrued_interest,
+                    )
 
         elif kind in ('dividend', 'coupon'):
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            if pos_id is None:
+                pos_id = await recover_current_position_if_needed()
             if pos_id:
                 income_kind = kind
                 await conn.execute(
@@ -1899,6 +2388,7 @@ class TinkoffSync:
                         )''',
                     op_id, pos_id,
                 )
+                await _refresh_position_metadata(conn, pos_id, instrument_meta)
             else:
                 await _record_unmatched_cash_only(
                     conn,
@@ -1922,7 +2412,10 @@ class TinkoffSync:
 
         elif kind == 'bond_repayment':
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
+            if pos_id is None:
+                pos_id = await recover_current_position_if_needed()
             if pos_id:
+                await _refresh_position_metadata(conn, pos_id, instrument_meta)
                 pos_row = await conn.fetchrow(
                     '''SELECT amount_in_currency
                        FROM budgeting.portfolio_positions
@@ -2004,6 +2497,7 @@ class TinkoffSync:
         elif kind == 'bond_repayment_full':
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
+                await _refresh_position_metadata(conn, pos_id, instrument_meta)
                 await conn.execute(
                     '''SELECT budgeting.put__close_portfolio_position(
                         $1::bigint, $2::bigint, $3::numeric, $4::char(3),
@@ -2073,6 +2567,7 @@ class TinkoffSync:
 
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
+                await _refresh_position_metadata(conn, pos_id, instrument_meta)
                 await self._require_investment_balance(conn, linked_account_id, currency, amount)
                 await conn.execute(
                     '''SELECT budgeting.put__record_portfolio_fee(
@@ -2114,10 +2609,12 @@ class TinkoffSync:
         elif kind == 'sell':
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
+                await _refresh_position_metadata(conn, pos_id, instrument_meta)
                 pos_row = await conn.fetchrow(
                     '''SELECT quantity,
                               amount_in_currency,
-                              COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base
+                              COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base,
+                              (metadata ->> 'clean_amount_in_base')::numeric AS clean_amount_in_base
                        FROM budgeting.portfolio_positions
                        WHERE id = $1''',
                     pos_id,
@@ -2125,12 +2622,15 @@ class TinkoffSync:
                 current_quantity = None
                 current_amount_in_currency = None
                 current_amount_in_base = None
+                current_clean_amount_in_base = None
                 if pos_row is not None and pos_row['quantity'] is not None:
                     current_quantity = Decimal(str(pos_row['quantity']))
                 if pos_row is not None and pos_row['amount_in_currency'] is not None:
                     current_amount_in_currency = Decimal(str(pos_row['amount_in_currency']))
                 if pos_row is not None and pos_row['amount_in_base'] is not None:
                     current_amount_in_base = Decimal(str(pos_row['amount_in_base']))
+                if pos_row is not None and pos_row['clean_amount_in_base'] is not None:
+                    current_clean_amount_in_base = Decimal(str(pos_row['clean_amount_in_base']))
 
                 base_currency = await conn.fetchval(
                     'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
@@ -2198,6 +2698,28 @@ class TinkoffSync:
                         quantity,
                         op_date,
                     )
+                    if (
+                        current_clean_amount_in_base is not None
+                        and current_quantity is not None
+                        and current_quantity > 0
+                        and quantity is not None
+                        and quantity > 0
+                    ):
+                        released_clean_principal_in_base = round(
+                            current_clean_amount_in_base * min(quantity, current_quantity) / current_quantity,
+                            2,
+                        )
+                        await conn.execute(
+                            '''UPDATE budgeting.portfolio_positions
+                               SET metadata = COALESCE(metadata, '{}'::jsonb)
+                                              || jsonb_build_object(
+                                                  'clean_amount_in_base',
+                                                  $2::numeric
+                                              )
+                               WHERE id = $1''',
+                            pos_id,
+                            current_clean_amount_in_base - released_clean_principal_in_base,
+                        )
                     event_types = ('partial_close', 'close')
 
                 await conn.execute(

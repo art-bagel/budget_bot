@@ -57,8 +57,10 @@ class ApplyTinkoffSyncRequest(BaseModel):
 class TinkoffLivePrice(BaseModel):
     position_id: int
     price: float
+    clean_price: Optional[float] = None
     currency_code: str
     current_value: float
+    clean_current_value: Optional[float] = None
     source: str
 
 

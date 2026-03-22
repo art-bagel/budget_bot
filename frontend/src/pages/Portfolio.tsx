@@ -458,12 +458,48 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [activeAssetTypeCode, closedPositions],
   );
 
+  const getPositionMetadataNumber = (position: PortfolioPosition, key: string): number | null => {
+    const value = position.metadata?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+
+  const getPositionEntryAmount = (position: PortfolioPosition): number => {
+    if (position.metadata?.moex_market === 'bonds') {
+      return getPositionMetadataNumber(position, 'clean_amount_in_base') ?? position.amount_in_currency;
+    }
+    return position.amount_in_currency;
+  };
+
+  const getPositionInvestedPrincipal = (position: PortfolioPosition): number => {
+    if (position.metadata?.moex_market === 'bonds') {
+      return (
+        getPositionMetadataNumber(position, 'clean_amount_in_base')
+        ?? getPositionEntryAmount(position)
+        ?? getPositionMetadataNumber(position, 'amount_in_base')
+        ?? position.amount_in_currency
+      );
+    }
+
+    return (
+      getPositionMetadataNumber(position, 'amount_in_base')
+      ?? getPositionEntryAmount(position)
+    );
+  };
+
   const getResolvedPositionQuote = (position: PortfolioPosition) => {
     const tinkoffPrice = tinkoffLivePrices.get(position.id) ?? null;
     if (tinkoffPrice) {
       return {
-        currentPrice: tinkoffPrice.price,
+        currentPrice: tinkoffPrice.clean_price ?? tinkoffPrice.price,
         currentTotalValue: tinkoffPrice.current_value,
+        performanceCurrentValue: tinkoffPrice.clean_current_value ?? tinkoffPrice.current_value,
         isPreviousClose: false,
         source: 'tinkoff' as const,
       };
@@ -480,6 +516,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     return {
       currentPrice,
       currentTotalValue,
+      performanceCurrentValue: currentTotalValue,
       isPreviousClose: moexPrice?.last === null && moexPrice?.prevClose !== null,
       source: currentPrice !== null ? 'moex' as const : null,
     };
@@ -488,6 +525,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const getResolvedPositionEstimatedValue = (position: PortfolioPosition) => (
     getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency
   );
+
+  const getResolvedPositionCurrentResult = (position: PortfolioPosition): number | null => {
+    const quote = getResolvedPositionQuote(position);
+    if (quote.performanceCurrentValue === null) {
+      return null;
+    }
+    return quote.performanceCurrentValue - getPositionEntryAmount(position);
+  };
 
   const summaryByAccountId = useMemo(
     () => summaryItems.reduce<Record<number, PortfolioSummaryItem>>((acc, item) => {
@@ -498,8 +543,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   );
 
   const totalInvestedPrincipalInBase = useMemo(
-    () => summaryItems.reduce((sum, item) => sum + item.invested_principal_in_base, 0),
-    [summaryItems],
+    () => openPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
+    [openPositions],
   );
 
   const totalRealizedIncomeInBase = useMemo(
@@ -517,21 +562,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
     let total = 0;
     let pricedMarket = 0;
     let pricedEntry = 0;
+    let unrealized = 0;
     let count = 0;
     for (const pos of openPositions) {
-      const quote = getResolvedPositionQuote(pos);
       total += getResolvedPositionEstimatedValue(pos);
-      if (quote.currentTotalValue !== null) {
-        pricedMarket += quote.currentTotalValue;
-        pricedEntry += pos.amount_in_currency;
+      const currentResult = getResolvedPositionCurrentResult(pos);
+      if (currentResult !== null) {
+        pricedMarket += getPositionEntryAmount(pos) + currentResult;
+        pricedEntry += getPositionEntryAmount(pos);
         count++;
+        unrealized += currentResult;
       }
     }
     return {
       totalPositionsValue: total,
       totalPricedMarketValue: pricedMarket,
       totalPricedEntry: pricedEntry,
-      totalUnrealizedPnl: pricedMarket - pricedEntry,
+      totalUnrealizedPnl: unrealized,
       hasPricedPositions: count > 0,
     };
   }, [openPositions, moexPrices, tinkoffLivePrices]);
@@ -550,21 +597,30 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
   const accountOpenPrincipalById = useMemo(
     () => openPositions.reduce<Record<number, number>>((acc, position) => {
-      acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + Number(position.metadata?.amount_in_base ?? 0);
+      acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + getPositionInvestedPrincipal(position);
       return acc;
     }, {}),
     [openPositions],
   );
 
+  const accountCurrentResultById = useMemo(
+    () => openPositions.reduce<Record<number, number>>((acc, position) => {
+      const currentResult = getResolvedPositionCurrentResult(position);
+      if (currentResult !== null) {
+        acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + currentResult;
+      }
+      return acc;
+    }, {}),
+    [openPositions, moexPrices, tinkoffLivePrices],
+  );
+
   const getConnectedSecurityMetrics = (accountId: number) => {
     const estimatedValue = accountEstimatedValueById[accountId] ?? 0;
-    const investedPrincipal = summaryByAccountId[accountId]?.invested_principal_in_base
-      ?? accountOpenPrincipalById[accountId]
-      ?? 0;
+    const investedPrincipal = accountOpenPrincipalById[accountId] ?? 0;
     return {
       estimatedValue,
       investedPrincipal,
-      currentResult: estimatedValue - investedPrincipal,
+      currentResult: accountCurrentResultById[accountId] ?? 0,
       cashValue: summaryByAccountId[accountId]?.cash_balance_in_base ?? 0,
     };
   };
@@ -1554,11 +1610,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             const quote = getResolvedPositionQuote(position);
                             const currentPrice = quote.currentPrice;
                             const currentTotalValue = quote.currentTotalValue;
-                            const unrealizedPnl = currentTotalValue !== null
-                              ? currentTotalValue - position.amount_in_currency
-                              : null;
-                            const pnlPercent = unrealizedPnl !== null && position.amount_in_currency > 0
-                              ? (unrealizedPnl / position.amount_in_currency) * 100
+                            const entryAmount = getPositionEntryAmount(position);
+                            const unrealizedPnl = getResolvedPositionCurrentResult(position);
+                            const pnlPercent = unrealizedPnl !== null && entryAmount > 0
+                              ? (unrealizedPnl / entryAmount) * 100
                               : null;
 
                             return (
@@ -1603,9 +1658,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                   ) : (
                                     <>
                                       {position.quantity ? (
-                                        <span>{formatAmount(position.amount_in_currency / position.quantity, position.currency_code)} · {position.quantity} шт.</span>
+                                        <span>{formatAmount(entryAmount / position.quantity, position.currency_code)} · {position.quantity} шт.</span>
                                       ) : (
-                                        <span>{formatAmount(position.amount_in_currency, position.currency_code)}</span>
+                                        <span>{formatAmount(entryAmount, position.currency_code)}</span>
                                       )}
                                     </>
                                   )}
@@ -1681,11 +1736,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   const detailQuote = getResolvedPositionQuote(selectedPosition);
                   const detailCurrentPrice = detailQuote.currentPrice;
                   const detailCurrentTotal = detailQuote.currentTotalValue;
-                  const detailPnl = detailCurrentTotal !== null
-                    ? detailCurrentTotal - selectedPosition.amount_in_currency
-                    : null;
-                  const detailPnlPct = detailPnl !== null && selectedPosition.amount_in_currency > 0
-                    ? (detailPnl / selectedPosition.amount_in_currency) * 100
+                  const detailEntryAmount = getPositionEntryAmount(selectedPosition);
+                  const detailPnl = getResolvedPositionCurrentResult(selectedPosition);
+                  const detailPnlPct = detailPnl !== null && detailEntryAmount > 0
+                    ? (detailPnl / detailEntryAmount) * 100
                     : null;
                   return (
                     <>
@@ -1706,7 +1760,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                             <span className="settings-row__sub">Вложено</span>
                             <strong className="portfolio-position-detail__amount">
-                              {formatAmount(selectedPosition.amount_in_currency, selectedPosition.currency_code)}
+                              {formatAmount(detailEntryAmount, selectedPosition.currency_code)}
                             </strong>
                           </div>
                           {detailCurrentTotal !== null && (
@@ -1734,8 +1788,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 <div className="portfolio-position-detail__meta">
                   <span>Дата входа: {formatDateLabel(selectedPosition.opened_at)}</span>
                   {selectedPosition.quantity ? <span>Количество: {selectedPosition.quantity} шт.</span> : null}
-                  {typeof selectedPosition.metadata?.amount_in_base === 'number'
-                    ? <span>Себестоимость: {formatAmount(Number(selectedPosition.metadata.amount_in_base), user.base_currency_code)}</span>
+                  {getPositionInvestedPrincipal(selectedPosition) > 0
+                    ? <span>Себестоимость: {formatAmount(getPositionInvestedPrincipal(selectedPosition), user.base_currency_code)}</span>
+                    : null}
+                  {(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0) > 0
+                    ? (
+                      <span>
+                        НКД при покупке: {formatAmount(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0, user.base_currency_code)}
+                      </span>
+                    )
                     : null}
                   {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0
                     ? <span>Комиссии: {formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
@@ -2235,7 +2296,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 const conn = tinkoffConnections.find((c) => c.linked_account_id === account.id);
                 const liveMetrics = getConnectedSecurityMetrics(account.id);
                 const estimatedValue = liveMetrics.estimatedValue;
-                const investedPrincipal = summary?.invested_principal_in_base ?? liveMetrics.investedPrincipal;
+                const investedPrincipal = liveMetrics.investedPrincipal;
                 const currentResult = liveMetrics.currentResult;
                 return (
                   <div key={account.id} className="portfolio-account-modal-item">

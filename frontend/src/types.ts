@@ -571,7 +571,9 @@ export interface ApplyTinkoffSyncResponse {
 export interface TinkoffLivePrice {
   position_id: number;
   price: number;
+  clean_price?: number;
   currency_code: string;
   current_value: number;
+  clean_current_value?: number;
   source: string;
 }
