@@ -79,14 +79,6 @@ class TinkoffLivePrice(BaseModel):
     source: str
 
 
-# ---------------------------------------------------------------------------
-# Helper: get pool from existing storage
-# ---------------------------------------------------------------------------
-
-async def _get_pool():
-    return await app_storage.context._get_pool()
-
-
 def _normalize_logo_name(value: str) -> str:
     match = _LOGO_NAME_RE.fullmatch(value.strip())
     if not match:
@@ -163,8 +155,7 @@ async def get_tinkoff_accounts(
     _user: TelegramUser = Depends(get_telegram_user),
 ) -> list:
     """Validate token and return list of Tinkoff broker accounts. Nothing is saved."""
-    pool = await _get_pool()
-    tc = TinkoffConnections(pool)
+    tc = TinkoffConnections(app_storage.tinkoff)
     try:
         return await tc.get_accounts_from_token(body.token)
     except Exception as exc:
@@ -177,8 +168,7 @@ async def connect_tinkoff(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> dict:
     """Save token + bind a Tinkoff account to our investment account."""
-    pool = await _get_pool()
-    tc = TinkoffConnections(pool)
+    tc = TinkoffConnections(app_storage.tinkoff)
     try:
         return await tc.create_connection(
             user_id=user.user_id,
@@ -194,8 +184,7 @@ async def connect_tinkoff(
 async def list_connections(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> list:
-    pool = await _get_pool()
-    tc = TinkoffConnections(pool)
+    tc = TinkoffConnections(app_storage.tinkoff)
     return await tc.list_connections(user.user_id)
 
 
@@ -204,8 +193,7 @@ async def delete_connection(
     connection_id: int,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> dict:
-    pool = await _get_pool()
-    tc = TinkoffConnections(pool)
+    tc = TinkoffConnections(app_storage.tinkoff)
     try:
         await tc.delete_connection(connection_id, user.user_id)
     except ValueError as exc:
@@ -219,21 +207,14 @@ async def preview_tinkoff_sync(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> dict:
     """Dry-run: fetch new operations from Tinkoff without writing anything."""
-    pool = await _get_pool()
-    tc = TinkoffConnections(pool)
+    tc = TinkoffConnections(app_storage.tinkoff)
 
     # Access check: connection must belong to this user/family
     connections = await tc.list_connections(user.user_id)
     if not any(c['id'] == connection_id for c in connections):
         raise HTTPException(status_code=404, detail='Connection not found')
 
-    # Load credentials directly
-    async with pool.acquire() as db_conn:
-        row = await db_conn.fetchrow(
-            'SELECT * FROM budgeting.external_connections WHERE id = $1',
-            connection_id,
-        )
-
+    row = await app_storage.tinkoff.get__tinkoff_connection(user.user_id, connection_id)
     if row is None:
         raise HTTPException(status_code=404, detail='Connection not found')
 
@@ -245,7 +226,7 @@ async def preview_tinkoff_sync(
     tinkoff_account_id = conn_row['provider_account_id']
     linked_account_id = conn_row['linked_account_id']
 
-    sync = TinkoffSync(pool)
+    sync = TinkoffSync(app_storage.tinkoff)
     try:
         return await sync.preview(token, tinkoff_account_id, linked_account_id, user.user_id, conn_row=conn_row)
     except Exception as exc:
@@ -259,15 +240,14 @@ async def apply_tinkoff_sync(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> dict:
     """Apply synced operations with user resolutions for deposits."""
-    pool = await _get_pool()
-    tc = TinkoffConnections(pool)
+    tc = TinkoffConnections(app_storage.tinkoff)
 
     # Access check
     connections = await tc.list_connections(user.user_id)
     if not any(c['id'] == connection_id for c in connections):
         raise HTTPException(status_code=404, detail='Connection not found')
 
-    sync = TinkoffSync(pool)
+    sync = TinkoffSync(app_storage.tinkoff)
     resolutions = [r.model_dump() for r in body.deposit_resolutions]
     withdrawal_resolutions = [r.model_dump() for r in body.withdrawal_resolutions]
     try:
@@ -282,8 +262,7 @@ async def apply_tinkoff_sync(
 async def get_tinkoff_live_prices(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> list:
-    pool = await _get_pool()
-    sync = TinkoffSync(pool)
+    sync = TinkoffSync(app_storage.tinkoff)
     try:
         return await sync.get_live_position_prices(user.user_id)
     except Exception as exc:

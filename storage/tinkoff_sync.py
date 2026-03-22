@@ -19,6 +19,7 @@ from typing import Any, Optional
 import asyncpg
 import httpx
 
+from storage.tinkoff import TinkoffStorage
 
 TINKOFF_REST_URL = 'https://invest-public-api.tinkoff.ru/rest'
 logger = logging.getLogger(__name__)
@@ -710,10 +711,9 @@ async def _refresh_position_metadata(
 
     if next_title and not _is_placeholder_instrument_name(next_title, instrument_meta):
         await conn.execute(
-            '''UPDATE budgeting.portfolio_positions
-               SET title = $2,
-                   metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
-               WHERE id = $1''',
+            '''SELECT budgeting.set__merge_portfolio_position_metadata(
+                $1::bigint, $2::text, $3::jsonb
+            )''',
             position_id,
             next_title,
             metadata_patch,
@@ -722,9 +722,9 @@ async def _refresh_position_metadata(
 
     if metadata_patch:
         await conn.execute(
-            '''UPDATE budgeting.portfolio_positions
-               SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
-               WHERE id = $1''',
+            '''SELECT budgeting.set__merge_portfolio_position_metadata(
+                $1::bigint, NULL::text, $2::jsonb
+            )''',
             position_id,
             metadata_patch,
         )
@@ -767,30 +767,13 @@ async def _apply_bond_cost_metadata_delta(
     if clean_amount_delta <= 0 and accrued_interest_delta <= 0:
         return
 
-    row = await conn.fetchrow(
-        '''SELECT
-               (metadata ->> 'clean_amount_in_base')::numeric AS clean_amount_in_base,
-               (metadata ->> 'accrued_interest_paid_in_base')::numeric AS accrued_interest_paid_in_base
-           FROM budgeting.portfolio_positions
-           WHERE id = $1''',
-        position_id,
-    )
-    if row is None:
-        return
-
-    current_clean_amount_in_base = Decimal(str(row['clean_amount_in_base'] or 0))
-    current_accrued_interest_paid = Decimal(str(row['accrued_interest_paid_in_base'] or 0))
-
     await conn.execute(
-        '''UPDATE budgeting.portfolio_positions
-           SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-               'clean_amount_in_base', $2::numeric,
-               'accrued_interest_paid_in_base', $3::numeric
-           )
-           WHERE id = $1''',
+        '''SELECT budgeting.set__increment_portfolio_bond_cost_metadata(
+            $1::bigint, $2::numeric, $3::numeric
+        )''',
         position_id,
-        current_clean_amount_in_base + round(clean_amount_delta, 2),
-        current_accrued_interest_paid + round(accrued_interest_delta, 2),
+        clean_amount_delta,
+        accrued_interest_delta,
     )
 
 
@@ -836,6 +819,7 @@ def _find_matching_portfolio_position(
 
 async def _recover_missing_current_position(
     conn: asyncpg.Connection,
+    db: TinkoffStorage,
     user_id: int,
     owner_type: str,
     owner_user_id: Optional[int],
@@ -886,11 +870,11 @@ async def _recover_missing_current_position(
         if value
     }
 
-    base_currency = await conn.fetchval(
-        'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
+    base_currency = await db.get__owner_base_currency(
         owner_type,
         owner_user_id,
         owner_family_id,
+        connection=conn,
     )
     if str(base_currency or '').upper() == currency.upper():
         metadata['amount_in_base'] = float(round(amount_in_currency, 2))
@@ -898,39 +882,12 @@ async def _recover_missing_current_position(
             metadata['clean_amount_in_base'] = float(round(amount_in_currency, 2))
 
     position_id = await conn.fetchval(
-        '''INSERT INTO budgeting.portfolio_positions (
-               owner_type,
-               owner_user_id,
-               owner_family_id,
-               investment_account_id,
-               asset_type_code,
-               title,
-               status,
-               quantity,
-               amount_in_currency,
-               currency_code,
-               opened_at,
-               comment,
-               metadata,
-               created_by_user_id
-           )
-           VALUES (
-               $1::varchar,
-               $2::bigint,
-               $3::bigint,
-               $4::bigint,
-               'security',
-               $5::varchar,
-               'open',
-               $6::numeric,
-               $7::numeric,
-               $8::char(3),
-               CURRENT_DATE,
-               $9::text,
-               $10::jsonb,
-               $11::bigint
-           )
-           RETURNING id''',
+        '''SELECT budgeting.put__recover_portfolio_position_from_import(
+            $1::bigint, $2::text, $3::bigint, $4::bigint,
+            $5::bigint, $6::text, $7::numeric, $8::numeric,
+            $9::char(3), $10::text, $11::jsonb
+        )''',
+        user_id,
         owner_type,
         owner_user_id,
         owner_family_id,
@@ -941,39 +898,6 @@ async def _recover_missing_current_position(
         currency,
         'Tinkoff: позиция восстановлена по текущему портфелю',
         metadata,
-        user_id,
-    )
-
-    await conn.execute(
-        '''INSERT INTO budgeting.portfolio_events (
-               position_id,
-               event_type,
-               event_at,
-               quantity,
-               amount,
-               currency_code,
-               comment,
-               metadata,
-               created_by_user_id
-           )
-           VALUES (
-               $1::bigint,
-               'open',
-               CURRENT_DATE,
-               $2::numeric,
-               $3::numeric,
-               $4::char(3),
-               $5::text,
-               $6::jsonb,
-               $7::bigint
-           )''',
-        position_id,
-        quantity,
-        amount_in_currency,
-        currency,
-        'Tinkoff: позиция восстановлена по текущему портфелю',
-        {'action': 'recovered_current_position', 'import_source': 'tinkoff'},
-        user_id,
     )
 
     return position_id
@@ -1003,11 +927,9 @@ async def _backfill_bond_clean_amount_from_portfolio(
 
     clean_amount_in_base = round(average_price * quantity, 2)
     await conn.execute(
-        """UPDATE budgeting.portfolio_positions
-           SET metadata = COALESCE(metadata, '{}'::jsonb)
-                          || jsonb_build_object('clean_amount_in_base', $2::numeric)
-           WHERE id = $1
-             AND COALESCE(metadata ->> 'clean_amount_in_base', '') = ''""",
+        '''SELECT budgeting.set__ensure_portfolio_position_clean_amount(
+            $1::bigint, $2::numeric
+        )''',
         position_id,
         clean_amount_in_base,
     )
@@ -1034,159 +956,23 @@ async def _record_unmatched_cash_only(
     comment: str,
     operation_type: str,
 ) -> None:
-    base_currency = await conn.fetchval(
-        'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
-        owner_type,
-        owner_user_id,
-        owner_family_id,
-    )
-    normalized_base_currency = str(base_currency or '').upper()
-    normalized_currency = currency.upper()
-    signed_cost_in_base = round(signed_amount, 2)
-    fx_consumptions: list[tuple[int, Decimal, Decimal]] = []
-
-    if normalized_base_currency != normalized_currency:
-        abs_amount = abs(signed_amount)
-        if signed_amount > 0:
-            signed_cost_in_base = round(signed_amount, 2)
-        else:
-            balance_row = await conn.fetchrow(
-                '''SELECT COALESCE(amount, 0) AS amount
-                   FROM budgeting.current_bank_balances
-                   WHERE bank_account_id = $1 AND currency_code = $2''',
-                linked_account_id,
-                normalized_currency,
-            )
-            current_balance = Decimal(str(balance_row['amount'])) if balance_row else Decimal('0')
-            if current_balance < abs_amount:
-                raise ValueError(
-                    f'Cannot record unmatched Tinkoff cash outflow of {abs_amount} {normalized_currency}: '
-                    'insufficient balance on investment account'
-                )
-
-            remaining_to_consume = abs_amount
-            consumed_cost_base = Decimal('0')
-            lot_rows = await conn.fetch(
-                '''SELECT id, amount_remaining, cost_base_remaining
-                   FROM budgeting.fx_lots
-                   WHERE bank_account_id = $1
-                     AND currency_code = $2
-                     AND amount_remaining > 0
-                   ORDER BY created_at, id''',
-                linked_account_id,
-                normalized_currency,
-            )
-
-            for lot_row in lot_rows:
-                if remaining_to_consume <= 0:
-                    break
-
-                lot_amount_remaining = Decimal(str(lot_row['amount_remaining']))
-                lot_cost_remaining = Decimal(str(lot_row['cost_base_remaining']))
-                consume_amount = min(remaining_to_consume, lot_amount_remaining)
-                if consume_amount == lot_amount_remaining:
-                    consume_cost = lot_cost_remaining
-                else:
-                    consume_cost = round(lot_cost_remaining * consume_amount / lot_amount_remaining, 2)
-
-                fx_consumptions.append((int(lot_row['id']), consume_amount, consume_cost))
-                consumed_cost_base += consume_cost
-                remaining_to_consume -= consume_amount
-
-            if remaining_to_consume > 0:
-                # Historical FX rates are unavailable from T-Bank cash-only movements,
-                # so the uncovered remainder falls back to the same 1:1 base-cost rule
-                # that we already use for imported broker inputs.
-                consumed_cost_base += round(remaining_to_consume, 2)
-
-            signed_cost_in_base = -consumed_cost_base
-
-    operation_id = await conn.fetchval(
-        '''INSERT INTO budgeting.operations (
-               actor_user_id,
-               owner_type,
-               owner_user_id,
-               owner_family_id,
-               type,
-               comment
-           )
-           VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id''',
+    await conn.execute(
+        '''SELECT budgeting.put__record_imported_cash_only(
+            $1::bigint, $2::text, $3::bigint, $4::bigint,
+            $5::bigint, $6::numeric, $7::char(3), $8::text,
+            'tinkoff', $9::text, $10::text
+        )''',
         user_id,
         owner_type,
         owner_user_id,
         owner_family_id,
-        operation_type,
-        comment,
-    )
-
-    await conn.execute(
-        '''INSERT INTO budgeting.bank_entries (
-               operation_id,
-               bank_account_id,
-               currency_code,
-               amount,
-               external_id,
-               import_source
-           )
-           VALUES ($1, $2, $3, $4, $5, 'tinkoff')''',
-        operation_id,
         linked_account_id,
-        currency,
         signed_amount,
+        currency,
         external_id,
+        comment,
+        operation_type,
     )
-
-    await conn.execute(
-        'SELECT budgeting.put__apply_current_bank_delta($1::bigint, $2::char(3), $3::numeric, $4::numeric)',
-        linked_account_id,
-        currency,
-        signed_amount,
-        signed_cost_in_base,
-    )
-
-    if normalized_base_currency != normalized_currency:
-        abs_amount = abs(signed_amount)
-        if signed_amount > 0:
-            positive_cost_in_base = round(abs_amount, 2)
-            await conn.execute(
-                '''INSERT INTO budgeting.fx_lots (
-                       bank_account_id,
-                       currency_code,
-                       amount_initial,
-                       amount_remaining,
-                       buy_rate_in_base,
-                       cost_base_initial,
-                       cost_base_remaining,
-                       opened_by_operation_id
-                   )
-                   VALUES ($1, $2, $3, $3, $4, $5, $5, $6)''',
-                linked_account_id,
-                normalized_currency,
-                abs_amount,
-                positive_cost_in_base / abs_amount,
-                positive_cost_in_base,
-                operation_id,
-            )
-        else:
-            for lot_id, consume_amount, consume_cost in fx_consumptions:
-                await conn.execute(
-                    '''UPDATE budgeting.fx_lots
-                       SET amount_remaining = amount_remaining - $2,
-                           cost_base_remaining = cost_base_remaining - $3
-                       WHERE id = $1''',
-                    lot_id,
-                    consume_amount,
-                    consume_cost,
-                )
-                await conn.execute(
-                    '''INSERT INTO budgeting.lot_consumptions (operation_id, lot_id, amount, cost_base)
-                       VALUES ($1, $2, $3, $4)''',
-                    operation_id,
-                    lot_id,
-                    consume_amount,
-                    consume_cost,
-                )
 
 
 async def _record_position_principal_repayment(
@@ -1200,173 +986,19 @@ async def _record_position_principal_repayment(
     external_id: str,
     comment: str,
 ) -> None:
-    row = await conn.fetchrow(
-        '''SELECT
-               owner_type,
-               owner_user_id,
-               owner_family_id,
-               status,
-               quantity,
-               amount_in_currency,
-               COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base,
-               (metadata ->> 'clean_amount_in_base')::numeric AS clean_amount_in_base,
-               COALESCE((metadata ->> 'returned_amount_in_base')::numeric, 0) AS returned_amount_in_base,
-               investment_account_id,
-               title
-           FROM budgeting.portfolio_positions
-           WHERE id = $1''',
-        position_id,
-    )
-    if row is None:
-        raise ValueError(f'Unknown portfolio position {position_id}')
-
-    if row['status'] != 'open':
-        raise ValueError(f'Portfolio position {position_id} must be open for bond repayment')
-
-    current_amount_in_currency = Decimal(str(row['amount_in_currency'] or 0))
-    current_amount_in_base = Decimal(str(row['amount_in_base'] or 0))
-    current_clean_amount_in_base = (
-        Decimal(str(row['clean_amount_in_base']))
-        if row['clean_amount_in_base'] is not None
-        else None
-    )
-    current_returned_amount_in_base = Decimal(str(row['returned_amount_in_base'] or 0))
-    if principal_reduction_in_currency <= 0 or principal_reduction_in_currency >= current_amount_in_currency:
-        raise ValueError(
-            'Bond repayment must leave a positive remaining principal; use full repayment for final close'
-        )
-
-    owner_type = str(row['owner_type'])
-    owner_user_id = row['owner_user_id']
-    owner_family_id = row['owner_family_id']
-    investment_account_id = int(row['investment_account_id'])
-    title = str(row['title'] or '')
-
-    base_currency = await conn.fetchval(
-        'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
-        owner_type,
-        owner_user_id,
-        owner_family_id,
-    )
-    if str(base_currency or '').upper() != currency.upper():
-        raise ValueError('Non-base currency bond repayment is not supported yet')
-
-    effective_return_amount_in_base = round(return_amount_in_currency, 2)
-    released_principal_in_base = round(
-        current_amount_in_base * principal_reduction_in_currency / current_amount_in_currency,
-        2,
-    )
-    remaining_amount_in_base = current_amount_in_base - released_principal_in_base
-    remaining_clean_amount_in_base = None
-    if current_clean_amount_in_base is not None:
-        released_clean_principal_in_base = round(
-            current_clean_amount_in_base * principal_reduction_in_currency / current_amount_in_currency,
-            2,
-        )
-        remaining_clean_amount_in_base = current_clean_amount_in_base - released_clean_principal_in_base
-    next_returned_amount_in_base = current_returned_amount_in_base + effective_return_amount_in_base
-
-    operation_id = await conn.fetchval(
-        '''INSERT INTO budgeting.operations (
-               actor_user_id,
-               owner_type,
-               owner_user_id,
-               owner_family_id,
-               type,
-               comment
-           )
-           VALUES ($1, $2, $3, $4, 'investment_adjustment', $5)
-           RETURNING id''',
+    await conn.execute(
+        '''SELECT budgeting.put__record_bond_principal_repayment(
+            $1::bigint, $2::bigint, $3::numeric, $4::char(3),
+            $5::numeric, $6::date, $7::text, 'tinkoff', $8::text
+        )''',
         user_id,
-        owner_type,
-        owner_user_id,
-        owner_family_id,
-        comment or f'Погашение облигации · {title}',
-    )
-
-    await conn.execute(
-        '''INSERT INTO budgeting.bank_entries (
-               operation_id,
-               bank_account_id,
-               currency_code,
-               amount,
-               external_id,
-               import_source
-           )
-           VALUES ($1, $2, $3, $4, $5, 'tinkoff')''',
-        operation_id,
-        investment_account_id,
-        currency,
-        return_amount_in_currency,
-        external_id,
-    )
-
-    await conn.execute(
-        'SELECT budgeting.put__apply_current_bank_delta($1::bigint, $2::char(3), $3::numeric, $4::numeric)',
-        investment_account_id,
-        currency,
-        return_amount_in_currency,
-        released_principal_in_base,
-    )
-
-    await conn.execute(
-        '''UPDATE budgeting.portfolio_positions
-           SET amount_in_currency = amount_in_currency - $2::numeric,
-               metadata = COALESCE(metadata, '{}'::jsonb)
-                          || jsonb_build_object(
-                              'amount_in_base', $3::numeric,
-                              'returned_amount_in_base', $4::numeric
-                          )
-                          || CASE
-                               WHEN $5::numeric IS NULL THEN '{}'::jsonb
-                               ELSE jsonb_build_object('clean_amount_in_base', $5::numeric)
-                             END
-           WHERE id = $1''',
         position_id,
+        return_amount_in_currency,
+        currency,
         principal_reduction_in_currency,
-        remaining_amount_in_base,
-        next_returned_amount_in_base,
-        remaining_clean_amount_in_base,
-    )
-
-    await conn.execute(
-        '''INSERT INTO budgeting.portfolio_events (
-               position_id,
-               event_type,
-               event_at,
-               amount,
-               currency_code,
-               linked_operation_id,
-               comment,
-               metadata,
-               created_by_user_id
-           )
-           VALUES (
-               $1::bigint,
-               'adjustment',
-               $2::date,
-               $3::numeric,
-               $4::char(3),
-               $5::bigint,
-               $6::text,
-               jsonb_build_object(
-                   'action', 'bond_repayment',
-                   'amount_in_base', $7::numeric,
-                   'principal_amount_in_currency', $8::numeric,
-                   'principal_amount_in_base', $9::numeric
-               ),
-               $10::bigint
-           )''',
-        position_id,
         repaid_at,
-        return_amount_in_currency,
-        currency,
-        operation_id,
-        comment or f'Погашение облигации · {title}',
-        effective_return_amount_in_base,
-        principal_reduction_in_currency,
-        released_principal_in_base,
-        user_id,
+        external_id,
+        comment,
     )
 
 
@@ -1389,8 +1021,8 @@ class TinkoffSync:
     Stateless helper: preview (dry-run) and apply (write) Tinkoff operations.
     """
 
-    def __init__(self, pool: asyncpg.Pool):
-        self._pool = pool
+    def __init__(self, db: TinkoffStorage):
+        self._db = db
 
     # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -1642,7 +1274,8 @@ class TinkoffSync:
         skipped_count = 0
         reconciled_positions = 0
 
-        async with self._pool.acquire() as conn:
+        pool = await self._db._get_pool()
+        async with pool.acquire() as conn:
             async with conn.transaction():
                 for currency, amount in opening_cash_seeds.items():
                     await _record_unmatched_cash_only(
@@ -1736,7 +1369,7 @@ class TinkoffSync:
 
                 # Update last_synced_at
                 await conn.execute(
-                    'UPDATE budgeting.external_connections SET last_synced_at = now() WHERE id = $1',
+                    'SELECT budgeting.set__touch_external_connection_last_synced($1::bigint)',
                     connection_id,
                 )
 
@@ -1748,35 +1381,7 @@ class TinkoffSync:
         }
 
     async def get_live_position_prices(self, user_id: int) -> list[dict]:
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(
-                '''SELECT
-                       ec.id AS connection_id,
-                       ec.provider_account_id,
-                       ec.linked_account_id,
-                       ec.credentials,
-                       pp.id AS position_id,
-                       pp.title,
-                       pp.quantity,
-                       pp.currency_code,
-                       pp.metadata
-                   FROM budgeting.external_connections ec
-                   JOIN budgeting.portfolio_positions pp
-                     ON pp.investment_account_id = ec.linked_account_id
-                    AND pp.status = 'open'
-                   WHERE ec.provider = 'tinkoff'
-                     AND ec.is_active = true
-                     AND ec.linked_account_id IS NOT NULL
-                     AND (
-                       (ec.owner_type = 'user' AND ec.owner_user_id = $1)
-                       OR
-                       (ec.owner_type = 'family' AND ec.owner_family_id = (
-                           SELECT family_id FROM budgeting.family_members WHERE user_id = $1 LIMIT 1
-                       ))
-                     )
-                   ORDER BY ec.id, pp.id''',
-                user_id,
-            )
+        rows = await self._db.get__tinkoff_live_price_rows(user_id)
 
         if not rows:
             return []
@@ -1967,21 +1572,7 @@ class TinkoffSync:
     # ── DB helpers ───────────────────────────────────────────────────────────
 
     async def _get_connection(self, connection_id: int, user_id: int) -> dict:
-        async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                '''SELECT ec.*
-                   FROM budgeting.external_connections ec
-                   WHERE ec.id = $1
-                     AND ec.is_active = true
-                     AND (
-                       (ec.owner_type = 'user'   AND ec.owner_user_id = $2)
-                       OR
-                       (ec.owner_type = 'family' AND ec.owner_family_id = (
-                           SELECT family_id FROM budgeting.family_members WHERE user_id = $2 LIMIT 1
-                       ))
-                     )''',
-                connection_id, user_id,
-            )
+        row = await self._db.get__tinkoff_connection(user_id, connection_id)
         if row is None:
             raise ValueError(f'Connection {connection_id} not found or not accessible')
         return dict(row)
@@ -1990,18 +1581,7 @@ class TinkoffSync:
         if not raw_ops:
             return set()
         op_ids = [op['id'] for op in raw_ops]
-        async with self._pool.acquire() as conn:
-            pe_rows = await conn.fetch(
-                '''SELECT external_id FROM budgeting.portfolio_events
-                   WHERE import_source = 'tinkoff' AND external_id = ANY($1::text[])''',
-                op_ids,
-            )
-            be_rows = await conn.fetch(
-                '''SELECT external_id FROM budgeting.bank_entries
-                   WHERE import_source = 'tinkoff' AND external_id = ANY($1::text[])''',
-                op_ids,
-            )
-        return {r['external_id'] for r in pe_rows} | {r['external_id'] for r in be_rows}
+        return await self._db.get__tinkoff_imported_ids(op_ids)
 
     async def _resolve_instrument_map(
         self,
@@ -2057,16 +1637,13 @@ class TinkoffSync:
         instrument_meta: Optional[dict],
     ) -> Optional[int]:
         meta = instrument_meta or {}
-        rows = await conn.fetch(
-            '''SELECT id, title, metadata
-               FROM budgeting.portfolio_positions
-               WHERE investment_account_id = $1
-                 AND status = 'open' ''',
+        rows = await self._db.get__open_portfolio_positions_for_account(
             linked_account_id,
+            connection=conn,
         )
 
         normalized_rows = [
-            (row['id'], row['title'], _normalize_metadata_object(row['metadata']))
+            (row['id'], row['title'], _normalize_metadata_object(row.get('metadata')))
             for row in rows
         ]
 
@@ -2163,6 +1740,7 @@ class TinkoffSync:
             if pos_id is None:
                 pos_id = await _recover_missing_current_position(
                     conn,
+                    self._db,
                     user_id,
                     owner_type,
                     owner_user_id,
@@ -2176,10 +1754,9 @@ class TinkoffSync:
                 continue
 
             await conn.execute(
-                '''UPDATE budgeting.portfolio_positions
-                   SET asset_type_code = 'security',
-                       quantity = $2::numeric
-                   WHERE id = $1''',
+                '''SELECT budgeting.set__reconcile_portfolio_position_quantity(
+                    $1::bigint, $2::numeric
+                )''',
                 pos_id,
                 quantity,
             )
@@ -2227,13 +1804,11 @@ class TinkoffSync:
             if source_account_id is None:
                 raise ValueError('source_account_id required for transfer resolution')
 
-            src_row = await conn.fetchrow(
-                '''SELECT COALESCE(amount, 0) AS amount
-                   FROM budgeting.current_bank_balances
-                   WHERE bank_account_id = $1 AND currency_code = $2''',
-                source_account_id, currency,
-            )
-            src_balance = Decimal(str(src_row['amount'])) if src_row else Decimal('0')
+            src_balance = Decimal(str(await self._db.get__current_bank_balance_amount(
+                source_account_id,
+                currency,
+                connection=conn,
+            )))
             if src_balance < abs_amount:
                 raise ValueError(
                     'Недостаточно денег на счёте-источнике для этого исторического перевода. '
@@ -2320,21 +1895,18 @@ class TinkoffSync:
             if operation_id is None:
                 raise ValueError('Transfer operation id was not returned')
 
-            await conn.execute(
-                '''UPDATE budgeting.bank_entries
-                   SET external_id = $1,
-                       import_source = 'tinkoff'
-                   WHERE operation_id = $2
-                     AND bank_account_id = $3
-                     AND currency_code = $4
-                     AND amount = -$5::numeric
-                     AND external_id IS NULL''',
-                tinkoff_op_id,
+            bank_entry_id = await conn.fetchval(
+                '''SELECT budgeting.set__mark_bank_entry_imported(
+                    $1::bigint, $2::bigint, $3::char(3), $4::numeric, $5::text, 'tinkoff'
+                )''',
                 operation_id,
                 linked_account_id,
                 currency,
-                abs_amount,
+                -abs_amount,
+                tinkoff_op_id,
             )
+            if bank_entry_id is None:
+                raise ValueError('Failed to mark imported transfer bank entry')
             return
 
         if resolution == 'already_recorded':
@@ -2363,13 +1935,11 @@ class TinkoffSync:
         required_amount: Decimal,
     ) -> None:
         """Validate that imported broker cash movements cover downstream trades."""
-        row = await conn.fetchrow(
-            '''SELECT COALESCE(amount, 0) AS amount
-               FROM budgeting.current_bank_balances
-               WHERE bank_account_id = $1 AND currency_code = $2''',
-            linked_account_id, currency,
-        )
-        current_balance = Decimal(str(row['amount'])) if row else Decimal('0')
+        current_balance = Decimal(str(await self._db.get__current_bank_balance_amount(
+            linked_account_id,
+            currency,
+            connection=conn,
+        )))
         if current_balance < required_amount:
             raise ValueError(
                 'Недостаточно средств на инвестиционном счёте для исторической операции из Тинькофф. '
@@ -2438,6 +2008,7 @@ class TinkoffSync:
 
             pos_id = await _recover_missing_current_position(
                 conn,
+                self._db,
                 user_id,
                 owner_type,
                 owner_user_id,
@@ -2488,14 +2059,12 @@ class TinkoffSync:
 
             if pos_id:
                 await conn.execute(
-                    '''UPDATE budgeting.portfolio_events
-                       SET external_id = $1, import_source = 'tinkoff'
-                       WHERE id = (
-                           SELECT id FROM budgeting.portfolio_events
-                           WHERE position_id = $2 AND event_type = $3 AND external_id IS NULL
-                           ORDER BY id DESC LIMIT 1
-                       )''',
-                    op_id, pos_id, event_type,
+                    '''SELECT budgeting.set__mark_portfolio_event_imported(
+                        $1::bigint, ARRAY[$2::varchar], $3::text, 'tinkoff'
+                    )''',
+                    pos_id,
+                    event_type,
+                    op_id,
                 )
                 await _refresh_position_metadata(conn, pos_id, instrument_meta)
 
@@ -2522,14 +2091,11 @@ class TinkoffSync:
                     user_id, pos_id, amount, currency, income_kind, op_date,
                 )
                 await conn.execute(
-                    '''UPDATE budgeting.portfolio_events
-                       SET external_id = $1, import_source = 'tinkoff'
-                       WHERE id = (
-                           SELECT id FROM budgeting.portfolio_events
-                           WHERE position_id = $2 AND event_type = 'income' AND external_id IS NULL
-                           ORDER BY id DESC LIMIT 1
-                        )''',
-                    op_id, pos_id,
+                    '''SELECT budgeting.set__mark_portfolio_event_imported(
+                        $1::bigint, ARRAY['income'::varchar], $2::text, 'tinkoff'
+                    )''',
+                    pos_id,
+                    op_id,
                 )
                 await _refresh_position_metadata(conn, pos_id, instrument_meta)
             else:
@@ -2559,11 +2125,9 @@ class TinkoffSync:
                 pos_id = await recover_current_position_if_needed()
             if pos_id:
                 await _refresh_position_metadata(conn, pos_id, instrument_meta)
-                pos_row = await conn.fetchrow(
-                    '''SELECT amount_in_currency
-                       FROM budgeting.portfolio_positions
-                       WHERE id = $1''',
+                pos_row = await self._db.get__portfolio_position_trade_context(
                     pos_id,
+                    connection=conn,
                 )
                 current_amount_in_currency = Decimal(str(pos_row['amount_in_currency'])) if pos_row else Decimal('0')
                 if amount >= current_amount_in_currency:
@@ -2580,15 +2144,11 @@ class TinkoffSync:
                         'Tinkoff: полное погашение облигации',
                     )
                     await conn.execute(
-                        '''UPDATE budgeting.portfolio_events
-                           SET external_id = $1, import_source = 'tinkoff'
-                           WHERE id = (
-                               SELECT id FROM budgeting.portfolio_events
-                               WHERE position_id = $2 AND event_type = 'close' AND external_id IS NULL
-                               ORDER BY id DESC LIMIT 1
-                           )''',
-                        op_id,
+                        '''SELECT budgeting.set__mark_portfolio_event_imported(
+                            $1::bigint, ARRAY['close'::varchar], $2::text, 'tinkoff'
+                        )''',
                         pos_id,
+                        op_id,
                     )
                 else:
                     await _record_position_principal_repayment(
@@ -2601,20 +2161,6 @@ class TinkoffSync:
                         op_date,
                         op_id,
                         'Tinkoff: частичное погашение облигации',
-                    )
-                    await conn.execute(
-                        '''UPDATE budgeting.portfolio_events
-                           SET external_id = $1, import_source = 'tinkoff'
-                           WHERE id = (
-                               SELECT id FROM budgeting.portfolio_events
-                               WHERE position_id = $2
-                                 AND event_type = 'adjustment'
-                                 AND COALESCE(metadata ->> 'action', '') = 'bond_repayment'
-                                 AND external_id IS NULL
-                               ORDER BY id DESC LIMIT 1
-                           )''',
-                        op_id,
-                        pos_id,
                     )
             else:
                 await _record_unmatched_cash_only(
@@ -2654,15 +2200,11 @@ class TinkoffSync:
                     'Tinkoff: полное погашение облигации',
                 )
                 await conn.execute(
-                    '''UPDATE budgeting.portfolio_events
-                       SET external_id = $1, import_source = 'tinkoff'
-                       WHERE id = (
-                           SELECT id FROM budgeting.portfolio_events
-                           WHERE position_id = $2 AND event_type = 'close' AND external_id IS NULL
-                           ORDER BY id DESC LIMIT 1
-                       )''',
-                    op_id,
+                    '''SELECT budgeting.set__mark_portfolio_event_imported(
+                        $1::bigint, ARRAY['close'::varchar], $2::text, 'tinkoff'
+                    )''',
                     pos_id,
+                    op_id,
                 )
             else:
                 await _record_unmatched_cash_only(
@@ -2719,14 +2261,11 @@ class TinkoffSync:
                     user_id, pos_id, amount, currency, op_date,
                 )
                 await conn.execute(
-                    '''UPDATE budgeting.portfolio_events
-                       SET external_id = $1, import_source = 'tinkoff'
-                       WHERE id = (
-                           SELECT id FROM budgeting.portfolio_events
-                           WHERE position_id = $2 AND event_type = 'fee' AND external_id IS NULL
-                           ORDER BY id DESC LIMIT 1
-                        )''',
-                    op_id, pos_id,
+                    '''SELECT budgeting.set__mark_portfolio_event_imported(
+                        $1::bigint, ARRAY['fee'::varchar], $2::text, 'tinkoff'
+                    )''',
+                    pos_id,
+                    op_id,
                 )
             else:
                 await _record_unmatched_cash_only(
@@ -2753,14 +2292,9 @@ class TinkoffSync:
             pos_id = await self._find_position(conn, linked_account_id, instrument_meta)
             if pos_id:
                 await _refresh_position_metadata(conn, pos_id, instrument_meta)
-                pos_row = await conn.fetchrow(
-                    '''SELECT quantity,
-                              amount_in_currency,
-                              COALESCE((metadata ->> 'amount_in_base')::numeric, 0) AS amount_in_base,
-                              (metadata ->> 'clean_amount_in_base')::numeric AS clean_amount_in_base
-                       FROM budgeting.portfolio_positions
-                       WHERE id = $1''',
+                pos_row = await self._db.get__portfolio_position_trade_context(
                     pos_id,
+                    connection=conn,
                 )
                 current_quantity = None
                 current_amount_in_currency = None
@@ -2775,11 +2309,11 @@ class TinkoffSync:
                 if pos_row is not None and pos_row['clean_amount_in_base'] is not None:
                     current_clean_amount_in_base = Decimal(str(pos_row['clean_amount_in_base']))
 
-                base_currency = await conn.fetchval(
-                    'SELECT budgeting.get__owner_base_currency($1::text, $2::bigint, $3::bigint)',
+                base_currency = await self._db.get__owner_base_currency(
                     owner_type,
                     owner_user_id,
                     owner_family_id,
+                    connection=conn,
                 )
                 close_amount_in_base: Optional[Decimal] = None
                 if (
@@ -2853,29 +2387,23 @@ class TinkoffSync:
                             2,
                         )
                         await conn.execute(
-                            '''UPDATE budgeting.portfolio_positions
-                               SET metadata = COALESCE(metadata, '{}'::jsonb)
-                                              || jsonb_build_object(
-                                                  'clean_amount_in_base',
-                                                  $2::numeric
-                                              )
-                               WHERE id = $1''',
+                            '''SELECT budgeting.set__merge_portfolio_position_metadata(
+                                $1::bigint,
+                                NULL::text,
+                                jsonb_build_object('clean_amount_in_base', $2::numeric)
+                            )''',
                             pos_id,
                             current_clean_amount_in_base - released_clean_principal_in_base,
                         )
                     event_types = ('partial_close', 'close')
 
                 await conn.execute(
-                    '''UPDATE budgeting.portfolio_events
-                       SET external_id = $1, import_source = 'tinkoff'
-                       WHERE id = (
-                           SELECT id FROM budgeting.portfolio_events
-                           WHERE position_id = $2
-                             AND event_type = ANY($3::varchar[])
-                             AND external_id IS NULL
-                           ORDER BY id DESC LIMIT 1
-                        )''',
-                    op_id, pos_id, list(event_types),
+                    '''SELECT budgeting.set__mark_portfolio_event_imported(
+                        $1::bigint, $2::varchar[], $3::text, 'tinkoff'
+                    )''',
+                    pos_id,
+                    list(event_types),
+                    op_id,
                 )
             else:
                 await _record_unmatched_cash_only(
@@ -2904,8 +2432,8 @@ class TinkoffSync:
 
 class TinkoffConnections:
 
-    def __init__(self, pool: asyncpg.Pool):
-        self._pool = pool
+    def __init__(self, db: TinkoffStorage):
+        self._db = db
 
     async def get_accounts_from_token(self, token: str) -> list[dict]:
         client = TinkoffRestClient(token)
@@ -2920,27 +2448,7 @@ class TinkoffConnections:
         ]
 
     async def list_connections(self, user_id: int) -> list[dict]:
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(
-                '''SELECT ec.id, ec.provider, ec.provider_account_id,
-                          ec.linked_account_id, ec.last_synced_at, ec.is_active,
-                          ec.settings, ec.created_at,
-                          ba.name AS linked_account_name
-                   FROM budgeting.external_connections ec
-                   LEFT JOIN budgeting.bank_accounts ba ON ba.id = ec.linked_account_id
-                   WHERE ec.provider = 'tinkoff'
-                     AND (
-                       (ec.owner_type = 'user' AND ec.owner_user_id = $1)
-                       OR
-                       (ec.owner_type = 'family' AND ec.owner_family_id = (
-                           SELECT family_id FROM budgeting.family_members WHERE user_id = $1 LIMIT 1
-                       ))
-                     )
-                     AND ec.is_active = true
-                   ORDER BY ec.created_at''',
-                user_id,
-            )
-            return [dict(r) for r in rows]
+        return await self._db.get__tinkoff_connections(user_id)
 
     async def create_connection(
         self,
@@ -2949,51 +2457,14 @@ class TinkoffConnections:
         provider_account_id: str,
         linked_account_id: int,
     ) -> dict:
-        async with self._pool.acquire() as conn:
-            family_row = await conn.fetchrow(
-                'SELECT family_id FROM budgeting.family_members WHERE user_id = $1 LIMIT 1',
-                user_id,
-            )
-            if family_row:
-                owner_type      = 'family'
-                owner_user_id   = None
-                owner_family_id = family_row['family_id']
-            else:
-                owner_type      = 'user'
-                owner_user_id   = user_id
-                owner_family_id = None
-
-            credentials = {'token': token}
-            row = await conn.fetchrow(
-                '''INSERT INTO budgeting.external_connections
-                   (owner_type, owner_user_id, owner_family_id, provider,
-                    provider_account_id, linked_account_id, credentials)
-                   VALUES ($1, $2, $3, 'tinkoff', $4, $5, $6)
-                   ON CONFLICT (provider, provider_account_id, owner_user_id, owner_family_id)
-                   DO UPDATE SET
-                       credentials = EXCLUDED.credentials,
-                       linked_account_id = EXCLUDED.linked_account_id,
-                       is_active = true
-                   RETURNING id, provider_account_id, linked_account_id, created_at''',
-                owner_type, owner_user_id, owner_family_id,
-                provider_account_id, linked_account_id, credentials,
-            )
-            return dict(row)
+        return await self._db.put__upsert_tinkoff_connection(
+            user_id,
+            token,
+            provider_account_id,
+            linked_account_id,
+        )
 
     async def delete_connection(self, connection_id: int, user_id: int) -> None:
-        async with self._pool.acquire() as conn:
-            result = await conn.execute(
-                '''UPDATE budgeting.external_connections
-                   SET is_active = false
-                   WHERE id = $1
-                     AND (
-                       (owner_type = 'user' AND owner_user_id = $2)
-                       OR
-                       (owner_type = 'family' AND owner_family_id = (
-                           SELECT family_id FROM budgeting.family_members WHERE user_id = $2 LIMIT 1
-                       ))
-                     )''',
-                connection_id, user_id,
-            )
-            if result == 'UPDATE 0':
-                raise ValueError(f'Connection {connection_id} not found or not accessible')
+        deleted = await self._db.set__deactivate_tinkoff_connection(connection_id, user_id)
+        if not deleted:
+            raise ValueError(f'Connection {connection_id} not found or not accessible')

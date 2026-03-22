@@ -127,6 +127,17 @@ class DataBase:
         async with pool.acquire() as connection:
             return await connection.fetchval(query, *args)
 
+    async def call_function_with_connection(self, connection: asyncpg.Connection, func: str, *args):
+        """
+        Вызывает PostgreSQL-функцию в рамках уже открытого соединения/транзакции.
+        :param connection: Активное asyncpg-соединение.
+        :param func: Полное имя PostgreSQL-функции.
+        :param args: Позиционные аргументы функции.
+        :return: Первое поле первой возвращенной строки.
+        """
+        query = self._build_function_query(func, len(args))
+        return await connection.fetchval(query, *args)
+
     async def close(self) -> None:
         """
         Закрывает пул asyncpg-соединений.

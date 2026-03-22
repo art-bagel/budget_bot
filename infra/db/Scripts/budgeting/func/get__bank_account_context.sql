@@ -1,4 +1,4 @@
-DROP FUNCTION get__bank_account_context(bigint);
+DROP FUNCTION IF EXISTS budgeting.get__bank_account_context(bigint);
 CREATE OR REPLACE FUNCTION budgeting.get__bank_account_context(
     _bank_account_id bigint
 )

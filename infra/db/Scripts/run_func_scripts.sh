@@ -3,8 +3,15 @@ set -euo pipefail
 
 USERNAME="$POSTGRES_USER"
 DATABASE="$DB_DATABASE"
-DIRECTORY="/Scripts/budgeting/func"
-FILES=(
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [ -d "/Scripts/budgeting/func" ]; then
+    DIRECTORY="/Scripts/budgeting/func"
+else
+    DIRECTORY="$SCRIPT_DIR/budgeting/func"
+fi
+
+PRIORITY_FILES=(
     "get__user_family_id.sql"
     "has__owner_access.sql"
     "get__owner_base_currency.sql"
@@ -14,51 +21,29 @@ FILES=(
     "put__apply_current_bank_delta.sql"
     "put__apply_current_budget_delta.sql"
     "rebuild_current_balances.sql"
-    "put__register_user_context.sql"
-    "put__create_family.sql"
-    "put__invite_family_member.sql"
-    "put__create_category.sql"
-    "put__create_income_source.sql"
-    "put__record_fx_rate_snapshot.sql"
-    "put__record_income.sql"
-    "put__allocate_budget.sql"
-    "put__allocate_group_budget.sql"
-    "put__exchange_currency.sql"
-    "put__record_expense.sql"
-    "put__reverse_operation.sql"
-    "get__currencies.sql"
-    "get__bank_accounts.sql"
-    "get__my_family.sql"
-    "get__family_members.sql"
-    "get__family_invitations.sql"
-    "get__categories.sql"
-    "get__income_sources.sql"
-    "get__group_members.sql"
-    "get__category_parent_groups.sql"
-    "get__bank_snapshot.sql"
-    "get__budget_snapshot.sql"
-    "get__operations_history.sql"
-    "get__operations_analytics.sql"
-    "get__portfolio_valuation.sql"
-    "set__update_category.sql"
-    "set__archive_category.sql"
-    "set__respond_family_invitation.sql"
-    "set__replace_group_members.sql"
-    "set__leave_family.sql"
-    "set__dissolve_family.sql"
-    "set__delete_user_account.sql"
-    "get__scheduled_expenses_for_category.sql"
-    "get__due_scheduled_expenses.sql"
-    "get__category_account_currencies.sql"
-    "put__create_scheduled_expense.sql"
-    "put__delete_scheduled_expense.sql"
-    "put__advance_scheduled_expense.sql"
-    "get__income_source_pattern.sql"
-    "put__upsert_income_source_pattern.sql"
-    "put__delete_income_source_pattern.sql"
-    "put__record_income_split.sql"
 )
 
-for file_name in "${FILES[@]}"; do
-    psql -v ON_ERROR_STOP=1 -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
+is_priority_file() {
+    local candidate="$1"
+    local item
+    for item in "${PRIORITY_FILES[@]}"; do
+        if [ "$item" = "$candidate" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+for file_name in "${PRIORITY_FILES[@]}"; do
+    if [ -f "$DIRECTORY/$file_name" ]; then
+        psql -v ON_ERROR_STOP=1 -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
+    fi
 done
+
+while IFS= read -r file_path; do
+    file_name="$(basename "$file_path")"
+    if is_priority_file "$file_name"; then
+        continue
+    fi
+    psql -v ON_ERROR_STOP=1 -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
+done < <(find "$DIRECTORY" -maxdepth 1 -type f -name '*.sql' | sort)
