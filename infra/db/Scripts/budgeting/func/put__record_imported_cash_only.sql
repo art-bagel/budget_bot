@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__record_imported_cash_only(
     _external_id text,
     _import_source varchar(30),
     _comment text,
-    _operation_type text
+    _operation_type text,
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -99,7 +100,8 @@ BEGIN
         owner_user_id,
         owner_family_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -107,7 +109,8 @@ BEGIN
         _owner_user_id,
         _owner_family_id,
         _operation_type,
-        _comment
+        _comment,
+        COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id INTO _operation_id;
 

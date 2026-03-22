@@ -20,6 +20,7 @@ import {
 } from '../api';
 import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
 import TinkoffSyncDialog from '../components/TinkoffSyncDialog';
+import { IconAnalyticsDonut, IconClock } from '../components/Icons';
 import type {
   BankAccount,
   Currency,
@@ -34,6 +35,7 @@ import type {
 import { formatAmount } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
+import Operations from './Operations';
 
 
 type AccountWithBalances = {
@@ -112,6 +114,41 @@ type SecuritySection = {
   code: string;
   label: string;
   positions: PortfolioPosition[];
+};
+
+type PortfolioHubMode = 'operations' | 'analytics';
+
+type PortfolioAnalyticsBucket = {
+  key: string;
+  label: string;
+  estimatedValue: number;
+  investedPrincipal: number;
+  currentResult: number;
+  positionsCount: number;
+  share: number;
+};
+
+type PortfolioAnalyticsAccountItem = {
+  key: string;
+  accountName: string;
+  ownerLabel: string | null;
+  estimatedValue: number;
+  investedPrincipal: number;
+  cashValue: number;
+  resultValue: number;
+  positionsCount: number;
+};
+
+type PortfolioAnalyticsLeader = {
+  positionId: number;
+  title: string;
+  ticker: string | null;
+  accountName: string;
+  quantity: number | null | undefined;
+  estimatedValue: number;
+  currentResult: number | null;
+  logoUrl: string | null;
+  share: number;
 };
 
 const ASSET_TYPE_OPTIONS = [
@@ -312,6 +349,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
   const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
+  const [portfolioHubMode, setPortfolioHubMode] = useState<PortfolioHubMode | null>(null);
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
 
   const loadPortfolio = async () => {
@@ -1301,6 +1339,81 @@ export default function Portfolio({ user }: { user: UserContext }) {
     visibleOpenPositions,
   ]);
 
+  const portfolioAnalyticsBuckets = useMemo<PortfolioAnalyticsBucket[]>(() => {
+    if (activeAssetTypeCode !== 'security') {
+      return [];
+    }
+
+    const totalEstimated = visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+    const buckets = SECURITY_KIND_OPTIONS.map((option) => {
+      const sectionPositions = visibleOpenPositions.filter((position) => getSecurityKindCode(position) === option.value);
+      const estimatedValue = sectionPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+      const investedPrincipal = sectionPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
+      const currentResult = sectionPositions.reduce((sum, position) => sum + (getResolvedPositionCurrentResult(position) ?? 0), 0);
+      return {
+        key: option.value,
+        label: option.label,
+        estimatedValue,
+        investedPrincipal,
+        currentResult,
+        positionsCount: sectionPositions.length,
+        share: totalEstimated > 0 ? estimatedValue / totalEstimated : 0,
+      };
+    }).filter((bucket) => bucket.positionsCount > 0);
+
+    return buckets.sort((left, right) => right.estimatedValue - left.estimatedValue);
+  }, [activeAssetTypeCode, moexPrices, tinkoffLivePrices, visibleOpenPositions]);
+
+  const portfolioAnalyticsAccounts = useMemo<PortfolioAnalyticsAccountItem[]>(
+    () => visibleOpenPositionGroups.map((group) => {
+      const estimatedValue = group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+      const investedPrincipal = group.positions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
+      const resultValue = activeAssetTypeCode === 'security'
+        ? group.positions.reduce((sum, position) => sum + (getResolvedPositionCurrentResult(position) ?? 0), 0)
+        : group.positions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0);
+      return {
+        key: `${group.ownerType}:${group.accountId}`,
+        accountName: group.accountName,
+        ownerLabel: group.ownerType === 'family' ? 'Семейный счет' : 'Личный счет',
+        estimatedValue,
+        investedPrincipal,
+        cashValue: summaryByAccountId[group.accountId]?.cash_balance_in_base ?? 0,
+        resultValue,
+        positionsCount: group.positions.length,
+      };
+    }).sort((left, right) => right.estimatedValue - left.estimatedValue),
+    [activeAssetTypeCode, moexPrices, summaryByAccountId, tinkoffLivePrices, visibleOpenPositionGroups],
+  );
+
+  const portfolioAnalyticsLeaders = useMemo<PortfolioAnalyticsLeader[]>(() => {
+    const totalEstimated = visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+    return visibleOpenPositions
+      .map((position) => {
+        const logoName = getPositionMetadataText(position, 'logo_name');
+        return {
+          positionId: position.id,
+          title: position.title,
+          ticker: getPositionMetadataText(position, 'ticker'),
+          accountName: position.investment_account_name,
+          quantity: position.quantity,
+          estimatedValue: getResolvedPositionEstimatedValue(position),
+          currentResult: getResolvedPositionCurrentResult(position),
+          logoUrl: logoName ? getTinkoffInstrumentLogoUrl(logoName) : null,
+          share: totalEstimated > 0 ? getResolvedPositionEstimatedValue(position) / totalEstimated : 0,
+        };
+      })
+      .sort((left, right) => right.estimatedValue - left.estimatedValue)
+      .slice(0, 8);
+  }, [moexPrices, tinkoffLivePrices, visibleOpenPositions]);
+
+  const portfolioAnalyticsScopeLabel = useMemo(() => {
+    const assetLabel = activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode);
+    if (activeAccountTabKey === 'all' || !activeAccountTab) {
+      return assetLabel;
+    }
+    return `${assetLabel} · ${activeAccountTab.accountName}`;
+  }, [activeAccountTab, activeAccountTabKey, activeAssetTab, activeAssetTypeCode]);
+
   const hasMultipleOpenPositionOwners = useMemo(
     () => new Set(visibleOpenPositionGroups.map((group) => group.ownerType)).size > 1,
     [visibleOpenPositionGroups],
@@ -1457,6 +1570,28 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <span>Нераспределённый кэш</span>
             <strong>{formatAmount(totalInvestmentCashInBase, user.base_currency_code)}</strong>
           </div>
+        </div>
+        <div className="dashboard-bank-actions dashboard-bank-actions--2" onClick={(event) => event.stopPropagation()}>
+          <button
+            className="dashboard-bank-action dashboard-bank-action--lg"
+            type="button"
+            onClick={() => setPortfolioHubMode('operations')}
+          >
+            <span className="dashboard-bank-action__icon">
+              <IconClock />
+            </span>
+            <span className="dashboard-bank-action__label">Операции</span>
+          </button>
+          <button
+            className="dashboard-bank-action dashboard-bank-action--lg"
+            type="button"
+            onClick={() => setPortfolioHubMode('analytics')}
+          >
+            <span className="dashboard-bank-action__icon">
+              <IconAnalyticsDonut />
+            </span>
+            <span className="dashboard-bank-action__label">Аналитика</span>
+          </button>
         </div>
       </article>
 
@@ -2405,6 +2540,196 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
             <div className="modal-actions">
               <button className="btn" type="button" onClick={() => setShowAccountsModal(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {portfolioHubMode && (
+        <div className="modal-backdrop" onClick={() => setPortfolioHubMode(null)}>
+          <div className="modal-card modal-card--wide" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div className="section__header">
+                <div>
+                  <div className="section__eyebrow">Портфель</div>
+                  <h2 className="section__title">
+                    {portfolioHubMode === 'operations' ? 'Инвестиционные операции' : 'Аналитика по активам'}
+                  </h2>
+                </div>
+              </div>
+            </div>
+            <div className="modal-body">
+              {portfolioHubMode === 'operations' ? (
+                <Operations
+                  user={user}
+                  embedded
+                  initialViewMode="investment"
+                  allowedModes={['investment']}
+                />
+              ) : (
+                <div className="portfolio-analytics-view">
+                  <div className="portfolio-analytics-hero">
+                    <div>
+                      <div className="section__eyebrow">Срез</div>
+                      <h3 className="section__title">{portfolioAnalyticsScopeLabel}</h3>
+                    </div>
+                    <p className="list-row__sub">
+                      Текущая структура портфеля по открытым позициям и свободному остатку на выбранных счетах.
+                    </p>
+                    <div className="portfolio-analytics-summary">
+                      <div className="portfolio-analytics-metric">
+                        <span className="portfolio-analytics-metric__label">Оценочная стоимость</span>
+                        <strong className="portfolio-analytics-metric__value">
+                          {formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
+                        </strong>
+                      </div>
+                      <div className="portfolio-analytics-metric">
+                        <span className="portfolio-analytics-metric__label">Вложено</span>
+                        <strong className="portfolio-analytics-metric__value">
+                          {formatAmount(activeScopeDisplayMetrics.investedPrincipal, user.base_currency_code)}
+                        </strong>
+                      </div>
+                      <div className="portfolio-analytics-metric">
+                        <span className="portfolio-analytics-metric__label">Остаток</span>
+                        <strong className="portfolio-analytics-metric__value">
+                          {formatAmount(activeScopeDisplayMetrics.cashValue, user.base_currency_code)}
+                        </strong>
+                      </div>
+                      <div className="portfolio-analytics-metric">
+                        <span className="portfolio-analytics-metric__label">{activeScopeDisplayMetrics.resultLabel}</span>
+                        <strong className={`portfolio-analytics-metric__value${activeScopeDisplayMetrics.resultValue >= 0 ? ' portfolio-analytics-metric__value--pos' : ' portfolio-analytics-metric__value--neg'}`}>
+                          {formatAmount(activeScopeDisplayMetrics.resultValue, user.base_currency_code)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {portfolioAnalyticsBuckets.length > 0 && (
+                    <section className="portfolio-analytics-section">
+                      <div className="portfolio-analytics-section__head">
+                        <div>
+                          <div className="section__eyebrow">Активы</div>
+                          <h3 className="section__title">Структура по типам бумаг</h3>
+                        </div>
+                      </div>
+                      <div className="portfolio-analytics-stack">
+                        {portfolioAnalyticsBuckets.map((bucket) => (
+                          <div key={bucket.key} className="portfolio-analytics-row">
+                            <div className="portfolio-analytics-row__top">
+                              <div>
+                                <div className="portfolio-analytics-row__title">{bucket.label}</div>
+                                <div className="portfolio-analytics-row__meta">
+                                  {bucket.positionsCount} поз. · Вложено {formatAmount(bucket.investedPrincipal, user.base_currency_code)}
+                                </div>
+                              </div>
+                              <div className="portfolio-analytics-row__side">
+                                <strong>{formatAmount(bucket.estimatedValue, user.base_currency_code)}</strong>
+                                <span className={bucket.currentResult >= 0 ? 'portfolio-analytics-row__result portfolio-analytics-row__result--pos' : 'portfolio-analytics-row__result portfolio-analytics-row__result--neg'}>
+                                  {formatAmount(bucket.currentResult, user.base_currency_code)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="portfolio-analytics-row__bar">
+                              <span style={{ width: `${Math.max(bucket.share * 100, bucket.share > 0 ? 6 : 0)}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  <section className="portfolio-analytics-section">
+                    <div className="portfolio-analytics-section__head">
+                      <div>
+                        <div className="section__eyebrow">Счета</div>
+                        <h3 className="section__title">Сравнение по счетам</h3>
+                      </div>
+                    </div>
+                    <div className="portfolio-analytics-stack">
+                      {portfolioAnalyticsAccounts.map((account) => (
+                        <div key={account.key} className="portfolio-analytics-row">
+                          <div className="portfolio-analytics-row__top">
+                            <div>
+                              <div className="portfolio-analytics-row__title">{account.accountName}</div>
+                              <div className="portfolio-analytics-row__meta">
+                                {account.ownerLabel} · {account.positionsCount} поз. · Остаток {formatAmount(account.cashValue, user.base_currency_code)}
+                              </div>
+                            </div>
+                            <div className="portfolio-analytics-row__side">
+                              <strong>{formatAmount(account.estimatedValue, user.base_currency_code)}</strong>
+                              <span className={account.resultValue >= 0 ? 'portfolio-analytics-row__result portfolio-analytics-row__result--pos' : 'portfolio-analytics-row__result portfolio-analytics-row__result--neg'}>
+                                {formatAmount(account.resultValue, user.base_currency_code)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="portfolio-analytics-row__meta portfolio-analytics-row__meta--inline">
+                            Вложено {formatAmount(account.investedPrincipal, user.base_currency_code)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="portfolio-analytics-section">
+                    <div className="portfolio-analytics-section__head">
+                      <div>
+                        <div className="section__eyebrow">Активы</div>
+                        <h3 className="section__title">Крупнейшие позиции</h3>
+                      </div>
+                    </div>
+                    {portfolioAnalyticsLeaders.length > 0 ? (
+                      <div className="portfolio-analytics-leaders">
+                        {portfolioAnalyticsLeaders.map((item) => (
+                          <button
+                            key={item.positionId}
+                            type="button"
+                            className="portfolio-analytics-leader"
+                            onClick={() => {
+                              setPortfolioHubMode(null);
+                              void handleOpenPositionDetails(item.positionId);
+                            }}
+                          >
+                            <div className="portfolio-analytics-leader__identity">
+                              {item.logoUrl && (
+                                <img
+                                  className="instrument-logo instrument-logo--position"
+                                  src={item.logoUrl}
+                                  alt=""
+                                  loading="lazy"
+                                />
+                              )}
+                              <div>
+                                <div className="portfolio-analytics-leader__title">{item.title}</div>
+                                <div className="portfolio-analytics-leader__meta">
+                                  {item.accountName}
+                                  {item.quantity ? ` · ${item.quantity} шт.` : ''}
+                                  {item.ticker ? ` · ${item.ticker}` : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="portfolio-analytics-leader__side">
+                              <strong>{formatAmount(item.estimatedValue, user.base_currency_code)}</strong>
+                              <span>{(item.share * 100).toFixed(1)}%</span>
+                              {item.currentResult !== null && (
+                                <span className={item.currentResult >= 0 ? 'portfolio-analytics-row__result portfolio-analytics-row__result--pos' : 'portfolio-analytics-row__result portfolio-analytics-row__result--neg'}>
+                                  {formatAmount(item.currentResult, user.base_currency_code)}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="list-row__sub">Открытых позиций для анализа пока нет.</p>
+                    )}
+                  </section>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={() => setPortfolioHubMode(null)}>
                 Закрыть
               </button>
             </div>

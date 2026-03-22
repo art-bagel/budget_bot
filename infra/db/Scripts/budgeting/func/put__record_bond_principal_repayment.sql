@@ -7,7 +7,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__record_bond_principal_repayment(
     _repaid_at date,
     _external_id text,
     _import_source varchar(30),
-    _comment text DEFAULT NULL
+    _comment text DEFAULT NULL,
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -106,7 +107,8 @@ BEGIN
         owner_user_id,
         owner_family_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -114,7 +116,8 @@ BEGIN
         _owner_user_id,
         _owner_family_id,
         'investment_adjustment',
-        COALESCE(_comment, 'Погашение облигации · ' || _title)
+        COALESCE(_comment, 'Погашение облигации · ' || _title),
+        COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id INTO _operation_id;
 

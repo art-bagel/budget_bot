@@ -384,6 +384,14 @@ p { margin: 0; }
   margin-top: 16px;
 }
 
+.dashboard-bank-actions--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-bank-actions--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .dashboard-bank-action {
   display: flex;
   flex-direction: column;
@@ -1670,6 +1678,191 @@ p { margin: 0; }
   color: var(--text-secondary);
 }
 
+.portfolio-analytics-view {
+  display: grid;
+  gap: 16px;
+}
+
+.portfolio-analytics-hero {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--radius-m);
+  background:
+    radial-gradient(circle at top left, rgba(15, 120, 104, 0.14), transparent 46%),
+    var(--bg-inset);
+  border: 1px solid var(--border);
+}
+
+.portfolio-analytics-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.portfolio-analytics-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+
+.portfolio-analytics-metric__label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.portfolio-analytics-metric__value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.portfolio-analytics-metric__value--pos {
+  color: var(--tag-in-fg);
+}
+
+.portfolio-analytics-metric__value--neg {
+  color: var(--tag-out-fg);
+}
+
+.portfolio-analytics-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-m);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+}
+
+.portfolio-analytics-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portfolio-analytics-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.portfolio-analytics-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+
+.portfolio-analytics-row__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portfolio-analytics-row__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.portfolio-analytics-row__meta {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.portfolio-analytics-row__meta--inline {
+  margin-top: -2px;
+}
+
+.portfolio-analytics-row__side {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  text-align: right;
+  font-size: 0.82rem;
+}
+
+.portfolio-analytics-row__result {
+  font-weight: 600;
+}
+
+.portfolio-analytics-row__result--pos {
+  color: var(--tag-in-fg);
+}
+
+.portfolio-analytics-row__result--neg {
+  color: var(--tag-out-fg);
+}
+
+.portfolio-analytics-row__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-root);
+  overflow: hidden;
+}
+
+.portfolio-analytics-row__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #159784 0%, #2ec6b0 100%);
+}
+
+.portfolio-analytics-leaders {
+  display: grid;
+  gap: 10px;
+}
+
+.portfolio-analytics-leader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: inherit;
+  text-align: left;
+}
+
+.portfolio-analytics-leader__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.portfolio-analytics-leader__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.portfolio-analytics-leader__meta {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-analytics-leader__side {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  text-align: right;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
 .analytics-view {
   touch-action: pan-y;
 }
@@ -2503,6 +2696,22 @@ select.input option {
 
   .portfolio-position-grid {
     grid-template-columns: 1fr;
+  }
+
+  .portfolio-analytics-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-analytics-row__top,
+  .portfolio-analytics-leader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .portfolio-analytics-row__side,
+  .portfolio-analytics-leader__side {
+    justify-items: start;
+    text-align: left;
   }
 
   .portfolio-type-switcher__total {

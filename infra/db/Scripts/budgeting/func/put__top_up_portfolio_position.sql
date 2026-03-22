@@ -5,7 +5,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__top_up_portfolio_position(
     _currency_code char(3),
     _quantity numeric DEFAULT NULL,
     _topped_up_at date DEFAULT CURRENT_DATE,
-    _comment text DEFAULT NULL
+    _comment text DEFAULT NULL,
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -160,7 +161,8 @@ BEGIN
         owner_user_id,
         owner_family_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -168,7 +170,8 @@ BEGIN
         _owner_user_id,
         _owner_family_id,
         'investment_trade',
-        _operation_comment
+        _operation_comment,
+        COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id
     INTO _operation_id;

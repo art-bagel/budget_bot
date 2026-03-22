@@ -28,6 +28,7 @@ BEGIN
     IF _normalized_operation_type IS NOT NULL
        AND _normalized_operation_type NOT IN (
            'investment',
+           'banking',
            'income',
            'allocate',
            'group_allocate',
@@ -91,7 +92,18 @@ BEGIN
                     )
                 )
                 OR (
-                    _normalized_operation_type <> 'investment'
+                    _normalized_operation_type = 'banking'
+                    AND EXISTS (
+                        SELECT 1
+                        FROM bank_entries be_filter
+                        JOIN bank_accounts ba_filter
+                          ON ba_filter.id = be_filter.bank_account_id
+                        WHERE be_filter.operation_id = o.id
+                          AND ba_filter.account_kind <> 'investment'
+                    )
+                )
+                OR (
+                    _normalized_operation_type NOT IN ('investment', 'banking')
                     AND o.type = _normalized_operation_type
                 )
           )

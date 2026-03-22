@@ -80,10 +80,13 @@ type AnalyticsSegment = {
 };
 
 type AnalyticsPeriodMode = 'week' | 'month' | 'year';
+type OperationsHistoryScope = 'all' | 'banking';
 type OperationsProps = {
   user: UserContext;
   embedded?: boolean;
   initialViewMode?: OperationsViewMode;
+  allowedModes?: OperationsViewMode[];
+  historyScope?: OperationsHistoryScope;
 };
 
 
@@ -427,8 +430,18 @@ export default function Operations({
   user: _user,
   embedded = false,
   initialViewMode = 'history',
+  allowedModes,
+  historyScope = 'all',
 }: OperationsProps) {
-  const [viewMode, setViewMode] = useState<OperationsViewMode>(initialViewMode);
+  const resolvedAllowedModes = useMemo<OperationsViewMode[]>(
+    () => (allowedModes && allowedModes.length > 0 ? allowedModes : ['history', 'investment', 'analytics']),
+    [allowedModes],
+  );
+  const safeInitialViewMode = useMemo<OperationsViewMode>(
+    () => (resolvedAllowedModes.includes(initialViewMode) ? initialViewMode : resolvedAllowedModes[0] ?? 'history'),
+    [initialViewMode, resolvedAllowedModes],
+  );
+  const [viewMode, setViewMode] = useState<OperationsViewMode>(safeInitialViewMode);
 
   const [historyItems, setHistoryItems] = useState<OperationHistoryItem[]>([]);
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
@@ -462,6 +475,10 @@ export default function Operations({
     () => getPeriodSelectOptions(analyticsPeriodMode, analyticsAnchorDate),
     [analyticsPeriodMode, analyticsAnchorDate],
   );
+  const showHistoryTypeFilter = viewMode === 'history' && historyScope === 'all';
+  const showInvestmentTypeFilter = viewMode === 'investment';
+  const nonAnalyticsModes = resolvedAllowedModes.filter((mode) => mode !== 'analytics');
+  const showModeSwitch = viewMode !== 'analytics' && nonAnalyticsModes.length > 1;
 
   const getEffectiveHistoryType = (
     nextViewMode: OperationsViewMode = viewMode,
@@ -469,6 +486,10 @@ export default function Operations({
   ): string | undefined => {
     if (nextViewMode === 'investment') {
       return 'investment';
+    }
+
+    if (nextViewMode === 'history' && historyScope === 'banking') {
+      return 'banking';
     }
 
     if (nextViewMode === 'history' && nextHistoryTypeFilter) {
@@ -547,8 +568,8 @@ export default function Operations({
   }, [analyticsHasFamily, analyticsOwnerScope]);
 
   useEffect(() => {
-    setViewMode(initialViewMode);
-  }, [initialViewMode]);
+    setViewMode(safeInitialViewMode);
+  }, [safeInitialViewMode]);
 
   useEffect(() => {
     const el = periodSelectRef.current;
@@ -630,37 +651,34 @@ export default function Operations({
           </div>
         )}
         <div className={[embedded ? '' : 'panel', !embedded && viewMode === 'analytics' ? 'panel--analytics' : ''].filter(Boolean).join(' ')}>
-          {viewMode !== 'analytics' && <div className="operations-mode-switch">
-            <button
-              className={[
-                'operations-mode-switch__item',
-                viewMode === 'history' ? 'operations-mode-switch__item--active' : '',
-              ].filter(Boolean).join(' ')}
-              type="button"
-              onClick={() => setViewMode('history')}
-            >
-              История
-            </button>
-            <button
-              className={[
-                'operations-mode-switch__item',
-                viewMode === 'investment' ? 'operations-mode-switch__item--active' : '',
-              ].filter(Boolean).join(' ')}
-              type="button"
-              onClick={() => setViewMode('investment')}
-            >
-              Инвестиции
-            </button>
+          {showModeSwitch && <div className="operations-mode-switch">
+            {nonAnalyticsModes.map((mode) => (
+              <button
+                key={mode}
+                className={[
+                  'operations-mode-switch__item',
+                  viewMode === mode ? 'operations-mode-switch__item--active' : '',
+                ].filter(Boolean).join(' ')}
+                type="button"
+                onClick={() => setViewMode(mode)}
+              >
+                {mode === 'investment' ? 'Инвестиции' : 'История'}
+              </button>
+            ))}
           </div>}
 
           {viewMode !== 'analytics' ? (
             <>
               <div className="section__header">
                 <h3 className="section__title">
-                  {viewMode === 'investment' ? 'Инвестиционные операции' : 'История операций'}
+                  {viewMode === 'investment'
+                    ? 'Инвестиционные операции'
+                    : historyScope === 'banking'
+                      ? 'История по счетам'
+                      : 'История операций'}
                 </h3>
                 <div className="section__header-actions">
-                  {viewMode === 'history' ? (
+                  {showHistoryTypeFilter ? (
                     <select
                       className="input input--compact"
                       value={historyTypeFilter}
@@ -672,7 +690,7 @@ export default function Operations({
                     </option>
                   ))}
                 </select>
-                  ) : (
+                  ) : showInvestmentTypeFilter ? (
                     <div className="analytics-toolbar__row">
                       {INVESTMENT_HISTORY_FILTER_OPTIONS.map((option) => (
                         <button
@@ -689,7 +707,7 @@ export default function Operations({
                         </button>
                       ))}
                     </div>
-                  )}
+                  ) : null}
                   <span className="tag tag--neutral">{historyTotalCount} всего</span>
                 </div>
               </div>
@@ -697,6 +715,11 @@ export default function Operations({
               {viewMode === 'investment' && (
                 <p className="list-row__sub" style={{ marginBottom: 12 }}>
                   Здесь собраны сделки по позициям, доход по инвестициям и переводы между обычными и investment-счетами.
+                </p>
+              )}
+              {viewMode === 'history' && historyScope === 'banking' && (
+                <p className="list-row__sub" style={{ marginBottom: 12 }}>
+                  Здесь только движения по личным и семейным счетам без инвестиционных операций.
                 </p>
               )}
 

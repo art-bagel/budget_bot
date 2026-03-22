@@ -4,7 +4,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__record_portfolio_fee(
     _amount numeric,
     _currency_code char(3),
     _charged_at date DEFAULT CURRENT_DATE,
-    _comment text DEFAULT NULL
+    _comment text DEFAULT NULL,
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -153,7 +154,8 @@ BEGIN
         owner_user_id,
         owner_family_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -161,7 +163,8 @@ BEGIN
         _owner_user_id,
         _owner_family_id,
         'investment_adjustment',
-        _operation_comment
+        _operation_comment,
+        COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id
     INTO _operation_id;

@@ -955,12 +955,13 @@ async def _record_unmatched_cash_only(
     external_id: str,
     comment: str,
     operation_type: str,
+    operation_at: datetime,
 ) -> None:
     await conn.execute(
         '''SELECT budgeting.put__record_imported_cash_only(
             $1::bigint, $2::text, $3::bigint, $4::bigint,
             $5::bigint, $6::numeric, $7::char(3), $8::text,
-            'tinkoff', $9::text, $10::text
+            'tinkoff', $9::text, $10::text, $11::timestamptz
         )''',
         user_id,
         owner_type,
@@ -972,6 +973,7 @@ async def _record_unmatched_cash_only(
         external_id,
         comment,
         operation_type,
+        operation_at,
     )
 
 
@@ -985,11 +987,12 @@ async def _record_position_principal_repayment(
     repaid_at: date,
     external_id: str,
     comment: str,
+    operation_at: datetime,
 ) -> None:
     await conn.execute(
         '''SELECT budgeting.put__record_bond_principal_repayment(
             $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-            $5::numeric, $6::date, $7::text, 'tinkoff', $8::text
+            $5::numeric, $6::date, $7::text, 'tinkoff', $8::text, $9::timestamptz
         )''',
         user_id,
         position_id,
@@ -999,6 +1002,7 @@ async def _record_position_principal_repayment(
         repaid_at,
         external_id,
         comment,
+        operation_at,
     )
 
 
@@ -1290,6 +1294,7 @@ class TinkoffSync:
                         f'tinkoff-opening-seed:{tinkoff_account_id}:{currency}',
                         'Tinkoff: начальный остаток, отсутствующий в истории API',
                         'investment_adjustment',
+                        since,
                     )
                     logger.info(
                         'Recorded inferred opening T-Bank cash seed for account %s (%s %s)',
@@ -1310,6 +1315,7 @@ class TinkoffSync:
                     mapped = _map_operation(op)
                     payment = _money_value_to_decimal(op.get('payment', {}))
                     currency = _op_currency(op)
+                    op_at = _op_datetime(op)
                     if not currency:
                         continue
 
@@ -1321,7 +1327,7 @@ class TinkoffSync:
 
                         await self._apply_deposit_resolution(
                             conn, user_id, owner_type, owner_user_id, owner_family_id,
-                            linked_account_id, op_id, payment, currency, kind, source_account_id,
+                            linked_account_id, op_id, payment, currency, op_at, kind, source_account_id,
                         )
                         applied_count += 1
                         continue
@@ -1333,7 +1339,7 @@ class TinkoffSync:
 
                         await self._apply_withdrawal_resolution(
                             conn, user_id, owner_type, owner_user_id, owner_family_id,
-                            linked_account_id, op_id, payment, currency, kind, target_account_id,
+                            linked_account_id, op_id, payment, currency, op_at, kind, target_account_id,
                         )
                         applied_count += 1
                         continue
@@ -1783,6 +1789,7 @@ class TinkoffSync:
         tinkoff_op_id: str,
         amount: Decimal,
         currency: str,
+        operation_at: datetime,
         resolution: str,
         source_account_id: Optional[int],
     ) -> None:
@@ -1793,11 +1800,11 @@ class TinkoffSync:
                 '''SELECT budgeting.put__record_broker_input(
                     $1::bigint, $2::text, $3::bigint, $4::bigint,
                     $5::bigint, $6::char(3), $7::numeric,
-                    $8::text, $9::varchar(30), $10::text
+                    $8::text, $9::varchar(30), $10::text, $11::timestamptz
                 )''',
                 user_id, owner_type, owner_user_id, owner_family_id,
                 linked_account_id, currency, abs_amount,
-                tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение счёта',
+                tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение счёта', operation_at,
             )
 
         elif resolution == 'transfer':
@@ -1819,11 +1826,11 @@ class TinkoffSync:
                 '''SELECT budgeting.put__record_broker_transfer_in(
                     $1::bigint, $2::text, $3::bigint, $4::bigint,
                     $5::bigint, $6::bigint, $7::char(3), $8::numeric,
-                    $9::text, $10::varchar(30), $11::text
+                    $9::text, $10::varchar(30), $11::text, $12::timestamptz
                 )''',
                 user_id, owner_type, owner_user_id, owner_family_id,
                 source_account_id, linked_account_id, currency, abs_amount,
-                tinkoff_op_id, 'tinkoff', 'Tinkoff: перевод на брокерский счёт',
+                tinkoff_op_id, 'tinkoff', 'Tinkoff: перевод на брокерский счёт', operation_at,
             )
 
         elif resolution == 'already_recorded':
@@ -1832,11 +1839,11 @@ class TinkoffSync:
                 '''SELECT budgeting.put__record_broker_input(
                     $1::bigint, $2::text, $3::bigint, $4::bigint,
                     $5::bigint, $6::char(3), $7::numeric,
-                    $8::text, $9::varchar(30), $10::text
+                    $8::text, $9::varchar(30), $10::text, $11::timestamptz
                 )''',
                 user_id, owner_type, owner_user_id, owner_family_id,
                 linked_account_id, currency, 0,
-                tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение (уже учтено)',
+                tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение (уже учтено)', operation_at,
             )
         else:
             raise ValueError(f'Unsupported deposit resolution: {resolution}')
@@ -1852,6 +1859,7 @@ class TinkoffSync:
         tinkoff_op_id: str,
         amount: Decimal,
         currency: str,
+        operation_at: datetime,
         resolution: str,
         target_account_id: Optional[int],
     ) -> None:
@@ -1870,6 +1878,7 @@ class TinkoffSync:
                 tinkoff_op_id,
                 'Tinkoff: вывод со счёта',
                 'investment_adjustment',
+                operation_at,
             )
             return
 
@@ -1879,7 +1888,7 @@ class TinkoffSync:
 
             transfer_result = await conn.fetchval(
                 '''SELECT budgeting.put__transfer_between_accounts(
-                    $1::bigint, $2::bigint, $3::bigint, $4::char(3), $5::numeric, $6::text
+                    $1::bigint, $2::bigint, $3::bigint, $4::char(3), $5::numeric, $6::text, $7::timestamptz
                 )''',
                 user_id,
                 linked_account_id,
@@ -1887,6 +1896,7 @@ class TinkoffSync:
                 currency,
                 abs_amount,
                 'Tinkoff: вывод с брокерского счёта',
+                operation_at,
             )
 
             if isinstance(transfer_result, str):
@@ -1922,6 +1932,7 @@ class TinkoffSync:
                 tinkoff_op_id,
                 'Tinkoff: вывод (уже учтён)',
                 'investment_adjustment',
+                operation_at,
             )
             return
 
@@ -1968,7 +1979,8 @@ class TinkoffSync:
         currency = _op_currency(op)
         if not currency:
             return
-        op_date  = _op_date(op)
+        op_at    = _op_datetime(op)
+        op_date  = op_at.date()
         qty      = op.get('quantity')
         quantity = Decimal(str(qty)) if qty else None
         op_id    = op['id']
@@ -2038,11 +2050,11 @@ class TinkoffSync:
                     '''SELECT budgeting.put__create_portfolio_position(
                         $1::bigint, $2::bigint, $3::text, $4::text,
                         $5::numeric, $6::numeric, $7::char(3), $8::date,
-                        NULL::text, $9::jsonb
+                        NULL::text, $9::jsonb, $10::timestamptz
                     )''',
                     user_id, linked_account_id, 'security', instrument_title,
                     quantity, amount, currency, op_date,
-                    position_metadata,
+                    position_metadata, op_at,
                 )
                 data = json.loads(result) if isinstance(result, str) else result
                 pos_id = data.get('id') if data else None
@@ -2051,9 +2063,9 @@ class TinkoffSync:
                 await conn.execute(
                     '''SELECT budgeting.put__top_up_portfolio_position(
                         $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                        $5::numeric, $6::date
+                        $5::numeric, $6::date, NULL::text, $7::timestamptz
                     )''',
-                    user_id, pos_id, amount, currency, quantity, op_date,
+                    user_id, pos_id, amount, currency, quantity, op_date, op_at,
                 )
                 event_type = 'top_up'
 
@@ -2086,9 +2098,9 @@ class TinkoffSync:
                 await conn.execute(
                     '''SELECT budgeting.put__record_portfolio_income(
                         $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                        NULL::numeric, $5::text, $6::date
+                        NULL::numeric, $5::text, $6::date, NULL::text, $7::timestamptz
                     )''',
-                    user_id, pos_id, amount, currency, income_kind, op_date,
+                    user_id, pos_id, amount, currency, income_kind, op_date, op_at,
                 )
                 await conn.execute(
                     '''SELECT budgeting.set__mark_portfolio_event_imported(
@@ -2111,6 +2123,7 @@ class TinkoffSync:
                     op_id,
                     unmatched_comment,
                     'investment_income',
+                    op_at,
                 )
                 logger.warning(
                     'Recorded unmatched %s as cash-only import for %s (%s)',
@@ -2134,7 +2147,7 @@ class TinkoffSync:
                     await conn.execute(
                         '''SELECT budgeting.put__close_portfolio_position(
                             $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                            NULL::numeric, $5::date, $6::text
+                            NULL::numeric, $5::date, $6::text, $7::timestamptz
                         )''',
                         user_id,
                         pos_id,
@@ -2142,6 +2155,7 @@ class TinkoffSync:
                         currency,
                         op_date,
                         'Tinkoff: полное погашение облигации',
+                        op_at,
                     )
                     await conn.execute(
                         '''SELECT budgeting.set__mark_portfolio_event_imported(
@@ -2161,6 +2175,7 @@ class TinkoffSync:
                         op_date,
                         op_id,
                         'Tinkoff: частичное погашение облигации',
+                        op_at,
                     )
             else:
                 await _record_unmatched_cash_only(
@@ -2175,6 +2190,7 @@ class TinkoffSync:
                     op_id,
                     unmatched_comment,
                     'investment_adjustment',
+                    op_at,
                 )
                 logger.warning(
                     'Recorded unmatched %s as cash-only import for %s (%s)',
@@ -2190,7 +2206,7 @@ class TinkoffSync:
                 await conn.execute(
                     '''SELECT budgeting.put__close_portfolio_position(
                         $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                        NULL::numeric, $5::date, $6::text
+                        NULL::numeric, $5::date, $6::text, $7::timestamptz
                     )''',
                     user_id,
                     pos_id,
@@ -2198,6 +2214,7 @@ class TinkoffSync:
                     currency,
                     op_date,
                     'Tinkoff: полное погашение облигации',
+                    op_at,
                 )
                 await conn.execute(
                     '''SELECT budgeting.set__mark_portfolio_event_imported(
@@ -2219,6 +2236,7 @@ class TinkoffSync:
                     op_id,
                     unmatched_comment,
                     'investment_adjustment',
+                    op_at,
                 )
                 logger.warning(
                     'Recorded unmatched %s as cash-only import for %s (%s)',
@@ -2241,6 +2259,7 @@ class TinkoffSync:
                     op_id,
                     f'Tinkoff: возврат удержания · {instrument_title}' if instrument_title else 'Tinkoff: возврат удержания',
                     'investment_adjustment',
+                    op_at,
                 )
                 logger.warning(
                     'Recorded positive %s correction as cash-only import for %s (%s)',
@@ -2256,9 +2275,9 @@ class TinkoffSync:
                 await self._require_investment_balance(conn, linked_account_id, currency, amount)
                 await conn.execute(
                     '''SELECT budgeting.put__record_portfolio_fee(
-                        $1::bigint, $2::bigint, $3::numeric, $4::char(3), $5::date
+                        $1::bigint, $2::bigint, $3::numeric, $4::char(3), $5::date, NULL::text, $6::timestamptz
                     )''',
-                    user_id, pos_id, amount, currency, op_date,
+                    user_id, pos_id, amount, currency, op_date, op_at,
                 )
                 await conn.execute(
                     '''SELECT budgeting.set__mark_portfolio_event_imported(
@@ -2280,6 +2299,7 @@ class TinkoffSync:
                     op_id,
                     unmatched_comment,
                     'investment_adjustment',
+                    op_at,
                 )
                 logger.warning(
                     'Recorded unmatched %s as cash-only import for %s (%s)',
@@ -2353,9 +2373,9 @@ class TinkoffSync:
                     await conn.execute(
                         '''SELECT budgeting.put__close_portfolio_position(
                             $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                            $5::numeric, $6::date
+                            $5::numeric, $6::date, NULL::text, $7::timestamptz
                         )''',
-                        user_id, pos_id, amount, currency, close_amount_in_base, op_date,
+                        user_id, pos_id, amount, currency, close_amount_in_base, op_date, op_at,
                     )
                     event_types = ('close',)
                 else:
@@ -2364,7 +2384,7 @@ class TinkoffSync:
                         #            return_amount_in_base (NULL), closed_quantity, closed_at
                         '''SELECT budgeting.put__partial_close_portfolio_position(
                             $1::bigint, $2::bigint, $3::numeric, $4::char(3),
-                            $5::numeric, $6::numeric, $7::numeric, $8::date
+                            $5::numeric, $6::numeric, $7::numeric, $8::date, NULL::text, $9::timestamptz
                         )''',
                         user_id,
                         pos_id,
@@ -2374,6 +2394,7 @@ class TinkoffSync:
                         close_amount_in_base,
                         quantity,
                         op_date,
+                        op_at,
                     )
                     if (
                         current_clean_amount_in_base is not None
@@ -2418,6 +2439,7 @@ class TinkoffSync:
                     op_id,
                     unmatched_comment,
                     'investment_adjustment',
+                    op_at,
                 )
                 logger.warning(
                     'Recorded unmatched sell as cash-only import for %s (%s)',

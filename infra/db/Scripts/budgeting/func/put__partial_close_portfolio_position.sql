@@ -7,7 +7,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__partial_close_portfolio_position(
     _return_amount_in_base numeric DEFAULT NULL,
     _closed_quantity numeric DEFAULT NULL,
     _closed_at date DEFAULT CURRENT_DATE,
-    _comment text DEFAULT NULL
+    _comment text DEFAULT NULL,
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -154,7 +155,8 @@ BEGIN
         owner_user_id,
         owner_family_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -162,7 +164,8 @@ BEGIN
         _owner_user_id,
         _owner_family_id,
         'investment_trade',
-        _operation_comment
+        _operation_comment,
+        COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id
     INTO _operation_id;

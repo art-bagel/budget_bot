@@ -8,7 +8,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__record_broker_input(
     _amount                numeric,          -- 0 means "already recorded" marker
     _external_id           text             DEFAULT NULL,
     _import_source         varchar(30)      DEFAULT NULL,
-    _comment               text             DEFAULT NULL
+    _comment               text             DEFAULT NULL,
+    _operation_at          timestamptz      DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -40,9 +41,12 @@ BEGIN
     END IF;
 
     INSERT INTO operations (
-        actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment
+        actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at
     )
-    VALUES (_user_id, _owner_type, _owner_user_id, _owner_family_id, 'broker_input', _comment)
+    VALUES (
+        _user_id, _owner_type, _owner_user_id, _owner_family_id,
+        'broker_input', _comment, COALESCE(_operation_at, CURRENT_TIMESTAMP)
+    )
     RETURNING id INTO _operation_id;
 
     INSERT INTO bank_entries (

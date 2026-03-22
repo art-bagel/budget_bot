@@ -6,7 +6,8 @@ CREATE OR REPLACE FUNCTION budgeting.put__record_portfolio_income(
     _amount_in_base numeric DEFAULT NULL,
     _income_kind text DEFAULT NULL,
     _received_at date DEFAULT CURRENT_DATE,
-    _comment text DEFAULT NULL
+    _comment text DEFAULT NULL,
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -108,7 +109,8 @@ BEGIN
         owner_user_id,
         owner_family_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -116,7 +118,8 @@ BEGIN
         _owner_user_id,
         _owner_family_id,
         'investment_income',
-        _comment
+        _comment,
+        COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id
     INTO _operation_id;

@@ -1232,60 +1232,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     )}
                   </div>
                 )}
-
-                <div className="dashboard-budget-section">
-                  <div className="dashboard-budget-section__header">
-                    <div className="section__eyebrow">Инвестиции</div>
-                  </div>
-                  {investmentAccounts.length === 0 ? (
-                    <p className="list-row__sub">Инвестиционных счетов пока нет.</p>
-                  ) : (
-                    <div className="dashboard-budget-sections">
-                      {investmentAccounts.map((account) => {
-                        const balances = investmentBalancesByAccountId[account.id] ?? [];
-                        const summary = investmentSummaryByAccountId[account.id];
-                        return (
-                          <div className="dashboard-budget-section" key={`investment-${account.id}`}>
-                            <div className="dashboard-budget-section__header">
-                              <div className="section__title" style={{ fontSize: '1rem' }}>{account.name}</div>
-                              {(summary || balances.length > 0) ? (
-                                <span className="tag tag--neutral">
-                                  {formatAmount(getInvestmentAccountMarketTotal(account.id), overview.base_currency_code)}
-                                </span>
-                              ) : null}
-                            </div>
-                            {summary ? (
-                              <div className="list-row__sub" style={{ marginBottom: balances.length > 0 ? '0.5rem' : 0 }}>
-                                Свободно {formatAmount(summary.cash_balance_in_base, overview.base_currency_code)}
-                                {' · '}
-                                Вложено {formatAmount(summary.invested_principal_in_base, overview.base_currency_code)}
-                              </div>
-                            ) : null}
-                            {balances.length === 0 ? (
-                              <p className="list-row__sub">На этом счете пока нет валютных остатков.</p>
-                            ) : (
-                              <ul className="bank-detail-list">
-                                {balances.map((balance) => (
-                                  <li className="bank-detail-row" key={`investment-${account.id}-${balance.currency_code}`}>
-                                    <div className="bank-detail-row__main">
-                                      <span className="pill">{balance.currency_code}</span>
-                                      <strong className="bank-detail-row__amount">
-                                        {formatAmount(balance.amount, balance.currency_code)}
-                                      </strong>
-                                    </div>
-                                    <div className="bank-detail-row__sub">
-                                      Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
             <div className="modal-actions">
@@ -1304,9 +1250,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
               <div className="section__header">
                 <div>
                   <div className="section__eyebrow">Банк</div>
-                  <h2 className="section__title">
-                    {bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}
-                  </h2>
+                  <h2 className="section__title">{bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}</h2>
                 </div>
               </div>
             </div>
@@ -1315,6 +1259,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                 user={user}
                 embedded
                 initialViewMode={bankHubMode === 'analytics' ? 'analytics' : 'history'}
+                allowedModes={['history', 'analytics']}
+                historyScope="banking"
               />
             </div>
             <div className="modal-actions">
