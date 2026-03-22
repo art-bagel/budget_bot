@@ -1220,6 +1220,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [activeAccountTabKey, accountTabs],
   );
 
+  const hideEstimatedValueInStats = activeAssetTypeCode === 'security' && accountTabs.length > 1;
+
   const visibleOpenPositions = useMemo(
     () => (
       activeAccountTabKey === 'all'
@@ -1274,6 +1276,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       return {
         estimatedValue,
         investedPrincipal,
+        cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
         resultValue: currentResult,
         resultLabel: 'Текущий результат',
       };
@@ -1282,6 +1285,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     return {
       estimatedValue: visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
       investedPrincipal: visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
+      cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
       resultValue: visibleAssetPositions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
       resultLabel: 'Доход',
     };
@@ -1543,9 +1547,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </div>
           )}
 
-          {(activeScopeDisplayMetrics.estimatedValue > 0 || activeScopeDisplayMetrics.investedPrincipal > 0 || activeScopeDisplayMetrics.resultValue !== 0) && (
+          {(
+            (!hideEstimatedValueInStats && activeScopeDisplayMetrics.estimatedValue > 0)
+            || activeScopeDisplayMetrics.investedPrincipal > 0
+            || activeScopeDisplayMetrics.cashValue > 0
+            || activeScopeDisplayMetrics.resultValue !== 0
+          ) && (
             <div className="portfolio-type-stats">
-              {activeScopeDisplayMetrics.estimatedValue > 0 && (
+              {!hideEstimatedValueInStats && activeScopeDisplayMetrics.estimatedValue > 0 && (
                 <div className="portfolio-type-stats__row">
                   <span className="portfolio-type-stats__label">Оценочная стоимость</span>
                   <span className="portfolio-type-stats__value">
@@ -1558,6 +1567,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   <span className="portfolio-type-stats__label">Вложено</span>
                   <span className="portfolio-type-stats__value">
                     {formatAmount(activeScopeDisplayMetrics.investedPrincipal, user.base_currency_code)}
+                  </span>
+                </div>
+              )}
+              {activeScopeDisplayMetrics.cashValue > 0 && (
+                <div className="portfolio-type-stats__row">
+                  <span className="portfolio-type-stats__label">Остаток</span>
+                  <span className="portfolio-type-stats__value">
+                    {formatAmount(activeScopeDisplayMetrics.cashValue, user.base_currency_code)}
                   </span>
                 </div>
               )}
@@ -1646,10 +1663,28 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                       />
                                     )}
                                     <div className="portfolio-position-card__left">
-                                      {posTicker && (
-                                        <span className="portfolio-position-card__ticker">{posTicker}</span>
-                                      )}
                                       <div className="portfolio-position-card__title">{position.title}</div>
+                                      <div className="portfolio-position-card__sub-row">
+                                        {currentPrice !== null && position.quantity ? (
+                                          <span>
+                                            {quote.source === 'tinkoff'
+                                              ? formatAmount(currentPrice, position.currency_code)
+                                              : isBond
+                                              ? `${currentPrice.toFixed(2)}% от ном.`
+                                              : formatAmount(currentPrice, position.currency_code)}
+                                            {' · '}{position.quantity} шт.
+                                            {quote.source === 'moex' && moexPrice?.last === null && <span className="portfolio-position-card__price-hint"> посл. закр.</span>}
+                                          </span>
+                                        ) : (
+                                          <>
+                                            {position.quantity ? (
+                                              <span>{formatAmount(entryAmount / position.quantity, position.currency_code)} · {position.quantity} шт.</span>
+                                            ) : (
+                                              <span>{formatAmount(entryAmount, position.currency_code)}</span>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                   <div className="portfolio-position-card__right">
@@ -1665,27 +1700,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                       </div>
                                     )}
                                   </div>
-                                </div>
-                                <div className="portfolio-position-card__sub-row">
-                                  {currentPrice !== null && position.quantity ? (
-                                    <span>
-                                      {quote.source === 'tinkoff'
-                                        ? formatAmount(currentPrice, position.currency_code)
-                                        : isBond
-                                        ? `${currentPrice.toFixed(2)}% от ном.`
-                                        : formatAmount(currentPrice, position.currency_code)}
-                                      {' · '}{position.quantity} шт.
-                                      {quote.source === 'moex' && moexPrice?.last === null && <span className="portfolio-position-card__price-hint"> посл. закр.</span>}
-                                    </span>
-                                  ) : (
-                                    <>
-                                      {position.quantity ? (
-                                        <span>{formatAmount(entryAmount / position.quantity, position.currency_code)} · {position.quantity} шт.</span>
-                                      ) : (
-                                        <span>{formatAmount(entryAmount, position.currency_code)}</span>
-                                      )}
-                                    </>
-                                  )}
                                 </div>
                               </button>
                             );

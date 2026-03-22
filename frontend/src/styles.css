@@ -1146,8 +1146,8 @@ p { margin: 0; }
 
 .portfolio-type-stats {
   display: grid;
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .portfolio-type-stats__row {
@@ -1155,17 +1155,19 @@ p { margin: 0; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .portfolio-type-stats__label {
   color: var(--text-secondary);
+  font-size: 0.78rem;
   font-weight: 500;
 }
 
 .portfolio-type-stats__value {
-  color: var(--text-secondary);
-  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
   text-align: right;
 }
 
@@ -1320,7 +1322,7 @@ p { margin: 0; }
   color: var(--text-primary);
   border-radius: 18px;
   min-width: 160px;
-  padding: 12px 14px;
+  padding: 10px 13px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1344,26 +1346,26 @@ p { margin: 0; }
 
 .portfolio-account-tabs__copy {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .portfolio-account-tabs__name {
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 700;
   line-height: 1.2;
   color: var(--text-primary);
 }
 
 .portfolio-account-tabs__meta {
-  font-size: 0.75rem;
+  font-size: 0.71rem;
   color: var(--text-tertiary);
   line-height: 1.2;
 }
 
 .portfolio-account-tabs__value {
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.76rem;
+  font-weight: 650;
   color: var(--text-primary);
   line-height: 1.25;
 }
@@ -1525,6 +1527,10 @@ p { margin: 0; }
   font-size: 0.75rem;
   color: var(--text-secondary);
   margin-top: 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portfolio-position-card__pnl {
