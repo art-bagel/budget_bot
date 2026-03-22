@@ -1472,7 +1472,28 @@ p { margin: 0; }
   margin-bottom: 3px;
 }
 
+.instrument-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(82, 126, 142, 0.08);
+  flex-shrink: 0;
+}
+
+.instrument-logo--position {
+  margin-top: 2px;
+}
+
 /* New 2-column card layout */
+.portfolio-position-card__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
 .portfolio-position-card__left {
   flex: 1;
   min-width: 0;
@@ -2849,6 +2870,12 @@ select.input option {
   border-radius: 8px;
   background: var(--bg-inset);
   font-size: 0.82rem;
+}
+
+.instrument-logo--sync {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
 }
 
 .tinkoff-sync__auto-type {

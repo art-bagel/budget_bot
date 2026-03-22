@@ -61,6 +61,10 @@ import { getTelegramInitData, getTelegramUserId } from './telegram';
 
 const API_BASE = '/api/v1';
 
+export function getTinkoffInstrumentLogoUrl(logoName: string): string {
+  return `${API_BASE}/tinkoff/instrument-logo/${encodeURIComponent(logoName)}`;
+}
+
 function normalizeApiErrorMessage(rawText: string, status: number): string {
   const text = rawText.trim().replace(/^"(.*)"$/s, '$1');
 

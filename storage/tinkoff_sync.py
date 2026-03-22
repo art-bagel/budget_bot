@@ -550,6 +550,7 @@ def _operation_instrument_cache_key(op: dict) -> str:
 
 def _normalize_instrument_meta(op: dict, raw: Optional[dict] = None) -> dict:
     raw = raw or {}
+    brand_raw = raw.get('brand') if isinstance(raw.get('brand'), dict) else {}
 
     figi = _op_field(raw, 'figi') or _op_field(op, 'figi')
     instrument_uid = _op_field(raw, 'uid', 'instrumentUid', 'instrument_uid') or _op_field(op, 'instrumentUid', 'instrument_uid')
@@ -560,6 +561,7 @@ def _normalize_instrument_meta(op: dict, raw: Optional[dict] = None) -> dict:
     exchange = _op_field(raw, 'exchange', 'realExchange', 'real_exchange')
     instrument_type = _op_field(raw, 'instrumentType', 'instrument_type', 'instrumentKind', 'instrument_kind')
     name = _op_field(raw, 'name', 'shortName', 'short_name')
+    logo_name = _op_field(brand_raw, 'logoName', 'logo_name') or _op_field(raw, 'logoName', 'logo_name')
 
     if not name:
         name = ticker or figi or position_uid or instrument_uid
@@ -577,6 +579,7 @@ def _normalize_instrument_meta(op: dict, raw: Optional[dict] = None) -> dict:
         'exchange': exchange,
         'instrument_type': instrument_type.lower(),
         'name': name,
+        'logo_name': logo_name,
         'moex_market': moex_market,
         'security_kind': security_kind,
     }
@@ -679,6 +682,7 @@ async def _refresh_position_metadata(
             'ticker': instrument_meta.get('ticker', ''),
             'class_code': instrument_meta.get('class_code', ''),
             'exchange': instrument_meta.get('exchange', ''),
+            'logo_name': instrument_meta.get('logo_name', ''),
             'security_kind': instrument_meta.get('security_kind', ''),
             'moex_market': instrument_meta.get('moex_market', ''),
             'import_source': 'tinkoff',
@@ -828,6 +832,7 @@ async def _recover_missing_current_position(
             'ticker': instrument_meta.get('ticker', ''),
             'class_code': instrument_meta.get('class_code', ''),
             'exchange': instrument_meta.get('exchange', ''),
+            'logo_name': instrument_meta.get('logo_name', ''),
             'security_kind': instrument_meta.get('security_kind', ''),
             'moex_market': instrument_meta.get('moex_market', ''),
             'import_source': 'tinkoff',
@@ -1515,6 +1520,7 @@ class TinkoffSync:
                     'ticker': instrument_meta.get('ticker', ''),
                     'title': instrument_meta.get('name', ''),
                     'figi': instrument_meta.get('figi', mapped['figi']),
+                    'logo_name': instrument_meta.get('logo_name', ''),
                     'amount': float(abs(payment)),
                     'quantity': float(qty) if qty else None,
                     'currency_code': currency,
@@ -1963,10 +1969,6 @@ class TinkoffSync:
         semaphore = asyncio.Semaphore(6)
 
         async def resolve_one(cache_key: str, op: dict) -> tuple[str, dict]:
-            normalized = _normalize_instrument_meta(op)
-            if normalized.get('ticker') and normalized.get('class_code') and normalized.get('name'):
-                return cache_key, normalized
-
             raw_instrument: Optional[dict] = None
             resolution_attempts = [
                 ('INSTRUMENT_ID_TYPE_POSITION_UID', _op_field(op, 'positionUid', 'position_uid')),
@@ -2274,6 +2276,7 @@ class TinkoffSync:
             'ticker': instrument_meta.get('ticker', ''),
             'class_code': instrument_meta.get('class_code', ''),
             'exchange': instrument_meta.get('exchange', ''),
+            'logo_name': instrument_meta.get('logo_name', ''),
             'security_kind': instrument_meta.get('security_kind', 'stock'),
             'import_source': 'tinkoff',
         }

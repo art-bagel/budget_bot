@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { applyTinkoffSync, fetchBankAccounts, fetchBankAccountSnapshot, previewTinkoffSync } from '../api';
+import { applyTinkoffSync, fetchBankAccounts, fetchBankAccountSnapshot, getTinkoffInstrumentLogoUrl, previewTinkoffSync } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
   BankAccount,
@@ -371,6 +371,14 @@ export default function TinkoffSyncDialog({
                       .filter((o) => !o.already_imported)
                       .map((op) => (
                         <div key={op.tinkoff_op_id} className="tinkoff-sync__auto-item">
+                          {op.logo_name && (
+                            <img
+                              className="instrument-logo instrument-logo--sync"
+                              src={getTinkoffInstrumentLogoUrl(op.logo_name)}
+                              alt=""
+                              loading="lazy"
+                            />
+                          )}
                           <span className="tinkoff-sync__auto-type">{op.type}</span>
                           <span className="tinkoff-sync__auto-ticker">{op.ticker || op.title || op.figi}</span>
                           <span className="tinkoff-sync__auto-amount">

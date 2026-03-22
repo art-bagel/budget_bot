@@ -11,6 +11,7 @@ import {
   fetchPortfolioPositions,
   fetchPortfolioSummary,
   fetchTinkoffLivePrices,
+  getTinkoffInstrumentLogoUrl,
   getTinkoffConnections,
   partialClosePortfolioPosition,
   recordPortfolioFee,
@@ -468,6 +469,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
       return Number.isFinite(parsed) ? parsed : null;
     }
     return null;
+  };
+
+  const getPositionMetadataText = (position: PortfolioPosition, key: string): string | null => {
+    const value = position.metadata?.[key];
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized !== '' ? normalized : null;
   };
 
   const getPositionEntryAmount = (position: PortfolioPosition): number => {
@@ -1611,6 +1621,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             const currentPrice = quote.currentPrice;
                             const currentTotalValue = quote.currentTotalValue;
                             const entryAmount = getPositionEntryAmount(position);
+                            const logoName = getPositionMetadataText(position, 'logo_name');
+                            const logoUrl = logoName ? getTinkoffInstrumentLogoUrl(logoName) : null;
                             const unrealizedPnl = getResolvedPositionCurrentResult(position);
                             const pnlPercent = unrealizedPnl !== null && entryAmount > 0
                               ? (unrealizedPnl / entryAmount) * 100
@@ -1624,11 +1636,21 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 onClick={() => void handleOpenPositionDetails(position.id)}
                               >
                                 <div className="portfolio-position-card__head">
-                                  <div className="portfolio-position-card__left">
-                                    {posTicker && (
-                                      <span className="portfolio-position-card__ticker">{posTicker}</span>
+                                  <div className="portfolio-position-card__identity">
+                                    {logoUrl && (
+                                      <img
+                                        className="instrument-logo instrument-logo--position"
+                                        src={logoUrl}
+                                        alt=""
+                                        loading="lazy"
+                                      />
                                     )}
-                                    <div className="portfolio-position-card__title">{position.title}</div>
+                                    <div className="portfolio-position-card__left">
+                                      {posTicker && (
+                                        <span className="portfolio-position-card__ticker">{posTicker}</span>
+                                      )}
+                                      <div className="portfolio-position-card__title">{position.title}</div>
+                                    </div>
                                   </div>
                                   <div className="portfolio-position-card__right">
                                     <div className="portfolio-position-card__amount">

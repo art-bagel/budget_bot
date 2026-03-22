@@ -1,9 +1,14 @@
+import asyncio
 import json
 import logging
+import re
+from pathlib import Path
 from typing import List, Literal, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from starlette.responses import FileResponse
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app import storage as app_storage
@@ -11,6 +16,9 @@ from storage.tinkoff_sync import TinkoffConnections, TinkoffSync
 
 router = APIRouter(prefix='/api/v1/tinkoff', tags=['tinkoff'])
 logger = logging.getLogger(__name__)
+LOGO_CACHE_DIR = Path(__file__).resolve().parents[2] / '.cache' / 'tinkoff-logos'
+_logo_download_locks: dict[str, asyncio.Lock] = {}
+_LOGO_NAME_RE = re.compile(r'^(?P<base>[A-Za-z0-9._-]+?)(?:x160)?(?:\.png)?$')
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +78,50 @@ class TinkoffLivePrice(BaseModel):
 
 async def _get_pool():
     return await app_storage.context._get_pool()
+
+
+def _normalize_logo_name(value: str) -> str:
+    match = _LOGO_NAME_RE.fullmatch(value.strip())
+    if not match:
+        raise HTTPException(status_code=400, detail='Invalid logo name')
+    return match.group('base')
+
+
+def _logo_cache_path(logo_name: str) -> Path:
+    return LOGO_CACHE_DIR / f'{logo_name}x160.png'
+
+
+def _logo_download_lock(logo_name: str) -> asyncio.Lock:
+    lock = _logo_download_locks.get(logo_name)
+    if lock is None:
+        lock = asyncio.Lock()
+        _logo_download_locks[logo_name] = lock
+    return lock
+
+
+async def _ensure_logo_cached(logo_name: str) -> Path:
+    cache_path = _logo_cache_path(logo_name)
+    if cache_path.exists():
+        return cache_path
+
+    async with _logo_download_lock(logo_name):
+        if cache_path.exists():
+            return cache_path
+
+        LOGO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        url = f'https://invest-brands.cdn-tinkoff.ru/{logo_name}x160.png'
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            response = await client.get(url)
+
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail='Logo not found')
+        if not response.is_success:
+            raise HTTPException(status_code=502, detail='Failed to fetch instrument logo')
+
+        tmp_path = cache_path.with_suffix('.tmp')
+        tmp_path.write_bytes(response.content)
+        tmp_path.replace(cache_path)
+        return cache_path
 
 
 def _handle_tinkoff_error(exc: Exception) -> HTTPException:
@@ -231,3 +283,21 @@ async def get_tinkoff_live_prices(
         # so gracefully degrade to MOEX/cost basis when T-Bank is unavailable.
         logger.exception('Failed to resolve T-Bank live prices for user %s: %s', user.user_id, exc)
         return []
+
+
+@router.get('/instrument-logo/{logo_name}')
+async def get_tinkoff_instrument_logo(logo_name: str) -> FileResponse:
+    normalized_logo_name = _normalize_logo_name(logo_name)
+    try:
+        cache_path = await _ensure_logo_cached(normalized_logo_name)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception('Failed to cache T-Bank logo %s: %s', normalized_logo_name, exc)
+        raise HTTPException(status_code=502, detail='Failed to fetch instrument logo') from exc
+
+    return FileResponse(
+        cache_path,
+        media_type='image/png',
+        headers={'Cache-Control': 'public, max-age=2592000'},
+    )
