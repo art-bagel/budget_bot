@@ -28,6 +28,8 @@ interface ResolutionState {
   accountId: string;
 }
 
+type ManualTab = 'deposits' | 'withdrawals';
+
 
 export default function TinkoffSyncDialog({
   connectionId,
@@ -54,6 +56,11 @@ export default function TinkoffSyncDialog({
   const [investmentBalances, setInvestmentBalances] = useState<DashboardBankBalance[]>([]);
 
   const [applyResult, setApplyResult] = useState<{ applied: number; skipped: number } | null>(null);
+  const [showAllDeposits, setShowAllDeposits] = useState(false);
+  const [showAllWithdrawals, setShowAllWithdrawals] = useState(false);
+  const [showAllAutoOperations, setShowAllAutoOperations] = useState(false);
+  const [manualTab, setManualTab] = useState<ManualTab>('deposits');
+  const [applyWarning, setApplyWarning] = useState<string | null>(null);
 
   // Load preview + account balances on mount
   useEffect(() => {
@@ -88,6 +95,11 @@ export default function TinkoffSyncDialog({
         }
         setDepositStates(nextDepositStates);
         setWithdrawalStates(nextWithdrawalStates);
+        setShowAllDeposits(false);
+        setShowAllWithdrawals(false);
+        setShowAllAutoOperations(false);
+        setManualTab(previewData.deposits.some((d) => !d.already_imported) ? 'deposits' : 'withdrawals');
+        setApplyWarning(null);
 
         // Load balances for all cash accounts
         const balanceEntries = await Promise.all(
@@ -114,6 +126,7 @@ export default function TinkoffSyncDialog({
   }, [connectionId, investmentAccountId]);
 
   const setDepositResolution = (opId: string, resolution: DepositResolutionKind) => {
+    setApplyWarning(null);
     setDepositStates((prev) => ({
       ...prev,
       [opId]: { ...prev[opId], resolution, accountId: prev[opId]?.accountId ?? '' },
@@ -121,6 +134,7 @@ export default function TinkoffSyncDialog({
   };
 
   const setDepositSourceAccount = (opId: string, accountId: string) => {
+    setApplyWarning(null);
     setDepositStates((prev) => ({
       ...prev,
       [opId]: { ...prev[opId], accountId },
@@ -128,6 +142,7 @@ export default function TinkoffSyncDialog({
   };
 
   const setWithdrawalResolution = (opId: string, resolution: WithdrawalResolutionKind) => {
+    setApplyWarning(null);
     setWithdrawalStates((prev) => ({
       ...prev,
       [opId]: { ...prev[opId], resolution, accountId: prev[opId]?.accountId ?? '' },
@@ -135,6 +150,7 @@ export default function TinkoffSyncDialog({
   };
 
   const setWithdrawalTargetAccount = (opId: string, accountId: string) => {
+    setApplyWarning(null);
     setWithdrawalStates((prev) => ({
       ...prev,
       [opId]: { ...prev[opId], accountId },
@@ -176,10 +192,31 @@ export default function TinkoffSyncDialog({
     return true;
   });
   const allResolved = depositsResolved && withdrawalsResolved;
+  const unresolvedDepositsCount = newDeposits.filter((d) => {
+    const s = depositStates[d.tinkoff_op_id];
+    if (!s || s.resolution === '') return true;
+    if (s.resolution === 'transfer' && !s.accountId) return true;
+    if (s.resolution === 'already_recorded' && !alreadyRecordedBalanceOk(d)) return true;
+    return false;
+  }).length;
+  const unresolvedWithdrawalsCount = newWithdrawals.filter((w) => {
+    const s = withdrawalStates[w.tinkoff_op_id];
+    if (!s || s.resolution === '') return true;
+    if (s.resolution === 'transfer' && !s.accountId) return true;
+    return false;
+  }).length;
 
   const totalNewAuto = (preview?.auto_operations ?? []).filter((o) => !o.already_imported).length;
   const totalManualNew = newDeposits.length + newWithdrawals.length;
   const totalNew = totalManualNew + totalNewAuto;
+  const shouldCompactDeposits = newDeposits.length > 24;
+  const shouldCompactWithdrawals = newWithdrawals.length > 12;
+  const shouldCompactAutoOperations = totalNewAuto > 40;
+  const visibleDeposits = shouldCompactDeposits && !showAllDeposits ? newDeposits.slice(0, 12) : newDeposits;
+  const visibleWithdrawals = shouldCompactWithdrawals && !showAllWithdrawals ? newWithdrawals.slice(0, 8) : newWithdrawals;
+  const visibleAutoOperations = shouldCompactAutoOperations && !showAllAutoOperations
+    ? (preview?.auto_operations ?? []).filter((o) => !o.already_imported).slice(0, 24)
+    : (preview?.auto_operations ?? []).filter((o) => !o.already_imported);
 
   const setAllDepositResolutions = (resolution: DepositResolutionKind, accountId = '') => {
     const next: Record<string, ResolutionState> = {};
@@ -199,6 +236,19 @@ export default function TinkoffSyncDialog({
 
   const handleApply = async () => {
     if (!preview) return;
+    if (!allResolved && totalManualNew > 0) {
+      if (unresolvedDepositsCount > 0) {
+        setManualTab('deposits');
+      } else if (unresolvedWithdrawalsCount > 0) {
+        setManualTab('withdrawals');
+      }
+      setApplyWarning(
+        `Сначала выбери способ учёта для всех ручных операций: осталось ${unresolvedDepositsCount} пополн. и ${unresolvedWithdrawalsCount} вывод.`,
+      );
+      return;
+    }
+
+    setApplyWarning(null);
     setStage('applying');
 
     const depositResolutions: DepositResolution[] = newDeposits.map((d) => {
@@ -406,6 +456,20 @@ export default function TinkoffSyncDialog({
           <button className="dialog__close" onClick={onClose} type="button">✕</button>
         </div>
 
+        {stage === 'review' && applyWarning && (
+          <div className="tinkoff-sync__warning-popover" role="alert" aria-live="assertive">
+            <div className="tinkoff-sync__warning-title">Не всё выбрано</div>
+            <p className="tinkoff-sync__warning-text">{applyWarning}</p>
+            <button
+              type="button"
+              className="tinkoff-sync__warning-close"
+              onClick={() => setApplyWarning(null)}
+            >
+              Понятно
+            </button>
+          </div>
+        )}
+
         <div className="dialog__body">
           {stage === 'loading' && (
             <p className="tinkoff-sync__status">Загружаем операции из Тинькофф…</p>
@@ -435,7 +499,45 @@ export default function TinkoffSyncDialog({
 
           {stage === 'review' && preview && (
             <>
-              {newDeposits.length > 0 && (
+              {totalManualNew > 0 && (
+                <div className="tinkoff-sync__hint">
+                  Нужно разобрать ручные движения перед импортом.
+                  {unresolvedDepositsCount > 0 && ` Пополнения без решения: ${unresolvedDepositsCount}.`}
+                  {unresolvedWithdrawalsCount > 0 && ` Выводы без решения: ${unresolvedWithdrawalsCount}.`}
+                  {newWithdrawals.length > 0 && ' У этого счёта есть не только пополнения, но и выводы ниже по списку.'}
+                </div>
+              )}
+
+              {totalManualNew > 0 && (newDeposits.length > 0 || newWithdrawals.length > 0) && (
+                <section className="tinkoff-sync__section">
+                  <div className="tinkoff-sync__tabs" role="tablist" aria-label="Ручные операции">
+                    {newDeposits.length > 0 && (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={manualTab === 'deposits'}
+                        className={`tinkoff-sync__tab${manualTab === 'deposits' ? ' tinkoff-sync__tab--active' : ''}`}
+                        onClick={() => setManualTab('deposits')}
+                      >
+                        Вводы ({newDeposits.length})
+                      </button>
+                    )}
+                    {newWithdrawals.length > 0 && (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={manualTab === 'withdrawals'}
+                        className={`tinkoff-sync__tab${manualTab === 'withdrawals' ? ' tinkoff-sync__tab--active' : ''}`}
+                        onClick={() => setManualTab('withdrawals')}
+                      >
+                        Выводы ({newWithdrawals.length})
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {newDeposits.length > 0 && manualTab === 'deposits' && (
                 <section className="tinkoff-sync__section">
                   <h3 className="tinkoff-sync__section-title">
                     Пополнения ({newDeposits.length}) — требуют решения
@@ -475,11 +577,22 @@ export default function TinkoffSyncDialog({
                     </div>
                   )}
 
-                  {newDeposits.map(renderDepositCard)}
+                  {visibleDeposits.map(renderDepositCard)}
+                  {shouldCompactDeposits && (
+                    <button
+                      type="button"
+                      className="tinkoff-sync__show-more"
+                      onClick={() => setShowAllDeposits((prev) => !prev)}
+                    >
+                      {showAllDeposits
+                        ? 'Свернуть список пополнений'
+                        : `Показать все пополнения (${newDeposits.length})`}
+                    </button>
+                  )}
                 </section>
               )}
 
-              {newWithdrawals.length > 0 && (
+              {newWithdrawals.length > 0 && manualTab === 'withdrawals' && (
                 <section className="tinkoff-sync__section">
                   <h3 className="tinkoff-sync__section-title">
                     Выводы ({newWithdrawals.length}) — требуют решения
@@ -519,7 +632,18 @@ export default function TinkoffSyncDialog({
                     </div>
                   )}
 
-                  {newWithdrawals.map(renderWithdrawalCard)}
+                  {visibleWithdrawals.map(renderWithdrawalCard)}
+                  {shouldCompactWithdrawals && (
+                    <button
+                      type="button"
+                      className="tinkoff-sync__show-more"
+                      onClick={() => setShowAllWithdrawals((prev) => !prev)}
+                    >
+                      {showAllWithdrawals
+                        ? 'Свернуть список выводов'
+                        : `Показать все выводы (${newWithdrawals.length})`}
+                    </button>
+                  )}
                 </section>
               )}
 
@@ -529,27 +653,36 @@ export default function TinkoffSyncDialog({
                     Автоматические операции ({totalNewAuto})
                   </h3>
                   <div className="tinkoff-sync__auto-list">
-                    {preview.auto_operations
-                      .filter((o) => !o.already_imported)
-                      .map((op) => (
-                        <div key={op.tinkoff_op_id} className="tinkoff-sync__auto-item">
-                          {op.logo_name && (
-                            <img
-                              className="instrument-logo instrument-logo--sync"
-                              src={getTinkoffInstrumentLogoUrl(op.logo_name)}
-                              alt=""
-                              loading="lazy"
-                            />
-                          )}
-                          <span className="tinkoff-sync__auto-type">{op.type}</span>
-                          <span className="tinkoff-sync__auto-ticker">{op.ticker || op.title || op.figi}</span>
-                          <span className="tinkoff-sync__auto-amount">
-                            {formatAmount(op.amount, op.currency_code)}
-                          </span>
-                          <span className="tinkoff-sync__auto-date">{op.date}</span>
-                        </div>
-                      ))}
+                    {visibleAutoOperations.map((op) => (
+                      <div key={op.tinkoff_op_id} className="tinkoff-sync__auto-item">
+                        {op.logo_name && (
+                          <img
+                            className="instrument-logo instrument-logo--sync"
+                            src={getTinkoffInstrumentLogoUrl(op.logo_name)}
+                            alt=""
+                            loading="lazy"
+                          />
+                        )}
+                        <span className="tinkoff-sync__auto-type">{op.type}</span>
+                        <span className="tinkoff-sync__auto-ticker">{op.ticker || op.title || op.figi}</span>
+                        <span className="tinkoff-sync__auto-amount">
+                          {formatAmount(op.amount, op.currency_code)}
+                        </span>
+                        <span className="tinkoff-sync__auto-date">{op.date}</span>
+                      </div>
+                    ))}
                   </div>
+                  {shouldCompactAutoOperations && (
+                    <button
+                      type="button"
+                      className="tinkoff-sync__show-more"
+                      onClick={() => setShowAllAutoOperations((prev) => !prev)}
+                    >
+                      {showAllAutoOperations
+                        ? 'Свернуть автооперации'
+                        : `Показать все автооперации (${totalNewAuto})`}
+                    </button>
+                  )}
                 </section>
               )}
 
@@ -572,14 +705,20 @@ export default function TinkoffSyncDialog({
           </button>
 
           {stage === 'review' && (
-            <button
-              className="btn btn--primary"
-              onClick={handleApply}
-              disabled={!allResolved && totalManualNew > 0}
-              type="button"
-            >
-              Применить {totalNew > 0 ? `${totalNew} опер.` : ''}
-            </button>
+            <div className="tinkoff-sync__footer-actions">
+              {!allResolved && totalManualNew > 0 && (
+                <p className="tinkoff-sync__footer-hint">
+                  Осталось выбрать: {unresolvedDepositsCount} пополн. и {unresolvedWithdrawalsCount} вывод.
+                </p>
+              )}
+              <button
+                className="btn btn--primary"
+                onClick={handleApply}
+                type="button"
+              >
+                Применить {totalNew > 0 ? `${totalNew} опер.` : ''}
+              </button>
+            </div>
           )}
 
           {(stage === 'done' || stage === 'error') && (

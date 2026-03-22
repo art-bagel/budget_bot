@@ -2830,6 +2830,7 @@ select.input option {
 }
 
 .dialog {
+  position: relative;
   width: min(520px, 100%);
   /* Вычитаем верхний отступ Telegram, верхний padding (12px) и нижний padding */
   max-height: calc(
@@ -2956,6 +2957,45 @@ select.input option {
   margin-bottom: 20px;
 }
 
+.tinkoff-sync__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+}
+
+.tinkoff-sync__tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tinkoff-sync__tab--active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.tinkoff-sync__hint {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--tag-income-fg) 10%, var(--bg-inset));
+  border: 1px solid color-mix(in srgb, var(--tag-income-fg) 25%, var(--border));
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .tinkoff-sync__section-title {
   font-size: 0.75rem;
   font-weight: 600;
@@ -3007,6 +3047,68 @@ select.input option {
   color: var(--text-primary);
   cursor: pointer;
   max-width: 160px;
+}
+
+.tinkoff-sync__show-more {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tinkoff-sync__footer-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.tinkoff-sync__footer-hint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+}
+
+.tinkoff-sync__warning-popover {
+  position: absolute;
+  top: 64px;
+  left: 16px;
+  right: 16px;
+  z-index: 3;
+  padding: 14px 14px 12px;
+  border-radius: var(--radius-m);
+  border: 1px solid color-mix(in srgb, var(--tag-out-fg) 24%, var(--border));
+  background: color-mix(in srgb, var(--bg-surface) 84%, var(--tag-out-bg));
+  box-shadow: var(--shadow-elevated);
+}
+
+.tinkoff-sync__warning-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tinkoff-sync__warning-text {
+  margin: 6px 0 10px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.tinkoff-sync__warning-close {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* Deposit card */
