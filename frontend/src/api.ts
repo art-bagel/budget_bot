@@ -54,6 +54,7 @@ import type {
   ExternalConnection,
   TinkoffPreviewResponse,
   DepositResolution,
+  WithdrawalResolution,
   ApplyTinkoffSyncResponse,
   TinkoffLivePrice,
 } from './types';
@@ -123,6 +124,10 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
 
   if (text.includes('source_account_id required')) {
     return 'Не выбран счёт для перевода';
+  }
+
+  if (text.includes('target_account_id required')) {
+    return 'Не выбран счёт для зачисления';
   }
 
   if (text.includes('Insufficient investment balance') || text.includes('investment account balance')) {
@@ -621,10 +626,14 @@ export async function previewTinkoffSync(connectionId: number): Promise<TinkoffP
 export async function applyTinkoffSync(
   connectionId: number,
   depositResolutions: DepositResolution[],
+  withdrawalResolutions: WithdrawalResolution[],
 ): Promise<ApplyTinkoffSyncResponse> {
   return apiFetch<ApplyTinkoffSyncResponse>(`/tinkoff/apply/${connectionId}`, {
     method: 'POST',
-    body: JSON.stringify({ deposit_resolutions: depositResolutions }),
+    body: JSON.stringify({
+      deposit_resolutions: depositResolutions,
+      withdrawal_resolutions: withdrawalResolutions,
+    }),
   });
 }
 

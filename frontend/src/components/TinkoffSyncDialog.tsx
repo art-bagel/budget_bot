@@ -7,6 +7,8 @@ import type {
   DashboardBankBalance,
   DepositResolution,
   DepositResolutionKind,
+  WithdrawalResolution,
+  WithdrawalResolutionKind,
   TinkoffDepositPreview,
   TinkoffPreviewResponse,
 } from '../types';
@@ -21,9 +23,9 @@ interface Props {
   onSuccess: () => void;
 }
 
-interface DepositState {
-  resolution: DepositResolutionKind | '';
-  sourceAccountId: string;
+interface ResolutionState {
+  resolution: DepositResolutionKind | WithdrawalResolutionKind | '';
+  accountId: string;
 }
 
 
@@ -40,8 +42,9 @@ export default function TinkoffSyncDialog({
   const [preview, setPreview] = useState<TinkoffPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Per-deposit resolution state keyed by tinkoff_op_id
-  const [depositStates, setDepositStates] = useState<Record<string, DepositState>>({});
+  // Per-operation resolution state keyed by tinkoff_op_id
+  const [depositStates, setDepositStates] = useState<Record<string, ResolutionState>>({});
+  const [withdrawalStates, setWithdrawalStates] = useState<Record<string, ResolutionState>>({});
 
   // Cash accounts for "transfer" resolution
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
@@ -71,13 +74,20 @@ export default function TinkoffSyncDialog({
         setInvestmentBalances(investmentSnapshot);
 
         // Init deposit states
-        const states: Record<string, DepositState> = {};
+        const nextDepositStates: Record<string, ResolutionState> = {};
         for (const d of previewData.deposits) {
           if (!d.already_imported) {
-            states[d.tinkoff_op_id] = { resolution: '', sourceAccountId: '' };
+            nextDepositStates[d.tinkoff_op_id] = { resolution: '', accountId: '' };
           }
         }
-        setDepositStates(states);
+        const nextWithdrawalStates: Record<string, ResolutionState> = {};
+        for (const w of previewData.withdrawals) {
+          if (!w.already_imported) {
+            nextWithdrawalStates[w.tinkoff_op_id] = { resolution: '', accountId: '' };
+          }
+        }
+        setDepositStates(nextDepositStates);
+        setWithdrawalStates(nextWithdrawalStates);
 
         // Load balances for all cash accounts
         const balanceEntries = await Promise.all(
@@ -103,17 +113,31 @@ export default function TinkoffSyncDialog({
     return () => { cancelled = true; };
   }, [connectionId, investmentAccountId]);
 
-  const setResolution = (opId: string, resolution: DepositResolutionKind) => {
+  const setDepositResolution = (opId: string, resolution: DepositResolutionKind) => {
     setDepositStates((prev) => ({
       ...prev,
-      [opId]: { ...prev[opId], resolution, sourceAccountId: prev[opId]?.sourceAccountId ?? '' },
+      [opId]: { ...prev[opId], resolution, accountId: prev[opId]?.accountId ?? '' },
     }));
   };
 
-  const setSourceAccount = (opId: string, accountId: string) => {
+  const setDepositSourceAccount = (opId: string, accountId: string) => {
     setDepositStates((prev) => ({
       ...prev,
-      [opId]: { ...prev[opId], sourceAccountId: accountId },
+      [opId]: { ...prev[opId], accountId },
+    }));
+  };
+
+  const setWithdrawalResolution = (opId: string, resolution: WithdrawalResolutionKind) => {
+    setWithdrawalStates((prev) => ({
+      ...prev,
+      [opId]: { ...prev[opId], resolution, accountId: prev[opId]?.accountId ?? '' },
+    }));
+  };
+
+  const setWithdrawalTargetAccount = (opId: string, accountId: string) => {
+    setWithdrawalStates((prev) => ({
+      ...prev,
+      [opId]: { ...prev[opId], accountId },
     }));
   };
 
@@ -130,6 +154,7 @@ export default function TinkoffSyncDialog({
   };
 
   const newDeposits = preview?.deposits.filter((d) => !d.already_imported) ?? [];
+  const newWithdrawals = preview?.withdrawals.filter((w) => !w.already_imported) ?? [];
 
   // Check if any "already_recorded" choice would fail balance check
   const alreadyRecordedBalanceOk = (deposit: TinkoffDepositPreview): boolean => {
@@ -137,40 +162,64 @@ export default function TinkoffSyncDialog({
     return bal === null || bal >= deposit.amount;
   };
 
-  const allResolved = newDeposits.every((d) => {
+  const depositsResolved = newDeposits.every((d) => {
     const s = depositStates[d.tinkoff_op_id];
     if (!s || s.resolution === '') return false;
-    if (s.resolution === 'transfer' && !s.sourceAccountId) return false;
+    if (s.resolution === 'transfer' && !s.accountId) return false;
     if (s.resolution === 'already_recorded' && !alreadyRecordedBalanceOk(d)) return false;
     return true;
   });
+  const withdrawalsResolved = newWithdrawals.every((w) => {
+    const s = withdrawalStates[w.tinkoff_op_id];
+    if (!s || s.resolution === '') return false;
+    if (s.resolution === 'transfer' && !s.accountId) return false;
+    return true;
+  });
+  const allResolved = depositsResolved && withdrawalsResolved;
 
   const totalNewAuto = (preview?.auto_operations ?? []).filter((o) => !o.already_imported).length;
-  const totalNew = newDeposits.length + totalNewAuto;
+  const totalManualNew = newDeposits.length + newWithdrawals.length;
+  const totalNew = totalManualNew + totalNewAuto;
 
-  const setAllResolutions = (resolution: DepositResolutionKind, sourceAccountId = '') => {
-    const next: Record<string, DepositState> = {};
+  const setAllDepositResolutions = (resolution: DepositResolutionKind, accountId = '') => {
+    const next: Record<string, ResolutionState> = {};
     for (const d of newDeposits) {
-      next[d.tinkoff_op_id] = { resolution, sourceAccountId };
+      next[d.tinkoff_op_id] = { resolution, accountId };
     }
     setDepositStates((prev) => ({ ...prev, ...next }));
+  };
+
+  const setAllWithdrawalResolutions = (resolution: WithdrawalResolutionKind, accountId = '') => {
+    const next: Record<string, ResolutionState> = {};
+    for (const w of newWithdrawals) {
+      next[w.tinkoff_op_id] = { resolution, accountId };
+    }
+    setWithdrawalStates((prev) => ({ ...prev, ...next }));
   };
 
   const handleApply = async () => {
     if (!preview) return;
     setStage('applying');
 
-    const resolutions: DepositResolution[] = newDeposits.map((d) => {
+    const depositResolutions: DepositResolution[] = newDeposits.map((d) => {
       const s = depositStates[d.tinkoff_op_id];
       return {
         tinkoff_op_id: d.tinkoff_op_id,
         resolution: s.resolution as DepositResolutionKind,
-        source_account_id: s.resolution === 'transfer' ? Number(s.sourceAccountId) : null,
+        source_account_id: s.resolution === 'transfer' ? Number(s.accountId) : null,
+      };
+    });
+    const withdrawalResolutions: WithdrawalResolution[] = newWithdrawals.map((w) => {
+      const s = withdrawalStates[w.tinkoff_op_id];
+      return {
+        tinkoff_op_id: w.tinkoff_op_id,
+        resolution: s.resolution as WithdrawalResolutionKind,
+        target_account_id: s.resolution === 'transfer' ? Number(s.accountId) : null,
       };
     });
 
     try {
-      const result = await applyTinkoffSync(connectionId, resolutions);
+      const result = await applyTinkoffSync(connectionId, depositResolutions, withdrawalResolutions);
       setApplyResult({ applied: result.applied, skipped: result.skipped_already_imported });
       setStage('done');
       onSuccess();
@@ -201,7 +250,7 @@ export default function TinkoffSyncDialog({
               type="radio"
               name={`resolution-${deposit.tinkoff_op_id}`}
               checked={state.resolution === 'external'}
-              onChange={() => setResolution(deposit.tinkoff_op_id, 'external')}
+              onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'external')}
             />
             <span>Внешнее пополнение</span>
           </label>
@@ -211,7 +260,7 @@ export default function TinkoffSyncDialog({
               type="radio"
               name={`resolution-${deposit.tinkoff_op_id}`}
               checked={state.resolution === 'transfer'}
-              onChange={() => setResolution(deposit.tinkoff_op_id, 'transfer')}
+              onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'transfer')}
             />
             <span>Перевод со счёта</span>
           </label>
@@ -219,8 +268,8 @@ export default function TinkoffSyncDialog({
           {state.resolution === 'transfer' && (
             <div className="tinkoff-deposit-card__transfer-detail">
               <select
-                value={state.sourceAccountId}
-                onChange={(e) => setSourceAccount(deposit.tinkoff_op_id, e.target.value)}
+                value={state.accountId}
+                onChange={(e) => setDepositSourceAccount(deposit.tinkoff_op_id, e.target.value)}
                 className="tinkoff-deposit-card__select"
               >
                 <option value="">— Выберите счёт —</option>
@@ -235,8 +284,8 @@ export default function TinkoffSyncDialog({
                   );
                 })}
               </select>
-              {state.sourceAccountId && (() => {
-                const bal = getAccountBalance(Number(state.sourceAccountId), deposit.currency_code);
+              {state.accountId && (() => {
+                const bal = getAccountBalance(Number(state.accountId), deposit.currency_code);
                 const enough = bal !== null && bal >= deposit.amount;
                 if (!enough && bal !== null) {
                   return (
@@ -255,7 +304,7 @@ export default function TinkoffSyncDialog({
               type="radio"
               name={`resolution-${deposit.tinkoff_op_id}`}
               checked={state.resolution === 'already_recorded'}
-              onChange={() => setResolution(deposit.tinkoff_op_id, 'already_recorded')}
+              onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'already_recorded')}
             />
             <span>
               Уже учтено в боте
@@ -273,6 +322,75 @@ export default function TinkoffSyncDialog({
               {investBal !== null && ` (есть ${formatAmount(investBal, deposit.currency_code)})`}
             </p>
           )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderWithdrawalCard = (withdrawal: TinkoffDepositPreview) => {
+    const state = withdrawalStates[withdrawal.tinkoff_op_id];
+    if (!state) return null;
+
+    const amountFormatted = formatAmount(withdrawal.amount, withdrawal.currency_code);
+
+    return (
+      <div key={withdrawal.tinkoff_op_id} className="tinkoff-deposit-card">
+        <div className="tinkoff-deposit-card__header">
+          <span className="tinkoff-deposit-card__amount">{amountFormatted}</span>
+          <span className="tinkoff-deposit-card__date">{withdrawal.date}</span>
+        </div>
+
+        <div className="tinkoff-deposit-card__options">
+          <label className="tinkoff-deposit-card__option">
+            <input
+              type="radio"
+              name={`withdrawal-resolution-${withdrawal.tinkoff_op_id}`}
+              checked={state.resolution === 'external'}
+              onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'external')}
+            />
+            <span>Внешний вывод</span>
+          </label>
+
+          <label className="tinkoff-deposit-card__option">
+            <input
+              type="radio"
+              name={`withdrawal-resolution-${withdrawal.tinkoff_op_id}`}
+              checked={state.resolution === 'transfer'}
+              onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'transfer')}
+            />
+            <span>Перевод на счёт</span>
+          </label>
+
+          {state.resolution === 'transfer' && (
+            <div className="tinkoff-deposit-card__transfer-detail">
+              <select
+                value={state.accountId}
+                onChange={(e) => setWithdrawalTargetAccount(withdrawal.tinkoff_op_id, e.target.value)}
+                className="tinkoff-deposit-card__select"
+              >
+                <option value="">— Выберите счёт —</option>
+                {cashAccounts.map((acc) => {
+                  const bal = getAccountBalance(acc.id, withdrawal.currency_code);
+                  return (
+                    <option key={acc.id} value={String(acc.id)}>
+                      {acc.name}
+                      {bal !== null ? ` (${formatAmount(bal, withdrawal.currency_code)})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
+          <label className="tinkoff-deposit-card__option">
+            <input
+              type="radio"
+              name={`withdrawal-resolution-${withdrawal.tinkoff_op_id}`}
+              checked={state.resolution === 'already_recorded'}
+              onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'already_recorded')}
+            />
+            <span>Уже учтено в боте</span>
+          </label>
         </div>
       </div>
     );
@@ -329,14 +447,14 @@ export default function TinkoffSyncDialog({
                       <button
                         type="button"
                         className="tinkoff-sync__bulk-btn"
-                        onClick={() => setAllResolutions('external')}
+                        onClick={() => setAllDepositResolutions('external')}
                       >
                         Внешнее
                       </button>
                       <button
                         type="button"
                         className="tinkoff-sync__bulk-btn"
-                        onClick={() => setAllResolutions('already_recorded')}
+                        onClick={() => setAllDepositResolutions('already_recorded')}
                       >
                         Уже учтено
                       </button>
@@ -345,7 +463,7 @@ export default function TinkoffSyncDialog({
                           className="tinkoff-sync__bulk-select"
                           value=""
                           onChange={(e) => {
-                            if (e.target.value) setAllResolutions('transfer', e.target.value);
+                            if (e.target.value) setAllDepositResolutions('transfer', e.target.value);
                           }}
                         >
                           <option value="">Перевод со счёта…</option>
@@ -358,6 +476,50 @@ export default function TinkoffSyncDialog({
                   )}
 
                   {newDeposits.map(renderDepositCard)}
+                </section>
+              )}
+
+              {newWithdrawals.length > 0 && (
+                <section className="tinkoff-sync__section">
+                  <h3 className="tinkoff-sync__section-title">
+                    Выводы ({newWithdrawals.length}) — требуют решения
+                  </h3>
+
+                  {newWithdrawals.length > 1 && (
+                    <div className="tinkoff-sync__bulk-actions">
+                      <span className="tinkoff-sync__bulk-label">Для всех:</span>
+                      <button
+                        type="button"
+                        className="tinkoff-sync__bulk-btn"
+                        onClick={() => setAllWithdrawalResolutions('external')}
+                      >
+                        Внешний
+                      </button>
+                      <button
+                        type="button"
+                        className="tinkoff-sync__bulk-btn"
+                        onClick={() => setAllWithdrawalResolutions('already_recorded')}
+                      >
+                        Уже учтено
+                      </button>
+                      {cashAccounts.length > 0 && (
+                        <select
+                          className="tinkoff-sync__bulk-select"
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) setAllWithdrawalResolutions('transfer', e.target.value);
+                          }}
+                        >
+                          <option value="">Перевод на счёт…</option>
+                          {cashAccounts.map((acc) => (
+                            <option key={acc.id} value={String(acc.id)}>{acc.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {newWithdrawals.map(renderWithdrawalCard)}
                 </section>
               )}
 
@@ -413,7 +575,7 @@ export default function TinkoffSyncDialog({
             <button
               className="btn btn--primary"
               onClick={handleApply}
-              disabled={!allResolved && newDeposits.length > 0}
+              disabled={!allResolved && totalManualNew > 0}
               type="button"
             >
               Применить {totalNew > 0 ? `${totalNew} опер.` : ''}

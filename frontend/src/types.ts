@@ -556,11 +556,18 @@ export interface TinkoffPreviewResponse {
 }
 
 export type DepositResolutionKind = 'external' | 'transfer' | 'already_recorded';
+export type WithdrawalResolutionKind = 'external' | 'transfer' | 'already_recorded';
 
 export interface DepositResolution {
   tinkoff_op_id: string;
   resolution: DepositResolutionKind;
   source_account_id: number | null;
+}
+
+export interface WithdrawalResolution {
+  tinkoff_op_id: string;
+  resolution: WithdrawalResolutionKind;
+  target_account_id: number | null;
 }
 
 export interface ApplyTinkoffSyncResponse {

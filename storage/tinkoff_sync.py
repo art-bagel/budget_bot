@@ -1586,6 +1586,7 @@ class TinkoffSync:
         self,
         connection_id: int,
         deposit_resolutions: list[dict],
+        withdrawal_resolutions: list[dict],
         user_id: int,
     ) -> dict:
         """Apply synced operations in a single DB transaction."""
@@ -1629,7 +1630,8 @@ class TinkoffSync:
             )
 
         already_imported_ids = await self._get_already_imported_ids(raw_ops)
-        resolutions_map = {r['tinkoff_op_id']: r for r in deposit_resolutions}
+        deposit_resolutions_map = {r['tinkoff_op_id']: r for r in deposit_resolutions}
+        withdrawal_resolutions_map = {r['tinkoff_op_id']: r for r in withdrawal_resolutions}
         opening_cash_seeds = (
             await self._infer_opening_cash_seeds(client, tinkoff_account_id, raw_ops)
             if not already_imported_ids
@@ -1678,9 +1680,9 @@ class TinkoffSync:
                     if not currency:
                         continue
 
-                    # Deposit/withdrawal with manual resolution
-                    if op_id in resolutions_map:
-                        resolution = resolutions_map[op_id]
+                    # Deposit with manual resolution
+                    if op_id in deposit_resolutions_map:
+                        resolution = deposit_resolutions_map[op_id]
                         kind = resolution['resolution']
                         source_account_id = resolution.get('source_account_id')
 
@@ -1691,25 +1693,26 @@ class TinkoffSync:
                         applied_count += 1
                         continue
 
-                    if mapped['kind'] == 'output':
-                        await _record_unmatched_cash_only(
-                            conn,
-                            user_id,
-                            owner_type,
-                            owner_user_id,
-                            owner_family_id,
-                            linked_account_id,
-                            -abs(payment),
-                            currency,
-                            op_id,
-                            'Tinkoff: вывод со счёта',
-                            'investment_adjustment',
+                    if op_id in withdrawal_resolutions_map:
+                        resolution = withdrawal_resolutions_map[op_id]
+                        kind = resolution['resolution']
+                        target_account_id = resolution.get('target_account_id')
+
+                        await self._apply_withdrawal_resolution(
+                            conn, user_id, owner_type, owner_user_id, owner_family_id,
+                            linked_account_id, op_id, payment, currency, kind, target_account_id,
                         )
                         applied_count += 1
                         continue
 
-                    # Skip unresolved deposits and unknown operations
-                    if mapped['kind'] in ('input', 'unknown'):
+                    if mapped['kind'] == 'input':
+                        raise ValueError('Для всех новых пополнений нужно выбрать способ учета перед сохранением.')
+
+                    if mapped['kind'] == 'output':
+                        raise ValueError('Для всех новых выводов нужно выбрать способ учета перед сохранением.')
+
+                    # Skip unknown operations
+                    if mapped['kind'] == 'unknown':
                         continue
 
                     # Auto operations (buy, sell, dividend, fee, tax, etc.)
@@ -2260,6 +2263,97 @@ class TinkoffSync:
                 linked_account_id, currency, 0,
                 tinkoff_op_id, 'tinkoff', 'Tinkoff: пополнение (уже учтено)',
             )
+        else:
+            raise ValueError(f'Unsupported deposit resolution: {resolution}')
+
+    async def _apply_withdrawal_resolution(
+        self,
+        conn: asyncpg.Connection,
+        user_id: int,
+        owner_type: str,
+        owner_user_id: Optional[int],
+        owner_family_id: Optional[int],
+        linked_account_id: int,
+        tinkoff_op_id: str,
+        amount: Decimal,
+        currency: str,
+        resolution: str,
+        target_account_id: Optional[int],
+    ) -> None:
+        abs_amount = abs(amount)
+
+        if resolution == 'external':
+            await _record_unmatched_cash_only(
+                conn,
+                user_id,
+                owner_type,
+                owner_user_id,
+                owner_family_id,
+                linked_account_id,
+                -abs_amount,
+                currency,
+                tinkoff_op_id,
+                'Tinkoff: вывод со счёта',
+                'investment_adjustment',
+            )
+            return
+
+        if resolution == 'transfer':
+            if target_account_id is None:
+                raise ValueError('target_account_id required for transfer resolution')
+
+            transfer_result = await conn.fetchval(
+                '''SELECT budgeting.put__transfer_between_accounts(
+                    $1::bigint, $2::bigint, $3::bigint, $4::char(3), $5::numeric, $6::text
+                )''',
+                user_id,
+                linked_account_id,
+                target_account_id,
+                currency,
+                abs_amount,
+                'Tinkoff: вывод с брокерского счёта',
+            )
+
+            if isinstance(transfer_result, str):
+                transfer_result = json.loads(transfer_result)
+            operation_id = transfer_result.get('operation_id') if isinstance(transfer_result, dict) else None
+            if operation_id is None:
+                raise ValueError('Transfer operation id was not returned')
+
+            await conn.execute(
+                '''UPDATE budgeting.bank_entries
+                   SET external_id = $1,
+                       import_source = 'tinkoff'
+                   WHERE operation_id = $2
+                     AND bank_account_id = $3
+                     AND currency_code = $4
+                     AND amount = -$5::numeric
+                     AND external_id IS NULL''',
+                tinkoff_op_id,
+                operation_id,
+                linked_account_id,
+                currency,
+                abs_amount,
+            )
+            return
+
+        if resolution == 'already_recorded':
+            await _record_unmatched_cash_only(
+                conn,
+                user_id,
+                owner_type,
+                owner_user_id,
+                owner_family_id,
+                linked_account_id,
+                Decimal('0'),
+                currency,
+                tinkoff_op_id,
+                'Tinkoff: вывод (уже учтён)',
+                'investment_adjustment',
+            )
+            return
+
+        raise ValueError(f'Unsupported withdrawal resolution: {resolution}')
 
     async def _require_investment_balance(
         self,

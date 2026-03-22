@@ -58,8 +58,15 @@ class DepositResolution(BaseModel):
     source_account_id: Optional[int] = None
 
 
+class WithdrawalResolution(BaseModel):
+    tinkoff_op_id: str
+    resolution: Literal['external', 'transfer', 'already_recorded']
+    target_account_id: Optional[int] = None
+
+
 class ApplyTinkoffSyncRequest(BaseModel):
     deposit_resolutions: List[DepositResolution]
+    withdrawal_resolutions: List[WithdrawalResolution] = []
 
 
 class TinkoffLivePrice(BaseModel):
@@ -262,8 +269,9 @@ async def apply_tinkoff_sync(
 
     sync = TinkoffSync(pool)
     resolutions = [r.model_dump() for r in body.deposit_resolutions]
+    withdrawal_resolutions = [r.model_dump() for r in body.withdrawal_resolutions]
     try:
-        return await sync.apply(connection_id, resolutions, user.user_id)
+        return await sync.apply(connection_id, resolutions, withdrawal_resolutions, user.user_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
