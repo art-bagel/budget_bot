@@ -184,6 +184,15 @@ async def get_portfolio_summary(
     return await reports.get__portfolio_summary(user.user_id)
 
 
+@router.get('/analytics')
+async def get_portfolio_analytics(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    user: TelegramUser = Depends(get_telegram_user),
+) -> dict:
+    return await reports.get__portfolio_analytics(user.user_id, date_from, date_to)
+
+
 @router.get('/positions', response_model=List[PortfolioPositionItem])
 async def get_portfolio_positions(
     status: Optional[Literal['open', 'closed']] = Query(None),

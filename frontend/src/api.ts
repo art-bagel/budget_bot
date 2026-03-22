@@ -50,6 +50,7 @@ import type {
   CancelPortfolioIncomeRequest,
   CancelPortfolioIncomeResponse,
   PortfolioSummaryItem,
+  PortfolioAnalyticsData,
   TinkoffBrokerAccount,
   ExternalConnection,
   TinkoffPreviewResponse,
@@ -506,6 +507,10 @@ export async function partialClosePortfolioPosition(
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function fetchPortfolioAnalytics(dateFrom: string, dateTo: string): Promise<PortfolioAnalyticsData> {
+  return apiFetch<PortfolioAnalyticsData>(`/portfolio/analytics?date_from=${dateFrom}&date_to=${dateTo}`);
 }
 
 export async function fetchPortfolioEvents(positionId: number): Promise<PortfolioEvent[]> {

@@ -26,6 +26,7 @@ class Reports(DataBase):
     F_GET__PORTFOLIO_POSITION = 'get__portfolio_position'
     F_GET__PORTFOLIO_POSITIONS = 'get__portfolio_positions'
     F_GET__PORTFOLIO_EVENTS = 'get__portfolio_events'
+    F_GET__PORTFOLIO_ANALYTICS = 'get__portfolio_analytics'
 
     @staticmethod
     def _repair_metadata(value: dict) -> dict:
@@ -344,3 +345,17 @@ class Reports(DataBase):
         for item in result:
             item['metadata'] = self._normalize_metadata(item.get('metadata'))
         return result
+
+    async def get__portfolio_analytics(
+        self,
+        user_id: int,
+        date_from: date,
+        date_to: date,
+    ) -> dict:
+        result = await self.call_function(
+            self._fn(self.F_GET__PORTFOLIO_ANALYTICS),
+            user_id,
+            date_from,
+            date_to,
+        )
+        return result if result else {}

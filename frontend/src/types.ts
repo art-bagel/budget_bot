@@ -434,6 +434,68 @@ export interface PortfolioSummaryItem {
   open_positions_count: number;
 }
 
+export interface PortfolioAnalyticsMonthlyItem {
+  period: string;
+  asset_type_code: string;
+  investment_account_id: number;
+  income_kind?: string;
+  total_amount: number;
+  events_count: number;
+}
+
+export interface PortfolioAnalyticsTotalByAssetType {
+  asset_type_code: string;
+  income_total: number;
+  trade_total: number;
+  adjustment_total: number;
+  income_count: number;
+  trade_count: number;
+}
+
+export interface PortfolioAnalyticsTotalByAccount {
+  investment_account_id: number;
+  account_name: string;
+  owner_type: 'user' | 'family';
+  owner_name: string;
+  income_total: number;
+  trade_total: number;
+  adjustment_total: number;
+  income_count: number;
+  trade_count: number;
+}
+
+export interface PortfolioAnalyticsTotalByIncomeKind {
+  income_kind: string;
+  total_amount: number;
+  events_count: number;
+}
+
+export interface PortfolioAnalyticsIncomeFeedItem {
+  event_id: number;
+  event_at: string;
+  position_id: number;
+  position_title: string;
+  asset_type_code: string;
+  investment_account_id: number;
+  account_name: string;
+  income_kind: string;
+  amount_in_base: number;
+  currency_code: string;
+  amount_in_currency: number;
+}
+
+export interface PortfolioAnalyticsData {
+  date_from: string;
+  date_to: string;
+  monthly_income: PortfolioAnalyticsMonthlyItem[];
+  monthly_trades: PortfolioAnalyticsMonthlyItem[];
+  monthly_adjustments: PortfolioAnalyticsMonthlyItem[];
+  totals_by_asset_type: PortfolioAnalyticsTotalByAssetType[];
+  totals_by_account: PortfolioAnalyticsTotalByAccount[];
+  totals_by_income_kind: PortfolioAnalyticsTotalByIncomeKind[];
+  income_feed: PortfolioAnalyticsIncomeFeedItem[];
+}
+
 export interface ScheduledExpense {
   id: number;
   category_id: number;

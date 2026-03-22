@@ -17,6 +17,7 @@ import {
   recordPortfolioFee,
   recordPortfolioIncome,
   topUpPortfolioPosition,
+  fetchPortfolioAnalytics,
 } from '../api';
 import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
 import TinkoffSyncDialog from '../components/TinkoffSyncDialog';
@@ -31,6 +32,7 @@ import type {
   PortfolioSummaryItem,
   TinkoffLivePrice,
   UserContext,
+  PortfolioAnalyticsData,
 } from '../types';
 import { formatAmount } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
@@ -164,6 +166,74 @@ const SECURITY_KIND_OPTIONS = [
   { value: 'bond', label: 'Облигации' },
   { value: 'fund', label: 'Фонды' },
 ] as const;
+
+const ANALYTICS_COLOR_PALETTE = [
+  '#00d2ff',
+  '#00e090',
+  '#ff5580',
+  '#ffaa00',
+  '#a855ff',
+  '#7b8a99',
+];
+
+const INCOME_KIND_LABELS: Record<string, string> = {
+  dividend: 'Дивиденды',
+  interest: 'Проценты',
+  coupon: 'Купоны',
+  other: 'Прочее',
+};
+
+function getAnalyticsPeriodRange(
+  periodType: 'month' | 'quarter' | 'year',
+  offset: number,
+): { dateFrom: string; dateTo: string; label: string } {
+  const now = new Date();
+  let start: Date;
+  let end: Date;
+  let label: string;
+
+  if (periodType === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+    label = start.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+  } else if (periodType === 'quarter') {
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const targetQuarter = currentQuarter + offset;
+    const targetYear = now.getFullYear() + Math.floor(targetQuarter / 4);
+    const targetQuarterInYear = ((targetQuarter % 4) + 4) % 4;
+    start = new Date(targetYear, targetQuarterInYear * 3, 1);
+    end = new Date(targetYear, targetQuarterInYear * 3 + 3, 0);
+    label = `${targetQuarterInYear + 1} кв. ${targetYear}`;
+  } else {
+    const targetYear = now.getFullYear() + offset;
+    start = new Date(targetYear, 0, 1);
+    end = new Date(targetYear, 11, 31);
+    label = String(targetYear);
+  }
+
+  return {
+    dateFrom: start.toISOString().slice(0, 10),
+    dateTo: end.toISOString().slice(0, 10),
+    label,
+  };
+}
+
+function buildPortfolioDonutGradient(segments: { share: number; color: string }[]): string {
+  if (segments.length === 0) {
+    return 'conic-gradient(var(--bg-inset) 0turn 1turn)';
+  }
+  let currentOffset = 0;
+  const parts = segments.map((s) => {
+    const start = currentOffset;
+    currentOffset += s.share;
+    return `${s.color} ${start}turn ${currentOffset}turn`;
+  });
+  return `conic-gradient(${parts.join(', ')})`;
+}
+
+function incomeKindLabel(kind: string): string {
+  return INCOME_KIND_LABELS[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+}
 
 
 function todayIso(): string {
@@ -350,6 +420,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [showAccountsModal, setShowAccountsModal] = useState(false);
   const [portfolioHubMode, setPortfolioHubMode] = useState<PortfolioHubMode | null>(null);
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
+  const [analyticsData, setAnalyticsData] = useState<PortfolioAnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsPeriodType, setAnalyticsPeriodType] = useState<'month' | 'quarter' | 'year'>('year');
+  const [analyticsPeriodOffset, setAnalyticsPeriodOffset] = useState(0);
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -444,6 +518,96 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setTinkoffLivePrices(new Map());
     });
   }, [openPositions, tinkoffConnections]);
+
+  const analyticsPeriodRange = useMemo(
+    () => getAnalyticsPeriodRange(analyticsPeriodType, analyticsPeriodOffset),
+    [analyticsPeriodType, analyticsPeriodOffset],
+  );
+
+  useEffect(() => {
+    if (portfolioHubMode !== 'analytics') return;
+    setAnalyticsLoading(true);
+    fetchPortfolioAnalytics(analyticsPeriodRange.dateFrom, analyticsPeriodRange.dateTo)
+      .then(setAnalyticsData)
+      .catch(() => setAnalyticsData(null))
+      .finally(() => setAnalyticsLoading(false));
+  }, [portfolioHubMode, analyticsPeriodRange.dateFrom, analyticsPeriodRange.dateTo]);
+
+  const analyticsMonthlyBars = useMemo(() => {
+    if (!analyticsData) return [];
+    const monthMap = new Map<string, { income: number; trades: number; adjustments: number }>();
+    for (const item of analyticsData.monthly_income) {
+      const existing = monthMap.get(item.period) ?? { income: 0, trades: 0, adjustments: 0 };
+      existing.income += item.total_amount;
+      monthMap.set(item.period, existing);
+    }
+    for (const item of analyticsData.monthly_trades) {
+      const existing = monthMap.get(item.period) ?? { income: 0, trades: 0, adjustments: 0 };
+      existing.trades += item.total_amount;
+      monthMap.set(item.period, existing);
+    }
+    for (const item of analyticsData.monthly_adjustments) {
+      const existing = monthMap.get(item.period) ?? { income: 0, trades: 0, adjustments: 0 };
+      existing.adjustments += item.total_amount;
+      monthMap.set(item.period, existing);
+    }
+    const entries = Array.from(monthMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+    const monthFormat: Intl.DateTimeFormatOptions['month'] = entries.length > 6 ? 'narrow' : 'short';
+    return entries.map(([period, values]) => ({
+      period,
+      label: new Date(period).toLocaleDateString('ru-RU', { month: monthFormat }),
+      income: values.income,
+      trades: values.trades,
+      total: values.income + values.trades + values.adjustments,
+    }));
+  }, [analyticsData]);
+
+  const analyticsAssetTypeDonut = useMemo(() => {
+    if (!analyticsData) return [];
+    const totalIncome = analyticsData.totals_by_asset_type.reduce(
+      (sum, item) => sum + item.income_total + item.trade_total + item.adjustment_total, 0,
+    );
+    if (totalIncome <= 0) return [];
+    return analyticsData.totals_by_asset_type
+      .map((item, index) => ({
+        key: item.asset_type_code,
+        label: assetTypeLabel(item.asset_type_code),
+        amount: item.income_total + item.trade_total + item.adjustment_total,
+        share: (item.income_total + item.trade_total + item.adjustment_total) / totalIncome,
+        color: ANALYTICS_COLOR_PALETTE[index % ANALYTICS_COLOR_PALETTE.length],
+      }))
+      .filter((s) => s.amount !== 0)
+      .sort((a, b) => b.amount - a.amount);
+  }, [analyticsData]);
+
+  const analyticsIncomeKindDonut = useMemo(() => {
+    if (!analyticsData) return [];
+    const total = analyticsData.totals_by_income_kind.reduce((sum, item) => sum + item.total_amount, 0);
+    if (total <= 0) return [];
+    return analyticsData.totals_by_income_kind
+      .map((item, index) => ({
+        key: item.income_kind,
+        label: incomeKindLabel(item.income_kind),
+        amount: item.total_amount,
+        share: item.total_amount / total,
+        color: ANALYTICS_COLOR_PALETTE[index % ANALYTICS_COLOR_PALETTE.length],
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [analyticsData]);
+
+  const analyticsTotalIncome = useMemo(() => {
+    if (!analyticsData) return 0;
+    return analyticsData.totals_by_asset_type.reduce(
+      (sum, item) => sum + item.income_total + item.adjustment_total, 0,
+    );
+  }, [analyticsData]);
+
+  const analyticsTotalTrades = useMemo(() => {
+    if (!analyticsData) return 0;
+    return analyticsData.totals_by_asset_type.reduce(
+      (sum, item) => sum + item.trade_total, 0,
+    );
+  }, [analyticsData]);
 
   const closedPositions = useMemo(
     () => positions.filter((position) => position.status === 'closed'),
@@ -2503,14 +2667,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 />
               ) : (
                 <div className="portfolio-analytics-view">
+                  {/* ── Hero: current portfolio snapshot ── */}
                   <div className="portfolio-analytics-hero">
                     <div>
                       <div className="section__eyebrow">Срез</div>
                       <h3 className="section__title">{portfolioAnalyticsScopeLabel}</h3>
                     </div>
-                    <p className="list-row__sub">
-                      Текущая структура портфеля по открытым позициям и свободному остатку на выбранных счетах.
-                    </p>
                     <div className="portfolio-analytics-summary">
                       <div className="portfolio-analytics-metric">
                         <span className="portfolio-analytics-metric__label">Оценочная стоимость</span>
@@ -2539,6 +2701,208 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     </div>
                   </div>
 
+                  {/* ── Period selector ── */}
+                  <div className="pa-period-controls">
+                    <div className="pa-period-chips">
+                      {(['month', 'quarter', 'year'] as const).map((pt) => (
+                        <button
+                          key={pt}
+                          type="button"
+                          className={`analytics-chip${analyticsPeriodType === pt ? ' analytics-chip--active' : ''}`}
+                          onClick={() => { setAnalyticsPeriodType(pt); setAnalyticsPeriodOffset(0); }}
+                        >
+                          {pt === 'month' ? 'Месяц' : pt === 'quarter' ? 'Квартал' : 'Год'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="pa-period-nav">
+                      <button type="button" className="pa-period-nav__arrow" onClick={() => setAnalyticsPeriodOffset((o) => o - 1)}>‹</button>
+                      <span className="pa-period-nav__label">{analyticsPeriodRange.label}</span>
+                      <button type="button" className="pa-period-nav__arrow" onClick={() => setAnalyticsPeriodOffset((o) => o + 1)}>›</button>
+                    </div>
+                  </div>
+
+                  {analyticsLoading && (
+                    <p className="list-row__sub" style={{ textAlign: 'center', padding: 24 }}>Загрузка...</p>
+                  )}
+
+                  {!analyticsLoading && analyticsData && (
+                    <>
+                      {/* ── Period totals ── */}
+                      <div className="portfolio-analytics-summary">
+                        <div className="portfolio-analytics-metric">
+                          <span className="portfolio-analytics-metric__label">Доход за период</span>
+                          <strong className={`portfolio-analytics-metric__value${analyticsTotalIncome >= 0 ? ' portfolio-analytics-metric__value--pos' : ' portfolio-analytics-metric__value--neg'}`}>
+                            {formatAmount(analyticsTotalIncome, user.base_currency_code)}
+                          </strong>
+                        </div>
+                        <div className="portfolio-analytics-metric">
+                          <span className="portfolio-analytics-metric__label">Результат сделок</span>
+                          <strong className={`portfolio-analytics-metric__value${analyticsTotalTrades >= 0 ? ' portfolio-analytics-metric__value--pos' : ' portfolio-analytics-metric__value--neg'}`}>
+                            {formatAmount(analyticsTotalTrades, user.base_currency_code)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* ── Donut: by asset type ── */}
+                      {analyticsAssetTypeDonut.length > 0 && (
+                        <section className="portfolio-analytics-section">
+                          <div className="portfolio-analytics-section__head">
+                            <div>
+                              <div className="section__eyebrow">Доходы за период</div>
+                              <h3 className="section__title">По типам активов</h3>
+                            </div>
+                          </div>
+                          <div className="pa-donut-layout">
+                            <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: buildPortfolioDonutGradient(analyticsAssetTypeDonut) }}>
+                              <div className="analytics-donut__inner">
+                                <strong>{formatAmount(analyticsTotalIncome + analyticsTotalTrades, user.base_currency_code)}</strong>
+                                <span className="analytics-donut__label">Итого</span>
+                              </div>
+                            </div>
+                            <div className="analytics-pill-grid">
+                              {analyticsAssetTypeDonut.map((segment) => (
+                                <div className="analytics-pill" key={segment.key}>
+                                  <span className="analytics-pill__dot" style={{ background: segment.color }} />
+                                  <div className="analytics-pill__content">
+                                    <div className="analytics-pill__title">{segment.label}</div>
+                                    <div className="analytics-pill__meta">
+                                      {formatAmount(segment.amount, user.base_currency_code)} · {(segment.share * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* ── Donut: by income kind ── */}
+                      {analyticsIncomeKindDonut.length > 0 && (
+                        <section className="portfolio-analytics-section">
+                          <div className="portfolio-analytics-section__head">
+                            <div>
+                              <div className="section__eyebrow">Структура дохода</div>
+                              <h3 className="section__title">По типам дохода</h3>
+                            </div>
+                          </div>
+                          <div className="pa-donut-layout">
+                            <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: buildPortfolioDonutGradient(analyticsIncomeKindDonut) }}>
+                              <div className="analytics-donut__inner">
+                                <strong>{formatAmount(analyticsTotalIncome, user.base_currency_code)}</strong>
+                                <span className="analytics-donut__label">Доход</span>
+                              </div>
+                            </div>
+                            <div className="analytics-pill-grid">
+                              {analyticsIncomeKindDonut.map((segment) => (
+                                <div className="analytics-pill" key={segment.key}>
+                                  <span className="analytics-pill__dot" style={{ background: segment.color }} />
+                                  <div className="analytics-pill__content">
+                                    <div className="analytics-pill__title">{segment.label}</div>
+                                    <div className="analytics-pill__meta">
+                                      {formatAmount(segment.amount, user.base_currency_code)} · {(segment.share * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* ── Monthly bar chart ── */}
+                      {analyticsMonthlyBars.length > 0 && (
+                        <section className="portfolio-analytics-section">
+                          <div className="portfolio-analytics-section__head">
+                            <div>
+                              <div className="section__eyebrow">Динамика</div>
+                              <h3 className="section__title">Доход по месяцам</h3>
+                            </div>
+                          </div>
+                          <div className="pa-bar-chart">
+                            {(() => {
+                              const maxVal = Math.max(...analyticsMonthlyBars.map((b) => Math.abs(b.total)), 1);
+                              return analyticsMonthlyBars.map((bar) => (
+                                <div key={bar.period} className="pa-bar-chart__col">
+                                  <div className="pa-bar-chart__bar-wrap">
+                                    {bar.income > 0 && (
+                                      <div
+                                        className="pa-bar-chart__bar pa-bar-chart__bar--income"
+                                        style={{ height: `${Math.max((bar.income / maxVal) * 100, 4)}%` }}
+                                        title={`Доход: ${formatAmount(bar.income, user.base_currency_code)}`}
+                                      />
+                                    )}
+                                    {bar.trades > 0 && (
+                                      <div
+                                        className="pa-bar-chart__bar pa-bar-chart__bar--trades"
+                                        style={{ height: `${Math.max((bar.trades / maxVal) * 100, 4)}%` }}
+                                        title={`Сделки: ${formatAmount(bar.trades, user.base_currency_code)}`}
+                                      />
+                                    )}
+                                    {bar.trades < 0 && (
+                                      <div
+                                        className="pa-bar-chart__bar pa-bar-chart__bar--trades-neg"
+                                        style={{ height: `${Math.max((Math.abs(bar.trades) / maxVal) * 100, 4)}%` }}
+                                        title={`Сделки: ${formatAmount(bar.trades, user.base_currency_code)}`}
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="pa-bar-chart__label">{bar.label}</div>
+                                  <div className="pa-bar-chart__value">{formatAmount(bar.total, user.base_currency_code)}</div>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                        </section>
+                      )}
+
+                      {/* ── By account for the period ── */}
+                      {analyticsData.totals_by_account.length > 0 && (
+                        <section className="portfolio-analytics-section">
+                          <div className="portfolio-analytics-section__head">
+                            <div>
+                              <div className="section__eyebrow">Счета</div>
+                              <h3 className="section__title">Доходность по счетам</h3>
+                            </div>
+                          </div>
+                          <div className="portfolio-analytics-stack">
+                            {analyticsData.totals_by_account.map((account) => {
+                              const accountTotal = account.income_total + account.trade_total + account.adjustment_total;
+                              return (
+                                <div key={account.investment_account_id} className="portfolio-analytics-row">
+                                  <div className="portfolio-analytics-row__top">
+                                    <div>
+                                      <div className="portfolio-analytics-row__title">{account.account_name}</div>
+                                      <div className="portfolio-analytics-row__meta">
+                                        {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.income_count} выплат · {account.trade_count} сделок
+                                      </div>
+                                    </div>
+                                    <div className="portfolio-analytics-row__side">
+                                      <strong className={accountTotal >= 0 ? 'portfolio-analytics-row__result portfolio-analytics-row__result--pos' : 'portfolio-analytics-row__result portfolio-analytics-row__result--neg'}>
+                                        {formatAmount(accountTotal, user.base_currency_code)}
+                                      </strong>
+                                    </div>
+                                  </div>
+                                  <div className="portfolio-analytics-row__meta portfolio-analytics-row__meta--inline">
+                                    Доход {formatAmount(account.income_total, user.base_currency_code)} · Сделки {formatAmount(account.trade_total, user.base_currency_code)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      )}
+
+                    </>
+                  )}
+
+                  {!analyticsLoading && !analyticsData && (
+                    <p className="list-row__sub" style={{ textAlign: 'center', padding: 24 }}>
+                      Нет данных за выбранный период.
+                    </p>
+                  )}
+
+                  {/* ── Static sections (from current positions) ── */}
                   {portfolioAnalyticsBuckets.length > 0 && (
                     <section className="portfolio-analytics-section">
                       <div className="portfolio-analytics-section__head">
@@ -2577,7 +2941,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     <div className="portfolio-analytics-section__head">
                       <div>
                         <div className="section__eyebrow">Счета</div>
-                        <h3 className="section__title">Сравнение по счетам</h3>
+                        <h3 className="section__title">Текущее сравнение</h3>
                       </div>
                     </div>
                     <div className="portfolio-analytics-stack">
