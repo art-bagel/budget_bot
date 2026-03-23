@@ -2,13 +2,19 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   archiveCreditAccount,
   createCreditAccount,
+  fetchCreditAccountSchedule,
+  fetchCreditAccountSummary,
   fetchBankAccountSnapshot,
   fetchBankAccounts,
   fetchCurrencies,
+  repayCreditAccount,
   transferBetweenAccounts,
+  updateCreditAccount,
 } from '../api';
 import type {
   BankAccount,
+  CreditAccountSummary,
+  CreditScheduleItem,
   Currency,
   DashboardBankBalance,
   UserContext,
@@ -41,6 +47,64 @@ interface RepayDraft {
   currencyCode: string;
   fromAccountId: string;
   comment: string;
+  paymentAt: string;
+}
+
+interface CreditEditDraft {
+  name: string;
+  creditLimit: string;
+  interestRate: string;
+  paymentDay: string;
+  creditStartedAt: string;
+  creditEndsAt: string;
+  providerName: string;
+}
+
+function isTermCredit(kind: CreditKind | null | undefined): boolean {
+  return kind === 'loan' || kind === 'mortgage';
+}
+
+function buildCreditEditDraft(account: BankAccount): CreditEditDraft {
+  return {
+    name: account.name ?? '',
+    creditLimit: account.credit_limit != null ? String(account.credit_limit) : '',
+    interestRate: account.interest_rate != null ? String(account.interest_rate) : '',
+    paymentDay: account.payment_day != null ? String(account.payment_day) : '',
+    creditStartedAt: account.credit_started_at ?? '',
+    creditEndsAt: account.credit_ends_at ?? '',
+    providerName: account.provider_name ?? '',
+  };
+}
+
+function buildRepayDraft(
+  credit: CreditWithBalances | null,
+  cashAccounts: BankAccount[],
+  baseCurrencyCode: string,
+): RepayDraft {
+  const currencyCode = credit?.balances[0]?.currency_code ?? baseCurrencyCode;
+  return {
+    amount: '',
+    currencyCode,
+    fromAccountId: String(cashAccounts[0]?.id ?? ''),
+    comment: '',
+    paymentAt: todayIso(),
+  };
+}
+
+function getMissingTermConfigFields(
+  summary: CreditAccountSummary | null,
+  account: BankAccount | null,
+): string[] {
+  const annualRate = summary?.annual_rate ?? account?.interest_rate ?? null;
+  const paymentDay = summary?.payment_day ?? account?.payment_day ?? null;
+  const creditEndsAt = summary?.credit_ends_at ?? account?.credit_ends_at ?? null;
+  const missing: string[] = [];
+
+  if (annualRate == null) missing.push('ставку');
+  if (paymentDay == null) missing.push('день платежа');
+  if (!creditEndsAt) missing.push('дату окончания');
+
+  return missing;
 }
 
 // Balances are negative for credit accounts (debt = negative balance)
@@ -67,6 +131,18 @@ export default function Credits({ user }: { user: UserContext }) {
 
   // Selected credit for detail panel
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedSummary, setSelectedSummary] = useState<CreditAccountSummary | null>(null);
+  const [selectedSummaryLoading, setSelectedSummaryLoading] = useState(false);
+  const [selectedSummaryError, setSelectedSummaryError] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleItems, setScheduleItems] = useState<CreditScheduleItem[]>([]);
+  const [selectedScheduleYear, setSelectedScheduleYear] = useState<number | null>(null);
+  const [editingCredit, setEditingCredit] = useState(false);
+  const [editDraft, setEditDraft] = useState<CreditEditDraft | null>(null);
+  const [savingCredit, setSavingCredit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Repay form
   const [repayDrafts, setRepayDrafts] = useState<Record<number, RepayDraft>>({});
@@ -128,23 +204,106 @@ export default function Credits({ user }: { user: UserContext }) {
   const handleOpenDetail = (id: number) => {
     setRepayError(null);
     setArchiveError(null);
+    setSelectedSummary(null);
+    setSelectedSummaryError(null);
+    setScheduleOpen(false);
+    setScheduleItems([]);
+    setScheduleError(null);
+    setSelectedScheduleYear(null);
+    setEditingCredit(false);
+    setEditError(null);
     setSelectedId(id);
     setRepayDrafts((prev) => {
       if (prev[id]) return prev;
       const credit = credits.find(({ account }) => account.id === id);
-      const currency = credit?.account.provider_name
-        ? credit.balances[0]?.currency_code ?? user.base_currency_code
-        : user.base_currency_code;
       return {
         ...prev,
-        [id]: { amount: '', currencyCode: currency, fromAccountId: String(cashAccounts[0]?.id ?? ''), comment: '' },
+        [id]: buildRepayDraft(credit ?? null, cashAccounts, user.base_currency_code),
       };
     });
+    const credit = credits.find(({ account }) => account.id === id);
+    setEditDraft(credit ? buildCreditEditDraft(credit.account) : null);
   };
 
   const handleCloseDetail = () => {
     setSelectedId(null);
     setArchiveError(null);
+    setSelectedSummary(null);
+    setSelectedSummaryError(null);
+    setScheduleOpen(false);
+    setScheduleItems([]);
+    setScheduleError(null);
+    setSelectedScheduleYear(null);
+    setEditingCredit(false);
+    setEditDraft(null);
+    setEditError(null);
+  };
+
+  useEffect(() => {
+    if (!selectedCredit) return;
+    if (!editingCredit) {
+      setEditDraft(buildCreditEditDraft(selectedCredit.account));
+      setEditError(null);
+    }
+  }, [editingCredit, selectedCredit]);
+
+  useEffect(() => {
+    if (!selectedCredit) return;
+    setRepayDrafts((prev) => {
+      if (prev[selectedCredit.account.id]) return prev;
+      return {
+        ...prev,
+        [selectedCredit.account.id]: buildRepayDraft(selectedCredit, cashAccounts, user.base_currency_code),
+      };
+    });
+  }, [cashAccounts, selectedCredit, user.base_currency_code]);
+
+  useEffect(() => {
+    if (!selectedCredit || !isTermCredit(selectedCredit.account.credit_kind)) {
+      setSelectedSummary(null);
+      setSelectedSummaryLoading(false);
+      setSelectedSummaryError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedSummaryLoading(true);
+    setSelectedSummaryError(null);
+
+    void fetchCreditAccountSummary(selectedCredit.account.id)
+      .then((summary) => {
+        if (cancelled) return;
+        setSelectedSummary(summary);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSelectedSummary(null);
+        setSelectedSummaryError(err instanceof Error ? err.message : 'Не удалось загрузить расчёт кредита');
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedSummaryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCredit]);
+
+  const openSchedule = async () => {
+    if (!selectedCredit || !isTermCredit(selectedCredit.account.credit_kind)) return;
+    setScheduleOpen(true);
+    setScheduleLoading(true);
+    setScheduleError(null);
+    try {
+      const items = await fetchCreditAccountSchedule(selectedCredit.account.id);
+      setScheduleItems(items);
+      setSelectedScheduleYear(items.length > 0 ? new Date(items[0].scheduled_date).getFullYear() : null);
+    } catch (err) {
+      setScheduleItems([]);
+      setScheduleError(err instanceof Error ? err.message : 'Не удалось загрузить график платежей');
+    } finally {
+      setScheduleLoading(false);
+    }
   };
 
   const handleArchive = async (creditId: number) => {
@@ -162,6 +321,34 @@ export default function Credits({ user }: { user: UserContext }) {
     }
   };
 
+  const handleSaveCredit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedCredit || !editDraft || savingCredit) return;
+
+    setSavingCredit(true);
+    setEditError(null);
+    try {
+      await updateCreditAccount(selectedCredit.account.id, {
+        name: editDraft.name.trim(),
+        credit_limit: Number(editDraft.creditLimit),
+        interest_rate: editDraft.interestRate.trim() ? Number(editDraft.interestRate) : null,
+        payment_day: editDraft.paymentDay.trim() ? Number(editDraft.paymentDay) : null,
+        credit_started_at: editDraft.creditStartedAt || null,
+        credit_ends_at: editDraft.creditEndsAt || null,
+        provider_name: editDraft.providerName.trim() || null,
+      });
+      setEditingCredit(false);
+      setScheduleOpen(false);
+      setScheduleItems([]);
+      setSelectedScheduleYear(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Не удалось сохранить параметры кредита');
+    } finally {
+      setSavingCredit(false);
+    }
+  };
+
   const handleRepay = async (e: FormEvent, creditId: number) => {
     e.preventDefault();
     const draft = repayDrafts[creditId];
@@ -170,17 +357,30 @@ export default function Credits({ user }: { user: UserContext }) {
     setSubmittingRepayId(creditId);
     setRepayError(null);
     try {
-      await transferBetweenAccounts({
-        from_account_id: Number(draft.fromAccountId),
-        to_account_id: creditId,
-        currency_code: draft.currencyCode,
-        amount: Number(draft.amount),
-        comment: draft.comment.trim() || undefined,
-      });
+      const selectedAccount = credits.find(({ account }) => account.id === creditId)?.account;
+      if (selectedAccount && isTermCredit(selectedAccount.credit_kind)) {
+        await repayCreditAccount(creditId, {
+          from_account_id: Number(draft.fromAccountId),
+          currency_code: draft.currencyCode,
+          amount: Number(draft.amount),
+          comment: draft.comment.trim() || undefined,
+          payment_at: draft.paymentAt ? new Date(`${draft.paymentAt}T12:00:00`).toISOString() : undefined,
+        });
+      } else {
+        await transferBetweenAccounts({
+          from_account_id: Number(draft.fromAccountId),
+          to_account_id: creditId,
+          currency_code: draft.currencyCode,
+          amount: Number(draft.amount),
+          comment: draft.comment.trim() || undefined,
+        });
+      }
       setRepayDrafts((prev) => {
-        const next = { ...prev };
-        delete next[creditId];
-        return next;
+        const credit = credits.find(({ account }) => account.id === creditId) ?? null;
+        return {
+          ...prev,
+          [creditId]: buildRepayDraft(credit, cashAccounts, user.base_currency_code),
+        };
       });
       await load();
     } catch (err) {
@@ -239,6 +439,26 @@ export default function Credits({ user }: { user: UserContext }) {
   const hasTerm = (kind: CreditKind) => kind === 'loan' || kind === 'mortgage';
 
   const getCreditDebt = ({ balances }: CreditWithBalances) => accountDebt(balances);
+  const scheduleYears = useMemo(
+    () => Array.from(new Set(scheduleItems.map((item) => new Date(item.scheduled_date).getFullYear()))),
+    [scheduleItems],
+  );
+  const visibleScheduleItems = useMemo(
+    () => (
+      selectedScheduleYear == null
+        ? scheduleItems
+        : scheduleItems.filter((item) => new Date(item.scheduled_date).getFullYear() === selectedScheduleYear)
+    ),
+    [scheduleItems, selectedScheduleYear],
+  );
+  const missingTermConfigFields = useMemo(
+    () => (
+      selectedCredit && isTermCredit(selectedCredit.account.credit_kind)
+        ? getMissingTermConfigFields(selectedSummary, selectedCredit.account)
+        : []
+    ),
+    [selectedCredit, selectedSummary],
+  );
 
   if (loading) {
     return (
@@ -382,14 +602,69 @@ export default function Credits({ user }: { user: UserContext }) {
 
                 {/* Debt info */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                  {selectedCredit.balances.map((b) => (
-                    <div key={b.currency_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span className="settings-row__sub">Остаток долга <span className="pill">{b.currency_code}</span></span>
-                      <strong style={{ color: 'var(--tag-out-fg)' }}>
-                        −{formatAmount(Math.abs(b.amount), b.currency_code)}
-                      </strong>
-                    </div>
-                  ))}
+                  {isTermCredit(selectedCredit.account.credit_kind) && selectedSummary ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                        <span className="settings-row__sub">Основной долг <span className="pill">{selectedSummary.currency_code}</span></span>
+                        <strong style={{ color: 'var(--tag-out-fg)' }}>
+                          {formatAmount(selectedSummary.principal_outstanding, selectedSummary.currency_code)}
+                        </strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                        <span className="settings-row__sub">Начислено процентов на сегодня</span>
+                        <strong>{formatAmount(selectedSummary.accrued_interest, selectedSummary.currency_code)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                        <span className="settings-row__sub">К оплате на сегодня</span>
+                        <strong>{formatAmount(selectedSummary.total_due_as_of, selectedSummary.currency_code)}</strong>
+                      </div>
+                      {selectedSummary.next_payment_date && selectedSummary.next_payment_total != null && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                          <span className="settings-row__sub">
+                            Следующий платёж · {new Date(selectedSummary.next_payment_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
+                          </span>
+                          <strong>{formatAmount(selectedSummary.next_payment_total, selectedSummary.currency_code)}</strong>
+                        </div>
+                      )}
+                      {selectedSummary.next_payment_interest != null && selectedSummary.next_payment_principal != null && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span className="settings-row__sub">В следующем платеже</span>
+                          <span className="settings-row__sub">
+                            {formatAmount(selectedSummary.next_payment_interest, selectedSummary.currency_code)} проценты
+                            {' · '}
+                            {formatAmount(selectedSummary.next_payment_principal, selectedSummary.currency_code)} долг
+                          </span>
+                        </div>
+                      )}
+                      {selectedSummary.payments_count > 0 && (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                            <span className="settings-row__sub">Погашено основного долга</span>
+                            <span>{formatAmount(selectedSummary.paid_principal_total, selectedSummary.currency_code)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                            <span className="settings-row__sub">Уплачено процентов</span>
+                            <span>{formatAmount(selectedSummary.paid_interest_total, selectedSummary.currency_code)}</span>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    selectedCredit.balances.map((b) => (
+                      <div key={b.currency_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                        <span className="settings-row__sub">Остаток долга <span className="pill">{b.currency_code}</span></span>
+                        <strong style={{ color: 'var(--tag-out-fg)' }}>
+                          −{formatAmount(Math.abs(b.amount), b.currency_code)}
+                        </strong>
+                      </div>
+                    ))
+                  )}
+                  {selectedSummaryLoading && (
+                    <div className="settings-row__sub">Считаем проценты и график...</div>
+                  )}
+                  {selectedSummaryError && (
+                    <div className="settings-row__sub" style={{ color: 'var(--tag-out-fg)' }}>{selectedSummaryError}</div>
+                  )}
                   {selectedCredit.account.credit_kind === 'credit_card' && selectedCredit.account.credit_limit != null && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span className="settings-row__sub">Использовано</span>
@@ -398,6 +673,12 @@ export default function Credits({ user }: { user: UserContext }) {
                         {' из '}
                         {formatAmount(selectedCredit.account.credit_limit, user.base_currency_code)}
                       </span>
+                    </div>
+                  )}
+                  {selectedCredit.account.provider_name && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span className="settings-row__sub">Банк</span>
+                      <span>{selectedCredit.account.provider_name}</span>
                     </div>
                   )}
                   {selectedCredit.account.interest_rate != null && (
@@ -412,15 +693,149 @@ export default function Credits({ user }: { user: UserContext }) {
                       <span>{selectedCredit.account.payment_day}-е число каждого месяца</span>
                     </div>
                   )}
-                  {selectedCredit.account.credit_started_at && (
+                  {(selectedCredit.account.credit_started_at || selectedCredit.account.credit_ends_at) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span className="settings-row__sub">Срок</span>
                       <span>
-                        {new Date(selectedCredit.account.credit_started_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {selectedCredit.account.credit_started_at
+                          ? new Date(selectedCredit.account.credit_started_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
                         {selectedCredit.account.credit_ends_at
                           ? ` — ${new Date(selectedCredit.account.credit_ends_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}`
                           : null}
                       </span>
+                    </div>
+                  )}
+                  {isTermCredit(selectedCredit.account.credit_kind) && !selectedSummaryLoading && !selectedSummaryError && missingTermConfigFields.length > 0 && (
+                    <div className="credit-config-hint">
+                      <span className="settings-row__sub">
+                        Чтобы появился график платежей, заполни {missingTermConfigFields.join(', ')}.
+                      </span>
+                    </div>
+                  )}
+                  <div className="credit-detail-actions">
+                    <button
+                      className="btn btn--secondary"
+                      type="button"
+                      onClick={() => {
+                        setEditingCredit((prev) => !prev);
+                        setEditError(null);
+                      }}
+                    >
+                      {editingCredit ? 'Скрыть условия' : 'Изменить условия'}
+                    </button>
+                    {isTermCredit(selectedCredit.account.credit_kind) && (
+                      <button
+                        className="btn btn--secondary"
+                        type="button"
+                        onClick={() => void openSchedule()}
+                        disabled={scheduleLoading || !!selectedSummaryError || !selectedSummary?.schedule_available}
+                      >
+                        {scheduleLoading ? 'Загружаем график...' : 'График платежей'}
+                      </button>
+                    )}
+                  </div>
+                  {editingCredit && editDraft && (
+                    <div className="credit-edit-panel">
+                      <div className="section__eyebrow">Параметры кредита</div>
+                      <form onSubmit={(e) => void handleSaveCredit(e)}>
+                        <div className="form-row" style={{ marginTop: 8 }}>
+                          <input
+                            className="input"
+                            type="text"
+                            placeholder="Название кредита"
+                            value={editDraft.name}
+                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+                            disabled={savingCredit}
+                            style={{ flex: '1 1 260px' }}
+                          />
+                        </div>
+                        <div className="form-row" style={{ marginTop: 8 }}>
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Кредитный лимит"
+                            value={editDraft.creditLimit}
+                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, creditLimit: e.target.value } : prev))}
+                            disabled={savingCredit}
+                            style={{ width: 180 }}
+                          />
+                          <input
+                            className="input"
+                            type="text"
+                            placeholder="Банк"
+                            value={editDraft.providerName}
+                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, providerName: e.target.value } : prev))}
+                            disabled={savingCredit}
+                            style={{ flex: '1 1 220px' }}
+                          />
+                        </div>
+                        <div className="form-row" style={{ marginTop: 8 }}>
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Ставка, % годовых"
+                            value={editDraft.interestRate}
+                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, interestRate: e.target.value } : prev))}
+                            disabled={savingCredit}
+                            style={{ width: 180 }}
+                          />
+                          {isTermCredit(selectedCredit.account.credit_kind) && (
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="День платежа"
+                              value={editDraft.paymentDay}
+                              onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, paymentDay: e.target.value.replace(/\D/g, '') } : prev))}
+                              disabled={savingCredit}
+                              style={{ width: 160 }}
+                            />
+                          )}
+                        </div>
+                        {isTermCredit(selectedCredit.account.credit_kind) && (
+                          <div className="form-row" style={{ marginTop: 8 }}>
+                            <input
+                              className="input"
+                              type="date"
+                              value={editDraft.creditStartedAt}
+                              onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, creditStartedAt: e.target.value } : prev))}
+                              disabled={savingCredit}
+                              style={{ flex: '1 1 180px' }}
+                            />
+                            <input
+                              className="input"
+                              type="date"
+                              value={editDraft.creditEndsAt}
+                              onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, creditEndsAt: e.target.value } : prev))}
+                              disabled={savingCredit}
+                              style={{ flex: '1 1 180px' }}
+                            />
+                          </div>
+                        )}
+                        {editError && (
+                          <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{editError}</p>
+                        )}
+                        <div className="credit-edit-panel__actions">
+                          <button
+                            className="btn btn--secondary"
+                            type="button"
+                            disabled={savingCredit}
+                            onClick={() => {
+                              setEditingCredit(false);
+                              setEditDraft(buildCreditEditDraft(selectedCredit.account));
+                              setEditError(null);
+                            }}
+                          >
+                            Отмена
+                          </button>
+                          <button className="btn btn--primary" type="submit" disabled={savingCredit}>
+                            {savingCredit ? 'Сохраняем...' : 'Сохранить условия'}
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   )}
                 </div>
@@ -431,6 +846,11 @@ export default function Credits({ user }: { user: UserContext }) {
                 <div className="section__header" style={{ marginBottom: 8 }}>
                   <div className="section__eyebrow">Погашение</div>
                 </div>
+                {isTermCredit(selectedCredit.account.credit_kind) && (
+                  <p className="settings-row__sub" style={{ marginBottom: 8 }}>
+                    Платёж сначала покроет начисленные проценты, остаток уменьшит основной долг.
+                  </p>
+                )}
                 <form onSubmit={(e) => void handleRepay(e, selectedCredit.account.id)}>
                   <div className="form-row">
                     <input
@@ -478,6 +898,25 @@ export default function Credits({ user }: { user: UserContext }) {
                     </select>
                   </div>
                   <div className="form-row" style={{ marginTop: 8 }}>
+                    {isTermCredit(selectedCredit.account.credit_kind) && (
+                      <input
+                        className="input"
+                        type="date"
+                        value={repayDrafts[selectedCredit.account.id]?.paymentAt ?? todayIso()}
+                        max={todayIso()}
+                        onChange={(e) => setRepayDrafts((prev) => ({
+                          ...prev,
+                          [selectedCredit.account.id]: {
+                            ...prev[selectedCredit.account.id],
+                            paymentAt: e.target.value,
+                          },
+                        }))}
+                        disabled={submittingRepayId === selectedCredit.account.id}
+                        style={{ width: 180 }}
+                      />
+                    )}
+                  </div>
+                  <div className="form-row" style={{ marginTop: 8 }}>
                     <input
                       className="input"
                       type="text"
@@ -522,6 +961,75 @@ export default function Credits({ user }: { user: UserContext }) {
                     {archiving ? 'Архивируем...' : 'В архив'}
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleOpen && selectedCredit && (
+        <div className="modal-backdrop" onClick={() => setScheduleOpen(false)}>
+          <div className="modal-card credit-schedule-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="section__eyebrow">График платежей</div>
+                <div className="section__title">{selectedCredit.account.name}</div>
+              </div>
+            </div>
+            <div className="modal-body">
+              {scheduleYears.length > 0 && (
+                <div className="credit-schedule-years">
+                  {scheduleYears.map((year) => (
+                    <button
+                      key={year}
+                      className={`credit-schedule-years__pill${selectedScheduleYear === year ? ' credit-schedule-years__pill--active' : ''}`}
+                      type="button"
+                      onClick={() => setSelectedScheduleYear(year)}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {scheduleLoading ? (
+                <p className="settings-row__sub">Собираем график платежей...</p>
+              ) : scheduleError ? (
+                <p className="settings-row__sub" style={{ color: 'var(--tag-out-fg)' }}>{scheduleError}</p>
+              ) : visibleScheduleItems.length === 0 ? (
+                <p className="settings-row__sub">График пока недоступен. Проверь срок, ставку и дату платежа.</p>
+              ) : (
+                <div className="credit-schedule-list">
+                  {visibleScheduleItems.map((item) => (
+                    <div className="credit-schedule-item" key={item.scheduled_date}>
+                      <div className="credit-schedule-item__head">
+                        <strong>
+                          {new Date(item.scheduled_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
+                          {' — '}
+                          {formatAmount(item.total_payment, selectedSummary?.currency_code ?? user.base_currency_code)}
+                        </strong>
+                      </div>
+                      <div className="credit-schedule-item__sub">
+                        Остаток {formatAmount(item.principal_after, selectedSummary?.currency_code ?? user.base_currency_code)}
+                      </div>
+                      <div className="credit-schedule-item__row">
+                        <span>Основной долг</span>
+                        <strong>{formatAmount(item.principal_component, selectedSummary?.currency_code ?? user.base_currency_code)}</strong>
+                      </div>
+                      <div className="credit-schedule-item__row">
+                        <span>Проценты</span>
+                        <strong>{formatAmount(item.interest_component, selectedSummary?.currency_code ?? user.base_currency_code)}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <div className="action-pill">
+                <button className="action-pill__cancel" type="button" onClick={() => setScheduleOpen(false)}>
+                  Закрыть
+                </button>
               </div>
             </div>
           </div>

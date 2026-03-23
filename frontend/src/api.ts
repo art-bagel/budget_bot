@@ -31,6 +31,11 @@ import type {
   CreateScheduledExpenseResponse,
   AccountCurrency,
   BankAccount,
+  CreditAccountSummary,
+  CreditRepaymentRequest,
+  CreditRepaymentResponse,
+  CreditScheduleItem,
+  UpdateCreditAccountRequest,
   IncomePattern,
   RecordIncomeSplitRequest,
   RecordIncomeSplitResponse,
@@ -85,6 +90,50 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
 
   if (text.includes('Credit limit is not configured')) {
     return 'Кредитный лимит не настроен для этого счёта';
+  }
+
+  if (text.includes('Credit repayment is supported only from cash accounts')) {
+    return 'Погашение кредита пока можно делать только с обычного счёта';
+  }
+
+  if (text.includes('Use a regular account transfer to repay credit cards')) {
+    return 'Для кредитной карты пока используйте обычное погашение переводом';
+  }
+
+  if (text.includes('Payment exceeds current total due')) {
+    return 'Сумма платежа больше текущей задолженности с процентами';
+  }
+
+  if (text.includes('Payment exceeds current principal balance')) {
+    return 'Сумма платежа больше остатка основного долга';
+  }
+
+  if (text.includes('Payment date cannot be earlier than the last repayment date')) {
+    return 'Дата платежа не может быть раньше предыдущего платежа';
+  }
+
+  if (text.includes('Currency mismatch for credit repayment')) {
+    return 'Выбрана не та валюта для погашения кредита';
+  }
+
+  if (text.includes('Credit account is already fully repaid')) {
+    return 'Этот кредит уже полностью погашен';
+  }
+
+  if (text.includes('Credit repayment can only be reversed from newest to oldest')) {
+    return 'Сначала нужно отменить более поздний платёж по этому кредиту';
+  }
+
+  if (text.includes('Interest rate must be non-negative')) {
+    return 'Ставка не может быть отрицательной';
+  }
+
+  if (text.includes('Credit end date must be after start date')) {
+    return 'Дата окончания должна быть позже даты начала';
+  }
+
+  if (text.includes('Credit limit cannot be smaller than current outstanding principal')) {
+    return 'Лимит не может быть меньше текущего остатка основного долга';
   }
 
   if (text.includes('Insufficient budget in category')) {
@@ -442,6 +491,45 @@ export async function createCreditAccount(data: CreateCreditAccountRequest): Pro
 
 export async function archiveCreditAccount(bankAccountId: number): Promise<{ bank_account_id: number; name: string; is_active: boolean }> {
   return apiFetch(`/bank-accounts/credit/${bankAccountId}/archive`, { method: 'POST' });
+}
+
+export async function updateCreditAccount(
+  bankAccountId: number,
+  data: UpdateCreditAccountRequest,
+): Promise<BankAccount> {
+  return apiFetch<BankAccount>(`/bank-accounts/credit/${bankAccountId}/update`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchCreditAccountSummary(
+  bankAccountId: number,
+  asOf?: string,
+): Promise<CreditAccountSummary> {
+  const query = asOf ? `?as_of=${encodeURIComponent(asOf)}` : '';
+  return apiFetch<CreditAccountSummary>(`/bank-accounts/credit/${bankAccountId}/summary${query}`);
+}
+
+export async function fetchCreditAccountSchedule(
+  bankAccountId: number,
+  params?: { asOf?: string; limit?: number },
+): Promise<CreditScheduleItem[]> {
+  const search = new URLSearchParams();
+  if (params?.asOf) search.set('as_of', params.asOf);
+  if (params?.limit) search.set('limit', String(params.limit));
+  const query = search.toString();
+  return apiFetch<CreditScheduleItem[]>(`/bank-accounts/credit/${bankAccountId}/schedule${query ? `?${query}` : ''}`);
+}
+
+export async function repayCreditAccount(
+  bankAccountId: number,
+  data: CreditRepaymentRequest,
+): Promise<CreditRepaymentResponse> {
+  return apiFetch<CreditRepaymentResponse>(`/bank-accounts/credit/${bankAccountId}/repay`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function fetchBankAccountSnapshot(bankAccountId: number): Promise<DashboardBankBalance[]> {

@@ -333,6 +333,97 @@ p { margin: 0; }
   color: rgba(255, 255, 255, 0.75);
 }
 
+.credit-schedule-modal {
+  max-width: 560px;
+}
+
+.credit-schedule-years {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+}
+
+.credit-schedule-years__pill {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.credit-schedule-years__pill--active {
+  background: var(--text-primary);
+  color: var(--bg-card);
+}
+
+.credit-schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.credit-schedule-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--radius-l);
+  background: var(--bg-inset);
+}
+
+.credit-schedule-item__head {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.credit-schedule-item__sub {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.credit-schedule-item__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.credit-config-hint {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(15, 120, 104, 0.08);
+}
+
+.credit-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.credit-edit-panel {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.credit-edit-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .hero-card__value-row {
   display: flex;
   align-items: baseline;

@@ -305,6 +305,72 @@ export interface CreateCreditAccountRequest {
   provider_name?: string;
 }
 
+export interface UpdateCreditAccountRequest {
+  name: string;
+  credit_limit: number;
+  interest_rate?: number | null;
+  payment_day?: number | null;
+  credit_started_at?: string | null;
+  credit_ends_at?: string | null;
+  provider_name?: string | null;
+}
+
+export interface CreditRepaymentRequest {
+  from_account_id: number;
+  currency_code: string;
+  amount: number;
+  comment?: string;
+  payment_at?: string;
+}
+
+export interface CreditRepaymentResponse {
+  operation_id: number;
+  payment_amount: number;
+  principal_paid: number;
+  interest_paid: number;
+  principal_before: number;
+  principal_after: number;
+  accrued_interest: number;
+  amount_in_base: number;
+  base_currency_code: string;
+}
+
+export interface CreditScheduleItem {
+  scheduled_date: string;
+  total_payment: number;
+  principal_component: number;
+  interest_component: number;
+  principal_before: number;
+  principal_after: number;
+}
+
+export interface CreditAccountSummary {
+  bank_account_id: number;
+  name: string;
+  credit_kind: 'loan' | 'credit_card' | 'mortgage';
+  currency_code: string;
+  principal_outstanding: number;
+  accrued_interest: number;
+  total_due_as_of: number;
+  annual_rate?: number | null;
+  payment_day?: number | null;
+  credit_started_at?: string | null;
+  credit_ends_at?: string | null;
+  credit_limit?: number | null;
+  last_accrual_date?: string | null;
+  last_payment_at?: string | null;
+  payments_count: number;
+  paid_principal_total: number;
+  paid_interest_total: number;
+  as_of_date: string;
+  schedule_available: boolean;
+  remaining_payments: number;
+  next_payment_date?: string | null;
+  next_payment_total?: number | null;
+  next_payment_principal?: number | null;
+  next_payment_interest?: number | null;
+}
+
 export interface CreditAccountWithBalances {
   account: BankAccount;
   balances: DashboardBankBalance[];

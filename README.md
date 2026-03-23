@@ -21,6 +21,7 @@ Telegram-бот для учета бюджета и инвестиций с Fast
 - [DATA_MODEL.dbml](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/DATA_MODEL.dbml) — схема данных в DBML.
 - [docs/tinkoff-integration.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/tinkoff-integration.md) — текущее устройство интеграции с T-Bank.
 - [docs/investment-implementation-checklist.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/investment-implementation-checklist.md) — текущий статус investment-модуля и backlog.
+- [docs/crypto-investment-accounts.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/crypto-investment-accounts.md) — дизайн-концепт будущих крипто-счетов и DeFi-операций.
 - [docs/telegram-webapp-safe-area.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/telegram-webapp-safe-area.md) — особенности safe area в Telegram WebApp.
 
 ## Структура репозитория

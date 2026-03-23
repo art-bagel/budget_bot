@@ -20,6 +20,11 @@ DECLARE
     _owner_family_id bigint;
     _base_currency_code char(3);
     _bank_cost_delta numeric(20, 2);
+    _bank_account_kind text;
+    _bank_credit_limit numeric(20, 2);
+    _credit_payment_id bigint;
+    _credit_payment_at timestamptz;
+    _credit_account_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
@@ -44,12 +49,32 @@ BEGIN
         RAISE EXCEPTION 'Investment operations reversal is not supported yet';
     END IF;
 
+    SELECT cpe.id, cpe.payment_at, cpe.credit_account_id
+    INTO _credit_payment_id, _credit_payment_at, _credit_account_id
+    FROM credit_payment_events cpe
+    WHERE cpe.operation_id = _operation_id;
+
     PERFORM 1
     FROM operations
     WHERE reversal_of_operation_id = _operation_id;
 
     IF FOUND THEN
         RAISE EXCEPTION 'Operation % has already been reversed', _operation_id;
+    END IF;
+
+    IF _credit_payment_id IS NOT NULL THEN
+        PERFORM 1
+        FROM credit_payment_events later_cpe
+        WHERE later_cpe.credit_account_id = _credit_account_id
+          AND later_cpe.id <> _credit_payment_id
+          AND (
+              later_cpe.payment_at > _credit_payment_at
+              OR (later_cpe.payment_at = _credit_payment_at AND later_cpe.id > _credit_payment_id)
+          );
+
+        IF FOUND THEN
+            RAISE EXCEPTION 'Credit repayment can only be reversed from newest to oldest';
+        END IF;
     END IF;
 
     FOR _created_lot IN
@@ -73,15 +98,30 @@ BEGIN
         WHERE operation_id = _operation_id
     LOOP
         IF _bank_entry.amount > 0 THEN
-            SELECT COALESCE((
-                SELECT amount
-                FROM current_bank_balances
-                WHERE bank_account_id = _bank_entry.bank_account_id
-                  AND currency_code = _bank_entry.currency_code
-            ), 0)
-            INTO _current_balance;
+            SELECT
+                ba.account_kind,
+                ba.credit_limit,
+                COALESCE((
+                    SELECT amount
+                    FROM current_bank_balances
+                    WHERE bank_account_id = _bank_entry.bank_account_id
+                      AND currency_code = _bank_entry.currency_code
+                ), 0)
+            INTO _bank_account_kind, _bank_credit_limit, _current_balance
+            FROM bank_accounts ba
+            WHERE ba.id = _bank_entry.bank_account_id;
 
-            IF _current_balance < _bank_entry.amount THEN
+            IF _bank_account_kind = 'credit' THEN
+                IF _bank_credit_limit IS NULL THEN
+                    RAISE EXCEPTION 'Credit limit is not configured for bank account %', _bank_entry.bank_account_id;
+                END IF;
+
+                IF (_current_balance - _bank_entry.amount) < -_bank_credit_limit THEN
+                    RAISE EXCEPTION 'Cannot reverse operation %, credit limit exceeded for bank account %',
+                        _operation_id,
+                        _bank_entry.bank_account_id;
+                END IF;
+            ELSIF _current_balance < _bank_entry.amount THEN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient bank balance in currency %',
                     _operation_id,
                     _bank_entry.currency_code;
@@ -213,6 +253,11 @@ BEGIN
             -_budget_entry.amount
         );
     END LOOP;
+
+    IF _credit_payment_id IS NOT NULL THEN
+        DELETE FROM credit_payment_events
+        WHERE id = _credit_payment_id;
+    END IF;
 
     RETURN jsonb_build_object(
         'reversal_operation_id', _reversal_operation_id,

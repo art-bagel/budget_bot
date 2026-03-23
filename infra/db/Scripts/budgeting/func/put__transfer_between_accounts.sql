@@ -1,3 +1,12 @@
+DROP FUNCTION IF EXISTS budgeting.put__transfer_between_accounts(
+    bigint,
+    bigint,
+    bigint,
+    char(3),
+    numeric,
+    text
+);
+
 CREATE OR REPLACE FUNCTION budgeting.put__transfer_between_accounts(
     _user_id         bigint,
     _from_account_id bigint,

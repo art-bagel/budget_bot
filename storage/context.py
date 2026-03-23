@@ -10,6 +10,7 @@ class Context(DataBase):
     F_PUT__CREATE_FAMILY = 'put__create_family'
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
     F_PUT__CREATE_CREDIT_ACCOUNT = 'put__create_credit_account'
+    F_PUT__REPAY_CREDIT_ACCOUNT = 'put__repay_credit_account'
     F_PUT__CREATE_PORTFOLIO_POSITION = 'put__create_portfolio_position'
     F_PUT__TOP_UP_PORTFOLIO_POSITION = 'put__top_up_portfolio_position'
     F_PUT__PARTIAL_CLOSE_PORTFOLIO_POSITION = 'put__partial_close_portfolio_position'
@@ -29,6 +30,7 @@ class Context(DataBase):
     F_SET__LEAVE_FAMILY = 'set__leave_family'
     F_SET__DISSOLVE_FAMILY = 'set__dissolve_family'
     F_SET__ARCHIVE_CREDIT_ACCOUNT = 'set__archive_credit_account'
+    F_SET__UPDATE_CREDIT_ACCOUNT = 'set__update_credit_account'
 
     async def put__register_user_context(
         self,
@@ -122,6 +124,52 @@ class Context(DataBase):
             self._fn(self.F_SET__ARCHIVE_CREDIT_ACCOUNT),
             user_id,
             bank_account_id,
+        )
+
+    async def set__update_credit_account(
+        self,
+        user_id: int,
+        bank_account_id: int,
+        name: str,
+        credit_limit: float,
+        interest_rate: Optional[float] = None,
+        payment_day: Optional[int] = None,
+        credit_started_at=None,
+        credit_ends_at=None,
+        provider_name: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__UPDATE_CREDIT_ACCOUNT),
+            user_id,
+            bank_account_id,
+            name,
+            credit_limit,
+            interest_rate,
+            payment_day,
+            credit_started_at,
+            credit_ends_at,
+            provider_name,
+        )
+
+    async def put__repay_credit_account(
+        self,
+        user_id: int,
+        from_account_id: int,
+        credit_account_id: int,
+        currency_code: str,
+        amount: float,
+        comment: Optional[str] = None,
+        payment_at=None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__REPAY_CREDIT_ACCOUNT),
+            user_id,
+            from_account_id,
+            credit_account_id,
+            currency_code,
+            amount,
+            comment,
+            payment_at,
         )
 
     async def put__invite_family_member(self, user_id: int, username: str) -> dict:

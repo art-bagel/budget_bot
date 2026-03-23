@@ -79,7 +79,7 @@
 ### UX backlog
 
 - [ ] цветовые индикаторы/бейджи на вкладках `Вводы/Выводы` в T-Bank sync
-- [ ] более явная индикация unresolved ручных решений в модалке синка
+- [ ] счётчики unresolved операций прямо на самих вкладках `Вводы/Выводы`
 - [ ] отдельный maintenance action для "обновить metadata инструмента" без переимпорта истории
 
 ## Текущее source of truth
@@ -90,6 +90,7 @@
 - [infra/db/Scripts/budgeting/tb/portfolio_positions.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/tb/portfolio_positions.sql)
 - [infra/db/Scripts/budgeting/tb/portfolio_events.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/tb/portfolio_events.sql)
 - [infra/db/Scripts/budgeting/migrations/018_external_connections.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/018_external_connections.sql)
+- [infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql)
 - [infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql)
 
 ### Документация

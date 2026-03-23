@@ -1,3 +1,18 @@
+DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
+    bigint,
+    text,
+    text,
+    char(3),
+    numeric,
+    text,
+    numeric,
+    smallint,
+    date,
+    date,
+    text,
+    text
+);
+
 CREATE OR REPLACE FUNCTION budgeting.put__create_credit_account(
     _user_id              bigint,
     _name                 text,
@@ -96,7 +111,8 @@ BEGIN
             _target_account_id,
             _currency_code,
             _credit_limit,
-            'Выдача кредита · ' || _normalized_name
+            'Выдача кредита · ' || _normalized_name,
+            COALESCE(_credit_started_at::timestamptz, CURRENT_TIMESTAMP)
         );
     END IF;
 

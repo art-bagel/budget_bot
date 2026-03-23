@@ -281,6 +281,7 @@ function formatSignedAmount(amount: number, currencyCode: string): string {
 
 
 function getOperationTitle(item: OperationHistoryItem): string {
+  if (item.comment?.includes('Платёж по кредиту')) return 'Платёж по кредиту';
   if (item.comment?.includes('Частичное закрытие позиции')) return 'Частичное закрытие позиции';
   if (item.comment?.includes('Пополнение позиции')) return 'Пополнение позиции';
   if (item.comment?.includes('Комиссия по позиции')) return 'Комиссия по позиции';
