@@ -336,12 +336,14 @@ export interface CreditRepaymentResponse {
 }
 
 export interface CreditScheduleItem {
+  operation_id?: number | null;
   scheduled_date: string;
   total_payment: number;
   principal_component: number;
   interest_component: number;
   principal_before: number;
   principal_after: number;
+  status: 'paid' | 'planned';
 }
 
 export interface CreditAccountSummary {

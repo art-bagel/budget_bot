@@ -173,12 +173,14 @@ class CreditRepaymentResponse(BaseModel):
 
 
 class CreditScheduleItem(BaseModel):
+    operation_id: Optional[int] = None
     scheduled_date: str
     total_payment: float
     principal_component: float
     interest_component: float
     principal_before: float
     principal_after: float
+    status: Literal['paid', 'planned'] = 'planned'
 
 
 class CreditAccountSummaryResponse(BaseModel):
@@ -311,17 +313,25 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
         principal_after = round(max(0, current_principal - principal_component), 2)
 
         items.append({
+            'operation_id': None,
             'scheduled_date': payment_date.isoformat(),
             'total_payment': total_payment,
             'principal_component': principal_component,
             'interest_component': interest_component,
             'principal_before': round(current_principal, 2),
             'principal_after': principal_after,
+            'status': 'planned',
         })
 
         current_principal = principal_after
 
     return items
+
+
+def _merge_credit_schedule(history_items: list[dict], planned_items: list[dict]) -> list[dict]:
+    merged = [*history_items, *planned_items]
+    merged.sort(key=lambda item: (str(item.get('scheduled_date') or ''), 0 if item.get('status') == 'paid' else 1, int(item.get('operation_id') or 0)))
+    return merged
 
 
 @router.get('', response_model=List[BankAccountItem])
@@ -447,7 +457,13 @@ async def get_credit_account_schedule(
     )
     if not summary:
         raise HTTPException(status_code=404, detail='Кредитный счёт не найден')
-    return _build_credit_schedule(summary, limit=limit)
+    history_items = await reports.get__credit_payment_schedule_events(
+        user.user_id,
+        bank_account_id,
+        effective_as_of,
+    )
+    planned_items = _build_credit_schedule(summary, limit=limit)
+    return _merge_credit_schedule(history_items, planned_items)
 
 
 @router.post('/credit/{bank_account_id}/repay', response_model=CreditRepaymentResponse)

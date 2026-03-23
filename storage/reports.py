@@ -19,6 +19,7 @@ class Reports(DataBase):
     F_GET__CATEGORY_PARENT_GROUPS = 'get__category_parent_groups'
     F_GET__BANK_SNAPSHOT = 'get__bank_snapshot'
     F_GET__CREDIT_ACCOUNT_SUMMARY = 'get__credit_account_summary'
+    F_GET__CREDIT_PAYMENT_SCHEDULE_EVENTS = 'get__credit_payment_schedule_events'
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
     F_GET__OPERATIONS_HISTORY = 'get__operations_history'
     F_GET__OPERATIONS_ANALYTICS = 'get__operations_analytics'
@@ -194,6 +195,20 @@ class Reports(DataBase):
             bank_account_id,
             as_of,
         )
+
+    async def get__credit_payment_schedule_events(
+        self,
+        user_id: int,
+        bank_account_id: int,
+        as_of: Optional[date] = None,
+    ) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__CREDIT_PAYMENT_SCHEDULE_EVENTS),
+            user_id,
+            bank_account_id,
+            as_of,
+        )
+        return result if result else []
 
     async def get__budget_snapshot(self, user_id: int, is_active: Optional[bool] = True) -> list[dict]:
         """

@@ -304,7 +304,13 @@ export default function Credits({ user }: { user: UserContext }) {
     try {
       const items = await fetchCreditAccountSchedule(selectedCredit.account.id);
       setScheduleItems(items);
-      setSelectedScheduleYear(items.length > 0 ? new Date(items[0].scheduled_date).getFullYear() : null);
+      const currentYear = new Date().getFullYear();
+      const years = Array.from(new Set(items.map((item) => new Date(item.scheduled_date).getFullYear())));
+      setSelectedScheduleYear(
+        years.includes(currentYear)
+          ? currentYear
+          : (items.length > 0 ? new Date(items[items.length - 1].scheduled_date).getFullYear() : null),
+      );
     } catch (err) {
       setScheduleItems([]);
       setScheduleError(err instanceof Error ? err.message : 'Не удалось загрузить график платежей');
@@ -1022,14 +1028,20 @@ export default function Credits({ user }: { user: UserContext }) {
                   {visibleScheduleItems.map((item) => (
                     <div className="credit-schedule-item" key={item.scheduled_date}>
                       <div className="credit-schedule-item__head">
-                        <strong>
-                          {new Date(item.scheduled_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
-                          {' — '}
-                          {formatAmount(item.total_payment, selectedSummary?.currency_code ?? user.base_currency_code)}
-                        </strong>
+                        <div className="credit-schedule-item__head-main">
+                          <strong>
+                            {new Date(item.scheduled_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
+                            {' — '}
+                            {formatAmount(item.total_payment, selectedSummary?.currency_code ?? user.base_currency_code)}
+                          </strong>
+                          <span className={`tag ${item.status === 'paid' ? 'tag--in' : 'tag--neutral'}`}>
+                            {item.status === 'paid' ? 'Оплачено' : 'План'}
+                          </span>
+                        </div>
                       </div>
                       <div className="credit-schedule-item__sub">
-                        Остаток {formatAmount(item.principal_after, selectedSummary?.currency_code ?? user.base_currency_code)}
+                        {item.status === 'paid' ? 'Остаток после платежа ' : 'Остаток '}
+                        {formatAmount(item.principal_after, selectedSummary?.currency_code ?? user.base_currency_code)}
                       </div>
                       <div className="credit-schedule-item__row">
                         <span>Основной долг</span>
