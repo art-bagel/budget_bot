@@ -37,6 +37,13 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function parseDecimalInput(value: string): number | null {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 interface CreditWithBalances {
   account: BankAccount;
   balances: DashboardBankBalance[];
@@ -327,11 +334,17 @@ export default function Credits({ user }: { user: UserContext }) {
 
     setSavingCredit(true);
     setEditError(null);
+    const parsedInterestRate = parseDecimalInput(editDraft.interestRate);
+    if (editDraft.interestRate.trim() && parsedInterestRate == null) {
+      setEditError('Ставку нужно ввести числом, например 10,4');
+      setSavingCredit(false);
+      return;
+    }
     try {
       await updateCreditAccount(selectedCredit.account.id, {
         name: editDraft.name.trim(),
         credit_limit: Number(editDraft.creditLimit),
-        interest_rate: editDraft.interestRate.trim() ? Number(editDraft.interestRate) : null,
+        interest_rate: parsedInterestRate,
         payment_day: editDraft.paymentDay.trim() ? Number(editDraft.paymentDay) : null,
         credit_started_at: editDraft.creditStartedAt || null,
         credit_ends_at: editDraft.creditEndsAt || null,
@@ -394,6 +407,12 @@ export default function Credits({ user }: { user: UserContext }) {
     if (!newName.trim() || submittingNew) return;
     setSubmittingNew(true);
     setNewError(null);
+    const parsedInterestRate = parseDecimalInput(newInterestRate);
+    if (newInterestRate.trim() && parsedInterestRate == null) {
+      setNewError('Ставку нужно ввести числом, например 10,4');
+      setSubmittingNew(false);
+      return;
+    }
     try {
       await createCreditAccount({
         name: newName.trim(),
@@ -402,7 +421,7 @@ export default function Credits({ user }: { user: UserContext }) {
         credit_limit: Number(newCreditLimit),
         target_account_id: newTargetAccountId ? Number(newTargetAccountId) : undefined,
         owner_type: newOwnerType,
-        interest_rate: newInterestRate.trim() ? Number(newInterestRate) : undefined,
+        interest_rate: parsedInterestRate ?? undefined,
         payment_day: newPaymentDay.trim() ? Number(newPaymentDay) : undefined,
         credit_started_at: newStartedAt.trim() || undefined,
         credit_ends_at: newEndsAt.trim() || undefined,
