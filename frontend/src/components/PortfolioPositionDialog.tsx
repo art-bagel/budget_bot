@@ -91,7 +91,7 @@ export default function PortfolioPositionDialog({
   const isDeposit = defaultAssetTypeCode === 'deposit';
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [endDate, setEndDate] = useState(todayIso());
   const [interestPayout, setInterestPayout] = useState<InterestPayout>('capitalize');
   const [capitalizationPeriod, setCapitalizationPeriod] = useState<CapitalizationPeriod>('monthly');
 
@@ -432,30 +432,42 @@ export default function PortfolioPositionDialog({
                 </option>
               ))}
             </select>
-            <input
-              className="input"
-              type="date"
-              title={isDeposit ? 'Дата открытия' : 'Дата входа'}
-              value={openedAt}
-              onChange={(event) => setOpenedAt(event.target.value)}
-              disabled={submitting}
-            />
-          </div>
-
-          {isDeposit && depositKind === 'term_deposit' && (
-            <div className="form-row">
+            {!isDeposit && (
               <input
                 className="input"
                 type="date"
-                title="Дата окончания вклада"
-                placeholder="Дата окончания"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
+                title="Дата входа"
+                value={openedAt}
+                onChange={(event) => setOpenedAt(event.target.value)}
                 disabled={submitting}
-                style={{ flex: '1 1 200px' }}
               />
-              <div className="input input--read-only" style={{ flex: '0 0 auto' }}>
-                Дата окончания
+            )}
+          </div>
+
+          {isDeposit && (
+            <div>
+              <div className="list-row__sub" style={{ marginBottom: 4 }}>Период</div>
+              <div className="form-row" style={{ alignItems: 'center' }}>
+                <input
+                  className="input"
+                  type="date"
+                  value={openedAt}
+                  onChange={(event) => setOpenedAt(event.target.value)}
+                  disabled={submitting}
+                  style={{ width: 'auto', flex: '0 0 auto' }}
+                />
+                {depositKind === 'term_deposit' && (
+                  <>
+                    <input
+                      className="input"
+                      type="date"
+                      value={endDate}
+                      onChange={(event) => setEndDate(event.target.value)}
+                      disabled={submitting}
+                      style={{ width: 'auto', flex: '0 0 auto' }}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
