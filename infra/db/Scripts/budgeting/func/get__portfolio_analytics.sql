@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__portfolio_analytics(
+DROP FUNCTION IF EXISTS budgeting.get__portfolio_analytics;
+CREATE FUNCTION budgeting.get__portfolio_analytics(
     _user_id bigint,
     _date_from date,
     _date_to date

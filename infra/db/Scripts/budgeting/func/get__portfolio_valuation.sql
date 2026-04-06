@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__portfolio_valuation(
+DROP FUNCTION IF EXISTS budgeting.get__portfolio_valuation;
+CREATE FUNCTION budgeting.get__portfolio_valuation(
     _user_id bigint,
     _bank_account_id bigint,
     _target_currency_code char(3),

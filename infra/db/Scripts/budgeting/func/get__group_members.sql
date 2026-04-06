@@ -1,6 +1,7 @@
 -- Description:
 --   Returns the configured members of a group with their allocation shares.
-CREATE OR REPLACE FUNCTION budgeting.get__group_members(
+DROP FUNCTION IF EXISTS budgeting.get__group_members;
+CREATE FUNCTION budgeting.get__group_members(
     _user_id bigint,
     _group_id bigint
 )

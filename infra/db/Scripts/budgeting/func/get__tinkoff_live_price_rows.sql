@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__tinkoff_live_price_rows(
+DROP FUNCTION IF EXISTS budgeting.get__tinkoff_live_price_rows;
+CREATE FUNCTION budgeting.get__tinkoff_live_price_rows(
     _user_id bigint
 )
 RETURNS jsonb

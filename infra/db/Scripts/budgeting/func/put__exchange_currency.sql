@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__exchange_currency(
+DROP FUNCTION IF EXISTS budgeting.put__exchange_currency;
+CREATE FUNCTION budgeting.put__exchange_currency(
     _user_id bigint,
     _bank_account_id bigint,
     _from_currency_code char(3),

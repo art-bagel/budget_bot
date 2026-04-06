@@ -1,6 +1,7 @@
 -- Description:
 --   Archives a credit account with zero balance (no remaining debt).
-CREATE OR REPLACE FUNCTION budgeting.set__archive_credit_account(
+DROP FUNCTION IF EXISTS budgeting.set__archive_credit_account;
+CREATE FUNCTION budgeting.set__archive_credit_account(
     _user_id          bigint,
     _bank_account_id  bigint
 )

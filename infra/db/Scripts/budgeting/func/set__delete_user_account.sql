@@ -1,6 +1,7 @@
 -- Description:
 --   Completely removes a user and all related personal budgeting data.
-CREATE OR REPLACE FUNCTION budgeting.set__delete_user_account(
+DROP FUNCTION IF EXISTS budgeting.set__delete_user_account;
+CREATE FUNCTION budgeting.set__delete_user_account(
     _user_id bigint
 )
 RETURNS jsonb

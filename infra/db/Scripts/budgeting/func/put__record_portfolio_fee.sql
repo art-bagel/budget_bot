@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__record_portfolio_fee(
+DROP FUNCTION IF EXISTS budgeting.put__record_portfolio_fee;
+CREATE FUNCTION budgeting.put__record_portfolio_fee(
     _user_id bigint,
     _position_id bigint,
     _amount numeric,

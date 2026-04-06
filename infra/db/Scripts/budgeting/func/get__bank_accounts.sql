@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__bank_accounts(
+DROP FUNCTION IF EXISTS budgeting.get__bank_accounts;
+CREATE FUNCTION budgeting.get__bank_accounts(
     _user_id bigint,
     _is_active boolean DEFAULT true,
     _account_kind text DEFAULT 'cash'

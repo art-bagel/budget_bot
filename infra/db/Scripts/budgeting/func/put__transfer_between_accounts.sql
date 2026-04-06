@@ -7,7 +7,7 @@ DROP FUNCTION IF EXISTS budgeting.put__transfer_between_accounts(
     text
 );
 
-CREATE OR REPLACE FUNCTION budgeting.put__transfer_between_accounts(
+CREATE FUNCTION budgeting.put__transfer_between_accounts(
     _user_id         bigint,
     _from_account_id bigint,
     _to_account_id   bigint,

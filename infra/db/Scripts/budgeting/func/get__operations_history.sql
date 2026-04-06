@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__operations_history(
+DROP FUNCTION IF EXISTS budgeting.get__operations_history;
+CREATE FUNCTION budgeting.get__operations_history(
     _user_id bigint,
     _limit integer DEFAULT 20,
     _offset integer DEFAULT 0,

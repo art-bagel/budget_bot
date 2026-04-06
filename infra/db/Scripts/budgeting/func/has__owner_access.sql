@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.has__owner_access(
+DROP FUNCTION IF EXISTS budgeting.has__owner_access;
+CREATE FUNCTION budgeting.has__owner_access(
     _actor_user_id bigint,
     _owner_type text,
     _owner_user_id bigint,

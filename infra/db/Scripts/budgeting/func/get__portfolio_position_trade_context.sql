@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__portfolio_position_trade_context(
+DROP FUNCTION IF EXISTS budgeting.get__portfolio_position_trade_context;
+CREATE FUNCTION budgeting.get__portfolio_position_trade_context(
     _position_id bigint
 )
 RETURNS jsonb

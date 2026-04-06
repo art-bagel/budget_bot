@@ -8,7 +8,8 @@
 --   _source text - Optional source label.
 -- Returns:
 --   bigint - Identifier of the stored snapshot.
-CREATE OR REPLACE FUNCTION budgeting.put__record_fx_rate_snapshot(
+DROP FUNCTION IF EXISTS budgeting.put__record_fx_rate_snapshot;
+CREATE FUNCTION budgeting.put__record_fx_rate_snapshot(
     _base_currency_code char(3),
     _quote_currency_code char(3),
     _rate numeric,

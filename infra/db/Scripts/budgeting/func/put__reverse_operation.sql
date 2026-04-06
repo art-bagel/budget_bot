@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__reverse_operation(
+DROP FUNCTION IF EXISTS budgeting.put__reverse_operation;
+CREATE FUNCTION budgeting.put__reverse_operation(
     _user_id bigint,
     _operation_id bigint,
     _comment text DEFAULT NULL

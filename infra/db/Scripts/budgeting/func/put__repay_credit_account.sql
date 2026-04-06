@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__repay_credit_account(
+DROP FUNCTION IF EXISTS budgeting.put__repay_credit_account;
+CREATE FUNCTION budgeting.put__repay_credit_account(
     _user_id bigint,
     _from_account_id bigint,
     _credit_account_id bigint,

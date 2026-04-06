@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__mark_bank_entry_imported(
+DROP FUNCTION IF EXISTS budgeting.set__mark_bank_entry_imported;
+CREATE FUNCTION budgeting.set__mark_bank_entry_imported(
     _operation_id bigint,
     _bank_account_id bigint,
     _currency_code char(3),

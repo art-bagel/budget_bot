@@ -1,7 +1,8 @@
 -- Drop the old overload that had _bank_account_id as the third parameter.
 DROP FUNCTION IF EXISTS budgeting.put__create_scheduled_expense(bigint, bigint, bigint, numeric, char(3), varchar(10), smallint, smallint, text);
 
-CREATE OR REPLACE FUNCTION budgeting.put__create_scheduled_expense(
+DROP FUNCTION IF EXISTS budgeting.put__create_scheduled_expense;
+CREATE FUNCTION budgeting.put__create_scheduled_expense(
     _user_id        bigint,
     _category_id    bigint,
     _amount         numeric,

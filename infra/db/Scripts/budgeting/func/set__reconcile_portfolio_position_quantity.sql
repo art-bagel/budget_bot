@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__reconcile_portfolio_position_quantity(
+DROP FUNCTION IF EXISTS budgeting.set__reconcile_portfolio_position_quantity;
+CREATE FUNCTION budgeting.set__reconcile_portfolio_position_quantity(
     _position_id bigint,
     _quantity numeric
 )

@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__merge_portfolio_position_metadata(
+DROP FUNCTION IF EXISTS budgeting.set__merge_portfolio_position_metadata;
+CREATE FUNCTION budgeting.set__merge_portfolio_position_metadata(
     _position_id bigint,
     _next_title text DEFAULT NULL,
     _metadata_patch jsonb DEFAULT '{}'::jsonb

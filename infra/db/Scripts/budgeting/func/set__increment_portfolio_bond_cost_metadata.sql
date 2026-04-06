@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__increment_portfolio_bond_cost_metadata(
+DROP FUNCTION IF EXISTS budgeting.set__increment_portfolio_bond_cost_metadata;
+CREATE FUNCTION budgeting.set__increment_portfolio_bond_cost_metadata(
     _position_id bigint,
     _clean_amount_delta numeric,
     _accrued_interest_delta numeric

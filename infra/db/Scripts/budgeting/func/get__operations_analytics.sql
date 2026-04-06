@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__operations_analytics(
+DROP FUNCTION IF EXISTS budgeting.get__operations_analytics;
+CREATE FUNCTION budgeting.get__operations_analytics(
     _user_id bigint,
     _anchor_date date DEFAULT NULL,
     _period_mode text DEFAULT 'month',

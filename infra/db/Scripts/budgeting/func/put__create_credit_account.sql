@@ -13,7 +13,7 @@ DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
     text
 );
 
-CREATE OR REPLACE FUNCTION budgeting.put__create_credit_account(
+CREATE FUNCTION budgeting.put__create_credit_account(
     _user_id              bigint,
     _name                 text,
     _credit_kind          text,

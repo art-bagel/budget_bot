@@ -54,6 +54,7 @@ import type {
   DeletePortfolioPositionResponse,
   CancelPortfolioIncomeRequest,
   CancelPortfolioIncomeResponse,
+  ChangeDepositRateRequest,
   PortfolioSummaryItem,
   PortfolioAnalyticsData,
   TinkoffBrokerAccount,
@@ -638,6 +639,16 @@ export async function cancelPortfolioIncome(
   data: CancelPortfolioIncomeRequest = {},
 ): Promise<CancelPortfolioIncomeResponse> {
   return apiFetch<CancelPortfolioIncomeResponse>(`/portfolio/events/${eventId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function changeDepositRate(
+  positionId: number,
+  data: ChangeDepositRateRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/change-rate`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

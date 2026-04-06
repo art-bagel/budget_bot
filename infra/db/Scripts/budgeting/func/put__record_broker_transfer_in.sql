@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__record_broker_transfer_in(
+DROP FUNCTION IF EXISTS budgeting.put__record_broker_transfer_in;
+CREATE FUNCTION budgeting.put__record_broker_transfer_in(
     _user_id               bigint,
     _owner_type            text,
     _owner_user_id         bigint,

@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__record_bond_principal_repayment(
+DROP FUNCTION IF EXISTS budgeting.put__record_bond_principal_repayment;
+CREATE FUNCTION budgeting.put__record_bond_principal_repayment(
     _user_id bigint,
     _position_id bigint,
     _return_amount_in_currency numeric,

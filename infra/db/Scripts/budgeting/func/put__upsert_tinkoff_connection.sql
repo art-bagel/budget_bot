@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__upsert_tinkoff_connection(
+DROP FUNCTION IF EXISTS budgeting.put__upsert_tinkoff_connection;
+CREATE FUNCTION budgeting.put__upsert_tinkoff_connection(
     _user_id bigint,
     _token text,
     _provider_account_id text,

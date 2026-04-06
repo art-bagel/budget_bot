@@ -5,7 +5,8 @@
 --   _name text - Income source name.
 -- Returns:
 --   bigint - Identifier of the created income source.
-CREATE OR REPLACE FUNCTION budgeting.put__create_income_source(
+DROP FUNCTION IF EXISTS budgeting.put__create_income_source;
+CREATE FUNCTION budgeting.put__create_income_source(
     _user_id bigint,
     _name text
 )

@@ -1,6 +1,7 @@
 -- Returns currencies with positive balance on the primary bank account
 -- of the category's owner (user→personal account, family→family account).
-CREATE OR REPLACE FUNCTION budgeting.get__category_account_currencies(
+DROP FUNCTION IF EXISTS budgeting.get__category_account_currencies;
+CREATE FUNCTION budgeting.get__category_account_currencies(
     _user_id     bigint,
     _category_id bigint
 )

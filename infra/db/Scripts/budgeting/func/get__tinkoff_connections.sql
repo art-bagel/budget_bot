@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__tinkoff_connections(
+DROP FUNCTION IF EXISTS budgeting.get__tinkoff_connections;
+CREATE FUNCTION budgeting.get__tinkoff_connections(
     _user_id bigint
 )
 RETURNS jsonb

@@ -1,6 +1,7 @@
 -- Description:
 --   Returns active parent groups that contain the specified category or group.
-CREATE OR REPLACE FUNCTION budgeting.get__category_parent_groups(
+DROP FUNCTION IF EXISTS budgeting.get__category_parent_groups;
+CREATE FUNCTION budgeting.get__category_parent_groups(
     _user_id bigint,
     _category_id bigint
 )

@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__mark_portfolio_event_imported(
+DROP FUNCTION IF EXISTS budgeting.set__mark_portfolio_event_imported;
+CREATE FUNCTION budgeting.set__mark_portfolio_event_imported(
     _position_id bigint,
     _event_types varchar[],
     _external_id text,

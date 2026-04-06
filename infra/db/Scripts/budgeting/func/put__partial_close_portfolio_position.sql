@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__partial_close_portfolio_position(
+DROP FUNCTION IF EXISTS budgeting.put__partial_close_portfolio_position;
+CREATE FUNCTION budgeting.put__partial_close_portfolio_position(
     _user_id bigint,
     _position_id bigint,
     _return_amount_in_currency numeric,

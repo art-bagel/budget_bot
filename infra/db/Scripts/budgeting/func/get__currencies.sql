@@ -2,7 +2,8 @@
 --   Returns all available currencies.
 -- Returns:
 --   jsonb - Array of currency objects (code, name, scale).
-CREATE OR REPLACE FUNCTION budgeting.get__currencies()
+DROP FUNCTION IF EXISTS budgeting.get__currencies;
+CREATE FUNCTION budgeting.get__currencies()
 RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$

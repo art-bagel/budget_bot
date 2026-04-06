@@ -1,6 +1,7 @@
 -- Description:
 --   Archives an accessible category or group and removes its group bindings.
-CREATE OR REPLACE FUNCTION budgeting.set__archive_category(
+DROP FUNCTION IF EXISTS budgeting.set__archive_category;
+CREATE FUNCTION budgeting.set__archive_category(
     _user_id bigint,
     _category_id bigint
 )

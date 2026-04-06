@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__delete_income_source_pattern(
+DROP FUNCTION IF EXISTS budgeting.put__delete_income_source_pattern;
+CREATE FUNCTION budgeting.put__delete_income_source_pattern(
     _user_id          bigint,
     _income_source_id bigint
 )

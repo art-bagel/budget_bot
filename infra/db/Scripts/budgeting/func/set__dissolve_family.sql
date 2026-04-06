@@ -3,7 +3,8 @@
 --   Only the family owner can dissolve the family.
 --   All family bank accounts, categories, and operations are deleted.
 --   Members' personal accounts and data are not affected.
-CREATE OR REPLACE FUNCTION budgeting.set__dissolve_family(
+DROP FUNCTION IF EXISTS budgeting.set__dissolve_family;
+CREATE FUNCTION budgeting.set__dissolve_family(
     _user_id bigint
 )
 RETURNS jsonb

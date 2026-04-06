@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__family_members(
+DROP FUNCTION IF EXISTS budgeting.get__family_members;
+CREATE FUNCTION budgeting.get__family_members(
     _user_id bigint
 )
 RETURNS jsonb

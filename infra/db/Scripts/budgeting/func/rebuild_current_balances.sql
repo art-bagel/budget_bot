@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.rebuild_current_balances(
+DROP FUNCTION IF EXISTS budgeting.rebuild_current_balances;
+CREATE FUNCTION budgeting.rebuild_current_balances(
     _user_id bigint DEFAULT NULL
 )
 RETURNS void

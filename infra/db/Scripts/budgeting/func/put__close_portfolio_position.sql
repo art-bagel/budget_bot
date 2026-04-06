@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__close_portfolio_position(
+DROP FUNCTION IF EXISTS budgeting.put__close_portfolio_position;
+CREATE FUNCTION budgeting.put__close_portfolio_position(
     _user_id bigint,
     _position_id bigint,
     _close_amount_in_currency numeric,

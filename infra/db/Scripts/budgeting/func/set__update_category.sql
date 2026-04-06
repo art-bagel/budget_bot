@@ -1,6 +1,7 @@
 -- Description:
 --   Updates the name of an active accessible category or group.
-CREATE OR REPLACE FUNCTION budgeting.set__update_category(
+DROP FUNCTION IF EXISTS budgeting.set__update_category;
+CREATE FUNCTION budgeting.set__update_category(
     _user_id bigint,
     _category_id bigint,
     _name text

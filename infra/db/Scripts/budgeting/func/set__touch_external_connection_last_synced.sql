@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__touch_external_connection_last_synced(
+DROP FUNCTION IF EXISTS budgeting.set__touch_external_connection_last_synced;
+CREATE FUNCTION budgeting.set__touch_external_connection_last_synced(
     _connection_id bigint
 )
 RETURNS void

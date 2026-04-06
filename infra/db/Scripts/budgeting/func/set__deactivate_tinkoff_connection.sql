@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__deactivate_tinkoff_connection(
+DROP FUNCTION IF EXISTS budgeting.set__deactivate_tinkoff_connection;
+CREATE FUNCTION budgeting.set__deactivate_tinkoff_connection(
     _connection_id bigint,
     _user_id bigint
 )

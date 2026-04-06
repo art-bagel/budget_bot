@@ -2,7 +2,8 @@
 -- The primary bank account for each category's owner is resolved here
 -- (personal category → personal primary account, family category → family primary account).
 -- Called by the background scheduler — no user auth required.
-CREATE OR REPLACE FUNCTION budgeting.get__due_scheduled_expenses()
+DROP FUNCTION IF EXISTS budgeting.get__due_scheduled_expenses;
+CREATE FUNCTION budgeting.get__due_scheduled_expenses()
 RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$

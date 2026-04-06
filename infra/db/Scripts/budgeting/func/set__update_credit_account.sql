@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__update_credit_account(
+DROP FUNCTION IF EXISTS budgeting.set__update_credit_account;
+CREATE FUNCTION budgeting.set__update_credit_account(
     _user_id bigint,
     _credit_account_id bigint,
     _name text,

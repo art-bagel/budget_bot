@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__create_bank_account(
+DROP FUNCTION IF EXISTS budgeting.put__create_bank_account;
+CREATE FUNCTION budgeting.put__create_bank_account(
     _user_id bigint,
     _name text,
     _owner_type text DEFAULT 'user',

@@ -493,6 +493,12 @@ export interface CancelPortfolioIncomeResponse {
   operation_id: number;
 }
 
+export interface ChangeDepositRateRequest {
+  new_rate: number;
+  effective_date?: string;
+  comment?: string;
+}
+
 export interface PortfolioSummaryItem {
   investment_account_id: number;
   investment_account_name: string;

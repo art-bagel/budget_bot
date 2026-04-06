@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__tinkoff_imported_ids(
+DROP FUNCTION IF EXISTS budgeting.get__tinkoff_imported_ids;
+CREATE FUNCTION budgeting.get__tinkoff_imported_ids(
     _external_ids text[]
 )
 RETURNS jsonb

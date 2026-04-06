@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__respond_family_invitation(
+DROP FUNCTION IF EXISTS budgeting.set__respond_family_invitation;
+CREATE FUNCTION budgeting.set__respond_family_invitation(
     _user_id bigint,
     _invitation_id bigint,
     _accept boolean

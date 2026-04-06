@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__budget_snapshot(
+DROP FUNCTION IF EXISTS budgeting.get__budget_snapshot;
+CREATE FUNCTION budgeting.get__budget_snapshot(
     _user_id bigint,
     _is_active boolean DEFAULT true
 )

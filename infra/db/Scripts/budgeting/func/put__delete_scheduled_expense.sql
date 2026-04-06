@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__delete_scheduled_expense(
+DROP FUNCTION IF EXISTS budgeting.put__delete_scheduled_expense;
+CREATE FUNCTION budgeting.put__delete_scheduled_expense(
     _user_id     bigint,
     _schedule_id bigint
 )

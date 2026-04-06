@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__invite_family_member(
+DROP FUNCTION IF EXISTS budgeting.put__invite_family_member;
+CREATE FUNCTION budgeting.put__invite_family_member(
     _user_id bigint,
     _username text
 )

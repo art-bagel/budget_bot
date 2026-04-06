@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__record_imported_cash_only(
+DROP FUNCTION IF EXISTS budgeting.put__record_imported_cash_only;
+CREATE FUNCTION budgeting.put__record_imported_cash_only(
     _user_id bigint,
     _owner_type text,
     _owner_user_id bigint,

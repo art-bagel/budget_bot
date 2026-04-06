@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__credit_account_summary(
+DROP FUNCTION IF EXISTS budgeting.get__credit_account_summary;
+CREATE FUNCTION budgeting.get__credit_account_summary(
     _user_id bigint,
     _credit_account_id bigint,
     _as_of date DEFAULT CURRENT_DATE

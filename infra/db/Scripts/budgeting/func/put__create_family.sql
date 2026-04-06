@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__create_family(
+DROP FUNCTION IF EXISTS budgeting.put__create_family;
+CREATE FUNCTION budgeting.put__create_family(
     _user_id bigint,
     _name text
 )

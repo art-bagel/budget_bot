@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__recover_portfolio_position_from_import(
+DROP FUNCTION IF EXISTS budgeting.put__recover_portfolio_position_from_import;
+CREATE FUNCTION budgeting.put__recover_portfolio_position_from_import(
     _user_id bigint,
     _owner_type text,
     _owner_user_id bigint,

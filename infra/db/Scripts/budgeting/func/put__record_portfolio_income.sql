@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__record_portfolio_income(
+DROP FUNCTION IF EXISTS budgeting.put__record_portfolio_income;
+CREATE FUNCTION budgeting.put__record_portfolio_income(
     _user_id bigint,
     _position_id bigint,
     _amount numeric,

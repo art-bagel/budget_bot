@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__scheduled_expenses_for_category(
+DROP FUNCTION IF EXISTS budgeting.get__scheduled_expenses_for_category;
+CREATE FUNCTION budgeting.get__scheduled_expenses_for_category(
     _user_id    bigint,
     _category_id bigint
 )

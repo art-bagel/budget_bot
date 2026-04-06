@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__record_income_split(
+DROP FUNCTION IF EXISTS budgeting.put__record_income_split;
+CREATE FUNCTION budgeting.put__record_income_split(
     _user_id              bigint,
     _income_source_id     bigint,
     _amount               numeric,

@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__apply_current_budget_delta(
+DROP FUNCTION IF EXISTS budgeting.put__apply_current_budget_delta;
+CREATE FUNCTION budgeting.put__apply_current_budget_delta(
     _category_id bigint,
     _currency_code char(3),
     _amount_delta numeric

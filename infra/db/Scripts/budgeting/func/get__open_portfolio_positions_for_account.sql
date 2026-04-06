@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__open_portfolio_positions_for_account(
+DROP FUNCTION IF EXISTS budgeting.get__open_portfolio_positions_for_account;
+CREATE FUNCTION budgeting.get__open_portfolio_positions_for_account(
     _investment_account_id bigint
 )
 RETURNS jsonb

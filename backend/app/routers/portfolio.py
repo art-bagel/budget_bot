@@ -1,10 +1,15 @@
 from datetime import date
 from typing import Any, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.services.deposit_interest import (
+    calculate_accrued_interest,
+    get_accrual_base_date,
+    should_capitalize,
+)
 from backend.app.storage import context, ledger, reports
 
 
@@ -166,6 +171,19 @@ class CancelPortfolioIncomeResponse(BaseModel):
     operation_id: int
 
 
+class ChangeDepositRateRequest(BaseModel):
+    new_rate: float
+    effective_date: date | None = None
+    comment: str | None = None
+
+    @field_validator('new_rate')
+    @classmethod
+    def rate_must_be_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('Ставка не может быть отрицательной')
+        return v
+
+
 class PortfolioSummaryItem(BaseModel):
     investment_account_id: int
     investment_account_name: str
@@ -175,6 +193,95 @@ class PortfolioSummaryItem(BaseModel):
     invested_principal_in_base: float
     realized_income_in_base: float
     open_positions_count: int
+
+
+def _enrich_deposit_positions(positions: list[dict]) -> list[dict]:
+    """Add calculated accrued_interest to open deposit positions."""
+    today = date.today()
+    for pos in positions:
+        if pos.get('asset_type_code') != 'deposit' or pos.get('status') != 'open':
+            continue
+        meta = pos.get('metadata') or {}
+        if not meta.get('deposit_kind'):
+            continue
+        opened_at = pos.get('opened_at')
+        if isinstance(opened_at, str):
+            opened_at = date.fromisoformat(opened_at)
+        from_date = get_accrual_base_date(meta, opened_at)
+        accrued = calculate_accrued_interest(
+            meta, pos.get('amount_in_currency', 0), from_date, today,
+        )
+        pos['metadata'] = {**meta, 'accrued_interest': accrued}
+    return positions
+
+
+async def _accrue_deposit_interest(
+    user_id: int, position: dict, effective_date: date | None = None,
+) -> float:
+    """Calculate and record accrued interest for a deposit position.
+
+    Returns the accrued amount. If amount is 0, no income event is created.
+    """
+    meta = position.get('metadata') or {}
+    if not meta.get('deposit_kind'):
+        return 0.0
+
+    eff_date = effective_date or date.today()
+    opened_at = position.get('opened_at')
+    if isinstance(opened_at, str):
+        opened_at = date.fromisoformat(opened_at)
+    from_date = get_accrual_base_date(meta, opened_at)
+
+    if from_date >= eff_date:
+        return 0.0
+
+    accrued = calculate_accrued_interest(
+        meta, position['amount_in_currency'], from_date, eff_date,
+    )
+    if accrued <= 0:
+        return 0.0
+
+    position_id = position['id']
+    currency_code = position['currency_code']
+
+    # Record income event
+    await ledger.put__record_portfolio_income(
+        user_id=user_id,
+        position_id=position_id,
+        amount=accrued,
+        currency_code=currency_code,
+        income_kind='interest',
+        received_at=eff_date,
+        comment='Начисление процентов',
+    )
+
+    # Update position: capitalize or just update last_accrual_date
+    if should_capitalize(meta):
+        await context.set__update_deposit_after_accrual(
+            position_id=position_id,
+            interest_amount=accrued,
+            last_accrual_date=str(eff_date),
+        )
+    else:
+        await context.set__merge_portfolio_position_metadata(
+            position_id=position_id,
+            metadata_patch={'last_accrual_date': str(eff_date)},
+        )
+
+    return accrued
+
+
+def _is_deposit(position: dict) -> bool:
+    meta = position.get('metadata') or {}
+    return (
+        position.get('asset_type_code') == 'deposit'
+        and meta.get('deposit_kind') in ('term_deposit', 'savings_account')
+    )
+
+
+def _is_term_deposit(position: dict) -> bool:
+    meta = position.get('metadata') or {}
+    return meta.get('deposit_kind') == 'term_deposit'
 
 
 @router.get('/summary', response_model=List[PortfolioSummaryItem])
@@ -199,11 +306,12 @@ async def get_portfolio_positions(
     investment_account_id: Optional[int] = Query(None),
     user: TelegramUser = Depends(get_telegram_user),
 ) -> list:
-    return await reports.get__portfolio_positions(
+    positions = await reports.get__portfolio_positions(
         user.user_id,
         status,
         investment_account_id,
     )
+    return _enrich_deposit_positions(positions)
 
 
 @router.post('/positions', response_model=PortfolioPositionItem)
@@ -232,6 +340,11 @@ async def close_portfolio_position(
     body: ClosePortfolioPositionRequest,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> PortfolioPositionItem:
+    # For deposits: accrue interest before closing
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and _is_deposit(position):
+        await _accrue_deposit_interest(user.user_id, position, body.closed_at)
+
     result = await context.put__close_portfolio_position(
         user_id=user.user_id,
         position_id=position_id,
@@ -250,6 +363,14 @@ async def partial_close_portfolio_position(
     body: PartialClosePortfolioPositionRequest,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> PortfolioPositionItem:
+    # Term deposits cannot be partially closed
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and _is_term_deposit(position):
+        raise HTTPException(status_code=400, detail='Частичное снятие со вклада невозможно')
+    # For savings accounts: accrue interest before partial close
+    if position and _is_deposit(position):
+        await _accrue_deposit_interest(user.user_id, position, body.closed_at)
+
     result = await context.put__partial_close_portfolio_position(
         user_id=user.user_id,
         position_id=position_id,
@@ -270,6 +391,14 @@ async def top_up_portfolio_position(
     body: TopUpPortfolioPositionRequest,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> PortfolioPositionItem:
+    # Term deposits cannot be topped up
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and _is_term_deposit(position):
+        raise HTTPException(status_code=400, detail='Пополнение вклада невозможно')
+    # For savings accounts: accrue interest before top-up
+    if position and _is_deposit(position):
+        await _accrue_deposit_interest(user.user_id, position, body.topped_up_at)
+
     result = await context.put__top_up_portfolio_position(
         user_id=user.user_id,
         position_id=position_id,
@@ -350,3 +479,36 @@ async def get_portfolio_events(
     user: TelegramUser = Depends(get_telegram_user),
 ) -> list:
     return await reports.get__portfolio_events(user.user_id, position_id)
+
+
+@router.post('/positions/{position_id}/change-rate', response_model=PortfolioPositionItem)
+async def change_deposit_rate(
+    position_id: int,
+    body: ChangeDepositRateRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> PortfolioPositionItem:
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if not position:
+        raise HTTPException(status_code=404, detail='Позиция не найдена')
+    if not _is_deposit(position):
+        raise HTTPException(status_code=400, detail='Смена ставки доступна только для депозитов')
+    if position.get('status') != 'open':
+        raise HTTPException(status_code=400, detail='Позиция закрыта')
+
+    effective = body.effective_date or date.today()
+
+    # Accrue interest at old rate up to effective_date
+    await _accrue_deposit_interest(user.user_id, position, effective)
+
+    # Update rate in metadata
+    await context.set__merge_portfolio_position_metadata(
+        position_id=position_id,
+        metadata_patch={
+            'interest_rate': body.new_rate,
+            'last_accrual_date': str(effective),
+        },
+    )
+
+    # Return updated position
+    updated = await reports.get__portfolio_position(user.user_id, position_id)
+    return PortfolioPositionItem(**updated)

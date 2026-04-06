@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__delete_portfolio_position(
+DROP FUNCTION IF EXISTS budgeting.put__delete_portfolio_position;
+CREATE FUNCTION budgeting.put__delete_portfolio_position(
     _user_id bigint,
     _position_id bigint,
     _comment text DEFAULT NULL

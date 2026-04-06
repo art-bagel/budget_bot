@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__create_portfolio_position(
+DROP FUNCTION IF EXISTS budgeting.put__create_portfolio_position;
+CREATE FUNCTION budgeting.put__create_portfolio_position(
     _user_id bigint,
     _investment_account_id bigint,
     _asset_type_code text,

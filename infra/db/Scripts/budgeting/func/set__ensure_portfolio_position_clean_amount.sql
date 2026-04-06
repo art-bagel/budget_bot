@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.set__ensure_portfolio_position_clean_amount(
+DROP FUNCTION IF EXISTS budgeting.set__ensure_portfolio_position_clean_amount;
+CREATE FUNCTION budgeting.set__ensure_portfolio_position_clean_amount(
     _position_id bigint,
     _clean_amount_in_base numeric
 )

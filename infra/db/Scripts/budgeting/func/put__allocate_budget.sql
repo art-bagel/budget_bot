@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.put__allocate_budget(
+DROP FUNCTION IF EXISTS budgeting.put__allocate_budget;
+CREATE FUNCTION budgeting.put__allocate_budget(
     _user_id bigint,
     _from_category_id bigint,
     _to_category_id bigint,

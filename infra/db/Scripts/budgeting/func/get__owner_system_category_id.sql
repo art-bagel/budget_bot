@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__owner_system_category_id(
+DROP FUNCTION IF EXISTS budgeting.get__owner_system_category_id;
+CREATE FUNCTION budgeting.get__owner_system_category_id(
     _owner_type text,
     _owner_user_id bigint,
     _owner_family_id bigint,

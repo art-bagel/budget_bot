@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__portfolio_positions(
+DROP FUNCTION IF EXISTS budgeting.get__portfolio_positions;
+CREATE FUNCTION budgeting.get__portfolio_positions(
     _user_id bigint,
     _status text DEFAULT NULL,
     _investment_account_id bigint DEFAULT NULL

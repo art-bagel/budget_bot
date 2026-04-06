@@ -1,7 +1,8 @@
 -- Advances next_run_at to the next period after a run (successful or failed).
 -- _error: NULL on success, error message on failure — stored in last_error for display in UI.
 -- Called by the background scheduler so that the same record is not re-triggered every minute.
-CREATE OR REPLACE FUNCTION budgeting.put__advance_scheduled_expense(
+DROP FUNCTION IF EXISTS budgeting.put__advance_scheduled_expense;
+CREATE FUNCTION budgeting.put__advance_scheduled_expense(
     _schedule_id bigint,
     _error       text DEFAULT NULL
 )

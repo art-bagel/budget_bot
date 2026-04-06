@@ -1,6 +1,7 @@
 -- Description:
 --   Creates a personal or family category for budget tracking.
-CREATE OR REPLACE FUNCTION budgeting.put__create_category(
+DROP FUNCTION IF EXISTS budgeting.put__create_category;
+CREATE FUNCTION budgeting.put__create_category(
     _user_id bigint,
     _name text,
     _kind text,

@@ -1,6 +1,7 @@
 -- Description:
 --   Returns active or archived categories accessible to the user.
-CREATE OR REPLACE FUNCTION budgeting.get__categories(
+DROP FUNCTION IF EXISTS budgeting.get__categories;
+CREATE FUNCTION budgeting.get__categories(
     _user_id bigint,
     _is_active boolean DEFAULT NULL
 )

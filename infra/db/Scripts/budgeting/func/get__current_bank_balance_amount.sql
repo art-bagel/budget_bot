@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__current_bank_balance_amount(
+DROP FUNCTION IF EXISTS budgeting.get__current_bank_balance_amount;
+CREATE FUNCTION budgeting.get__current_bank_balance_amount(
     _bank_account_id bigint,
     _currency_code char(3)
 )

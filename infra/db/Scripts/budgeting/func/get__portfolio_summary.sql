@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__portfolio_summary(
+DROP FUNCTION IF EXISTS budgeting.get__portfolio_summary;
+CREATE FUNCTION budgeting.get__portfolio_summary(
     _user_id bigint
 )
 RETURNS jsonb

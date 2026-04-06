@@ -5,7 +5,8 @@
 --   _is_active boolean - Optional activity filter.
 -- Returns:
 --   jsonb - Array of income sources.
-CREATE OR REPLACE FUNCTION budgeting.get__income_sources(
+DROP FUNCTION IF EXISTS budgeting.get__income_sources;
+CREATE FUNCTION budgeting.get__income_sources(
     _user_id bigint,
     _is_active boolean DEFAULT NULL
 )

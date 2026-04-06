@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__bank_snapshot(
+DROP FUNCTION IF EXISTS budgeting.get__bank_snapshot;
+CREATE FUNCTION budgeting.get__bank_snapshot(
     _user_id bigint,
     _bank_account_id bigint
 )

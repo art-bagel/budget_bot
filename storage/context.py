@@ -31,6 +31,8 @@ class Context(DataBase):
     F_SET__DISSOLVE_FAMILY = 'set__dissolve_family'
     F_SET__ARCHIVE_CREDIT_ACCOUNT = 'set__archive_credit_account'
     F_SET__UPDATE_CREDIT_ACCOUNT = 'set__update_credit_account'
+    F_SET__UPDATE_DEPOSIT_AFTER_ACCRUAL = 'set__update_deposit_after_accrual'
+    F_SET__MERGE_PORTFOLIO_POSITION_METADATA = 'set__merge_portfolio_position_metadata'
 
     async def put__register_user_context(
         self,
@@ -316,6 +318,32 @@ class Context(DataBase):
             user_id,
             event_id,
             comment,
+        )
+
+    async def set__update_deposit_after_accrual(
+        self,
+        position_id: int,
+        interest_amount: float,
+        last_accrual_date: str,
+    ) -> None:
+        await self.call_function(
+            self._fn(self.F_SET__UPDATE_DEPOSIT_AFTER_ACCRUAL),
+            position_id,
+            interest_amount,
+            last_accrual_date,
+        )
+
+    async def set__merge_portfolio_position_metadata(
+        self,
+        position_id: int,
+        next_title: Optional[str] = None,
+        metadata_patch: Optional[dict] = None,
+    ) -> None:
+        await self.call_function(
+            self._fn(self.F_SET__MERGE_PORTFOLIO_POSITION_METADATA),
+            position_id,
+            next_title,
+            metadata_patch or {},
         )
 
     async def put__create_category(

@@ -1,7 +1,8 @@
 -- Description:
 --   Removes a non-owner member from their family.
 --   The owner cannot leave — they must use set__dissolve_family instead.
-CREATE OR REPLACE FUNCTION budgeting.set__leave_family(
+DROP FUNCTION IF EXISTS budgeting.set__leave_family;
+CREATE FUNCTION budgeting.set__leave_family(
     _user_id bigint
 )
 RETURNS jsonb

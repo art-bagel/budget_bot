@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__portfolio_events(
+DROP FUNCTION IF EXISTS budgeting.get__portfolio_events;
+CREATE FUNCTION budgeting.get__portfolio_events(
     _user_id bigint,
     _position_id bigint
 )

@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__category_context(
+DROP FUNCTION IF EXISTS budgeting.get__category_context;
+CREATE FUNCTION budgeting.get__category_context(
     _category_id bigint
 )
 RETURNS TABLE (

@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION budgeting.get__user_family_id(
+DROP FUNCTION IF EXISTS budgeting.get__user_family_id;
+CREATE FUNCTION budgeting.get__user_family_id(
     _user_id bigint
 )
 RETURNS bigint

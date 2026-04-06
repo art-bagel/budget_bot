@@ -1,7 +1,8 @@
 -- Description:
 --   Registers a user in the budgeting model, creates the personal primary bank account
 --   and the required personal system categories.
-CREATE OR REPLACE FUNCTION budgeting.put__register_user_context(
+DROP FUNCTION IF EXISTS budgeting.put__register_user_context;
+CREATE FUNCTION budgeting.put__register_user_context(
     _user_id bigint,
     _base_currency_code char(3),
     _username text DEFAULT NULL,

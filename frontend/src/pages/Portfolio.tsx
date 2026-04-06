@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import {
   cancelPortfolioIncome,
+  changeDepositRate,
   closePortfolioPosition,
   deletePortfolioPosition,
   fetchBankAccountSnapshot,
@@ -34,6 +35,7 @@ import type {
   UserContext,
   PortfolioAnalyticsData,
 } from '../types';
+import { calculateProjectedInterest } from '../utils/depositInterest';
 import { formatAmount } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
@@ -85,6 +87,11 @@ type FeeDraft = {
   currencyCode: string;
   chargedAt: string;
   comment: string;
+};
+
+type RateChangeDraft = {
+  newRate: string;
+  effectiveDate: string;
 };
 
 type PortfolioAssetTab = {
@@ -399,6 +406,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [topUpError, setTopUpError] = useState<string | null>(null);
   const [partialCloseError, setPartialCloseError] = useState<string | null>(null);
   const [feeError, setFeeError] = useState<string | null>(null);
+  const [rateChangeError, setRateChangeError] = useState<string | null>(null);
+  const [submittingRateChangeId, setSubmittingRateChangeId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [cancelIncomeError, setCancelIncomeError] = useState<string | null>(null);
   const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
@@ -410,6 +419,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [topUpDrafts, setTopUpDrafts] = useState<Record<number, TopUpDraft>>({});
   const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
+  const [rateChangeDrafts, setRateChangeDrafts] = useState<Record<number, RateChangeDraft>>({});
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
   const [accountSwipeStartX, setAccountSwipeStartX] = useState<number | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
@@ -1219,6 +1229,38 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
   };
 
+  const handleChangeRate = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = rateChangeDrafts[position.id];
+
+    if (!draft || !draft.newRate.trim() || submittingRateChangeId === position.id) {
+      return;
+    }
+
+    setSubmittingRateChangeId(position.id);
+    setRateChangeError(null);
+
+    try {
+      await changeDepositRate(position.id, {
+        new_rate: Number(draft.newRate),
+        effective_date: draft.effectiveDate || undefined,
+      });
+      setRateChangeDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      if (selectedPositionId === position.id) {
+        await loadEventsForPosition(position.id);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setRateChangeError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingRateChangeId(null);
+    }
+  };
+
   const handleDeletePosition = async (position: PortfolioPosition) => {
     const isConfirmed = window.confirm(
       'Удалить незакрытую позицию? Это возможно только если по ней еще нет доходов и других событий.',
@@ -1536,6 +1578,19 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const hasMultipleOpenPositionAccounts = visibleOpenPositionGroups.length > 1;
 
   const getOpenPositionSections = (positionsForGroup: PortfolioPosition[]): SecuritySection[] => {
+    if (activeAssetTypeCode === 'deposit') {
+      const termDeposits = positionsForGroup.filter((p) => p.metadata?.deposit_kind === 'term_deposit');
+      const savingsAccounts = positionsForGroup.filter((p) => p.metadata?.deposit_kind === 'savings_account');
+      const other = positionsForGroup.filter(
+        (p) => p.metadata?.deposit_kind !== 'term_deposit' && p.metadata?.deposit_kind !== 'savings_account',
+      );
+      const sections: SecuritySection[] = [];
+      if (termDeposits.length > 0) sections.push({ code: 'term_deposit', label: 'Вклады', positions: termDeposits });
+      if (savingsAccounts.length > 0) sections.push({ code: 'savings_account', label: 'Накопительные счета', positions: savingsAccounts });
+      if (other.length > 0) sections.push({ code: 'deposit', label: 'Депозиты', positions: other });
+      return sections.length > 0 ? sections : [{ code: 'deposit', label: 'Депозиты', positions: positionsForGroup }];
+    }
+
     if (activeAssetTypeCode !== 'security') {
       return [{
         code: activeAssetTypeCode,
@@ -1865,11 +1920,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
                     {sections.map((section) => (
                       <div className="dashboard-budget-section" key={`${group.accountId}-${section.code}`}>
-                        {activeAssetTypeCode === 'security' && (
+                        {(activeAssetTypeCode === 'security' || activeAssetTypeCode === 'deposit') && sections.length > 1 && (
                           <div className="portfolio-position-section-title">{section.label}</div>
                         )}
                         <div className="portfolio-position-grid">
                           {section.positions.map((position) => {
+                            const isDepositCard = position.asset_type_code === 'deposit' && !!position.metadata?.deposit_kind;
                             const posTicker = typeof position.metadata?.ticker === 'string' ? position.metadata.ticker : null;
                             const isBond = position.metadata?.moex_market === 'bonds';
                             const moexPrice = posTicker ? moexPrices.get(posTicker) : null;
@@ -1883,6 +1939,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             const pnlPercent = unrealizedPnl !== null && entryAmount > 0
                               ? (unrealizedPnl / entryAmount) * 100
                               : null;
+
+                            const depositAccrued = isDepositCard && typeof position.metadata?.accrued_interest === 'number'
+                              ? position.metadata.accrued_interest as number
+                              : 0;
 
                             return (
                               <button
@@ -1904,7 +1964,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                     <div className="portfolio-position-card__left">
                                       <div className="portfolio-position-card__title">{position.title}</div>
                                       <div className="portfolio-position-card__sub-row">
-                                        {currentPrice !== null && position.quantity ? (
+                                        {isDepositCard ? (
+                                          <span>
+                                            {position.metadata.interest_rate}% годовых
+                                            {position.metadata.deposit_kind === 'term_deposit' && position.metadata.end_date
+                                              ? ` · до ${formatDateLabel(String(position.metadata.end_date))}`
+                                              : ''}
+                                          </span>
+                                        ) : currentPrice !== null && position.quantity ? (
                                           <span>
                                             {quote.source === 'tinkoff'
                                               ? formatAmount(currentPrice, position.currency_code)
@@ -1928,16 +1995,22 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                   </div>
                                   <div className="portfolio-position-card__right">
                                     <div className="portfolio-position-card__amount">
-                                      {currentTotalValue !== null
-                                        ? formatAmount(currentTotalValue, position.currency_code)
-                                        : formatAmount(position.amount_in_currency, position.currency_code)}
+                                      {isDepositCard
+                                        ? formatAmount(position.amount_in_currency, position.currency_code)
+                                        : currentTotalValue !== null
+                                          ? formatAmount(currentTotalValue, position.currency_code)
+                                          : formatAmount(position.amount_in_currency, position.currency_code)}
                                     </div>
-                                    {unrealizedPnl !== null && pnlPercent !== null && (
+                                    {isDepositCard && depositAccrued > 0 ? (
+                                      <div className="portfolio-position-card__pnl portfolio-position-card__pnl--pos">
+                                        +{formatAmount(depositAccrued, position.currency_code)}
+                                      </div>
+                                    ) : unrealizedPnl !== null && pnlPercent !== null ? (
                                       <div className={`portfolio-position-card__pnl${unrealizedPnl >= 0 ? ' portfolio-position-card__pnl--pos' : ' portfolio-position-card__pnl--neg'}`}>
                                         {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(0)} ₽
                                         {' '}({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
                                       </div>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
                               </button>
@@ -2062,20 +2135,66 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 })()}
                 <div className="portfolio-position-detail__meta">
                   <span>Дата входа: {formatDateLabel(selectedPosition.opened_at)}</span>
-                  {selectedPosition.quantity ? <span>Количество: {selectedPosition.quantity} шт.</span> : null}
-                  {getPositionInvestedPrincipal(selectedPosition) > 0
-                    ? <span>Себестоимость: {formatAmount(getPositionInvestedPrincipal(selectedPosition), user.base_currency_code)}</span>
-                    : null}
-                  {(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0) > 0
-                    ? (
-                      <span>
-                        НКД при покупке: {formatAmount(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0, user.base_currency_code)}
-                      </span>
-                    )
-                    : null}
-                  {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0
-                    ? <span>Комиссии: {formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
-                    : null}
+                  {selectedPosition.asset_type_code === 'deposit' && selectedPosition.metadata?.deposit_kind ? (
+                    <>
+                      {typeof selectedPosition.metadata.interest_rate === 'number' && (
+                        <span>Ставка: {selectedPosition.metadata.interest_rate}% годовых</span>
+                      )}
+                      {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.end_date && (
+                        <span>Срок до: {formatDateLabel(String(selectedPosition.metadata.end_date))}</span>
+                      )}
+                      {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.interest_payout && (
+                        <span>Выплата: {
+                          selectedPosition.metadata.interest_payout === 'at_end' ? 'в конце срока'
+                            : selectedPosition.metadata.interest_payout === 'monthly_to_account' ? 'ежемесячно на счёт'
+                              : selectedPosition.metadata.interest_payout === 'capitalize'
+                                ? `капитализация ${selectedPosition.metadata.capitalization_period === 'daily' ? 'ежедневно' : 'ежемесячно'}`
+                                : String(selectedPosition.metadata.interest_payout)
+                        }</span>
+                      )}
+                      {selectedPosition.metadata.deposit_kind === 'savings_account' && selectedPosition.metadata.capitalization_period && (
+                        <span>Капитализация: {selectedPosition.metadata.capitalization_period === 'daily' ? 'ежедневно' : 'ежемесячно'}</span>
+                      )}
+                      {typeof selectedPosition.metadata.accrued_interest === 'number' && selectedPosition.metadata.accrued_interest > 0 && (
+                        <span style={{ color: 'var(--tag-in-fg)' }}>
+                          Начислено на сегодня: +{formatAmount(selectedPosition.metadata.accrued_interest as number, selectedPosition.currency_code)}
+                        </span>
+                      )}
+                      {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.end_date && (() => {
+                        const projected = calculateProjectedInterest({
+                          depositKind: 'term_deposit',
+                          principal: selectedPosition.amount_in_currency,
+                          annualRate: Number(selectedPosition.metadata.interest_rate),
+                          startDate: selectedPosition.opened_at,
+                          endDate: String(selectedPosition.metadata.end_date),
+                          interestPayout: selectedPosition.metadata.interest_payout as 'at_end' | 'monthly_to_account' | 'capitalize' | undefined,
+                          capitalizationPeriod: selectedPosition.metadata.capitalization_period as 'daily' | 'monthly' | undefined,
+                        });
+                        return projected > 0 ? (
+                          <span>
+                            Доход за весь срок: +{formatAmount(projected, selectedPosition.currency_code)}
+                          </span>
+                        ) : null;
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      {selectedPosition.quantity ? <span>Количество: {selectedPosition.quantity} шт.</span> : null}
+                      {getPositionInvestedPrincipal(selectedPosition) > 0
+                        ? <span>Себестоимость: {formatAmount(getPositionInvestedPrincipal(selectedPosition), user.base_currency_code)}</span>
+                        : null}
+                      {(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0) > 0
+                        ? (
+                          <span>
+                            НКД при покупке: {formatAmount(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0, user.base_currency_code)}
+                          </span>
+                        )
+                        : null}
+                      {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0
+                        ? <span>Комиссии: {formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
+                        : null}
+                    </>
+                  )}
                 </div>
                 {selectedPosition.comment ? (
                   <p className="list-row__sub" style={{ marginTop: 10 }}>
@@ -2084,53 +2203,82 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 ) : null}
               </div>
 
-              <div className="form-row">
-                <button
-                  className="btn btn--primary"
-                  type="button"
-                  onClick={() => handleOpenCloseForm(selectedPosition)}
-                >
-                  Закрыть позицию
-                </button>
-                {canRecordPositionIncome(selectedPosition) && (
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => handleOpenIncomeForm(selectedPosition)}
-                  >
-                    Начислить доход
-                  </button>
-                )}
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => handleOpenPartialCloseForm(selectedPosition)}
-                >
-                  Частично закрыть
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => handleOpenTopUpForm(selectedPosition)}
-                >
-                  Пополнить
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  onClick={() => handleOpenFeeForm(selectedPosition)}
-                >
-                  Комиссия
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={deletingPositionId === selectedPosition.id}
-                  onClick={() => void handleDeletePosition(selectedPosition)}
-                >
-                  {deletingPositionId === selectedPosition.id ? 'Удаляем...' : 'Удалить'}
-                </button>
-              </div>
+              {(() => {
+                const isDepositPosition = selectedPosition.asset_type_code === 'deposit' && !!selectedPosition.metadata?.deposit_kind;
+                const isTermDeposit = selectedPosition.metadata?.deposit_kind === 'term_deposit';
+                return (
+                  <div className="form-row">
+                    <button
+                      className="btn btn--primary"
+                      type="button"
+                      onClick={() => handleOpenCloseForm(selectedPosition)}
+                    >
+                      Закрыть позицию
+                    </button>
+                    {!isDepositPosition && canRecordPositionIncome(selectedPosition) && (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handleOpenIncomeForm(selectedPosition)}
+                      >
+                        Начислить доход
+                      </button>
+                    )}
+                    {!(isDepositPosition && isTermDeposit) && (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handleOpenPartialCloseForm(selectedPosition)}
+                      >
+                        Частично закрыть
+                      </button>
+                    )}
+                    {!(isDepositPosition && isTermDeposit) && (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handleOpenTopUpForm(selectedPosition)}
+                      >
+                        Пополнить
+                      </button>
+                    )}
+                    {isDepositPosition && (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => {
+                          setRateChangeDrafts((prev) => ({
+                            ...prev,
+                            [selectedPosition.id]: {
+                              newRate: String(selectedPosition.metadata?.interest_rate ?? ''),
+                              effectiveDate: todayIso(),
+                            },
+                          }));
+                        }}
+                      >
+                        Изменить ставку
+                      </button>
+                    )}
+                    {!isDepositPosition && (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handleOpenFeeForm(selectedPosition)}
+                      >
+                        Комиссия
+                      </button>
+                    )}
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={deletingPositionId === selectedPosition.id}
+                      onClick={() => void handleDeletePosition(selectedPosition)}
+                    >
+                      {deletingPositionId === selectedPosition.id ? 'Удаляем...' : 'Удалить'}
+                    </button>
+                  </div>
+                );
+              })()}
 
               {closeDrafts[selectedPosition.id] && (
                 <form onSubmit={(event) => void handleClosePosition(selectedPosition.id, event)}>
@@ -2472,11 +2620,45 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 </form>
               )}
 
+              {rateChangeDrafts[selectedPosition.id] && (
+                <form onSubmit={(event) => void handleChangeRate(selectedPosition, event)}>
+                  <div className="form-row">
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Новая ставка, % годовых"
+                      value={rateChangeDrafts[selectedPosition.id].newRate}
+                      onChange={(event) => setRateChangeDrafts((prev) => ({
+                        ...prev,
+                        [selectedPosition.id]: { ...prev[selectedPosition.id], newRate: event.target.value },
+                      }))}
+                      disabled={submittingRateChangeId === selectedPosition.id}
+                      style={{ width: 200 }}
+                    />
+                    <input
+                      className="input"
+                      type="date"
+                      value={rateChangeDrafts[selectedPosition.id].effectiveDate}
+                      onChange={(event) => setRateChangeDrafts((prev) => ({
+                        ...prev,
+                        [selectedPosition.id]: { ...prev[selectedPosition.id], effectiveDate: event.target.value },
+                      }))}
+                      disabled={submittingRateChangeId === selectedPosition.id}
+                    />
+                    <button className="btn btn--primary" type="submit" disabled={submittingRateChangeId === selectedPosition.id}>
+                      {submittingRateChangeId === selectedPosition.id ? 'Сохраняем...' : 'Изменить ставку'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {closeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{closeError}</p>}
               {incomeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{incomeError}</p>}
               {topUpError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{topUpError}</p>}
               {partialCloseError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{partialCloseError}</p>}
               {feeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{feeError}</p>}
+              {rateChangeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{rateChangeError}</p>}
               {deleteError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{deleteError}</p>}
               {cancelIncomeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{cancelIncomeError}</p>}
 

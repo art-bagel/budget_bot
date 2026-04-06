@@ -7,6 +7,7 @@ import type { BankAccount, Currency, DashboardBankBalance, UserContext } from '.
 import { formatAmount } from '../utils/format';
 import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
+import { calculateProjectedInterest } from '../utils/depositInterest';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -30,6 +31,28 @@ const SECURITY_KIND_OPTIONS = [
   { value: 'bond', label: 'Облигации' },
   { value: 'fund', label: 'Фонды' },
 ] as const;
+
+const DEPOSIT_KIND_OPTIONS = [
+  { value: 'term_deposit', label: 'Вклад' },
+  { value: 'savings_account', label: 'Накопительный счёт' },
+] as const;
+
+type DepositKind = (typeof DEPOSIT_KIND_OPTIONS)[number]['value'];
+
+const INTEREST_PAYOUT_OPTIONS = [
+  { value: 'at_end', label: 'В конце срока' },
+  { value: 'monthly_to_account', label: 'Ежемесячно на счёт' },
+  { value: 'capitalize', label: 'Капитализация' },
+] as const;
+
+type InterestPayout = (typeof INTEREST_PAYOUT_OPTIONS)[number]['value'];
+
+const CAPITALIZATION_PERIOD_OPTIONS = [
+  { value: 'daily', label: 'Ежедневно' },
+  { value: 'monthly', label: 'Ежемесячно' },
+] as const;
+
+type CapitalizationPeriod = (typeof CAPITALIZATION_PERIOD_OPTIONS)[number]['value'];
 
 
 function todayIso(): string {
@@ -63,6 +86,14 @@ export default function PortfolioPositionDialog({
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Deposit-specific state
+  const isDeposit = defaultAssetTypeCode === 'deposit';
+  const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
+  const [interestRate, setInterestRate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [interestPayout, setInterestPayout] = useState<InterestPayout>('capitalize');
+  const [capitalizationPeriod, setCapitalizationPeriod] = useState<CapitalizationPeriod>('monthly');
 
   const { results: tickerResults, loading: tickerLoading } = useMoexSearch(
     defaultAssetTypeCode === 'security' ? tickerQuery : '',
@@ -115,7 +146,9 @@ export default function PortfolioPositionDialog({
   const canSubmit = !submitting
     && !!investmentAccountId
     && !!title.trim()
-    && parseFloat(amount) > 0;
+    && parseFloat(amount) > 0
+    && (!isDeposit || parseFloat(interestRate) >= 0)
+    && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
 
   const handleSubmit = async () => {
     if (!canSubmit) {
@@ -131,18 +164,37 @@ export default function PortfolioPositionDialog({
     setError(null);
 
     try {
+      let metadata: Record<string, unknown> | undefined;
+      if (defaultAssetTypeCode === 'security') {
+        metadata = { security_kind: securityKind, ...(ticker ? { ticker, moex_market: moexMarket } : {}) };
+      } else if (isDeposit) {
+        const showCapPeriod = depositKind === 'savings_account' || interestPayout === 'capitalize';
+        metadata = {
+          deposit_kind: depositKind,
+          interest_rate: Number(interestRate),
+          last_accrual_date: openedAt || todayIso(),
+          ...(depositKind === 'term_deposit'
+            ? {
+                end_date: endDate,
+                interest_payout: interestPayout,
+                ...(interestPayout === 'capitalize' ? { capitalization_period: capitalizationPeriod } : {}),
+              }
+            : {
+                capitalization_period: showCapPeriod ? capitalizationPeriod : 'daily',
+              }),
+        };
+      }
+
       await createPortfolioPosition({
         investment_account_id: Number(investmentAccountId),
         asset_type_code: defaultAssetTypeCode,
         title: title.trim(),
-        quantity: quantity.trim() ? Number(quantity) : undefined,
+        quantity: (!isDeposit && quantity.trim()) ? Number(quantity) : undefined,
         amount_in_currency: Number(amount),
         currency_code: currencyCode,
         opened_at: openedAt || undefined,
         comment: comment.trim() || undefined,
-        metadata: defaultAssetTypeCode === 'security'
-          ? { security_kind: securityKind, ...(ticker ? { ticker, moex_market: moexMarket } : {}) }
-          : undefined,
+        metadata,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -262,35 +314,107 @@ export default function PortfolioPositionDialog({
             </>
           )}
 
+          {isDeposit && (
+            <>
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={depositKind}
+                  onChange={(event) => setDepositKind(event.target.value as DepositKind)}
+                  disabled={submitting}
+                >
+                  {DEPOSIT_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
           <div className="form-row">
             <input
               className="input"
               type="text"
-              placeholder="Название позиции"
+              placeholder={isDeposit ? 'Название вклада' : 'Название позиции'}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               disabled={submitting}
               autoFocus
               style={{ flex: '1 1 280px' }}
             />
-            <input
-              className="input"
-              type="text"
-              inputMode="decimal"
-              placeholder="Количество, если есть"
-              value={quantity}
-              onChange={(event) => setQuantity(sanitizeDecimalInput(event.target.value))}
-              disabled={submitting}
-              style={{ width: 180 }}
-            />
+            {!isDeposit && (
+              <input
+                className="input"
+                type="text"
+                inputMode="decimal"
+                placeholder="Количество, если есть"
+                value={quantity}
+                onChange={(event) => setQuantity(sanitizeDecimalInput(event.target.value))}
+                disabled={submitting}
+                style={{ width: 180 }}
+              />
+            )}
           </div>
+
+          {isDeposit && (
+            <>
+              <div className="form-row">
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Процентная ставка, % годовых"
+                  value={interestRate}
+                  onChange={(event) => setInterestRate(sanitizeDecimalInput(event.target.value))}
+                  disabled={submitting}
+                  style={{ flex: '1 1 200px' }}
+                />
+              </div>
+
+              {depositKind === 'term_deposit' && (
+                <div className="form-row">
+                  <select
+                    className="input"
+                    value={interestPayout}
+                    onChange={(event) => setInterestPayout(event.target.value as InterestPayout)}
+                    disabled={submitting}
+                  >
+                    {INTEREST_PAYOUT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(depositKind === 'savings_account' || interestPayout === 'capitalize') && (
+                <div className="form-row">
+                  <select
+                    className="input"
+                    value={capitalizationPeriod}
+                    onChange={(event) => setCapitalizationPeriod(event.target.value as CapitalizationPeriod)}
+                    disabled={submitting}
+                  >
+                    {CAPITALIZATION_PERIOD_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        Капитализация: {option.label.toLowerCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
 
           <div className="form-row">
             <input
               className="input"
               type="text"
               inputMode="decimal"
-              placeholder="Сумма входа"
+              placeholder={isDeposit ? 'Сумма вклада' : 'Сумма входа'}
               value={amount}
               onChange={(event) => setAmount(sanitizeDecimalInput(event.target.value))}
               disabled={submitting}
@@ -311,17 +435,64 @@ export default function PortfolioPositionDialog({
             <input
               className="input"
               type="date"
+              title={isDeposit ? 'Дата открытия' : 'Дата входа'}
               value={openedAt}
               onChange={(event) => setOpenedAt(event.target.value)}
               disabled={submitting}
             />
           </div>
 
+          {isDeposit && depositKind === 'term_deposit' && (
+            <div className="form-row">
+              <input
+                className="input"
+                type="date"
+                title="Дата окончания вклада"
+                placeholder="Дата окончания"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                disabled={submitting}
+                style={{ flex: '1 1 200px' }}
+              />
+              <div className="input input--read-only" style={{ flex: '0 0 auto' }}>
+                Дата окончания
+              </div>
+            </div>
+          )}
+
           <div className="form-row">
             <div className="input input--read-only" style={{ flex: '1 1 280px' }}>
               Доступно: {formatAmount(selectedCurrencyBalance, currencyCode)}
             </div>
           </div>
+
+          {isDeposit && parseFloat(amount) > 0 && parseFloat(interestRate) > 0 && (
+            (() => {
+              const projectedEnd = depositKind === 'term_deposit' && endDate
+                ? calculateProjectedInterest({
+                    depositKind,
+                    principal: Number(amount),
+                    annualRate: Number(interestRate),
+                    startDate: openedAt || todayIso(),
+                    endDate,
+                    interestPayout,
+                    capitalizationPeriod,
+                  })
+                : null;
+              const totalAtEnd = projectedEnd !== null ? Number(amount) + projectedEnd : null;
+              return (
+                <div className="form-row">
+                  <div className="input input--read-only" style={{ flex: '1 1 280px', color: 'var(--tag-in-fg)' }}>
+                    {projectedEnd !== null
+                      ? `Доход за весь срок: +${formatAmount(projectedEnd, currencyCode)} (итого ${formatAmount(totalAtEnd!, currencyCode)})`
+                      : depositKind === 'savings_account'
+                        ? 'Накопительный счёт — бессрочный'
+                        : 'Укажите дату окончания для расчёта'}
+                  </div>
+                </div>
+              );
+            })()
+          )}
 
           <div className="form-row">
             <input
@@ -348,7 +519,7 @@ export default function PortfolioPositionDialog({
               Отмена
             </button>
             <button className="action-pill__confirm" type="button" onClick={handleSubmit} disabled={!canSubmit}>
-              {submitting ? 'Сохраняем...' : 'Добавить позицию'}
+              {submitting ? 'Сохраняем...' : isDeposit ? 'Открыть вклад' : 'Добавить позицию'}
             </button>
           </div>
         </div>

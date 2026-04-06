@@ -6,7 +6,8 @@
 --   _theme varchar - Theme preference: 'light', 'dark', 'system' (NULL = no change).
 -- Returns:
 --   jsonb - Updated settings.
-CREATE OR REPLACE FUNCTION budgeting.set__update_user_settings(
+DROP FUNCTION IF EXISTS budgeting.set__update_user_settings;
+CREATE FUNCTION budgeting.set__update_user_settings(
     _user_id bigint,
     _hints_enabled boolean DEFAULT NULL,
     _theme varchar DEFAULT NULL

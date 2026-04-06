@@ -1,6 +1,7 @@
 -- Description:
 --   Replaces the full membership definition of an accessible budget group.
-CREATE OR REPLACE FUNCTION budgeting.set__replace_group_members(
+DROP FUNCTION IF EXISTS budgeting.set__replace_group_members;
+CREATE FUNCTION budgeting.set__replace_group_members(
     _user_id bigint,
     _group_id bigint,
     _child_category_ids bigint[],
