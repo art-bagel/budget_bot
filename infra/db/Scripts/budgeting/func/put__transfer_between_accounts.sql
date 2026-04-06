@@ -4,7 +4,8 @@ DROP FUNCTION IF EXISTS budgeting.put__transfer_between_accounts(
     bigint,
     char(3),
     numeric,
-    text
+    text,
+    timestamptz
 );
 
 CREATE FUNCTION budgeting.put__transfer_between_accounts(

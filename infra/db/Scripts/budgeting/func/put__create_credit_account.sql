@@ -4,6 +4,7 @@ DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
     text,
     char(3),
     numeric,
+    bigint,
     text,
     numeric,
     smallint,

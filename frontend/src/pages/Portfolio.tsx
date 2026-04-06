@@ -1966,7 +1966,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                       <div className="portfolio-position-card__sub-row">
                                         {isDepositCard ? (
                                           <span>
-                                            {position.metadata.interest_rate}% годовых
+                                            {String(position.metadata.interest_rate)}% годовых
                                             {position.metadata.deposit_kind === 'term_deposit' && position.metadata.end_date
                                               ? ` · до ${formatDateLabel(String(position.metadata.end_date))}`
                                               : ''}
