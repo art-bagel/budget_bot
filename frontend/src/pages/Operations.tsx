@@ -586,12 +586,18 @@ export default function Operations({
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
   const visibleHistoryItems = useMemo(() => {
-    if (viewMode !== 'investment' || investmentHistoryFilter === 'all') {
-      return historyItems;
+    let items = historyItems;
+
+    if (embedded) {
+      items = items.filter((item) => !item.reversal_of_operation_id);
     }
 
-    return historyItems.filter((item) => getInvestmentHistoryKind(item) === investmentHistoryFilter);
-  }, [historyItems, investmentHistoryFilter, viewMode]);
+    if (viewMode === 'investment' && investmentHistoryFilter !== 'all') {
+      items = items.filter((item) => getInvestmentHistoryKind(item) === investmentHistoryFilter);
+    }
+
+    return items;
+  }, [historyItems, investmentHistoryFilter, viewMode, embedded]);
 
   const handleReverseOperation = async (operationId: number) => {
     setReversingOperationId(operationId);

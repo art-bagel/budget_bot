@@ -94,13 +94,16 @@ BEGIN
                 )
                 OR (
                     _normalized_operation_type = 'banking'
-                    AND EXISTS (
-                        SELECT 1
-                        FROM bank_entries be_filter
-                        JOIN bank_accounts ba_filter
-                          ON ba_filter.id = be_filter.bank_account_id
-                        WHERE be_filter.operation_id = o.id
-                          AND ba_filter.account_kind <> 'investment'
+                    AND (
+                        o.type IN ('allocate', 'group_allocate')
+                        OR EXISTS (
+                            SELECT 1
+                            FROM bank_entries be_filter
+                            JOIN bank_accounts ba_filter
+                              ON ba_filter.id = be_filter.bank_account_id
+                            WHERE be_filter.operation_id = o.id
+                              AND ba_filter.account_kind <> 'investment'
+                        )
                     )
                 )
                 OR (
