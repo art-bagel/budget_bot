@@ -274,7 +274,7 @@ async def record_income(
         currency_code=body.currency_code,
         budget_amount_in_base=body.budget_amount_in_base,
         comment=body.comment,
-        operated_at=body.operated_at.isoformat() if body.operated_at else None,
+        operated_at=body.operated_at,
     )
     return RecordIncomeResponse(**result)
 
@@ -320,7 +320,7 @@ async def record_income_split(
         amount=body.amount,
         currency_code=body.currency_code,
         budget_amount_in_base=body.budget_amount_in_base,
-        operated_at=body.operated_at.isoformat() if body.operated_at else None,
+        operated_at=body.operated_at,
         comment=body.comment,
     )
     return RecordIncomeSplitResponse(**result)

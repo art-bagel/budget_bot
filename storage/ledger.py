@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 
 from storage.databases import DataBase
@@ -50,7 +51,7 @@ class Ledger(DataBase):
         income_source_id: Optional[int] = None,
         budget_amount_in_base: Optional[float] = None,
         comment: Optional[str] = None,
-        operated_at: Optional[str] = None,
+        operated_at: Optional[date] = None,
     ) -> dict:
         """
         Записывает доход в банк и в нераспределенный бюджет.
@@ -350,7 +351,7 @@ class Ledger(DataBase):
         currency_code: str,
         budget_amount_in_base: Optional[float] = None,
         comment: Optional[str] = None,
-        operated_at: Optional[str] = None,
+        operated_at: Optional[date] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__RECORD_INCOME_SPLIT),
