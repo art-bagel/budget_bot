@@ -98,6 +98,7 @@ export interface RecordIncomeRequest {
   currency_code: string;
   budget_amount_in_base?: number;
   comment?: string;
+  operated_at?: string;
 }
 
 export interface RecordIncomeResponse {
@@ -627,6 +628,7 @@ export interface RecordIncomeSplitRequest {
   currency_code: string;
   budget_amount_in_base?: number;
   comment?: string;
+  operated_at?: string;
 }
 
 export interface RecordIncomeSplitResponse {

@@ -6,7 +6,8 @@ CREATE FUNCTION budgeting.put__record_income(
     _currency_code char(3),
     _income_source_id bigint DEFAULT NULL,
     _budget_amount_in_base numeric DEFAULT NULL,
-    _comment text DEFAULT NULL
+    _comment text DEFAULT NULL,
+    _operated_at timestamptz DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -96,7 +97,8 @@ BEGIN
         owner_family_id,
         income_source_id,
         type,
-        comment
+        comment,
+        created_at
     )
     VALUES (
         _user_id,
@@ -105,7 +107,8 @@ BEGIN
         _owner_family_id,
         _income_source_id,
         'income',
-        _comment
+        _comment,
+        COALESCE(_operated_at, current_timestamp)
     )
     RETURNING id
     INTO _operation_id;

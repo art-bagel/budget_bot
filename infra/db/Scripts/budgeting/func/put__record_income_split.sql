@@ -5,7 +5,8 @@ CREATE FUNCTION budgeting.put__record_income_split(
     _amount               numeric,
     _currency_code        char(3),
     _budget_amount_in_base numeric DEFAULT NULL,
-    _comment              text     DEFAULT NULL
+    _comment              text     DEFAULT NULL,
+    _operated_at          timestamptz DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -80,7 +81,8 @@ BEGIN
             _currency_code,
             _income_source_id,
             _line_budget_amount,
-            _comment
+            _comment,
+            _operated_at
         ) INTO _result;
 
         _operation_ids      := _operation_ids || (_result->>'operation_id')::bigint;

@@ -18,6 +18,7 @@ class RecordIncomeRequest(BaseModel):
     currency_code: str
     budget_amount_in_base: Optional[float] = None
     comment: Optional[str] = None
+    operated_at: Optional[date] = None
 
     @field_validator('amount')
     @classmethod
@@ -273,6 +274,7 @@ async def record_income(
         currency_code=body.currency_code,
         budget_amount_in_base=body.budget_amount_in_base,
         comment=body.comment,
+        operated_at=body.operated_at.isoformat() if body.operated_at else None,
     )
     return RecordIncomeResponse(**result)
 
@@ -283,6 +285,7 @@ class RecordIncomeSplitRequest(BaseModel):
     currency_code: str
     budget_amount_in_base: Optional[float] = None
     comment: Optional[str] = None
+    operated_at: Optional[date] = None
 
     @field_validator('amount')
     @classmethod
@@ -317,6 +320,7 @@ async def record_income_split(
         amount=body.amount,
         currency_code=body.currency_code,
         budget_amount_in_base=body.budget_amount_in_base,
+        operated_at=body.operated_at.isoformat() if body.operated_at else None,
         comment=body.comment,
     )
     return RecordIncomeSplitResponse(**result)

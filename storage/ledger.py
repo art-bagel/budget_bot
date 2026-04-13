@@ -50,6 +50,7 @@ class Ledger(DataBase):
         income_source_id: Optional[int] = None,
         budget_amount_in_base: Optional[float] = None,
         comment: Optional[str] = None,
+        operated_at: Optional[str] = None,
     ) -> dict:
         """
         Записывает доход в банк и в нераспределенный бюджет.
@@ -60,6 +61,7 @@ class Ledger(DataBase):
         :param currency_code: Код валюты дохода.
         :param budget_amount_in_base: Историческая стоимость в базовой валюте.
         :param comment: Комментарий к операции.
+        :param operated_at: Дата операции (ISO-формат). По умолчанию — текущая дата.
         :return: Словарь с идентификатором операции и суммой в базовой валюте.
         """
         return await self.call_function(
@@ -71,6 +73,7 @@ class Ledger(DataBase):
             income_source_id,
             budget_amount_in_base,
             comment,
+            operated_at,
         )
 
     async def put__record_portfolio_income(
@@ -347,6 +350,7 @@ class Ledger(DataBase):
         currency_code: str,
         budget_amount_in_base: Optional[float] = None,
         comment: Optional[str] = None,
+        operated_at: Optional[str] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__RECORD_INCOME_SPLIT),
@@ -356,6 +360,7 @@ class Ledger(DataBase):
             currency_code,
             budget_amount_in_base,
             comment,
+            operated_at,
         )
 
     async def put__reverse_operation(self, user_id: int, operation_id: int, comment: Optional[str] = None) -> dict:

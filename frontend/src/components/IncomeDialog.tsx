@@ -58,6 +58,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [newIncomeSourceName, setNewIncomeSourceName] = useState('');
   const [incomeBudgetAmountInBase, setIncomeBudgetAmountInBase] = useState('');
   const [incomeComment, setIncomeComment] = useState('');
+  const [incomeDate, setIncomeDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
   const [creatingSource, setCreatingSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +145,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
     setError(null);
 
     try {
+      const operatedAt = incomeDate || undefined;
+
       if (hasPattern) {
         await recordIncomeSplit({
           income_source_id: selectedSource.id,
@@ -151,6 +154,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
           currency_code: incomeCurrencyCode,
           budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
           comment: incomeComment.trim() || undefined,
+          operated_at: operatedAt,
         });
       } else {
         await recordIncome({
@@ -160,6 +164,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
           currency_code: incomeCurrencyCode,
           budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
           comment: incomeComment.trim() || undefined,
+          operated_at: operatedAt,
         } as RecordIncomeRequest);
       }
 
@@ -509,6 +514,12 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   onChange={(e) => setIncomeComment(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
                   style={{ flex: 1 }}
+                />
+                <input
+                  className="input"
+                  type="date"
+                  value={incomeDate}
+                  onChange={(e) => setIncomeDate(e.target.value)}
                 />
               </div>
 
