@@ -192,6 +192,7 @@ class Ledger(DataBase):
         amount: float,
         currency_code: str,
         comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
     ) -> dict:
         """
         Записывает расход из банка на категорию.
@@ -201,6 +202,7 @@ class Ledger(DataBase):
         :param amount: Сумма расхода в валюте операции.
         :param currency_code: Код валюты расхода.
         :param comment: Комментарий к операции.
+        :param operated_at: Дата операции. По умолчанию — текущая дата.
         :return: Словарь с идентификатором операции и суммой в базовой валюте.
         """
         return await self.call_function(
@@ -211,6 +213,7 @@ class Ledger(DataBase):
             amount,
             currency_code,
             comment,
+            operated_at,
         )
 
     F_PUT__TRANSFER_BETWEEN_ACCOUNTS = 'put__transfer_between_accounts'

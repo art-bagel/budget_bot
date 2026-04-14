@@ -48,6 +48,7 @@ class RecordExpenseRequest(BaseModel):
     amount: float
     currency_code: str
     comment: Optional[str] = None
+    operated_at: Optional[date] = None
 
     @field_validator('amount')
     @classmethod
@@ -338,6 +339,7 @@ async def record_expense(
         amount=body.amount,
         currency_code=body.currency_code,
         comment=body.comment,
+        operated_at=body.operated_at,
     )
     return RecordExpenseResponse(**result)
 

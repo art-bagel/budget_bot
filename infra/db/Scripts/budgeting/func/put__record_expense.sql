@@ -5,7 +5,8 @@ CREATE FUNCTION budgeting.put__record_expense(
     _category_id     bigint,
     _amount          numeric,
     _currency_code   char(3),
-    _comment         text DEFAULT NULL
+    _comment         text DEFAULT NULL,
+    _operated_at     timestamptz DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -171,8 +172,8 @@ BEGIN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
-    INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment)
-    VALUES (_user_id, _category_owner_type, _category_owner_user_id, _category_owner_family_id, 'expense', _comment)
+    INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at)
+    VALUES (_user_id, _category_owner_type, _category_owner_user_id, _category_owner_family_id, 'expense', _comment, COALESCE(_operated_at, current_timestamp))
     RETURNING id INTO _operation_id;
 
     INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)

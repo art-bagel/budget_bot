@@ -24,6 +24,7 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
   const [comment, setComment] = useState('');
+  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
         amount: parseFloat(amount),
         currency_code: currencyCode,
         comment: comment.trim() || undefined,
+        operated_at: expenseDate || undefined,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -147,6 +149,15 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
               onChange={(e) => setComment(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               style={{ flex: 1 }}
+            />
+          </div>
+
+          <div className="form-row">
+            <input
+              className="input"
+              type="date"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
             />
           </div>
 

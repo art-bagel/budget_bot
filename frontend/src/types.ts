@@ -113,6 +113,7 @@ export interface RecordExpenseRequest {
   amount: number;
   currency_code: string;
   comment?: string;
+  operated_at?: string;
 }
 
 export interface RecordExpenseResponse {
