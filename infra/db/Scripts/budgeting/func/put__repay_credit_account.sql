@@ -211,11 +211,32 @@ BEGIN
     END IF;
 
     _days_since_accrual := _payment_date - _last_accrual_date;
-    _interest_accrued := CASE
-        WHEN COALESCE(_credit_interest_rate, 0) > 0 AND _principal_before > 0
-            THEN round(_principal_before * _credit_interest_rate * _days_since_accrual / 36500.0, 2)
-        ELSE 0
-    END;
+    _interest_accrued := 0;
+    IF COALESCE(_credit_interest_rate, 0) > 0 AND _principal_before > 0 AND _days_since_accrual > 0 THEN
+        DECLARE
+            _cursor_date date := _last_accrual_date;
+            _year_end date;
+            _period_end date;
+            _period_days integer;
+            _year_days integer;
+        BEGIN
+            WHILE _cursor_date < _payment_date LOOP
+                _year_end := make_date(extract(year FROM _cursor_date)::integer + 1, 1, 1);
+                _period_end := LEAST(_year_end, _payment_date);
+                _period_days := _period_end - _cursor_date;
+                _year_days := CASE
+                    WHEN extract(year FROM _cursor_date)::integer % 4 = 0
+                         AND (extract(year FROM _cursor_date)::integer % 100 != 0
+                              OR extract(year FROM _cursor_date)::integer % 400 = 0)
+                    THEN 366 ELSE 365
+                END;
+                _interest_accrued := _interest_accrued
+                    + _principal_before * _credit_interest_rate * _period_days / (_year_days * 100.0);
+                _cursor_date := _period_end;
+            END LOOP;
+            _interest_accrued := round(_interest_accrued, 2);
+        END;
+    END IF;
 
     IF round(_principal_before + _interest_accrued, 2) <= 0 THEN
         RAISE EXCEPTION 'Credit account is already fully repaid';

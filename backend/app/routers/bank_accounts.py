@@ -244,6 +244,29 @@ def _next_payment_date(as_of: date, payment_day: int, include_same_day: bool = T
     return _payment_date_for_month(next_month_anchor.year, next_month_anchor.month, payment_day)
 
 
+def _is_leap_year(year: int) -> bool:
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def _days_in_year(year: int) -> int:
+    return 366 if _is_leap_year(year) else 365
+
+
+def _actual_actual_interest(principal: float, annual_rate: float, date_from: date, date_to: date) -> float:
+    """Calculate interest using actual/actual day count convention, splitting across year boundaries."""
+    if annual_rate <= 0 or principal <= 0 or date_from >= date_to:
+        return 0.0
+    total = 0.0
+    current = date_from
+    while current < date_to:
+        year_end = date(current.year + 1, 1, 1)
+        period_end = min(year_end, date_to)
+        days = (period_end - current).days
+        total += principal * annual_rate / 100.0 * days / _days_in_year(current.year)
+        current = period_end
+    return round(total, 2)
+
+
 def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[dict]:
     credit_kind = summary.get('credit_kind')
     annual_rate_raw = summary.get('annual_rate')
@@ -296,12 +319,13 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
 
     items: list[dict] = []
     current_principal = principal
+    prev_date = as_of_date
 
     for idx, payment_date in enumerate(payment_dates):
         if current_principal <= 0:
             break
 
-        interest_component = round(current_principal * monthly_rate, 2) if monthly_rate > 0 else 0
+        interest_component = _actual_actual_interest(current_principal, annual_rate, prev_date, payment_date)
 
         total_payment = annuity_payment
         principal_component = round(max(0, total_payment - interest_component), 2)
@@ -324,6 +348,7 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
         })
 
         current_principal = principal_after
+        prev_date = payment_date
 
     return items
 
