@@ -38,6 +38,7 @@ const HISTORY_TYPE_OPTIONS = [
   { value: 'investment_trade', label: 'Сделка по инвестиции' },
   { value: 'investment_income', label: 'Доход по инвестициям' },
   { value: 'investment_adjustment', label: 'Корректировка инвестиции' },
+  { value: 'cancelled', label: 'Отменённые' },
 ];
 const ANALYTICS_TYPE_OPTIONS: { value: 'expense' | 'income'; label: string }[] = [
   { value: 'expense', label: 'Расходы' },
@@ -65,6 +66,7 @@ const BANKING_TYPE_FILTER_OPTIONS = [
   { value: 'allocate', label: 'Распределение' },
   { value: 'exchange', label: 'Обмен' },
   { value: 'account_transfer', label: 'Переводы' },
+  { value: 'cancelled', label: 'Отменённые' },
 ] as const;
 
 type OperationLine = {
@@ -454,9 +456,13 @@ export default function Operations({
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [historyTypeFilter, setHistoryTypeFilter] = useState<Set<string>>(new Set());
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<Set<string>>(
+    () => new Set(HISTORY_TYPE_OPTIONS.filter((o) => o.value !== 'cancelled').map((o) => o.value)),
+  );
   const [investmentHistoryFilter, setInvestmentHistoryFilter] = useState<InvestmentHistoryFilter>('all');
-  const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(new Set());
+  const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(
+    () => new Set(BANKING_TYPE_FILTER_OPTIONS.filter((o) => o.value !== 'cancelled').map((o) => o.value)),
+  );
   const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
@@ -503,8 +509,12 @@ export default function Operations({
       return 'banking';
     }
 
-    if (nextViewMode === 'history' && nextHistoryTypeFilter.size > 0) {
-      return Array.from(nextHistoryTypeFilter).join(',');
+    if (nextViewMode === 'history') {
+      const typeValues = Array.from(nextHistoryTypeFilter).filter((v) => v !== 'cancelled');
+      const allTypeCount = HISTORY_TYPE_OPTIONS.filter((o) => o.value !== 'cancelled').length;
+      if (typeValues.length > 0 && typeValues.length < allTypeCount) {
+        return typeValues.join(',');
+      }
     }
 
     return undefined;
@@ -562,6 +572,14 @@ export default function Operations({
     if (viewMode === 'analytics') {
       return;
     }
+    if (showHistoryTypeFilter) {
+      const typeValues = Array.from(historyTypeFilter).filter((v) => v !== 'cancelled');
+      if (typeValues.length === 0) {
+        setHistoryItems([]);
+        setHistoryTotalCount(0);
+        return;
+      }
+    }
     void loadHistory(0, true);
   }, [viewMode, historyTypeFilterKey]);
 
@@ -613,11 +631,16 @@ export default function Operations({
       items = items.filter((item) => !item.reversal_of_operation_id);
     }
 
-    if (historyScope === 'banking' && bankingTypeFilter.size > 0) {
+    if (historyScope === 'banking') {
       items = items.filter((item) =>
-        bankingTypeFilter.has(item.type) ||
-        (bankingTypeFilter.has('allocate') && item.type === 'group_allocate'),
+        (bankingTypeFilter.has(item.type) ||
+        (bankingTypeFilter.has('allocate') && item.type === 'group_allocate'))
+        && (!item.has_reversal || bankingTypeFilter.has('cancelled')),
       );
+    }
+
+    if (showHistoryTypeFilter && !historyTypeFilter.has('cancelled')) {
+      items = items.filter((item) => !item.has_reversal);
     }
 
     if (viewMode === 'investment' && investmentHistoryFilter !== 'all') {
@@ -720,10 +743,10 @@ export default function Operations({
                         type="button"
                         onClick={() => setTypeFilterOpen((prev) => !prev)}
                       >
-                        {historyTypeFilter.size === 0
+                        {historyTypeFilter.size === HISTORY_TYPE_OPTIONS.length
                           ? 'Все типы'
-                          : historyTypeFilter.size === 1
-                            ? HISTORY_TYPE_OPTIONS.find((o) => historyTypeFilter.has(o.value))?.label ?? 'Выбрано'
+                          : historyTypeFilter.size === 0
+                            ? 'Не выбрано'
                             : `Выбрано: ${historyTypeFilter.size}`}
                       </button>
                       {typeFilterOpen && (
@@ -748,15 +771,19 @@ export default function Operations({
                               {option.label}
                             </label>
                           ))}
-                          {historyTypeFilter.size > 0 && (
-                            <button
-                              className="multiselect__clear"
-                              type="button"
-                              onClick={() => setHistoryTypeFilter(new Set())}
-                            >
-                              Сбросить
-                            </button>
-                          )}
+                          <button
+                            className="multiselect__clear"
+                            type="button"
+                            onClick={() => {
+                              if (historyTypeFilter.size === HISTORY_TYPE_OPTIONS.length) {
+                                setHistoryTypeFilter(new Set());
+                              } else {
+                                setHistoryTypeFilter(new Set(HISTORY_TYPE_OPTIONS.map((o) => o.value)));
+                              }
+                            }}
+                          >
+                            {historyTypeFilter.size === HISTORY_TYPE_OPTIONS.length ? 'Сбросить' : 'Выбрать все'}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -784,10 +811,10 @@ export default function Operations({
                         type="button"
                         onClick={() => setTypeFilterOpen((prev) => !prev)}
                       >
-                        {bankingTypeFilter.size === 0
+                        {bankingTypeFilter.size === BANKING_TYPE_FILTER_OPTIONS.length
                           ? 'Все типы'
-                          : bankingTypeFilter.size === 1
-                            ? BANKING_TYPE_FILTER_OPTIONS.find((o) => bankingTypeFilter.has(o.value))?.label ?? 'Выбрано'
+                          : bankingTypeFilter.size === 0
+                            ? 'Не выбрано'
                             : `Выбрано: ${bankingTypeFilter.size}`}
                       </button>
                       {typeFilterOpen && (
@@ -812,15 +839,19 @@ export default function Operations({
                               {option.label}
                             </label>
                           ))}
-                          {bankingTypeFilter.size > 0 && (
-                            <button
-                              className="multiselect__clear"
-                              type="button"
-                              onClick={() => setBankingTypeFilter(new Set())}
-                            >
-                              Сбросить
-                            </button>
-                          )}
+                          <button
+                            className="multiselect__clear"
+                            type="button"
+                            onClick={() => {
+                              if (bankingTypeFilter.size === BANKING_TYPE_FILTER_OPTIONS.length) {
+                                setBankingTypeFilter(new Set());
+                              } else {
+                                setBankingTypeFilter(new Set(BANKING_TYPE_FILTER_OPTIONS.map((o) => o.value)));
+                              }
+                            }}
+                          >
+                            {bankingTypeFilter.size === BANKING_TYPE_FILTER_OPTIONS.length ? 'Сбросить' : 'Выбрать все'}
+                          </button>
                         </div>
                       )}
                     </div>
