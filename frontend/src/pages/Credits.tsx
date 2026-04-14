@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { sanitizeDecimalInput } from '../utils/validation';
 import {
   archiveCreditAccount,
   createCreditAccount,
@@ -886,7 +887,7 @@ export default function Credits({ user }: { user: UserContext }) {
                       value={repayDrafts[selectedCredit.account.id]?.amount ?? ''}
                       onChange={(e) => setRepayDrafts((prev) => ({
                         ...prev,
-                        [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], amount: e.target.value },
+                        [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], amount: sanitizeDecimalInput(e.target.value) },
                       }))}
                       disabled={submittingRepayId === selectedCredit.account.id}
                       style={{ width: 160 }}

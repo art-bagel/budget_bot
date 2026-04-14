@@ -83,6 +83,10 @@ BEGIN
         WHERE o.type = _normalized_operation_type
           AND o.created_at >= _series_start
           AND o.created_at < _selected_period_end
+          AND NOT EXISTS (
+              SELECT 1 FROM operations ro
+              WHERE ro.reversal_of_operation_id = o.id
+          )
           AND (
               (_normalized_owner_scope = 'all' AND (
                   (o.owner_type = 'user' AND o.owner_user_id = _user_id)
