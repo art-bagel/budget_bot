@@ -33,6 +33,7 @@ DECLARE
     _bank_owner_user_id       bigint;
     _bank_owner_family_id     bigint;
     _bank_account_kind        text;
+    _bank_credit_kind         text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -59,8 +60,8 @@ BEGIN
         RAISE EXCEPTION 'Expense category % must be of kind regular', _category_id;
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit
-    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind, _bank_credit_limit
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit, credit_kind
+    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind, _bank_credit_limit, _bank_credit_kind
     FROM bank_accounts
     WHERE id = _bank_account_id AND is_active;
 
@@ -76,6 +77,10 @@ BEGIN
 
     IF _bank_account_kind NOT IN ('cash', 'credit') THEN
         RAISE EXCEPTION 'Expenses can only be recorded from cash or credit accounts';
+    END IF;
+
+    IF _bank_account_kind = 'credit' AND _bank_credit_kind IS DISTINCT FROM 'credit_card' THEN
+        RAISE EXCEPTION 'Expenses can only be recorded from credit card accounts';
     END IF;
 
     IF _category_owner_type <> _bank_owner_type

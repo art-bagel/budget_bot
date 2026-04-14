@@ -43,7 +43,8 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
       fetchBankAccounts('credit'),
     ]).then(([loadedCurrencies, cashAccounts, creditAccounts]) => {
       setCurrencies(loadedCurrencies);
-      const ownerAccounts = [...cashAccounts, ...creditAccounts].filter((a) =>
+      const creditCardAccounts = creditAccounts.filter((a) => a.credit_kind === 'credit_card');
+      const ownerAccounts = [...cashAccounts, ...creditCardAccounts].filter((a) =>
         category.owner_type === 'family'
           ? a.owner_type === 'family'
           : a.owner_type === 'user',

@@ -93,6 +93,10 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Кредитный лимит не настроен для этого счёта';
   }
 
+  if (text.includes('Expenses can only be recorded from credit card accounts')) {
+    return 'Расходы можно записывать только с кредитных карт';
+  }
+
   if (text.includes('Credit repayment is supported only from cash accounts')) {
     return 'Погашение кредита пока можно делать только с обычного счёта';
   }
