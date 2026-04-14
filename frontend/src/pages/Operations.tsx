@@ -29,16 +29,15 @@ const ANALYTICS_COLOR_PALETTE = [
   '#7b8a99',
 ];
 const HISTORY_TYPE_OPTIONS = [
-  { value: '', label: 'Все типы' },
   { value: 'income', label: 'Доход' },
-  { value: 'investment_trade', label: 'Сделка по инвестиции' },
-  { value: 'investment_income', label: 'Доход по инвестициям' },
-  { value: 'investment_adjustment', label: 'Корректировка инвестиции' },
   { value: 'expense', label: 'Расход' },
   { value: 'allocate', label: 'Распределение по категории' },
   { value: 'group_allocate', label: 'Распределение по группе' },
   { value: 'exchange', label: 'Обмен валют' },
   { value: 'account_transfer', label: 'Перевод между счетами' },
+  { value: 'investment_trade', label: 'Сделка по инвестиции' },
+  { value: 'investment_income', label: 'Доход по инвестициям' },
+  { value: 'investment_adjustment', label: 'Корректировка инвестиции' },
 ];
 const ANALYTICS_TYPE_OPTIONS: { value: 'expense' | 'income'; label: string }[] = [
   { value: 'expense', label: 'Расходы' },
@@ -59,6 +58,13 @@ const INVESTMENT_HISTORY_FILTER_OPTIONS = [
   { value: 'trade', label: 'Сделки' },
   { value: 'income', label: 'Доход' },
   { value: 'transfer', label: 'Переводы' },
+] as const;
+const BANKING_TYPE_FILTER_OPTIONS = [
+  { value: 'income', label: 'Доход' },
+  { value: 'expense', label: 'Расход' },
+  { value: 'allocate', label: 'Распределение' },
+  { value: 'exchange', label: 'Обмен' },
+  { value: 'account_transfer', label: 'Переводы' },
 ] as const;
 
 type OperationLine = {
@@ -448,9 +454,12 @@ export default function Operations({
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [historyTypeFilter, setHistoryTypeFilter] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<Set<string>>(new Set());
   const [investmentHistoryFilter, setInvestmentHistoryFilter] = useState<InvestmentHistoryFilter>('all');
+  const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(new Set());
   const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false);
+  const typeFilterRef = useRef<HTMLDivElement>(null);
 
   const [analyticsData, setAnalyticsData] = useState<OperationAnalyticsResponse | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -476,6 +485,7 @@ export default function Operations({
     () => getPeriodSelectOptions(analyticsPeriodMode, analyticsAnchorDate),
     [analyticsPeriodMode, analyticsAnchorDate],
   );
+  const historyTypeFilterKey = useMemo(() => Array.from(historyTypeFilter).sort().join(','), [historyTypeFilter]);
   const showHistoryTypeFilter = viewMode === 'history' && historyScope === 'all';
   const showInvestmentTypeFilter = viewMode === 'investment';
   const nonAnalyticsModes = resolvedAllowedModes.filter((mode) => mode !== 'analytics');
@@ -483,7 +493,7 @@ export default function Operations({
 
   const getEffectiveHistoryType = (
     nextViewMode: OperationsViewMode = viewMode,
-    nextHistoryTypeFilter = historyTypeFilter,
+    nextHistoryTypeFilter: Set<string> = historyTypeFilter,
   ): string | undefined => {
     if (nextViewMode === 'investment') {
       return 'investment';
@@ -493,8 +503,8 @@ export default function Operations({
       return 'banking';
     }
 
-    if (nextViewMode === 'history' && nextHistoryTypeFilter) {
-      return nextHistoryTypeFilter;
+    if (nextViewMode === 'history' && nextHistoryTypeFilter.size > 0) {
+      return Array.from(nextHistoryTypeFilter).join(',');
     }
 
     return undefined;
@@ -553,7 +563,7 @@ export default function Operations({
       return;
     }
     void loadHistory(0, true);
-  }, [viewMode, historyTypeFilter]);
+  }, [viewMode, historyTypeFilterKey]);
 
   useEffect(() => {
     if (viewMode !== 'analytics') {
@@ -571,6 +581,17 @@ export default function Operations({
   useEffect(() => {
     setViewMode(safeInitialViewMode);
   }, [safeInitialViewMode]);
+
+  useEffect(() => {
+    if (!typeFilterOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      if (typeFilterRef.current && !typeFilterRef.current.contains(event.target as Node)) {
+        setTypeFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [typeFilterOpen]);
 
   useEffect(() => {
     const el = periodSelectRef.current;
@@ -592,12 +613,19 @@ export default function Operations({
       items = items.filter((item) => !item.reversal_of_operation_id);
     }
 
+    if (historyScope === 'banking' && bankingTypeFilter.size > 0) {
+      items = items.filter((item) =>
+        bankingTypeFilter.has(item.type) ||
+        (bankingTypeFilter.has('allocate') && item.type === 'group_allocate'),
+      );
+    }
+
     if (viewMode === 'investment' && investmentHistoryFilter !== 'all') {
       items = items.filter((item) => getInvestmentHistoryKind(item) === investmentHistoryFilter);
     }
 
     return items;
-  }, [historyItems, investmentHistoryFilter, viewMode, embedded]);
+  }, [historyItems, investmentHistoryFilter, viewMode, embedded, historyScope, bankingTypeFilter]);
 
   const handleReverseOperation = async (operationId: number) => {
     setReversingOperationId(operationId);
@@ -686,17 +714,52 @@ export default function Operations({
                 </h3>
                 <div className="section__header-actions">
                   {showHistoryTypeFilter ? (
-                    <select
-                      className="input input--compact"
-                      value={historyTypeFilter}
-                      onChange={(event) => setHistoryTypeFilter(event.target.value)}
-                    >
-                      {HISTORY_TYPE_OPTIONS.map((option) => (
-                        <option key={option.value || 'all'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                    <div className="multiselect" ref={typeFilterRef}>
+                      <button
+                        className="input input--compact multiselect__trigger"
+                        type="button"
+                        onClick={() => setTypeFilterOpen((prev) => !prev)}
+                      >
+                        {historyTypeFilter.size === 0
+                          ? 'Все типы'
+                          : historyTypeFilter.size === 1
+                            ? HISTORY_TYPE_OPTIONS.find((o) => historyTypeFilter.has(o.value))?.label ?? 'Выбрано'
+                            : `Выбрано: ${historyTypeFilter.size}`}
+                      </button>
+                      {typeFilterOpen && (
+                        <div className="multiselect__dropdown">
+                          {HISTORY_TYPE_OPTIONS.map((option) => (
+                            <label key={option.value} className="multiselect__option">
+                              <input
+                                type="checkbox"
+                                checked={historyTypeFilter.has(option.value)}
+                                onChange={() => {
+                                  setHistoryTypeFilter((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(option.value)) {
+                                      next.delete(option.value);
+                                    } else {
+                                      next.add(option.value);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              />
+                              {option.label}
+                            </label>
+                          ))}
+                          {historyTypeFilter.size > 0 && (
+                            <button
+                              className="multiselect__clear"
+                              type="button"
+                              onClick={() => setHistoryTypeFilter(new Set())}
+                            >
+                              Сбросить
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ) : showInvestmentTypeFilter ? (
                     <div className="analytics-toolbar__row">
                       {INVESTMENT_HISTORY_FILTER_OPTIONS.map((option) => (
@@ -713,6 +776,53 @@ export default function Operations({
                           {option.label}
                         </button>
                       ))}
+                    </div>
+                  ) : historyScope === 'banking' ? (
+                    <div className="multiselect" ref={typeFilterRef}>
+                      <button
+                        className="input input--compact multiselect__trigger"
+                        type="button"
+                        onClick={() => setTypeFilterOpen((prev) => !prev)}
+                      >
+                        {bankingTypeFilter.size === 0
+                          ? 'Все типы'
+                          : bankingTypeFilter.size === 1
+                            ? BANKING_TYPE_FILTER_OPTIONS.find((o) => bankingTypeFilter.has(o.value))?.label ?? 'Выбрано'
+                            : `Выбрано: ${bankingTypeFilter.size}`}
+                      </button>
+                      {typeFilterOpen && (
+                        <div className="multiselect__dropdown">
+                          {BANKING_TYPE_FILTER_OPTIONS.map((option) => (
+                            <label key={option.value} className="multiselect__option">
+                              <input
+                                type="checkbox"
+                                checked={bankingTypeFilter.has(option.value)}
+                                onChange={() => {
+                                  setBankingTypeFilter((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(option.value)) {
+                                      next.delete(option.value);
+                                    } else {
+                                      next.add(option.value);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              />
+                              {option.label}
+                            </label>
+                          ))}
+                          {bankingTypeFilter.size > 0 && (
+                            <button
+                              className="multiselect__clear"
+                              type="button"
+                              onClick={() => setBankingTypeFilter(new Set())}
+                            >
+                              Сбросить
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : null}
                   <span className="tag tag--neutral">{historyTotalCount} всего</span>

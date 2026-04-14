@@ -26,22 +26,26 @@ BEGIN
         RAISE EXCEPTION 'History offset must be zero or positive';
     END IF;
 
-    IF _normalized_operation_type IS NOT NULL
-       AND _normalized_operation_type NOT IN (
-           'investment',
-           'banking',
-           'income',
-           'allocate',
-           'group_allocate',
-           'exchange',
-           'expense',
-           'account_transfer',
-           'investment_trade',
-           'investment_income',
-           'investment_adjustment',
-           'reversal'
-       ) THEN
-        RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
+    IF _normalized_operation_type IS NOT NULL THEN
+        PERFORM 1
+        FROM unnest(string_to_array(_normalized_operation_type, ',')) AS t(val)
+        WHERE trim(val) NOT IN (
+            'investment',
+            'banking',
+            'income',
+            'allocate',
+            'group_allocate',
+            'exchange',
+            'expense',
+            'account_transfer',
+            'investment_trade',
+            'investment_income',
+            'investment_adjustment',
+            'reversal'
+        );
+        IF FOUND THEN
+            RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
+        END IF;
     END IF;
 
     -- total_count is computed once via a window function to avoid a second
@@ -108,7 +112,7 @@ BEGIN
                 )
                 OR (
                     _normalized_operation_type NOT IN ('investment', 'banking')
-                    AND o.type = _normalized_operation_type
+                    AND o.type = ANY(string_to_array(_normalized_operation_type, ','))
                 )
           )
         ORDER BY o.created_at DESC, o.id DESC

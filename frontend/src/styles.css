@@ -671,6 +671,83 @@ p { margin: 0; }
   min-width: 220px;
 }
 
+/* ── Multiselect dropdown ────────────────────────── */
+
+.multiselect {
+  position: relative;
+}
+
+.multiselect__trigger {
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.multiselect__trigger::after {
+  content: '▾';
+  font-size: 0.7em;
+  opacity: 0.5;
+}
+
+.multiselect__dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 220px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-root);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-elevated);
+  padding: 4px 0;
+}
+
+.multiselect__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.multiselect__option:hover {
+  background: var(--bg-inset);
+}
+
+.multiselect__option input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.multiselect__clear {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  text-align: center;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.multiselect__clear:hover {
+  color: var(--text-primary);
+}
+
 /* ── Balance cards ───────────────────────────────── */
 
 .balance-scroll {
