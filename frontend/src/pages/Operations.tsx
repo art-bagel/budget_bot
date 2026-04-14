@@ -66,6 +66,7 @@ const BANKING_TYPE_FILTER_OPTIONS = [
   { value: 'allocate', label: 'Распределение' },
   { value: 'exchange', label: 'Обмен' },
   { value: 'account_transfer', label: 'Переводы' },
+  { value: 'credit_repayment', label: 'Погашение кредита' },
   { value: 'cancelled', label: 'Отменённые' },
 ] as const;
 
@@ -632,11 +633,16 @@ export default function Operations({
     }
 
     if (historyScope === 'banking') {
-      items = items.filter((item) =>
-        (bankingTypeFilter.has(item.type) ||
-        (bankingTypeFilter.has('allocate') && item.type === 'group_allocate'))
-        && (!item.has_reversal || bankingTypeFilter.has('cancelled')),
-      );
+      items = items.filter((item) => {
+        if (item.has_reversal && !bankingTypeFilter.has('cancelled')) return false;
+
+        const isCreditRepayment = item.type === 'account_transfer' && item.comment?.includes('Платёж по кредиту');
+        if (isCreditRepayment) return bankingTypeFilter.has('credit_repayment');
+        if (item.type === 'account_transfer') return bankingTypeFilter.has('account_transfer');
+        if (item.type === 'group_allocate') return bankingTypeFilter.has('allocate');
+
+        return bankingTypeFilter.has(item.type);
+      });
     }
 
     if (showHistoryTypeFilter && !historyTypeFilter.has('cancelled')) {
@@ -648,7 +654,7 @@ export default function Operations({
     }
 
     return items;
-  }, [historyItems, investmentHistoryFilter, viewMode, embedded, historyScope, bankingTypeFilter]);
+  }, [historyItems, investmentHistoryFilter, viewMode, embedded, historyScope, bankingTypeFilter, historyTypeFilter, showHistoryTypeFilter]);
 
   const handleReverseOperation = async (operationId: number) => {
     setReversingOperationId(operationId);
