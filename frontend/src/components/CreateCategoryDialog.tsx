@@ -15,6 +15,15 @@ interface GroupDraftRow {
 }
 
 
+function groupOptionLabel(category: Pick<Category, 'kind' | 'name'>): string {
+  if (category.kind === 'system' && category.name === 'Unallocated') {
+    return 'В свободный остаток';
+  }
+
+  return category.kind === 'group' ? `${category.name} · группа` : category.name;
+}
+
+
 function createDraftRow(index: number): GroupDraftRow {
   return {
     key: 'draft-' + index,
@@ -64,7 +73,9 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
       .then((categories) => {
         if (cancelled) return;
         setGroupSelectableCategories(
-          categories.filter((item) => item.is_active && item.kind !== 'system'),
+          categories.filter(
+            (item) => item.is_active && (item.kind !== 'system' || item.name === 'Unallocated'),
+          ),
         );
       })
       .catch((reason: unknown) => {
@@ -81,6 +92,12 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
       cancelled = true;
     };
   }, [kind]);
+
+  useEffect(() => {
+    if (kind === 'group') {
+      setGroupRows([createDraftRow(1)]);
+    }
+  }, [kind, ownerType]);
 
   const handleGroupRowChange = (
     rowKey: string,
@@ -109,6 +126,7 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
   const canSaveGroupMembers =
     validGroupRows.length > 0 &&
     Math.abs(totalSharePercent - 100) < 0.001;
+  const visibleGroupOptions = groupSelectableCategories.filter((item) => item.owner_type === ownerType);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -240,9 +258,9 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
                     disabled={creating}
                   >
                     <option value="">Выберите элемент</option>
-                    {groupSelectableCategories.map((item) => (
+                    {visibleGroupOptions.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.kind === 'group' ? `${item.name} · группа` : item.name}
+                        {groupOptionLabel(item)}
                       </option>
                     ))}
                   </select>

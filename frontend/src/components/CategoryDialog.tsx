@@ -100,6 +100,15 @@ function serializeGroupRows(rows: GroupDraftRow[]): string {
 }
 
 
+function groupOptionLabel(category: Pick<Category, 'kind' | 'name'>): string {
+  if (category.kind === 'system' && category.name === 'Unallocated') {
+    return 'В свободный остаток';
+  }
+
+  return category.kind === 'group' ? `${category.name} · группа` : category.name;
+}
+
+
 interface Props {
   category: DashboardBudgetCategory;
   onClose: () => void;
@@ -245,7 +254,11 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
 
         setGroupSelectableCategories(
           loadedCategories.filter(
-            (item) => item.is_active && item.kind !== 'system' && item.id !== category.category_id,
+            (item) =>
+              item.is_active &&
+              item.owner_type === category.owner_type &&
+              item.id !== category.category_id &&
+              (item.kind !== 'system' || item.name === 'Unallocated'),
           ),
         );
         setGroupRows(nextRows);
@@ -438,7 +451,7 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
                     <option value="">Выберите категорию</option>
                     {groupSelectableCategories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
-                        {cat.kind === 'group' ? `${cat.name} · группа` : cat.name}
+                        {groupOptionLabel(cat)}
                       </option>
                     ))}
                   </select>

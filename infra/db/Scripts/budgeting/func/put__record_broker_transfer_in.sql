@@ -19,8 +19,16 @@ AS $function$
 DECLARE
     _operation_id        bigint;
     _base_currency_code  char(3);
+    _from_owner_type     text;
+    _from_owner_user_id  bigint;
+    _from_owner_family_id bigint;
+    _investment_owner_type text;
+    _investment_owner_user_id bigint;
+    _investment_owner_family_id bigint;
     _from_account_kind   text;
+    _investment_account_kind text;
     _from_credit_limit   numeric(20, 2);
+    _from_unallocated_id bigint;
     _bank_balance        numeric(20, 8);
     _cost_base           numeric(20, 2) := 0;
     _remaining           numeric(20, 8);
@@ -38,8 +46,8 @@ BEGIN
         RAISE EXCEPTION 'Transfer amount must be positive';
     END IF;
 
-    SELECT account_kind, credit_limit
-    INTO _from_account_kind, _from_credit_limit
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit
+    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind, _from_credit_limit
     FROM bank_accounts
     WHERE id = _from_account_id AND is_active;
 
@@ -47,19 +55,35 @@ BEGIN
         RAISE EXCEPTION 'Unknown active bank account %', _from_account_id;
     END IF;
 
-    IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+    IF NOT budgeting.has__owner_access(_user_id, _from_owner_type, _from_owner_user_id, _from_owner_family_id) THEN
         RAISE EXCEPTION 'Access denied to account %', _from_account_id;
     END IF;
 
-    PERFORM 1
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind
+    INTO _investment_owner_type, _investment_owner_user_id, _investment_owner_family_id, _investment_account_kind
     FROM bank_accounts
-    WHERE id = _investment_account_id AND is_active AND account_kind = 'investment';
+    WHERE id = _investment_account_id AND is_active;
 
-    IF NOT FOUND THEN
+    IF _investment_owner_type IS NULL OR _investment_account_kind <> 'investment' THEN
         RAISE EXCEPTION 'Unknown active investment account %', _investment_account_id;
     END IF;
 
-    _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
+    IF NOT budgeting.has__owner_access(
+        _user_id, _investment_owner_type, _investment_owner_user_id, _investment_owner_family_id
+    ) THEN
+        RAISE EXCEPTION 'Access denied to investment account %', _investment_account_id;
+    END IF;
+
+    _base_currency_code := budgeting.get__owner_base_currency(_from_owner_type, _from_owner_user_id, _from_owner_family_id);
+
+    IF _from_account_kind = 'cash' THEN
+        _from_unallocated_id := budgeting.get__owner_system_category_id(
+            _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
+        );
+        IF _from_unallocated_id IS NULL THEN
+            RAISE EXCEPTION 'Unallocated category missing for source account %', _from_account_id;
+        END IF;
+    END IF;
 
     -- Lock the balance row to prevent concurrent over-spend.
     PERFORM 1 FROM current_bank_balances
@@ -127,7 +151,7 @@ BEGIN
         actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at
     )
     VALUES (
-        _user_id, _owner_type, _owner_user_id, _owner_family_id,
+        _user_id, _from_owner_type, _from_owner_user_id, _from_owner_family_id,
         'account_transfer', _comment, COALESCE(_operation_at, CURRENT_TIMESTAMP)
     )
     RETURNING id INTO _operation_id;
@@ -143,8 +167,17 @@ BEGIN
     )
     ON CONFLICT DO NOTHING;
 
+    IF _from_account_kind = 'cash' THEN
+        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+        VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_cost_base);
+    END IF;
+
     PERFORM budgeting.put__apply_current_bank_delta(_from_account_id,       _currency_code, -_amount, -_cost_base);
     PERFORM budgeting.put__apply_current_bank_delta(_investment_account_id, _currency_code,  _amount,  _cost_base);
+
+    IF _from_account_kind = 'cash' THEN
+        PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_cost_base);
+    END IF;
 
     IF _currency_code <> _base_currency_code THEN
         IF array_length(_lot_ids, 1) IS NOT NULL THEN

@@ -633,6 +633,14 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     return acc;
   }, {});
 
+  const groupMemberLabel = (member: GroupMember): string => {
+    if (member.child_category_kind === 'system' && member.child_category_name === 'Unallocated') {
+      return 'В свободный остаток';
+    }
+
+    return `${member.child_category_kind === 'group' ? 'Группа ' : ''}${member.child_category_name}`;
+  };
+
   const getNestedGroupBalance = (categoryId: number, visited = new Set<number>()): number => {
     if (visited.has(categoryId)) {
       return 0;
@@ -1008,7 +1016,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     const groupMembers = groupMembersByGroupId[category.category_id] || [];
                     const groupComposition = groupMembers.length > 0
                       ? groupMembers
-                          .map((member) => `${member.child_category_kind === 'group' ? 'Группа ' : ''}${member.child_category_name} ${Number((member.share * 100).toFixed(2))}%`)
+                          .map((member) => `${groupMemberLabel(member)} ${Number((member.share * 100).toFixed(2))}%`)
                           .join(' · ')
                       : 'Состав группы пока не настроен';
                     const groupBalance = groupMembers.length > 0

@@ -15,6 +15,8 @@ DECLARE
     _source_name text;
     _group_kind text;
     _from_balance numeric(20, 2);
+    _source_credit numeric(20, 2) := 0;
+    _source_debit numeric(20, 2);
     _operation_id bigint;
     _member_count integer;
     _idx integer := 0;
@@ -78,20 +80,6 @@ BEGIN
 
     _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
-    PERFORM 1 FROM current_budget_balances
-    WHERE category_id = _from_category_id
-      AND currency_code = _base_currency_code
-    FOR UPDATE;
-
-    SELECT COALESCE(amount, 0) INTO _from_balance
-    FROM current_budget_balances
-    WHERE category_id = _from_category_id
-      AND currency_code = _base_currency_code;
-
-    IF _from_balance < round(_amount_in_base, 2) THEN
-        RAISE EXCEPTION 'Insufficient budget in category %', _from_category_id;
-    END IF;
-
     -- Expand the group hierarchy once and materialise leaf members with their
     -- aggregated effective shares. _member_count is derived from the same
     -- result set, avoiding a second recursive scan.
@@ -131,6 +119,7 @@ BEGIN
     JOIN categories c
       ON c.id = em.category_id
     WHERE c.kind = 'regular'
+       OR (c.kind = 'system' AND c.name = 'Unallocated')
     GROUP BY em.category_id
     ORDER BY em.category_id;
 
@@ -139,6 +128,40 @@ BEGIN
     IF _member_count = 0 THEN
         RAISE EXCEPTION 'Group % has no active child categories', _group_id;
     END IF;
+
+    FOR _member IN SELECT child_category_id, share FROM _group_leaf_members LOOP
+        _idx := _idx + 1;
+
+        IF _idx < _member_count THEN
+            _line_amount := round(_amount_in_base * _member.share, 2);
+            _allocated_total := _allocated_total + _line_amount;
+        ELSE
+            _line_amount := round(_amount_in_base, 2) - _allocated_total;
+        END IF;
+
+        IF _member.child_category_id = _from_category_id THEN
+            _source_credit := _source_credit + _line_amount;
+        END IF;
+    END LOOP;
+
+    _source_debit := round(_amount_in_base, 2) - _source_credit;
+
+    PERFORM 1 FROM current_budget_balances
+    WHERE category_id = _from_category_id
+      AND currency_code = _base_currency_code
+    FOR UPDATE;
+
+    SELECT COALESCE(amount, 0) INTO _from_balance
+    FROM current_budget_balances
+    WHERE category_id = _from_category_id
+      AND currency_code = _base_currency_code;
+
+    IF _from_balance < _source_debit THEN
+        RAISE EXCEPTION 'Insufficient budget in category %', _from_category_id;
+    END IF;
+
+    _idx := 0;
+    _allocated_total := 0;
 
     INSERT INTO operations (
         actor_user_id,

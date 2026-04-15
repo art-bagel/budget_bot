@@ -16,6 +16,7 @@ DECLARE
     _total_share numeric := 0;
     _group_kind text;
     _child_kind text;
+    _child_name text;
     _owner_type text;
     _owner_user_id bigint;
     _owner_family_id bigint;
@@ -65,14 +66,15 @@ BEGIN
             RAISE EXCEPTION 'Invalid group share at position %', _idx;
         END IF;
 
-        SELECT kind, owner_type, owner_user_id, owner_family_id
-        INTO _child_kind, _child_owner_type, _child_owner_user_id, _child_owner_family_id
+        SELECT kind, name, owner_type, owner_user_id, owner_family_id
+        INTO _child_kind, _child_name, _child_owner_type, _child_owner_user_id, _child_owner_family_id
         FROM categories
         WHERE id = _child_category_ids[_idx]
           AND is_active;
 
-        IF _child_kind IS NULL OR _child_kind = 'system' THEN
-            RAISE EXCEPTION 'Child category % must be an active regular category or group',
+        IF _child_kind IS NULL
+           OR (_child_kind = 'system' AND _child_name <> 'Unallocated') THEN
+            RAISE EXCEPTION 'Child category % must be an active regular category, group, or Unallocated',
                 _child_category_ids[_idx];
         END IF;
 
