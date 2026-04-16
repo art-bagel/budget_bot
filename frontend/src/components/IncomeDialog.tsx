@@ -57,6 +57,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [incomeSourceId, setIncomeSourceId] = useState('');
   const [newIncomeSourceName, setNewIncomeSourceName] = useState('');
   const [incomeBudgetAmountInBase, setIncomeBudgetAmountInBase] = useState('');
+  const [incomeTaxPercent, setIncomeTaxPercent] = useState('');
   const [incomeComment, setIncomeComment] = useState('');
   const [incomeDate, setIncomeDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
@@ -106,12 +107,21 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const hasPattern = pattern !== null;
   const personalAccount = bankAccounts.find((ba) => ba.id === user.bank_account_id);
   const totalAmount = parseFloat(incomeAmount) || 0;
+  const taxPercent = parseFloat(incomeTaxPercent) || 0;
+  const hasTax = incomeTaxPercent.trim() !== '' && taxPercent > 0;
+  const isTaxValid = incomeTaxPercent.trim() === '' || (taxPercent > 0 && taxPercent < 100);
+  const taxAmount = hasTax && isTaxValid ? Math.round(totalAmount * taxPercent * 1000000) / 100000000 : 0;
+  const distributionAmount = Math.max(0, totalAmount - taxAmount);
+  const taxAmountInBase = isNonBase && hasTax && isTaxValid
+    ? Math.round((parseFloat(incomeBudgetAmountInBase) || 0) * taxPercent) / 100
+    : taxAmount;
 
   const canSubmit =
     !submitting &&
     !!selectedSource &&
     parseFloat(incomeAmount) > 0 &&
-    (!isNonBase || parseFloat(incomeBudgetAmountInBase) > 0);
+    (!isNonBase || parseFloat(incomeBudgetAmountInBase) > 0) &&
+    isTaxValid;
 
   const handleCreateSource = async () => {
     const name = newIncomeSourceName.trim();
@@ -155,6 +165,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
           budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
           comment: incomeComment.trim() || undefined,
           operated_at: operatedAt,
+          tax_percent: hasTax ? taxPercent : undefined,
         });
       } else {
         await recordIncome({
@@ -165,6 +176,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
           budget_amount_in_base: isNonBase ? parseFloat(incomeBudgetAmountInBase) : undefined,
           comment: incomeComment.trim() || undefined,
           operated_at: operatedAt,
+          tax_percent: hasTax ? taxPercent : undefined,
         } as RecordIncomeRequest);
       }
 
@@ -453,7 +465,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             </span>
                             {totalAmount > 0 && (
                               <span style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
-                                ({(totalAmount * line.share).toFixed(2)} {incomeCurrencyCode})
+                                ({(distributionAmount * line.share).toFixed(2)} {incomeCurrencyCode})
                               </span>
                             )}
                           </span>
@@ -490,6 +502,42 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   ))}
                 </select>
               </div>
+
+              <div className="form-row">
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Налог, %"
+                  value={incomeTaxPercent}
+                  onChange={(e) => setIncomeTaxPercent(sanitizeDecimalInput(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                {hasTax && isTaxValid && totalAmount > 0 && (
+                  <div style={{
+                    flex: 1,
+                    fontSize: '0.78rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.35,
+                  }}>
+                    Налог {taxAmount.toFixed(2)} {incomeCurrencyCode}
+                    <br />
+                    К распределению {distributionAmount.toFixed(2)} {incomeCurrencyCode}
+                    {isNonBase && taxAmountInBase > 0 && (
+                      <>
+                        <br />
+                        {taxAmountInBase.toFixed(2)} {user.base_currency_code}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {!isTaxValid && (
+                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
+                  Налог должен быть больше 0 и меньше 100%.
+                </p>
+              )}
 
               {isNonBase && (
                 <div className="form-row">

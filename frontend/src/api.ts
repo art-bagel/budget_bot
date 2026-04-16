@@ -145,6 +145,14 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Недостаточно бюджета в категории';
   }
 
+  if (
+    text.includes('Tax percent')
+    || text.includes('income tax')
+    || text.includes('Calculated income tax')
+  ) {
+    return 'Проверь процент налога: он должен быть больше 0 и меньше 100%';
+  }
+
   if (text.includes('Expense category and bank account must have the same owner')) {
     return 'Выбран неподходящий счет для этой категории';
   }

@@ -99,11 +99,16 @@ export interface RecordIncomeRequest {
   budget_amount_in_base?: number;
   comment?: string;
   operated_at?: string;
+  tax_percent?: number;
 }
 
 export interface RecordIncomeResponse {
   operation_id: number;
+  tax_operation_id?: number | null;
   budget_amount_in_base: number;
+  gross_budget_amount_in_base?: number;
+  tax_amount: number;
+  tax_amount_in_base: number;
   base_currency_code: string;
 }
 
@@ -630,11 +635,14 @@ export interface RecordIncomeSplitRequest {
   budget_amount_in_base?: number;
   comment?: string;
   operated_at?: string;
+  tax_percent?: number;
 }
 
 export interface RecordIncomeSplitResponse {
   operation_ids: number[];
+  tax_operation_ids: number[];
   total_budget_in_base: number;
+  total_tax_in_base: number;
   base_currency_code: string;
 }
 

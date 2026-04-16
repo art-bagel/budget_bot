@@ -2,7 +2,7 @@ from datetime import date
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import ledger, reports
@@ -19,12 +19,22 @@ class RecordIncomeRequest(BaseModel):
     budget_amount_in_base: Optional[float] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
+    tax_percent: Optional[float] = None
 
     @field_validator('amount')
     @classmethod
     def amount_must_be_positive(cls, v: float) -> float:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('tax_percent')
+    @classmethod
+    def tax_percent_must_be_valid(cls, v: Optional[float]) -> Optional[float]:
+        if v is None or v == 0:
+            return None
+        if v < 0 or v >= 100:
+            raise ValueError('Налог должен быть от 0 до 100%')
         return v
 
     @field_validator('currency_code')
@@ -38,7 +48,11 @@ class RecordIncomeRequest(BaseModel):
 
 class RecordIncomeResponse(BaseModel):
     operation_id: int
+    tax_operation_id: Optional[int] = None
     budget_amount_in_base: float
+    gross_budget_amount_in_base: Optional[float] = None
+    tax_amount: float = 0
+    tax_amount_in_base: float = 0
     base_currency_code: str
 
 
@@ -276,6 +290,7 @@ async def record_income(
         budget_amount_in_base=body.budget_amount_in_base,
         comment=body.comment,
         operated_at=body.operated_at,
+        tax_percent=body.tax_percent,
     )
     return RecordIncomeResponse(**result)
 
@@ -287,12 +302,22 @@ class RecordIncomeSplitRequest(BaseModel):
     budget_amount_in_base: Optional[float] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
+    tax_percent: Optional[float] = None
 
     @field_validator('amount')
     @classmethod
     def amount_must_be_positive(cls, v: float) -> float:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('tax_percent')
+    @classmethod
+    def tax_percent_must_be_valid(cls, v: Optional[float]) -> Optional[float]:
+        if v is None or v == 0:
+            return None
+        if v < 0 or v >= 100:
+            raise ValueError('Налог должен быть от 0 до 100%')
         return v
 
     @field_validator('currency_code')
@@ -306,7 +331,9 @@ class RecordIncomeSplitRequest(BaseModel):
 
 class RecordIncomeSplitResponse(BaseModel):
     operation_ids: List[int]
+    tax_operation_ids: List[int] = Field(default_factory=list)
     total_budget_in_base: float
+    total_tax_in_base: float = 0
     base_currency_code: str
 
 
@@ -323,6 +350,7 @@ async def record_income_split(
         budget_amount_in_base=body.budget_amount_in_base,
         operated_at=body.operated_at,
         comment=body.comment,
+        tax_percent=body.tax_percent,
     )
     return RecordIncomeSplitResponse(**result)
 

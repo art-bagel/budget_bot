@@ -1,4 +1,5 @@
-DROP FUNCTION IF EXISTS budgeting.put__record_income_split;
+DROP FUNCTION IF EXISTS budgeting.put__record_income_split(bigint, bigint, numeric, character, numeric, text, timestamptz);
+DROP FUNCTION IF EXISTS budgeting.put__record_income_split(bigint, bigint, numeric, character, numeric, text, timestamptz, numeric);
 CREATE FUNCTION budgeting.put__record_income_split(
     _user_id              bigint,
     _income_source_id     bigint,
@@ -6,7 +7,8 @@ CREATE FUNCTION budgeting.put__record_income_split(
     _currency_code        char(3),
     _budget_amount_in_base numeric DEFAULT NULL,
     _comment              text     DEFAULT NULL,
-    _operated_at          timestamptz DEFAULT NULL
+    _operated_at          timestamptz DEFAULT NULL,
+    _tax_percent          numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -24,11 +26,19 @@ DECLARE
     _running_budget      numeric  := 0;
     _line_index          int      := 0;
     _total_lines         int;
+    _tax_operation_id    bigint;
+    _tax_operation_ids   bigint[] := '{}';
+    _total_tax_base      numeric  := 0;
 BEGIN
     SET search_path TO budgeting;
 
     IF _amount <= 0 THEN
         RAISE EXCEPTION 'Income amount must be positive';
+    END IF;
+
+    IF _tax_percent IS NOT NULL AND _tax_percent <> 0
+       AND (_tax_percent < 0 OR _tax_percent >= 100) THEN
+        RAISE EXCEPTION 'Tax percent must be greater than or equal to 0 and less than 100';
     END IF;
 
     -- Verify income source and locate its pattern
@@ -82,17 +92,25 @@ BEGIN
             _income_source_id,
             _line_budget_amount,
             _comment,
-            _operated_at
+            _operated_at,
+            _tax_percent
         ) INTO _result;
 
         _operation_ids      := _operation_ids || (_result->>'operation_id')::bigint;
         _total_budget_base  := _total_budget_base + (_result->>'budget_amount_in_base')::numeric;
+        _total_tax_base     := _total_tax_base + COALESCE((_result->>'tax_amount_in_base')::numeric, 0);
+        _tax_operation_id   := NULLIF(_result->>'tax_operation_id', '')::bigint;
+        IF _tax_operation_id IS NOT NULL THEN
+            _tax_operation_ids := _tax_operation_ids || _tax_operation_id;
+        END IF;
         _last_base_currency := (_result->>'base_currency_code')::char(3);
     END LOOP;
 
     RETURN jsonb_build_object(
         'operation_ids',        _operation_ids,
+        'tax_operation_ids',    _tax_operation_ids,
         'total_budget_in_base', _total_budget_base,
+        'total_tax_in_base',    _total_tax_base,
         'base_currency_code',   _last_base_currency
     );
 END
