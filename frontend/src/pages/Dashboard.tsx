@@ -1013,7 +1013,11 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     const isDropTarget = dropTargetCategoryId === category.category_id;
                     const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
                       && (!hasFamily || draggedOwnerType === category.owner_type);
-                    const groupMembers = groupMembersByGroupId[category.category_id] || [];
+                    const groupMembers = [...(groupMembersByGroupId[category.category_id] || [])]
+                      .sort((left, right) => {
+                        if (right.share !== left.share) return right.share - left.share;
+                        return groupMemberLabel(left).localeCompare(groupMemberLabel(right), 'ru');
+                      });
                     const groupBalance = groupMembers.length > 0
                       ? groupMembers.reduce(
                           (sum, member) => sum + getNestedGroupBalance(member.child_category_id, new Set([category.category_id])),
