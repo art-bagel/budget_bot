@@ -299,6 +299,10 @@ function getPositionAccountKey(position: Pick<PortfolioPosition, 'investment_acc
   return `${position.investment_account_owner_type}:${position.investment_account_id}`;
 }
 
+function getInvestmentAccountAssetType(account: BankAccount): string {
+  return account.investment_asset_type ?? 'security';
+}
+
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
   return {
     amount: '',
@@ -625,9 +629,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
   );
 
   const assetTabs = useMemo<PortfolioAssetTab[]>(() => {
-    const positionTypeCodes = Array.from(new Set(positions.map((position) => position.asset_type_code)));
-    const knownCodes = [...DEFAULT_PORTFOLIO_ASSET_TYPE_CODES];
-    const extraCodes = positionTypeCodes
+    const accountTypeCodes = Array.from(new Set(accounts.map(({ account }) => getInvestmentAccountAssetType(account))));
+    const knownCodes = DEFAULT_PORTFOLIO_ASSET_TYPE_CODES.filter((code) => accountTypeCodes.includes(code));
+    const extraCodes = accountTypeCodes
       .filter((code) => !knownCodes.includes(code as (typeof DEFAULT_PORTFOLIO_ASSET_TYPE_CODES)[number]))
       .sort((left, right) => assetTypeLabel(left).localeCompare(assetTypeLabel(right), 'ru'));
 
@@ -647,7 +651,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       ...tab,
       totalInBase: tab.principalInBase + tab.incomeInBase,
     }));
-  }, [closedPositions, openPositions, positions]);
+  }, [accounts, closedPositions, openPositions, positions]);
 
   useEffect(() => {
     if (!assetTabs.some((tab) => tab.code === activeAssetTypeCode)) {
