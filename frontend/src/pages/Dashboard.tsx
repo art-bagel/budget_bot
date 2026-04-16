@@ -1174,6 +1174,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         <AccountTransferDialog
           personalAccountId={user.bank_account_id}
           familyAccountId={overview.family_bank_account_id}
+          baseCurrencyCode={overview.base_currency_code}
           personalBalances={overview.bank_balances}
           familyBalances={overview.family_bank_balances}
           onClose={() => setShowAccountTransfer(false)}

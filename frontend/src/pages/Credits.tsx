@@ -58,6 +58,13 @@ interface RepayDraft {
   paymentAt: string;
 }
 
+interface CreditTransferDraft {
+  amount: string;
+  currencyCode: string;
+  toAccountId: string;
+  comment: string;
+}
+
 interface CreditEditDraft {
   name: string;
   creditLimit: string;
@@ -99,6 +106,20 @@ function buildRepayDraft(
   };
 }
 
+function buildCreditTransferDraft(
+  credit: CreditWithBalances | null,
+  cashAccounts: BankAccount[],
+  baseCurrencyCode: string,
+): CreditTransferDraft {
+  const currencyCode = credit?.balances[0]?.currency_code ?? baseCurrencyCode;
+  return {
+    amount: '',
+    currencyCode,
+    toAccountId: String(cashAccounts[0]?.id ?? ''),
+    comment: '',
+  };
+}
+
 function getMissingTermConfigFields(
   summary: CreditAccountSummary | null,
   account: BankAccount | null,
@@ -130,6 +151,12 @@ function debtByKind(credits: CreditWithBalances[], kind: CreditKind): number {
     .reduce((sum, { balances }) => sum + accountDebt(balances), 0);
 }
 
+function availableCreditLimit(credit: CreditWithBalances, currencyCode: string): number {
+  const creditLimit = credit.account.credit_limit ?? 0;
+  const balance = credit.balances.find((item) => item.currency_code === currencyCode)?.amount ?? 0;
+  return Math.max(0, creditLimit + balance);
+}
+
 export default function Credits({ user }: { user: UserContext }) {
   const [credits, setCredits] = useState<CreditWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
@@ -156,6 +183,9 @@ export default function Credits({ user }: { user: UserContext }) {
   const [repayDrafts, setRepayDrafts] = useState<Record<number, RepayDraft>>({});
   const [submittingRepayId, setSubmittingRepayId] = useState<number | null>(null);
   const [repayError, setRepayError] = useState<string | null>(null);
+  const [creditTransferDrafts, setCreditTransferDrafts] = useState<Record<number, CreditTransferDraft>>({});
+  const [submittingCreditTransferId, setSubmittingCreditTransferId] = useState<number | null>(null);
+  const [creditTransferError, setCreditTransferError] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
 
@@ -211,6 +241,7 @@ export default function Credits({ user }: { user: UserContext }) {
 
   const handleOpenDetail = (id: number) => {
     setRepayError(null);
+    setCreditTransferError(null);
     setArchiveError(null);
     setSelectedSummary(null);
     setSelectedSummaryError(null);
@@ -227,6 +258,14 @@ export default function Credits({ user }: { user: UserContext }) {
       return {
         ...prev,
         [id]: buildRepayDraft(credit ?? null, cashAccounts, user.base_currency_code),
+      };
+    });
+    setCreditTransferDrafts((prev) => {
+      if (prev[id]) return prev;
+      const credit = credits.find(({ account }) => account.id === id);
+      return {
+        ...prev,
+        [id]: buildCreditTransferDraft(credit ?? null, cashAccounts, user.base_currency_code),
       };
     });
     const credit = credits.find(({ account }) => account.id === id);
@@ -262,6 +301,13 @@ export default function Credits({ user }: { user: UserContext }) {
       return {
         ...prev,
         [selectedCredit.account.id]: buildRepayDraft(selectedCredit, cashAccounts, user.base_currency_code),
+      };
+    });
+    setCreditTransferDrafts((prev) => {
+      if (prev[selectedCredit.account.id]) return prev;
+      return {
+        ...prev,
+        [selectedCredit.account.id]: buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code),
       };
     });
   }, [cashAccounts, selectedCredit, user.base_currency_code]);
@@ -410,6 +456,45 @@ export default function Credits({ user }: { user: UserContext }) {
     }
   };
 
+  const handleCreditTransfer = async (e: FormEvent, creditId: number) => {
+    e.preventDefault();
+    const credit = credits.find(({ account }) => account.id === creditId) ?? null;
+    const draft = creditTransferDrafts[creditId];
+    if (!credit || !draft || !draft.amount.trim() || !draft.toAccountId || submittingCreditTransferId === creditId) return;
+
+    const parsedAmount = Number(draft.amount);
+    const availableLimit = availableCreditLimit(credit, draft.currencyCode);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setCreditTransferError('Сумма должна быть положительной');
+      return;
+    }
+    if (parsedAmount > availableLimit) {
+      setCreditTransferError(`Доступный лимит: ${formatAmount(availableLimit, draft.currencyCode)}`);
+      return;
+    }
+
+    setSubmittingCreditTransferId(creditId);
+    setCreditTransferError(null);
+    try {
+      await transferBetweenAccounts({
+        from_account_id: creditId,
+        to_account_id: Number(draft.toAccountId),
+        currency_code: draft.currencyCode,
+        amount: parsedAmount,
+        comment: draft.comment.trim() || `Перевод с кредита · ${credit.account.name}`,
+      });
+      setCreditTransferDrafts((prev) => ({
+        ...prev,
+        [creditId]: buildCreditTransferDraft(credit, cashAccounts, user.base_currency_code),
+      }));
+      await load();
+    } catch (err) {
+      setCreditTransferError(err instanceof Error ? err.message : 'Ошибка перевода с кредита');
+    } finally {
+      setSubmittingCreditTransferId(null);
+    }
+  };
+
   const handleCreateCredit = async () => {
     if (!newName.trim() || submittingNew) return;
     setSubmittingNew(true);
@@ -485,6 +570,17 @@ export default function Credits({ user }: { user: UserContext }) {
     ),
     [selectedCredit, selectedSummary],
   );
+  const selectedCreditTransferCurrencyCodes = useMemo(() => {
+    const codes = selectedCredit?.balances.map((balance) => balance.currency_code) ?? [];
+    if (codes.length === 0) return [user.base_currency_code];
+    return Array.from(new Set(codes));
+  }, [selectedCredit, user.base_currency_code]);
+  const selectedCreditTransferDraft = selectedCredit
+    ? creditTransferDrafts[selectedCredit.account.id] ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)
+    : null;
+  const selectedCreditAvailableLimit = selectedCredit && selectedCreditTransferDraft
+    ? availableCreditLimit(selectedCredit, selectedCreditTransferDraft.currencyCode)
+    : 0;
 
   if (loading) {
     return (
@@ -867,6 +963,110 @@ export default function Credits({ user }: { user: UserContext }) {
                 </div>
 
                 <hr style={{ opacity: 0.15, marginBottom: 16 }} />
+
+                {/* Transfer from credit */}
+                <div className="section__header" style={{ marginBottom: 8 }}>
+                  <div className="section__eyebrow">Перевод с кредита</div>
+                </div>
+                <p className="settings-row__sub" style={{ marginBottom: 8 }}>
+                  Деньги попадут в свободный остаток выбранного личного или семейного счёта.
+                </p>
+                <form onSubmit={(e) => void handleCreditTransfer(e, selectedCredit.account.id)}>
+                  <div className="form-row">
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Сумма перевода"
+                      value={selectedCreditTransferDraft?.amount ?? ''}
+                      onChange={(e) => setCreditTransferDrafts((prev) => ({
+                        ...prev,
+                        [selectedCredit.account.id]: {
+                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
+                          amount: sanitizeDecimalInput(e.target.value),
+                        },
+                      }))}
+                      disabled={submittingCreditTransferId === selectedCredit.account.id}
+                      style={{ width: 160 }}
+                    />
+                    <select
+                      className="input"
+                      value={selectedCreditTransferDraft?.currencyCode ?? user.base_currency_code}
+                      onChange={(e) => setCreditTransferDrafts((prev) => ({
+                        ...prev,
+                        [selectedCredit.account.id]: {
+                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
+                          currencyCode: e.target.value,
+                          amount: '',
+                        },
+                      }))}
+                      disabled={submittingCreditTransferId === selectedCredit.account.id}
+                    >
+                      {selectedCreditTransferCurrencyCodes.map((code) => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-row" style={{ marginTop: 8 }}>
+                    <select
+                      className="input"
+                      value={selectedCreditTransferDraft?.toAccountId ?? ''}
+                      onChange={(e) => setCreditTransferDrafts((prev) => ({
+                        ...prev,
+                        [selectedCredit.account.id]: {
+                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
+                          toAccountId: e.target.value,
+                        },
+                      }))}
+                      disabled={submittingCreditTransferId === selectedCredit.account.id}
+                      style={{ flex: '1 1 220px' }}
+                    >
+                      <option value="">Выберите счёт зачисления</option>
+                      {cashAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.owner_type === 'family' ? 'Семейный' : 'Личный'} · {acc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-row" style={{ marginTop: 8 }}>
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="Комментарий"
+                      value={selectedCreditTransferDraft?.comment ?? ''}
+                      onChange={(e) => setCreditTransferDrafts((prev) => ({
+                        ...prev,
+                        [selectedCredit.account.id]: {
+                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
+                          comment: e.target.value,
+                        },
+                      }))}
+                      disabled={submittingCreditTransferId === selectedCredit.account.id}
+                      style={{ flex: '1 1 220px' }}
+                    />
+                    <button
+                      className="btn btn--primary"
+                      type="submit"
+                      disabled={
+                        submittingCreditTransferId === selectedCredit.account.id
+                        || !selectedCreditTransferDraft?.amount.trim()
+                        || !selectedCreditTransferDraft?.toAccountId
+                        || selectedCreditAvailableLimit <= 0
+                      }
+                    >
+                      {submittingCreditTransferId === selectedCredit.account.id ? 'Переводим...' : 'Перевести'}
+                    </button>
+                  </div>
+                  <p className="settings-row__sub" style={{ marginTop: 8 }}>
+                    Доступный лимит: {formatAmount(selectedCreditAvailableLimit, selectedCreditTransferDraft?.currencyCode ?? user.base_currency_code)}
+                  </p>
+                  {creditTransferError && (
+                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{creditTransferError}</p>
+                  )}
+                </form>
+
+                <hr style={{ opacity: 0.15, margin: '16px 0' }} />
 
                 {/* Repay form */}
                 <div className="section__header" style={{ marginBottom: 8 }}>

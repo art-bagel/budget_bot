@@ -10,16 +10,27 @@ import { sanitizeDecimalInput } from '../utils/validation';
 interface Props {
   personalAccountId: number;
   familyAccountId?: number | null;
+  baseCurrencyCode: string;
   personalBalances: DashboardBankBalance[];
   familyBalances?: DashboardBankBalance[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
+type TransferMode = 'between_cash' | 'investment' | 'credit_to_cash';
+type TransferDirection =
+  | 'personal_to_family'
+  | 'family_to_personal'
+  | 'cash_to_cash'
+  | 'cash_to_investment'
+  | 'investment_to_cash'
+  | 'credit_to_cash';
+
 
 export default function AccountTransferDialog({
   personalAccountId,
   familyAccountId = null,
+  baseCurrencyCode,
   personalBalances,
   familyBalances = [],
   onClose,
@@ -28,18 +39,20 @@ export default function AccountTransferDialog({
   useModalOpen();
 
   const hasFamily = familyAccountId !== null;
-  const [mode, setMode] = useState<'between_cash' | 'investment'>(hasFamily ? 'between_cash' : 'investment');
-  const [direction, setDirection] = useState<
-    'personal_to_family' | 'family_to_personal' | 'cash_to_investment' | 'investment_to_cash'
-  >(hasFamily ? 'personal_to_family' : 'cash_to_investment');
+  const [mode, setMode] = useState<TransferMode>('between_cash');
+  const [direction, setDirection] = useState<TransferDirection>(hasFamily ? 'personal_to_family' : 'cash_to_cash');
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
+  const [creditAccounts, setCreditAccounts] = useState<BankAccount[]>([]);
   const [balancesByAccountId, setBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({
     [personalAccountId]: personalBalances,
     ...(familyAccountId ? { [familyAccountId]: familyBalances } : {}),
   });
+  const [cashFromAccountId, setCashFromAccountId] = useState(String(personalAccountId));
+  const [cashToAccountId, setCashToAccountId] = useState(familyAccountId ? String(familyAccountId) : '');
   const [cashAccountId, setCashAccountId] = useState(String(personalAccountId));
   const [investmentAccountId, setInvestmentAccountId] = useState('');
+  const [creditAccountId, setCreditAccountId] = useState('');
   const [currencyCode, setCurrencyCode] = useState('');
   const [amount, setAmount] = useState('');
   const [comment, setComment] = useState('');
@@ -51,12 +64,13 @@ export default function AccountTransferDialog({
   useEffect(() => {
     let cancelled = false;
 
-    const loadInvestmentContext = async () => {
+    const loadAccountContext = async () => {
       setLoadingAccounts(true);
       try {
-        const [loadedCashAccounts, loadedInvestmentAccounts] = await Promise.all([
+        const [loadedCashAccounts, loadedInvestmentAccounts, loadedCreditAccounts] = await Promise.all([
           fetchBankAccounts('cash'),
           fetchBankAccounts('investment'),
+          fetchBankAccounts('credit'),
         ]);
 
         if (cancelled) {
@@ -65,6 +79,23 @@ export default function AccountTransferDialog({
 
         setCashAccounts(loadedCashAccounts);
         setInvestmentAccounts(loadedInvestmentAccounts);
+        setCreditAccounts(loadedCreditAccounts);
+
+        const resolvedCashFromId = loadedCashAccounts.some((account) => String(account.id) === cashFromAccountId)
+          ? cashFromAccountId
+          : String(loadedCashAccounts[0]?.id ?? '');
+        const resolvedCashToId = loadedCashAccounts.some((account) => String(account.id) === cashToAccountId)
+          && cashToAccountId !== resolvedCashFromId
+          ? cashToAccountId
+          : String(loadedCashAccounts.find((account) => String(account.id) !== resolvedCashFromId)?.id ?? '');
+
+        if (resolvedCashFromId !== cashFromAccountId) {
+          setCashFromAccountId(resolvedCashFromId);
+        }
+
+        if (resolvedCashToId !== cashToAccountId) {
+          setCashToAccountId(resolvedCashToId);
+        }
 
         if (!loadedCashAccounts.some((account) => String(account.id) === cashAccountId) && loadedCashAccounts[0]) {
           setCashAccountId(String(loadedCashAccounts[0].id));
@@ -72,6 +103,10 @@ export default function AccountTransferDialog({
 
         if (!loadedInvestmentAccounts.some((account) => String(account.id) === investmentAccountId) && loadedInvestmentAccounts[0]) {
           setInvestmentAccountId(String(loadedInvestmentAccounts[0].id));
+        }
+
+        if (!loadedCreditAccounts.some((account) => String(account.id) === creditAccountId) && loadedCreditAccounts[0]) {
+          setCreditAccountId(String(loadedCreditAccounts[0].id));
         }
       } catch (reason: unknown) {
         if (!cancelled) {
@@ -84,21 +119,28 @@ export default function AccountTransferDialog({
       }
     };
 
-    void loadInvestmentContext();
+    void loadAccountContext();
 
     return () => {
       cancelled = true;
     };
-  }, [cashAccountId, investmentAccountId]);
+  }, [cashAccountId, cashFromAccountId, cashToAccountId, creditAccountId, investmentAccountId]);
 
   useEffect(() => {
-    if (mode !== 'investment') {
-      return;
-    }
-
     const idsToLoad = new Set<number>();
-    if (cashAccountId) idsToLoad.add(Number(cashAccountId));
-    if (investmentAccountId) idsToLoad.add(Number(investmentAccountId));
+    if (mode === 'between_cash') {
+      if (hasFamily) {
+        if (direction === 'personal_to_family') idsToLoad.add(personalAccountId);
+        if (direction === 'family_to_personal' && familyAccountId) idsToLoad.add(familyAccountId);
+      } else if (cashFromAccountId) {
+        idsToLoad.add(Number(cashFromAccountId));
+      }
+    } else if (mode === 'investment') {
+      if (cashAccountId) idsToLoad.add(Number(cashAccountId));
+      if (investmentAccountId) idsToLoad.add(Number(investmentAccountId));
+    } else if (creditAccountId) {
+      idsToLoad.add(Number(creditAccountId));
+    }
 
     const missingIds = [...idsToLoad].filter((id) => balancesByAccountId[id] === undefined);
     if (missingIds.length === 0) {
@@ -139,11 +181,56 @@ export default function AccountTransferDialog({
     return () => {
       cancelled = true;
     };
-  }, [mode, cashAccountId, investmentAccountId, balancesByAccountId]);
+  }, [
+    mode,
+    direction,
+    hasFamily,
+    personalAccountId,
+    familyAccountId,
+    cashAccountId,
+    cashFromAccountId,
+    creditAccountId,
+    investmentAccountId,
+    balancesByAccountId,
+  ]);
+
+  const selectedCreditAccount = creditAccounts.find((account) => String(account.id) === creditAccountId) ?? null;
+  const creditAvailableBalances = useMemo<DashboardBankBalance[]>(() => {
+    if (!selectedCreditAccount) return [];
+
+    const creditLimit = selectedCreditAccount.credit_limit ?? 0;
+    const creditBalances = balancesByAccountId[selectedCreditAccount.id];
+    if (creditBalances === undefined) return [];
+    if (creditBalances.length === 0) {
+      return [{
+        currency_code: baseCurrencyCode,
+        amount: creditLimit,
+        historical_cost_in_base: creditLimit,
+        base_currency_code: baseCurrencyCode,
+      }];
+    }
+
+    return creditBalances.map((balance) => {
+      const availableAmount = Math.max(0, creditLimit + balance.amount);
+      return {
+        ...balance,
+        amount: availableAmount,
+        historical_cost_in_base: balance.currency_code === baseCurrencyCode
+          ? availableAmount
+          : Math.max(0, creditLimit + balance.historical_cost_in_base),
+      };
+    });
+  }, [balancesByAccountId, baseCurrencyCode, selectedCreditAccount]);
 
   const fromBalances = useMemo(() => {
     if (mode === 'between_cash') {
-      return direction === 'personal_to_family' ? personalBalances : familyBalances;
+      if (hasFamily) {
+        return direction === 'personal_to_family' ? personalBalances : familyBalances;
+      }
+      return balancesByAccountId[Number(cashFromAccountId)] || [];
+    }
+    if (mode === 'credit_to_cash') {
+      return creditAvailableBalances;
     }
     return balancesByAccountId[
       direction === 'cash_to_investment' ? Number(cashAccountId) : Number(investmentAccountId)
@@ -151,18 +238,29 @@ export default function AccountTransferDialog({
   }, [
     mode,
     direction,
+    hasFamily,
     personalBalances,
     familyBalances,
     balancesByAccountId,
     cashAccountId,
+    cashFromAccountId,
+    creditAvailableBalances,
     investmentAccountId,
   ]);
 
   const fromAccountId = mode === 'between_cash'
-    ? (direction === 'personal_to_family' ? personalAccountId : Number(familyAccountId))
+    ? hasFamily
+      ? (direction === 'personal_to_family' ? personalAccountId : Number(familyAccountId))
+      : Number(cashFromAccountId)
+    : mode === 'credit_to_cash'
+      ? Number(creditAccountId)
     : (direction === 'cash_to_investment' ? Number(cashAccountId) : Number(investmentAccountId));
   const toAccountId = mode === 'between_cash'
-    ? (direction === 'personal_to_family' ? Number(familyAccountId) : personalAccountId)
+    ? hasFamily
+      ? (direction === 'personal_to_family' ? Number(familyAccountId) : personalAccountId)
+      : Number(cashToAccountId)
+    : mode === 'credit_to_cash'
+      ? Number(cashAccountId)
     : (direction === 'cash_to_investment' ? Number(investmentAccountId) : Number(cashAccountId));
 
   const availableCurrencies = fromBalances.filter((b) => b.amount > 0);
@@ -172,14 +270,26 @@ export default function AccountTransferDialog({
 
   const validationMessage = mode === 'investment' && !investmentAccounts.length
     ? 'Сначала создай инвестиционный счет.'
+    : mode === 'credit_to_cash' && !creditAccounts.length
+      ? 'Сначала создай кредитный счет.'
+    : mode === 'between_cash' && !hasFamily && cashAccounts.length < 2
+      ? 'Для перевода между cash-счетами нужно минимум два счёта.'
+    : mode === 'between_cash' && !hasFamily && fromAccountId === toAccountId
+      ? 'Выбери разные счета.'
     : !currencyCode
       ? null
       : availableCurrencies.length === 0
-        ? 'На исходном счёте нет средств для перевода.'
+        ? mode === 'credit_to_cash'
+          ? 'На кредитном счёте нет доступного лимита.'
+          : 'На исходном счёте нет средств для перевода.'
         : !selectedBalance || selectedBalance.amount <= 0
-          ? 'На исходном счёте нет средств в выбранной валюте.'
+          ? mode === 'credit_to_cash'
+            ? 'На кредитном счёте нет доступного лимита в выбранной валюте.'
+            : 'На исходном счёте нет средств в выбранной валюте.'
           : exceedsBalance
-            ? `Недостаточно средств: ${formatAmount(selectedBalance.amount, currencyCode)}`
+            ? mode === 'credit_to_cash'
+              ? `Доступный лимит: ${formatAmount(selectedBalance.amount, currencyCode)}`
+              : `Недостаточно средств: ${formatAmount(selectedBalance.amount, currencyCode)}`
             : null;
 
   const canSubmit =
@@ -188,13 +298,12 @@ export default function AccountTransferDialog({
     && !loadingBalances
     && fromAccountId > 0
     && toAccountId > 0
+    && fromAccountId !== toAccountId
     && !!currencyCode
     && amountValue > 0
     && !validationMessage;
 
-  const handleDirectionChange = (
-    newDirection: 'personal_to_family' | 'family_to_personal' | 'cash_to_investment' | 'investment_to_cash',
-  ) => {
+  const handleDirectionChange = (newDirection: TransferDirection) => {
     setDirection(newDirection);
     setCurrencyCode('');
     setAmount('');
@@ -242,13 +351,18 @@ export default function AccountTransferDialog({
 
         <div className="modal-body">
           <div className="operations-note">
-            Выбери направление, валюту и сумму. Перевод в инвестиции уменьшает бюджет, обратный перевод возвращает деньги в свободный остаток.
+            {mode === 'credit_to_cash'
+              ? 'Выбери кредит, счёт зачисления и сумму. Перевод с кредита увеличит долг и добавит деньги в свободный остаток выбранного счёта.'
+              : mode === 'between_cash'
+                ? 'Выбери cash-счета, валюту и сумму. Деньги перейдут между банковскими счетами без изменения общего бюджета.'
+                : 'Выбери направление, валюту и сумму. Перевод в инвестиции уменьшает бюджет, обратный перевод возвращает деньги в свободный остаток.'}
           </div>
 
           <div className="form-row">
             {([
-              { key: 'between_cash', label: 'Между cash', disabled: !hasFamily },
+              { key: 'between_cash', label: 'Между cash', disabled: false },
               { key: 'investment', label: 'С инвестициями', disabled: false },
+              { key: 'credit_to_cash', label: 'С кредита', disabled: false },
             ] as const).map((item) => (
               <button
                 key={item.key}
@@ -258,8 +372,10 @@ export default function AccountTransferDialog({
                   setMode(item.key);
                   handleDirectionChange(
                     item.key === 'between_cash'
-                      ? 'personal_to_family'
-                      : 'cash_to_investment',
+                      ? hasFamily ? 'personal_to_family' : 'cash_to_cash'
+                      : item.key === 'credit_to_cash'
+                        ? 'credit_to_cash'
+                        : 'cash_to_investment',
                   );
                 }}
                 disabled={submitting || item.disabled}
@@ -281,9 +397,9 @@ export default function AccountTransferDialog({
             ))}
           </div>
 
-          <div className="form-row">
-            {mode === 'between_cash' ? (
-              (['personal_to_family', 'family_to_personal'] as const).map((dir) => (
+          {mode === 'between_cash' && hasFamily && (
+            <div className="form-row">
+              {(['personal_to_family', 'family_to_personal'] as const).map((dir) => (
                 <button
                   key={dir}
                   type="button"
@@ -303,9 +419,13 @@ export default function AccountTransferDialog({
                 >
                   {dir === 'personal_to_family' ? 'Личный → Семейный' : 'Семейный → Личный'}
                 </button>
-              ))
-            ) : (
-              (['cash_to_investment', 'investment_to_cash'] as const).map((dir) => (
+              ))}
+            </div>
+          )}
+
+          {mode === 'investment' && (
+            <div className="form-row">
+              {(['cash_to_investment', 'investment_to_cash'] as const).map((dir) => (
                 <button
                   key={dir}
                   type="button"
@@ -325,9 +445,55 @@ export default function AccountTransferDialog({
                 >
                   {dir === 'cash_to_investment' ? 'Cash → Invest' : 'Invest → Cash'}
                 </button>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {mode === 'between_cash' && !hasFamily && (
+            <>
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={cashFromAccountId}
+                  onChange={(e) => {
+                    setCashFromAccountId(e.target.value);
+                    setCurrencyCode('');
+                    setAmount('');
+                  }}
+                  disabled={submitting || loadingAccounts || cashAccounts.length < 2}
+                >
+                  <option value="">Счёт списания</option>
+                  {cashAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={cashToAccountId}
+                  onChange={(e) => {
+                    setCashToAccountId(e.target.value);
+                    setCurrencyCode('');
+                    setAmount('');
+                  }}
+                  disabled={submitting || loadingAccounts || cashAccounts.length < 2}
+                >
+                  <option value="">Счёт зачисления</option>
+                  {cashAccounts
+                    .filter((account) => String(account.id) !== cashFromAccountId)
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </>
+          )}
 
           {mode === 'investment' && (
             <>
@@ -367,6 +533,50 @@ export default function AccountTransferDialog({
                     <option key={account.id} value={account.id}>
                       {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
                       {account.provider_name ? ` · ${account.provider_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {mode === 'credit_to_cash' && (
+            <>
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={creditAccountId}
+                  onChange={(e) => {
+                    setCreditAccountId(e.target.value);
+                    setCurrencyCode('');
+                    setAmount('');
+                  }}
+                  disabled={submitting || loadingAccounts || !creditAccounts.length}
+                >
+                  <option value="">{loadingAccounts ? 'Загружаем кредитные счета...' : 'Кредитный счет'}</option>
+                  {creditAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <select
+                  className="input"
+                  value={cashAccountId}
+                  onChange={(e) => {
+                    setCashAccountId(e.target.value);
+                    setCurrencyCode('');
+                    setAmount('');
+                  }}
+                  disabled={submitting || loadingAccounts || !cashAccounts.length}
+                >
+                  <option value="">Счёт зачисления</option>
+                  {cashAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
                     </option>
                   ))}
                 </select>
