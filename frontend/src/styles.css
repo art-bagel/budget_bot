@@ -1177,13 +1177,38 @@ p { margin: 0; }
 
 .list-row__meta--group-composition {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  overflow-wrap: normal;
 }
 
 .list-row__meta-line {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.list-row__meta-line--group-chip {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  gap: 4px;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row__meta-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-row__meta-percent {
+  flex-shrink: 0;
+  font-weight: 600;
 }
 
 .list-row__value {
@@ -3121,6 +3146,27 @@ select.input option {
 .dashboard-budget-row__main {
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.dashboard-budget-row__main--group {
+  width: 100%;
+}
+
+.dashboard-budget-row__group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
+}
+
+.dashboard-budget-row__group-title {
+  margin-bottom: 0;
+}
+
+.dashboard-budget-row__group-value {
+  flex-shrink: 0;
+  max-width: 48%;
 }
 
 .dashboard-budget-row__side {

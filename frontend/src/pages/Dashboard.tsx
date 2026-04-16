@@ -1082,26 +1082,24 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                           });
                         }}
                       >
-                        <div className="dashboard-budget-row__main">
-                          <div className="list-row__title">{categoryDisplayName(category.name)}</div>
-                          <div className="list-row__sub">
-                            {isValidTarget
-                              ? 'Нажми, чтобы перевести сюда'
-                              : hintsEnabled ? 'Группа распределения · нажми для редактирования' : null}
+                        <div className="dashboard-budget-row__main dashboard-budget-row__main--group">
+                          <div className="dashboard-budget-row__group-head">
+                            <div className="list-row__title dashboard-budget-row__group-title">
+                              {isValidTarget ? 'Перевести сюда' : categoryDisplayName(category.name)}
+                            </div>
+                            <div className="list-row__value dashboard-budget-row__group-value">
+                              {formatAmount(groupBalance, category.currency_code)}
+                            </div>
                           </div>
                           <div className="list-row__meta list-row__meta--group-composition">
                             {groupMembers.length > 0
                               ? groupMembers.map((member) => (
-                                  <span className="list-row__meta-line" key={member.child_category_id}>
-                                    {groupMemberLabel(member)} {Number((member.share * 100).toFixed(2))}%
+                                  <span className="list-row__meta-line list-row__meta-line--group-chip" key={member.child_category_id}>
+                                    <span className="list-row__meta-name">{groupMemberLabel(member)}</span>
+                                    <span className="list-row__meta-percent">{Number((member.share * 100).toFixed(2))}%</span>
                                   </span>
                                 ))
-                              : 'Состав группы пока не настроен'}
-                          </div>
-                        </div>
-                        <div className="dashboard-budget-row__side">
-                          <div className="list-row__value">
-                            {formatAmount(groupBalance, category.currency_code)}
+                              : <span className="list-row__meta-line">Состав группы пока не настроен</span>}
                           </div>
                         </div>
                       </li>
