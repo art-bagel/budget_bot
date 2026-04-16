@@ -32,7 +32,7 @@ import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
 import { IconAnalyticsDonut, IconClock, IconExchange, IconPlusCircle } from '../components/Icons';
-import { parseCategoryIcon } from '../utils/categoryIcon';
+import { categoryDisplayName, parseCategoryIcon } from '../utils/categoryIcon';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
@@ -638,7 +638,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       return 'В свободный остаток';
     }
 
-    return `${member.child_category_kind === 'group' ? 'Группа ' : ''}${member.child_category_name}`;
+    return `${member.child_category_kind === 'group' ? 'Группа ' : ''}${categoryDisplayName(member.child_category_name)}`;
   };
 
   const getNestedGroupBalance = (categoryId: number, visited = new Set<number>()): number => {
@@ -1014,11 +1014,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
                       && (!hasFamily || draggedOwnerType === category.owner_type);
                     const groupMembers = groupMembersByGroupId[category.category_id] || [];
-                    const groupComposition = groupMembers.length > 0
-                      ? groupMembers
-                          .map((member) => `${groupMemberLabel(member)} ${Number((member.share * 100).toFixed(2))}%`)
-                          .join(' · ')
-                      : 'Состав группы пока не настроен';
                     const groupBalance = groupMembers.length > 0
                       ? groupMembers.reduce(
                           (sum, member) => sum + getNestedGroupBalance(member.child_category_id, new Set([category.category_id])),
@@ -1084,13 +1079,21 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                         }}
                       >
                         <div className="dashboard-budget-row__main">
-                          <div className="list-row__title">{category.name}</div>
+                          <div className="list-row__title">{categoryDisplayName(category.name)}</div>
                           <div className="list-row__sub">
                             {isValidTarget
                               ? 'Нажми, чтобы перевести сюда'
                               : hintsEnabled ? 'Группа распределения · нажми для редактирования' : null}
                           </div>
-                          <div className="list-row__meta">{groupComposition}</div>
+                          <div className="list-row__meta list-row__meta--group-composition">
+                            {groupMembers.length > 0
+                              ? groupMembers.map((member) => (
+                                  <span className="list-row__meta-line" key={member.child_category_id}>
+                                    {groupMemberLabel(member)} {Number((member.share * 100).toFixed(2))}%
+                                  </span>
+                                ))
+                              : 'Состав группы пока не настроен'}
+                          </div>
                         </div>
                         <div className="dashboard-budget-row__side">
                           <div className="list-row__value">

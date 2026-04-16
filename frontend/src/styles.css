@@ -840,13 +840,14 @@ p { margin: 0; }
 
 .cat-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .cat-card {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 4px;
   padding: 12px 14px;
   position: relative;
@@ -870,6 +871,7 @@ p { margin: 0; }
 }
 
 .cat-card__name {
+  min-width: 0;
   font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -879,6 +881,7 @@ p { margin: 0; }
 }
 
 .cat-card__amount {
+  min-width: 0;
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -1077,6 +1080,7 @@ p { margin: 0; }
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-width: 0;
   gap: 12px;
   padding: 14px 0;
   border-top: 1px solid var(--border);
@@ -1145,14 +1149,18 @@ p { margin: 0; }
 }
 
 .list-row__title {
+  min-width: 0;
   font-size: 0.92rem;
   font-weight: 600;
   margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .list-row__sub {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 2px;
   font-size: 0.8rem;
   color: var(--text-tertiary);
@@ -1160,15 +1168,31 @@ p { margin: 0; }
 
 .list-row__meta {
   margin-top: 6px;
+  min-width: 0;
   font-size: 0.78rem;
   line-height: 1.45;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.list-row__meta--group-composition {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list-row__meta-line {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .list-row__value {
   font-weight: 600;
   font-size: 0.92rem;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
 }
 
 .list-row__actions {
@@ -2988,6 +3012,10 @@ select.input option {
 }
 
 @media (max-width: 640px) {
+  .list-row--group {
+    align-items: flex-start;
+  }
+
   .settings-danger {
     align-items: stretch;
     flex-direction: column;
@@ -3088,6 +3116,17 @@ select.input option {
   flex: 1;
   height: 1px;
   background: var(--border);
+}
+
+.dashboard-budget-row__main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dashboard-budget-row__side {
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 42%;
 }
 
 /* ── Free budget split (personal / family) ─────── */
