@@ -513,6 +513,9 @@ export default function Operations({
     if (nextViewMode === 'history') {
       const typeValues = Array.from(nextHistoryTypeFilter).filter((v) => v !== 'cancelled');
       const allTypeCount = HISTORY_TYPE_OPTIONS.filter((o) => o.value !== 'cancelled').length;
+      if (typeValues.length === 0 && nextHistoryTypeFilter.has('cancelled')) {
+        return 'cancelled';
+      }
       if (typeValues.length > 0 && typeValues.length < allTypeCount) {
         return typeValues.join(',');
       }
@@ -575,7 +578,7 @@ export default function Operations({
     }
     if (showHistoryTypeFilter) {
       const typeValues = Array.from(historyTypeFilter).filter((v) => v !== 'cancelled');
-      if (typeValues.length === 0) {
+      if (typeValues.length === 0 && !historyTypeFilter.has('cancelled')) {
         setHistoryItems([]);
         setHistoryTotalCount(0);
         return;
@@ -634,6 +637,8 @@ export default function Operations({
 
     if (historyScope === 'banking') {
       items = items.filter((item) => {
+        const checkedTypes = Array.from(bankingTypeFilter).filter((value) => value !== 'cancelled');
+        if (checkedTypes.length === 0) return item.has_reversal && bankingTypeFilter.has('cancelled');
         if (item.has_reversal && !bankingTypeFilter.has('cancelled')) return false;
 
         const isCreditRepayment = item.type === 'account_transfer' && item.comment?.includes('Платёж по кредиту');

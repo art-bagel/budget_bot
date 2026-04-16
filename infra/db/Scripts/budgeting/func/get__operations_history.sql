@@ -41,7 +41,8 @@ BEGIN
             'investment_trade',
             'investment_income',
             'investment_adjustment',
-            'reversal'
+            'reversal',
+            'cancelled'
         );
         IF FOUND THEN
             RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
@@ -111,7 +112,15 @@ BEGIN
                     )
                 )
                 OR (
-                    _normalized_operation_type NOT IN ('investment', 'banking')
+                    _normalized_operation_type = 'cancelled'
+                    AND EXISTS (
+                        SELECT 1
+                        FROM operations ro_filter
+                        WHERE ro_filter.reversal_of_operation_id = o.id
+                    )
+                )
+                OR (
+                    _normalized_operation_type NOT IN ('investment', 'banking', 'cancelled')
                     AND o.type = ANY(string_to_array(_normalized_operation_type, ','))
                 )
           )
