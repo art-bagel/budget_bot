@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { createCategory, fetchCategories, fetchMyFamily, replaceGroupMembers } from '../api';
+import { archiveCategory, createCategory, fetchCategories, fetchMyFamily, replaceGroupMembers } from '../api';
 import EmojiPicker from './EmojiPicker';
 import { buildCategoryName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
@@ -143,11 +143,16 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
       const result = await createCategory(buildCategoryName(icon, name), kind, ownerType);
 
       if (kind === 'group' && validGroupRows.length > 0) {
-        await replaceGroupMembers(
-          result.id,
-          validGroupRows.map((row) => Number(row.child_category_id)),
-          validGroupRows.map((row) => Number(row.share_percent) / 100),
-        );
+        try {
+          await replaceGroupMembers(
+            result.id,
+            validGroupRows.map((row) => Number(row.child_category_id)),
+            validGroupRows.map((row) => Number(row.share_percent) / 100),
+          );
+        } catch (reason) {
+          await archiveCategory(result.id).catch(() => undefined);
+          throw reason;
+        }
       }
 
       onSuccess();

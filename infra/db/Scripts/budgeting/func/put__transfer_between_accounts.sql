@@ -85,7 +85,10 @@ BEGIN
     END IF;
 
     -- cash → credit_card is a repayment: expense already counted in categories.
-    _is_cc_repayment := (_from_account_kind = 'cash' AND _to_credit_kind = 'credit_card');
+    _is_cc_repayment := (
+        _from_account_kind = 'cash'
+        AND COALESCE(_to_credit_kind = 'credit_card', false)
+    );
 
     _base_currency_code := budgeting.get__owner_base_currency(
         _from_owner_type, _from_owner_user_id, _from_owner_family_id
