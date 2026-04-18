@@ -43,6 +43,10 @@
       <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
 
       <symbol id="i-chev" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 10v-.5A4.5 4.5 0 0 1 8.5 5h10M18.5 5l-3-3M18.5 5l-3 3M20 14v.5A4.5 4.5 0 0 1 15.5 19h-10M5.5 19l3 3M5.5 19l3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-chev-right-sm" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
       <symbol id="i-arrow-up-r" viewBox="0 0 16 16"><path d="m4 12 8-8M5 4h7v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -94,21 +98,21 @@
           </span>
         </div>
         <dl class="hero__rows">
-          <div class="hero__row">
+          <div class="hero__row" data-account="personal" role="button" tabindex="0">
             <dt><span class="hero__mark hero__mark--ink"></span>Личный счёт</dt>
-            <dd>845 200 ₽</dd>
+            <dd>845 200 ₽ <svg class="hero__row-chev"><use href="#i-chev-right-sm"/></svg></dd>
           </div>
-          <div class="hero__row">
+          <div class="hero__row" data-account="family" role="button" tabindex="0">
             <dt><span class="hero__mark hero__mark--coral"></span>Семейный счёт</dt>
-            <dd>420 100 ₽</dd>
+            <dd>420 100 ₽ <svg class="hero__row-chev"><use href="#i-chev-right-sm"/></svg></dd>
           </div>
-          <div class="hero__row">
+          <div class="hero__row" data-account="invest" role="button" tabindex="0">
             <dt><span class="hero__mark hero__mark--mint"></span>Инвестиции</dt>
-            <dd>1 562 000 ₽</dd>
+            <dd>1 562 000 ₽ <svg class="hero__row-chev"><use href="#i-chev-right-sm"/></svg></dd>
           </div>
-          <div class="hero__row hero__row--neg" id="creditsRow">
+          <div class="hero__row hero__row--neg" id="creditsRow" data-account="credits" role="button" tabindex="0">
             <dt><span class="hero__mark hero__mark--warn"></span>Кредиты</dt>
-            <dd id="creditsLine">−180 000 ₽</dd>
+            <dd id="creditsLine">−180 000 ₽ <svg class="hero__row-chev"><use href="#i-chev-right-sm"/></svg></dd>
           </div>
         </dl>
       </article>
@@ -119,17 +123,17 @@
           <span class="qa__ico"><svg><use href="#i-plus"/></svg></span>
           <span class="qa__label">Пополнить</span>
         </button>
-        <button class="qa" type="button">
+        <button class="qa" type="button" data-sheet="operations">
           <span class="qa__ico qa__ico--alt"><svg><use href="#i-clock"/></svg></span>
           <span class="qa__label">Операции</span>
         </button>
-        <button class="qa" type="button">
+        <button class="qa" type="button" data-sheet="analytics">
           <span class="qa__ico qa__ico--alt"><svg><use href="#i-donut"/></svg></span>
           <span class="qa__label">Аналитика</span>
         </button>
-        <button class="qa" type="button">
+        <button class="qa" type="button" data-sheet="account-transfer">
           <span class="qa__ico qa__ico--alt"><svg><use href="#i-swap"/></svg></span>
-          <span class="qa__label">Обмен</span>
+          <span class="qa__label">Перевод</span>
         </button>
       </div>
 
@@ -346,9 +350,9 @@
         <svg class="tab__ico"><use href="#i-grid"/></svg>
         <span class="tab__label">Обзор</span>
       </button>
-      <button class="tab" data-tab="exchange" type="button">
+      <button class="tab" data-tab="transfer" type="button">
         <svg class="tab__ico"><use href="#i-swap"/></svg>
-        <span class="tab__label">Обмен</span>
+        <span class="tab__label">Перевод</span>
       </button>
       <button class="tab" data-tab="portfolio" type="button">
         <svg class="tab__ico"><use href="#i-bars"/></svg>
@@ -389,15 +393,30 @@
           <div class="sheet-stat__num"><span class="sheet-stat__val">8 400</span><span class="sheet-stat__sym">₽</span></div>
           <div class="sheet-stat__meta"><span class="ghost-chip">В группе «Питание» · 70%</span></div>
         </div>
+
+        <div class="cat-actions" role="group" aria-label="Действия с категорией">
+          <button class="cat-act cat-act--primary" type="button" data-action="spend">
+            <span class="cat-act__ico"><svg><use href="#i-arrow-down"/></svg></span>
+            <span class="cat-act__label">Потратить</span>
+          </button>
+          <button class="cat-act" type="button" data-action="transfer">
+            <span class="cat-act__ico"><svg><use href="#i-swap"/></svg></span>
+            <span class="cat-act__label">Перевод</span>
+          </button>
+          <button class="cat-act" type="button" data-action="settings">
+            <span class="cat-act__ico"><svg><use href="#i-gear"/></svg></span>
+            <span class="cat-act__label">Настройки</span>
+          </button>
+        </div>
+
+        <div class="sub__head sub__head--inline">
+          <span class="sub__title">Последние траты</span>
+        </div>
         <div class="sheet-list">
           <div class="sl-row"><div><span class="sl-name">Пятёрочка</span><span class="sl-sub">вчера в 19:42</span></div><strong class="sl-val sl-val--neg">−1 240 ₽</strong></div>
           <div class="sl-row"><div><span class="sl-name">ВкусВилл</span><span class="sl-sub">16 апреля</span></div><strong class="sl-val sl-val--neg">−2 180 ₽</strong></div>
           <div class="sl-row"><div><span class="sl-name">Ашан</span><span class="sl-sub">14 апреля</span></div><strong class="sl-val sl-val--neg">−3 620 ₽</strong></div>
         </div>
-      </div>
-      <div class="sheet__actions">
-        <button class="btn btn--ghost" type="button">Перевод</button>
-        <button class="btn btn--primary" type="button">Добавить расход</button>
       </div>
     </div>
 
@@ -490,6 +509,543 @@
       <div class="sheet__actions">
         <button class="btn btn--ghost" data-close type="button">Отмена</button>
         <button class="btn btn--primary" type="button">Перевести</button>
+      </div>
+    </div>
+
+    <div class="sheet" id="sheet-account" role="dialog" aria-labelledby="sheetAccountTitle">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <div class="sheet__head-left">
+          <span class="sheet-ico sheet-ico--g" id="sheetAccountIco"><svg><use href="#i-card"/></svg></span>
+          <div>
+            <span class="sheet__tag">Счёт</span>
+            <h3 id="sheetAccountTitle" class="sheet__title">Личный счёт</h3>
+          </div>
+        </div>
+        <button class="sheet__close" data-close type="button" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="sheet__body">
+        <div class="sheet-stat">
+          <span class="sheet-stat__tag">Баланс</span>
+          <div class="sheet-stat__num"><span class="sheet-stat__val" id="sheetAccountVal">845 200</span><span class="sheet-stat__sym">₽</span></div>
+          <div class="sheet-stat__meta"><span class="ghost-chip" id="sheetAccountMeta">3 валюты · Сбер, Тинькофф</span></div>
+        </div>
+
+        <div class="comp" id="sheetAccountComp">
+          <div class="comp__bar" role="img" aria-label="Состав валют">
+            <span class="comp__seg comp__seg--rub" style="flex: 620400;"></span>
+            <span class="comp__seg comp__seg--usd" style="flex: 205200;"></span>
+            <span class="comp__seg comp__seg--eur" style="flex: 19600;"></span>
+          </div>
+          <ul class="comp__list">
+            <li class="comp__row">
+              <span class="comp__dot comp__dot--rub"></span>
+              <span class="comp__name">Рубли</span>
+              <span class="comp__native">620 400 ₽</span>
+              <span class="comp__pct">73%</span>
+            </li>
+            <li class="comp__row">
+              <span class="comp__dot comp__dot--usd"></span>
+              <span class="comp__name">Доллары</span>
+              <span class="comp__native">$ 2 180 <span class="comp__conv">≈ 205 200 ₽</span></span>
+              <span class="comp__pct">24%</span>
+            </li>
+            <li class="comp__row">
+              <span class="comp__dot comp__dot--eur"></span>
+              <span class="comp__name">Евро</span>
+              <span class="comp__native">€ 195 <span class="comp__conv">≈ 19 600 ₽</span></span>
+              <span class="comp__pct">3%</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="cat-actions" role="group" aria-label="Действия со счётом">
+          <button class="cat-act cat-act--primary" type="button" data-action="account-transfer">
+            <span class="cat-act__ico"><svg><use href="#i-swap"/></svg></span>
+            <span class="cat-act__label">Перевод</span>
+          </button>
+          <button class="cat-act" type="button" data-action="account-topup">
+            <span class="cat-act__ico"><svg><use href="#i-plus"/></svg></span>
+            <span class="cat-act__label">Пополнить</span>
+          </button>
+          <button class="cat-act" type="button" data-action="account-history">
+            <span class="cat-act__ico"><svg><use href="#i-clock"/></svg></span>
+            <span class="cat-act__label">История</span>
+          </button>
+        </div>
+
+        <div class="sub__head sub__head--inline">
+          <span class="sub__title">Обменять валюту</span>
+        </div>
+        <div class="fx">
+          <div class="fx__side">
+            <span class="fl">Отдаёте</span>
+            <div class="fx__row">
+              <button class="fx__cur" type="button">
+                <span class="comp__dot comp__dot--usd"></span>
+                USD
+                <svg class="fx__chev"><use href="#i-chev"/></svg>
+              </button>
+              <input class="fx__inp" type="text" value="100" inputmode="decimal" aria-label="Сумма" />
+            </div>
+            <span class="fx__hint">Доступно: $ 2 180</span>
+          </div>
+          <button class="fx__swap" type="button" aria-label="Поменять местами">
+            <svg><use href="#i-swap"/></svg>
+          </button>
+          <div class="fx__side">
+            <span class="fl">Получите</span>
+            <div class="fx__row">
+              <button class="fx__cur" type="button">
+                <span class="comp__dot comp__dot--rub"></span>
+                RUB
+                <svg class="fx__chev"><use href="#i-chev"/></svg>
+              </button>
+              <input class="fx__inp fx__inp--muted" type="text" value="9 420" inputmode="decimal" readonly aria-label="Результат" />
+            </div>
+            <span class="fx__hint">Курс: 1 USD = 94,20 ₽</span>
+          </div>
+        </div>
+      </div>
+      <div class="sheet__actions">
+        <button class="btn btn--ghost" data-close type="button">Закрыть</button>
+        <button class="btn btn--primary" type="button">Обменять</button>
+      </div>
+    </div>
+
+    <div class="sheet" id="sheet-account-transfer" role="dialog" aria-labelledby="sheetAcctXferTitle">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <div class="sheet__head-left">
+          <span class="sheet-ico sheet-ico--o"><svg><use href="#i-swap"/></svg></span>
+          <div>
+            <span class="sheet__tag">Перевод</span>
+            <h3 id="sheetAcctXferTitle" class="sheet__title">Между счетами</h3>
+          </div>
+        </div>
+        <button class="sheet__close" data-close type="button" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="sheet__body">
+        <div class="xfer">
+          <div class="xfer__card">
+            <span class="xfer__tag">Откуда</span>
+            <button class="xfer__row" type="button">
+              <span class="sheet-ico sheet-ico--sm" style="background:var(--text); color:var(--surface);"><svg><use href="#i-card"/></svg></span>
+              <div class="xfer__text">
+                <span class="xfer__name">Личный счёт</span>
+                <span class="xfer__sub">Доступно: 845 200 ₽</span>
+              </div>
+              <svg class="xfer__chev"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+          <div class="xfer__arrow"><svg><use href="#i-arrow-down"/></svg></div>
+          <div class="xfer__card xfer__card--to">
+            <span class="xfer__tag">Куда</span>
+            <button class="xfer__row" type="button">
+              <span class="sheet-ico sheet-ico--sm" style="background:#E86A4F; color:#fff;"><svg><use href="#i-card"/></svg></span>
+              <div class="xfer__text">
+                <span class="xfer__name">Семейный счёт</span>
+                <span class="xfer__sub">Остаток: 420 100 ₽</span>
+              </div>
+              <svg class="xfer__chev"><use href="#i-chev"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="fl">Сумма</span>
+          <div class="amt">
+            <input class="amt__inp" type="text" value="15 000" inputmode="decimal" />
+            <span class="amt__cur">₽</span>
+          </div>
+        </div>
+        <div class="field">
+          <span class="fl">Комментарий</span>
+          <input class="inp" type="text" placeholder="Необязательно" />
+        </div>
+      </div>
+      <div class="sheet__actions">
+        <button class="btn btn--ghost" data-close type="button">Отмена</button>
+        <button class="btn btn--primary" type="button">Перевести</button>
+      </div>
+    </div>
+
+    <div class="sheet sheet--tall" id="sheet-analytics" role="dialog" aria-labelledby="sheetAnaTitle">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <div class="sheet__head-left">
+          <span class="sheet-ico sheet-ico--p"><svg><use href="#i-donut"/></svg></span>
+          <div>
+            <span class="sheet__tag">Аналитика</span>
+            <h3 id="sheetAnaTitle" class="sheet__title">Расходы за апрель</h3>
+          </div>
+        </div>
+        <button class="sheet__close" data-close type="button" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="sheet__body sheet__body--tall">
+        <div class="seg" role="tablist" aria-label="Тип операций">
+          <button class="seg__opt seg__opt--active" data-ana-type="expense" type="button">Расход</button>
+          <button class="seg__opt" data-ana-type="income" type="button">Доход</button>
+        </div>
+
+        <div class="trend">
+          <div class="trend__bars">
+            <button class="trend__bar" type="button" data-month="nov"><span class="trend__fill" style="height:58%;"></span><span class="trend__lbl">Ноя</span><span class="trend__sum">112k</span></button>
+            <button class="trend__bar" type="button" data-month="dec"><span class="trend__fill" style="height:76%;"></span><span class="trend__lbl">Дек</span><span class="trend__sum">145k</span></button>
+            <button class="trend__bar" type="button" data-month="jan"><span class="trend__fill" style="height:51%;"></span><span class="trend__lbl">Янв</span><span class="trend__sum">98k</span></button>
+            <button class="trend__bar" type="button" data-month="feb"><span class="trend__fill" style="height:65%;"></span><span class="trend__lbl">Фев</span><span class="trend__sum">125k</span></button>
+            <button class="trend__bar" type="button" data-month="mar"><span class="trend__fill" style="height:74%;"></span><span class="trend__lbl">Мар</span><span class="trend__sum">142k</span></button>
+            <button class="trend__bar trend__bar--active" type="button" data-month="apr"><span class="trend__fill" style="height:67%;"></span><span class="trend__lbl">Апр</span><span class="trend__sum">128k</span></button>
+          </div>
+        </div>
+
+        <div class="ana-hero">
+          <div class="ana-hero__num">
+            <span class="ana-hero__val" id="anaHeroVal">128 400</span>
+            <span class="ana-hero__sym">₽</span>
+          </div>
+          <div class="ana-hero__meta">
+            <span class="delta delta--down">↓ 10%</span>
+            <span class="ana-hero__cmp">к марту 2026</span>
+          </div>
+        </div>
+
+        <div class="scope" role="group" aria-label="Кого учитывать">
+          <button class="scope__chip scope__chip--active" type="button" data-scope="all">Все · 47</button>
+          <button class="scope__chip" type="button" data-scope="user">Личные · 28</button>
+          <button class="scope__chip" type="button" data-scope="family">Семейные · 19</button>
+        </div>
+
+        <div class="sub__head sub__head--inline">
+          <span class="sub__title">Категории</span>
+          <span class="sub__hint">по сумме</span>
+        </div>
+        <ul class="ana-cats">
+          <li class="ana-cat" data-cat="grocery">
+            <span class="ana-cat__ico cat__ico--g"><svg><use href="#i-cart"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Продукты</span>
+                <strong class="ana-cat__amt">28 600 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--g" style="width:100%;"></span></div>
+              <div class="ana-cat__foot"><span>22%</span><span>14 операций</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="utilities">
+            <span class="ana-cat__ico cat__ico--p"><svg><use href="#i-bolt"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Коммуналка</span>
+                <strong class="ana-cat__amt">22 500 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--p" style="width:79%;"></span></div>
+              <div class="ana-cat__foot"><span>18%</span><span>4 операции</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="travel">
+            <span class="ana-cat__ico cat__ico--b"><svg><use href="#i-plane"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Путешествия</span>
+                <strong class="ana-cat__amt">18 200 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--b" style="width:64%;"></span></div>
+              <div class="ana-cat__foot"><span>14%</span><span>2 операции</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="transport">
+            <span class="ana-cat__ico cat__ico--b"><svg><use href="#i-car"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Транспорт</span>
+                <strong class="ana-cat__amt">15 400 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--b" style="width:54%;"></span></div>
+              <div class="ana-cat__foot"><span>12%</span><span>11 операций</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="cafe">
+            <span class="ana-cat__ico cat__ico--o"><svg><use href="#i-cup"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Кафе и рестораны</span>
+                <strong class="ana-cat__amt">12 800 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--o" style="width:45%;"></span></div>
+              <div class="ana-cat__foot"><span>10%</span><span>9 операций</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="health">
+            <span class="ana-cat__ico cat__ico--g"><svg><use href="#i-heart"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Здоровье</span>
+                <strong class="ana-cat__amt">9 400 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--g" style="width:33%;"></span></div>
+              <div class="ana-cat__foot"><span>7%</span><span>3 операции</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="clothes">
+            <span class="ana-cat__ico cat__ico--r"><svg><use href="#i-shirt"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Одежда</span>
+                <strong class="ana-cat__amt">8 200 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--r" style="width:29%;"></span></div>
+              <div class="ana-cat__foot"><span>6%</span><span>2 операции</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="fun">
+            <span class="ana-cat__ico cat__ico--o"><svg><use href="#i-ticket"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Развлечения</span>
+                <strong class="ana-cat__amt">6 100 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--o" style="width:21%;"></span></div>
+              <div class="ana-cat__foot"><span>5%</span><span>5 операций</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="gifts">
+            <span class="ana-cat__ico cat__ico--v"><svg><use href="#i-gift"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Подарки</span>
+                <strong class="ana-cat__amt">4 900 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--v" style="width:17%;"></span></div>
+              <div class="ana-cat__foot"><span>4%</span><span>2 операции</span></div>
+            </div>
+          </li>
+          <li class="ana-cat" data-cat="repair">
+            <span class="ana-cat__ico cat__ico--r"><svg><use href="#i-wrench"/></svg></span>
+            <div class="ana-cat__body">
+              <div class="ana-cat__top">
+                <span class="ana-cat__name">Ремонт</span>
+                <strong class="ana-cat__amt">2 300 ₽</strong>
+              </div>
+              <div class="ana-cat__bar"><span class="ana-cat__fill ana-cat__fill--r" style="width:8%;"></span></div>
+              <div class="ana-cat__foot"><span>2%</span><span>1 операция</span></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="sheet sheet--tall" id="sheet-operations" role="dialog" aria-labelledby="sheetOpsTitle">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <div class="sheet__head-left">
+          <span class="sheet-ico sheet-ico--b"><svg><use href="#i-clock"/></svg></span>
+          <div>
+            <span class="sheet__tag">История</span>
+            <h3 id="sheetOpsTitle" class="sheet__title">Операции</h3>
+          </div>
+        </div>
+        <button class="sheet__close" data-close type="button" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="sheet__body sheet__body--tall">
+        <div class="op-filter" role="group" aria-label="Фильтр по типу">
+          <button class="op-filter__chip op-filter__chip--all op-filter__chip--active" data-op-all type="button">Все</button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="expense" type="button">
+            <span class="op-dot op-dot--expense"></span>Расходы
+          </button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="income" type="button">
+            <span class="op-dot op-dot--income"></span>Доходы
+          </button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="account_transfer" type="button">
+            <span class="op-dot op-dot--xfer"></span>Переводы
+          </button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="allocate" type="button">
+            <span class="op-dot op-dot--alloc"></span>Распределение
+          </button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="exchange" type="button">
+            <span class="op-dot op-dot--exch"></span>Обмен
+          </button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="investment" type="button">
+            <span class="op-dot op-dot--invest"></span>Инвестиции
+          </button>
+          <button class="op-filter__chip op-filter__chip--active" data-op-type="credit_repayment" type="button">
+            <span class="op-dot op-dot--credit"></span>Кредиты
+          </button>
+          <button class="op-filter__chip" data-op-type="cancelled" type="button">
+            <span class="op-dot op-dot--cancel"></span>Отменённые
+          </button>
+        </div>
+
+        <div class="op-groups" id="opList">
+          <div class="op-group" data-date="today">
+            <div class="op-group__head">Сегодня · 18 апреля</div>
+            <button class="op-row" type="button" data-op-id="1" data-op-type="expense">
+              <span class="op-ico cat__ico--g"><svg><use href="#i-cart"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Пятёрочка</span>
+                <span class="op-row__sub">Продукты · Личный · 19:42</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−1 240 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="2" data-op-type="income">
+              <span class="op-ico op-ico--income"><svg><use href="#i-plus"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Зарплата</span>
+                <span class="op-row__sub">Личный счёт · Tinkoff · 12:00</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--pos">+125 000 ₽</strong>
+            </button>
+          </div>
+
+          <div class="op-group" data-date="yesterday">
+            <div class="op-group__head">Вчера · 17 апреля</div>
+            <button class="op-row" type="button" data-op-id="3" data-op-type="expense">
+              <span class="op-ico cat__ico--b"><svg><use href="#i-car"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Яндекс Такси</span>
+                <span class="op-row__sub">Транспорт · Личный · 22:15</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−480 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="4" data-op-type="expense">
+              <span class="op-ico cat__ico--o"><svg><use href="#i-cup"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Шоколадница</span>
+                <span class="op-row__sub">Кафе и рестораны · Личный · 15:02</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−1 820 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="5" data-op-type="account_transfer">
+              <span class="op-ico op-ico--xfer"><svg><use href="#i-swap"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Перевод между счетами</span>
+                <span class="op-row__sub">Личный → Семейный · 11:30</span>
+              </div>
+              <strong class="op-row__amt">15 000 ₽</strong>
+            </button>
+          </div>
+
+          <div class="op-group" data-date="16apr">
+            <div class="op-group__head">16 апреля</div>
+            <button class="op-row" type="button" data-op-id="6" data-op-type="expense">
+              <span class="op-ico cat__ico--g"><svg><use href="#i-cart"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">ВкусВилл</span>
+                <span class="op-row__sub">Продукты · Семейный · 20:18</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−2 180 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="7" data-op-type="exchange">
+              <span class="op-ico op-ico--exch"><svg><use href="#i-swap"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Обмен валют</span>
+                <span class="op-row__sub">$100 → 9 420 ₽ · 1 USD = 94,20 ₽</span>
+              </div>
+              <strong class="op-row__amt">9 420 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="8" data-op-type="expense">
+              <span class="op-ico cat__ico--p"><svg><use href="#i-bolt"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Мосэнергосбыт</span>
+                <span class="op-row__sub">Коммуналка · Семейный · 09:00</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−4 200 ₽</strong>
+            </button>
+          </div>
+
+          <div class="op-group" data-date="15apr">
+            <div class="op-group__head">15 апреля</div>
+            <button class="op-row" type="button" data-op-id="9" data-op-type="allocate">
+              <span class="op-ico op-ico--alloc"><svg><use href="#i-arrow-down"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Распределение в категорию</span>
+                <span class="op-row__sub">Свободный остаток → Путешествия · 14:20</span>
+              </div>
+              <strong class="op-row__amt">30 000 ₽</strong>
+            </button>
+            <button class="op-row op-row--cancelled" type="button" data-op-id="10" data-op-type="expense" data-op-cancelled>
+              <span class="op-ico cat__ico--g"><svg><use href="#i-cart"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Ашан <span class="op-badge op-badge--cancel">Отменено</span></span>
+                <span class="op-row__sub">Продукты · Семейный · 12:00</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−3 620 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="11" data-op-type="investment">
+              <span class="op-ico op-ico--invest"><svg><use href="#i-bars"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Дивиденды SBER</span>
+                <span class="op-row__sub">Инвестиции · 11:00</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--pos">+1 840 ₽</strong>
+            </button>
+          </div>
+
+          <div class="op-group" data-date="12apr">
+            <div class="op-group__head">12 апреля</div>
+            <button class="op-row" type="button" data-op-id="12" data-op-type="credit_repayment">
+              <span class="op-ico op-ico--credit"><svg><use href="#i-card"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Погашение кредита</span>
+                <span class="op-row__sub">Сбер Потреб · Ежемесячный платёж</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−12 500 ₽</strong>
+            </button>
+            <button class="op-row" type="button" data-op-id="13" data-op-type="expense">
+              <span class="op-ico cat__ico--v"><svg><use href="#i-gift"/></svg></span>
+              <div class="op-row__body">
+                <span class="op-row__name">Apple Store</span>
+                <span class="op-row__sub">Подарки · Личный · 18:45</span>
+              </div>
+              <strong class="op-row__amt op-row__amt--neg">−890 ₽</strong>
+            </button>
+          </div>
+
+          <div class="op-empty" id="opEmpty" hidden>
+            <span class="op-empty__msg">Ничего не найдено под этот фильтр</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet" id="sheet-op-detail" role="dialog" aria-labelledby="sheetOpDetTitle">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <div class="sheet__head-left">
+          <button class="sheet__back" type="button" aria-label="Назад" id="opDetBack">
+            <svg><use href="#i-chev-left"/></svg>
+          </button>
+          <span class="sheet-ico sheet-ico--g" id="opDetIco"><svg><use href="#i-cart"/></svg></span>
+          <div>
+            <span class="sheet__tag" id="opDetTag">Расход</span>
+            <h3 id="sheetOpDetTitle" class="sheet__title">Пятёрочка</h3>
+          </div>
+        </div>
+        <button class="sheet__close" data-close type="button" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="sheet__body">
+        <div class="sheet-stat">
+          <span class="sheet-stat__tag" id="opDetAmtTag">Сумма расхода</span>
+          <div class="sheet-stat__num">
+            <span class="sheet-stat__val" id="opDetAmt">1 240</span>
+            <span class="sheet-stat__sym">₽</span>
+          </div>
+        </div>
+        <dl class="op-meta">
+          <div class="op-meta__row"><dt>Категория</dt><dd id="opDetCat">Продукты</dd></div>
+          <div class="op-meta__row"><dt>Счёт</dt><dd id="opDetAcct">Личный · Tinkoff</dd></div>
+          <div class="op-meta__row"><dt>Когда</dt><dd id="opDetWhen">Сегодня, 19:42</dd></div>
+          <div class="op-meta__row"><dt>Комментарий</dt><dd id="opDetCom" class="op-meta__muted">—</dd></div>
+        </dl>
+      </div>
+      <div class="sheet__actions">
+        <button class="btn btn--ghost" type="button" id="btnRepeatOp">
+          <svg class="btn__ico"><use href="#i-repeat"/></svg>
+          Повторить
+        </button>
+        <button class="btn btn--destructive" type="button" id="btnCancelOp">
+          <svg class="btn__ico"><use href="#i-trash"/></svg>
+          Отменить
+        </button>
       </div>
     </div>
 
