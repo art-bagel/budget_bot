@@ -11,8 +11,8 @@ export function IconOperations() {
 export function IconClock() {
   return (
     <svg viewBox="0 0 24 24" {...s}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 3" />
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
     </svg>
   );
 }
@@ -74,4 +74,33 @@ export function IconCredit() {
 
 export function IconFamily() {
   return <svg viewBox="0 0 24 24" {...s}><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a5 5 0 015-5h2"/><circle cx="17" cy="10" r="2.5"/><path d="M13 21v-1.5a3.5 3.5 0 017 0V21"/></svg>;
+}
+
+export function IconChevronRight() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="m9 18 6-6-6-6"/></svg>;
+}
+
+export function IconArrowDownRight() {
+  return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m4 4 8 8M5 12h7V5"/></svg>;
+}
+
+export function IconPlus() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M12 5v14M5 12h14"/></svg>;
+}
+
+export function IconArrowRightLeft() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>;
+}
+
+export function IconCirclePlus() {
+  return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
+}
+
+export function IconChartPie() {
+  return (
+    <svg viewBox="0 0 24 24" {...s}>
+      <path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" />
+      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+    </svg>
+  );
 }

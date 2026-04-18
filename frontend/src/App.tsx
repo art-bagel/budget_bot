@@ -60,7 +60,7 @@ export default function App() {
   return (
     <Layout page={page} onNavigate={handleNavigate} onRefresh={handleRefresh} badges={{ settings: familyBadge }}>
       {PAGE_IDS.map((id) => visited.has(id) ? (
-        <div key={id} style={id !== page ? { display: 'none' } : undefined}>
+        <div key={id} className="page-wrap" style={id !== page ? { display: 'none' } : undefined}>
           <ErrorBoundary key={refreshKeys[id]}>
             {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} />}
             {id === 'exchange' && <Exchange user={user} />}

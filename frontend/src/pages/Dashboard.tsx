@@ -20,7 +20,7 @@ import type {
   TinkoffLivePrice,
   UserContext,
 } from '../types';
-import { formatAmount } from '../utils/format';
+import { currencySymbol, formatAmount } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import TransferDialog from '../components/TransferDialog';
@@ -31,7 +31,13 @@ import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
-import { IconAnalyticsDonut, IconClock, IconExchange, IconPlusCircle } from '../components/Icons';
+import {
+  IconArrowRightLeft,
+  IconChartPie,
+  IconChevronRight,
+  IconClock,
+  IconPlus,
+} from '../components/Icons';
 import { categoryDisplayName, parseCategoryIcon } from '../utils/categoryIcon';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
@@ -666,450 +672,479 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   };
   return (
     <>
-      <h1 className="page-title">Обзор</h1>
-
+      {/* Hero — yellow capital card */}
       <article
-        className="hero-card hero-card--clickable"
-        role="button"
-        tabIndex={0}
-        onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+        className="hero"
         onTouchStart={hasFamily ? handleHeroSwipeStart : undefined}
         onTouchMove={hasFamily ? handleHeroSwipeMove : undefined}
         onTouchEnd={hasFamily ? handleHeroSwipeEnd : undefined}
       >
-        <span className="hero-card__label-row">
-          <span className="hero-card__label">Чистый капитал</span>
+        <div className="hero__head">
+          <span className="hero__eyebrow">Чистый капитал</span>
           <button
-            className={`hero-card__credit-toggle${includeCredits ? ' hero-card__credit-toggle--active' : ''}`}
+            className={`chiptog${includeCredits ? ' chiptog--on' : ''}`}
             type="button"
             onClick={toggleIncludeCredits}
           >
-            {includeCredits ? '−' : '+'}  кредиты
+            <span className="chiptog__glyph" aria-hidden="true">{includeCredits ? '−' : '+'}</span>
+            кредиты
           </button>
-        </span>
-        <strong className="hero-card__value">
-          {formatAmount(totalBankWithInvestments, overview.base_currency_code)}
-        </strong>
-        <div className="hero-card__breakdown">
-          <div className="hero-card__breakdown-row">
-            <span>Личный счёт</span>
-            <strong>{formatAmount(personalBankTotal, overview.base_currency_code)}</strong>
+        </div>
+        <div className="hero__amount">
+          <span className="hero__value">
+            {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(totalBankWithInvestments)}
+          </span>
+          <span className="hero__sym">{currencySymbol(overview.base_currency_code)}</span>
+        </div>
+        <dl className="hero__rows">
+          <div
+            className="hero__row"
+            role="button"
+            tabIndex={0}
+            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+          >
+            <dt><span className="hero__mark hero__mark--ink" />&nbsp;Личный счёт</dt>
+            <dd>
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(personalBankTotal)}&nbsp;{currencySymbol(overview.base_currency_code)}
+              <span className="hero__row-chev"><IconChevronRight /></span>
+            </dd>
           </div>
           {hasFamily && (
-            <div className="hero-card__breakdown-row">
-              <span>Семейный счёт</span>
-              <strong>{formatAmount(familyBankTotal, overview.base_currency_code)}</strong>
+            <div
+              className="hero__row"
+              role="button"
+              tabIndex={0}
+              onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+            >
+              <dt><span className="hero__mark hero__mark--coral" />&nbsp;Семейный счёт</dt>
+              <dd>
+                {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(familyBankTotal)}&nbsp;{currencySymbol(overview.base_currency_code)}
+                <span className="hero__row-chev"><IconChevronRight /></span>
+              </dd>
             </div>
           )}
-          <div className="hero-card__breakdown-row">
-            <span>Инвестиции</span>
-            <strong>{formatAmount(investmentBankTotal, overview.base_currency_code)}</strong>
+          <div
+            className="hero__row"
+            role="button"
+            tabIndex={0}
+            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+          >
+            <dt><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</dt>
+            <dd>
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investmentBankTotal)}&nbsp;{currencySymbol(overview.base_currency_code)}
+              <span className="hero__row-chev"><IconChevronRight /></span>
+            </dd>
           </div>
-          <div className="hero-card__breakdown-row">
-            <span>Кредиты</span>
-            <strong style={totalCreditDebtInBase > 0 ? { color: 'var(--tag-out-fg)' } : undefined}>
+          <div
+            className={`hero__row${totalCreditDebtInBase > 0 ? ' hero__row--neg' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+          >
+            <dt><span className={`hero__mark${totalCreditDebtInBase > 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</dt>
+            <dd>
               {totalCreditDebtInBase > 0
-                ? `−${formatAmount(totalCreditDebtInBase, overview.base_currency_code)}`
-                : formatAmount(0, overview.base_currency_code)}
-            </strong>
+                ? `−${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(totalCreditDebtInBase)}`
+                : '0'}&nbsp;{currencySymbol(overview.base_currency_code)}
+              <span className="hero__row-chev"><IconChevronRight /></span>
+            </dd>
           </div>
-        </div>
-        {hasFamily && hintsEnabled && (
-          <span className="hero-card__sub">← свайп для перевода между счетами</span>
-        )}
-        <div className="dashboard-bank-actions" onClick={(e) => e.stopPropagation()}>
-          <button
-            className="dashboard-bank-action dashboard-bank-action--lg"
-            type="button"
-            onClick={() => openBankHub('history')}
-          >
-            <span className="dashboard-bank-action__icon">
-              <IconClock />
-            </span>
-            <span className="dashboard-bank-action__label">Операции</span>
-          </button>
-          <button
-            className="dashboard-bank-action dashboard-bank-action--lg"
-            type="button"
-            onClick={() => setShowIncomeDialog(true)}
-          >
-            <span className="dashboard-bank-action__icon">
-              <IconPlusCircle />
-            </span>
-            <span className="dashboard-bank-action__label">Пополнить</span>
-          </button>
-          <button
-            className="dashboard-bank-action dashboard-bank-action--lg"
-            type="button"
-            onClick={() => openBankHub('analytics')}
-          >
-            <span className="dashboard-bank-action__icon">
-              <IconAnalyticsDonut />
-            </span>
-            <span className="dashboard-bank-action__label">Аналитика</span>
-          </button>
-          <button
-            className="dashboard-bank-action"
-            type="button"
-            onClick={() => onNavigate?.('exchange')}
-          >
-            <span className="dashboard-bank-action__icon">
-              <IconExchange />
-            </span>
-            <span className="dashboard-bank-action__label">Обмен</span>
-          </button>
-        </div>
+        </dl>
       </article>
 
-      <section className="section">
-        <div className="section__header">
-          <div>
-            <div className="section__eyebrow">Бюджет</div>
-            <h2 className="section__title">Как распределены деньги по категориям</h2>
-          </div>
+      {/* Quick actions row */}
+      <div className="quickrow">
+        <button className="qa" type="button" onClick={() => setShowIncomeDialog(true)}>
+          <span className="qa__ico"><IconPlus /></span>
+          <span className="qa__label">Пополнить</span>
+        </button>
+        <button className="qa" type="button" onClick={() => openBankHub('history')}>
+          <span className="qa__ico qa__ico--alt"><IconClock /></span>
+          <span className="qa__label">Операции</span>
+        </button>
+        <button className="qa" type="button" onClick={() => openBankHub('analytics')}>
+          <span className="qa__ico qa__ico--alt"><IconChartPie /></span>
+          <span className="qa__label">Аналитика</span>
+        </button>
+        <button className="qa" type="button" onClick={() => setShowAccountTransfer(true)}>
+          <span className="qa__ico qa__ico--alt"><IconArrowRightLeft /></span>
+          <span className="qa__label">Перевод</span>
+        </button>
+      </div>
+
+      {/* Budget section */}
+      <section className="sec">
+        <div className="sec__head">
+          <h2 className="sec__title">Бюджет</h2>
+          <span className="sec__sub">Как распределены деньги</span>
         </div>
-        <div className="panel">
-          <div className="dashboard-transfer-source">
-            <div
-              className={[
-                'balance-card',
-                'balance-card--draggable',
-                'swipeable',
-                activeSourceId !== null && activeSourceId !== personalFreeBudgetSource.category_id && draggedOwnerType === 'user'
-                  ? 'balance-card--valid-target'
-                  : '',
-                activeSourceId === personalFreeBudgetSource.category_id ? 'balance-card--active-source' : '',
-                draggedCategoryId === personalFreeBudgetSource.category_id ? 'balance-card--dragging' : '',
-                dropTargetCategoryId === freeBudgetTarget.category_id ? 'balance-card--drop-target' : '',
-              ].join(' ').trim()}
-              draggable={personalFreeBudgetSource.balance > 0}
-              onDragStart={(e) => {
-                if (personalFreeBudgetSource.balance > 0) handleDragStart(personalFreeBudgetSource, e);
-              }}
-              onDragEnd={handleDragEnd}
-              onDragOver={(event) => {
-                if (activeSourceId === null || activeSourceId === freeBudgetTarget.category_id || draggedOwnerType !== 'user') return;
-                event.preventDefault();
-                setDropTargetCategoryId(freeBudgetTarget.category_id);
-              }}
-              onDragLeave={() => {
-                if (dropTargetCategoryId === freeBudgetTarget.category_id) {
-                  setDropTargetCategoryId(null);
-                }
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                handleDropOnCategory(freeBudgetTarget);
-              }}
-              onTouchStart={(e) => handleSwipeStart(personalFreeBudgetSource.category_id, 'free_budget', null, e)}
-              onTouchMove={handleSwipeMove}
-              onTouchEnd={handleSwipeEnd}
-              onClick={() => {
-                if (Date.now() < suppressClickUntilRef.current) return;
-                if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
-                  openTransferDialog(freeBudgetTarget, activeSourceId);
-                }
-              }}
-            >
-              <div className="balance-card__head">
-                <span className="pill">Свободный остаток</span>
-              </div>
-              {hasFamily ? (
-                <div className="balance-card__split">
-                  <div className="balance-card__split-row">
-                    <span className="balance-card__split-label">Личный</span>
-                    <strong className="balance-card__split-amount">
-                      {formatAmount(overview.personal_free_budget_in_base, overview.base_currency_code)}
-                    </strong>
-                  </div>
-                  <div className="balance-card__split-row">
-                    <span className="balance-card__split-label">Семейный</span>
-                    <strong className="balance-card__split-amount">
-                      {formatAmount(overview.family_free_budget_in_base, overview.base_currency_code)}
-                    </strong>
-                  </div>
-                </div>
-              ) : (
-                <strong className="balance-card__amount">
-                  {formatAmount(overview.free_budget_in_base, overview.base_currency_code)}
+
+        {/* Free budget card */}
+        <div
+          className={[
+            'free',
+            activeSourceId !== null && activeSourceId !== personalFreeBudgetSource.category_id && draggedOwnerType === 'user'
+              ? 'free--valid-target' : '',
+            dropTargetCategoryId === freeBudgetTarget.category_id ? 'free--drop-target' : '',
+          ].filter(Boolean).join(' ')}
+          role="button"
+          tabIndex={0}
+          draggable={personalFreeBudgetSource.balance > 0}
+          onDragStart={(e) => { if (personalFreeBudgetSource.balance > 0) handleDragStart(personalFreeBudgetSource, e); }}
+          onDragEnd={handleDragEnd}
+          onDragOver={(event) => {
+            if (activeSourceId === null || activeSourceId === freeBudgetTarget.category_id || draggedOwnerType !== 'user') return;
+            event.preventDefault();
+            setDropTargetCategoryId(freeBudgetTarget.category_id);
+          }}
+          onDragLeave={() => { if (dropTargetCategoryId === freeBudgetTarget.category_id) setDropTargetCategoryId(null); }}
+          onDrop={(event) => { event.preventDefault(); handleDropOnCategory(freeBudgetTarget); }}
+          onTouchStart={(e) => handleSwipeStart(personalFreeBudgetSource.category_id, 'free_budget', null, e)}
+          onTouchMove={handleSwipeMove}
+          onTouchEnd={handleSwipeEnd}
+          onClick={() => {
+            if (Date.now() < suppressClickUntilRef.current) return;
+            if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
+              openTransferDialog(freeBudgetTarget, activeSourceId);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
+                openTransferDialog(freeBudgetTarget, activeSourceId);
+              }
+            }
+          }}
+        >
+          <div className="free__top">
+            <span className="sec-tag">Свободный остаток</span>
+            <span className="free__hint">
+              <svg className="free__hint-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
+                <path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>
+              </svg>
+              перевод
+            </span>
+          </div>
+          {hasFamily ? (
+            <div className="free__split">
+              <div className="free__side">
+                <span className="free__label">Личный</span>
+                <strong className="free__amt">
+                  {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(overview.personal_free_budget_in_base)}
+                  <span className="ruble">&nbsp;{currencySymbol(overview.base_currency_code)}</span>
                 </strong>
-              )}
-              <div className="balance-card__sub">
-                {fxResultSummary || (hintsEnabled ? 'Свайпни влево для перевода. Сюда тоже можно вернуть из категории.' : null)}
               </div>
-              {fxResultSummary && hintsEnabled ? (
-                <div className="balance-card__hint">
-                  Свайпни влево для перевода. Сюда тоже можно вернуть из категории.
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="dashboard-budget-sections">
-            <div className="dashboard-budget-section">
-              <div className="dashboard-budget-section__header">
-                <div className="section__eyebrow">Категории</div>
-                <button
-                  className="btn btn--icon"
-                  type="button"
-                  onClick={() => setCreateDialogKind('regular')}
-                  aria-label="Добавить категорию"
-                  title="Добавить категорию"
-                >
-                  +
-                </button>
+              <span className="free__sep" />
+              <div className="free__side">
+                <span className="free__label">Семейный</span>
+                <strong className="free__amt">
+                  {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(overview.family_free_budget_in_base)}
+                  <span className="ruble">&nbsp;{currencySymbol(overview.base_currency_code)}</span>
+                </strong>
               </div>
-              {regularBudgetCategories.length === 0 ? (
-                <p className="list-row__sub">Обычных категорий пока нет.</p>
-              ) : (
-                <ul className="cat-grid">
-                  {[
-                    ...personalRegular,
-                    ...(hasFamily && familyRegular.length > 0 && personalRegular.length > 0 ? [null] : []),
-                    ...familyRegular,
-                  ].map((category) => {
-                    if (category === null) {
-                      return <li className="cat-grid__divider" key="cat-family-divider" aria-hidden="true">Семейные</li>;
-                    }
-
-                    const isDropTarget = dropTargetCategoryId === category.category_id;
-                    const isActiveSource = activeSourceId === category.category_id;
-                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
-                      && (!hasFamily || draggedOwnerType === category.owner_type);
-
-                    return (
-                      <li
-                        className={[
-                          'cat-card',
-                          'swipeable',
-                          draggedCategoryId === category.category_id ? 'cat-card--dragging' : '',
-                          isActiveSource ? 'cat-card--active-source' : '',
-                          isDropTarget ? 'cat-card--drop-target' : '',
-                          isValidTarget ? 'cat-card--valid-target' : '',
-                        ].join(' ').trim()}
-                        key={category.category_id}
-                        draggable
-                        role="button"
-                        tabIndex={0}
-                        onDragStart={(e) => handleDragStart({ ...category, owner_type: category.owner_type }, e)}
-                        onDragEnd={handleDragEnd}
-                        onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
-                        onTouchMove={handleSwipeMove}
-                        onTouchEnd={handleSwipeEnd}
-                        onClick={() => {
-                          if (Date.now() < suppressClickUntilRef.current) return;
-                          if (activeSourceId !== null && activeSourceId !== category.category_id) {
-                            openTransferDialog({
-                              category_id: category.category_id,
-                              name: category.name,
-                              kind: category.kind,
-                              owner_type: category.owner_type,
-                              currency_code: category.currency_code,
-                            }, activeSourceId);
-                          } else {
-                            openCategoryDialog(category);
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            openCategoryDialog(category);
-                          }
-                        }}
-                        onDragOver={(event) => {
-                          if (activeSourceId === null || activeSourceId === category.category_id) return;
-                          if (hasFamily && draggedOwnerType !== category.owner_type) return;
-                          event.preventDefault();
-                          setDropTargetCategoryId(category.category_id);
-                        }}
-                        onDragLeave={() => {
-                          if (dropTargetCategoryId === category.category_id) setDropTargetCategoryId(null);
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          handleDropOnCategory({
-                            category_id: category.category_id,
-                            name: category.name,
-                            kind: category.kind,
-                            owner_type: category.owner_type,
-                            currency_code: category.currency_code,
-                          });
-                        }}
-                      >
-                        {(() => {
-                          const parsed = parseCategoryIcon(category.name);
-                          return (
-                            <>
-                              {parsed.icon && !isValidTarget && (
-                                <span className="cat-card__icon">
-                                  {parsed.kind === 'svg'
-                                    ? <CategorySvgIcon code={parsed.icon} />
-                                    : parsed.icon}
-                                </span>
-                              )}
-                              <span className="cat-card__name">
-                                {isValidTarget ? 'Перевести сюда' : parsed.displayName}
-                              </span>
-                              <strong className="cat-card__amount">
-                                {formatAmount(category.balance, category.currency_code)}
-                              </strong>
-                              {!isValidTarget && hintsEnabled && (
-                                <span className="cat-card__hint">← перевод · расход →</span>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
             </div>
-
-            <div className="dashboard-budget-section dashboard-budget-section--groups">
-              <div className="dashboard-budget-section__header">
-                <div className="section__eyebrow">Группы</div>
-                <button
-                  className="btn btn--icon"
-                  type="button"
-                  onClick={() => setCreateDialogKind('group')}
-                  aria-label="Добавить группу"
-                  title="Добавить группу"
-                >
-                  +
-                </button>
-              </div>
-              {groupBudgetCategories.length === 0 ? (
-                <p className="list-row__sub">Групп пока нет.</p>
-              ) : (
-                <ul className="groups-list">
-                  {[
-                    ...[...personalGroups].sort((a, b) => {
-                      const aMembers = groupMembersByGroupId[a.category_id] ?? [];
-                      const bMembers = groupMembersByGroupId[b.category_id] ?? [];
-                      if (bMembers.length !== aMembers.length) return bMembers.length - aMembers.length;
-                      const aSubGroups = aMembers.filter((m) => m.child_category_kind === 'group').length;
-                      const bSubGroups = bMembers.filter((m) => m.child_category_kind === 'group').length;
-                      return bSubGroups - aSubGroups;
-                    }),
-                    ...(hasFamily && familyGroups.length > 0 && personalGroups.length > 0 ? [null] : []),
-                    ...[...familyGroups].sort((a, b) => {
-                      const aMembers = groupMembersByGroupId[a.category_id] ?? [];
-                      const bMembers = groupMembersByGroupId[b.category_id] ?? [];
-                      if (bMembers.length !== aMembers.length) return bMembers.length - aMembers.length;
-                      const aSubGroups = aMembers.filter((m) => m.child_category_kind === 'group').length;
-                      const bSubGroups = bMembers.filter((m) => m.child_category_kind === 'group').length;
-                      return bSubGroups - aSubGroups;
-                    }),
-                  ].map((category) => {
-                    if (category === null) {
-                      return (
-                        <li className="groups-list__divider" key="family-divider" aria-hidden="true">
-                          Семейные
-                        </li>
-                      );
-                    }
-
-                    const isDropTarget = dropTargetCategoryId === category.category_id;
-                    const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
-                      && (!hasFamily || draggedOwnerType === category.owner_type);
-                    const groupMembers = [...(groupMembersByGroupId[category.category_id] || [])]
-                      .sort((left, right) => {
-                        if (right.share !== left.share) return right.share - left.share;
-                        return groupMemberLabel(left).localeCompare(groupMemberLabel(right), 'ru');
-                      });
-                    const groupBalance = groupMembers.length > 0
-                      ? groupMembers.reduce(
-                          (sum, member) => sum + getNestedGroupBalance(member.child_category_id, new Set([category.category_id])),
-                          0,
-                        )
-                      : 0;
-
-                    return (
-                      <li
-                        className={[
-                          'dashboard-budget-row',
-                          'list-row',
-                          'list-row--interactive',
-                          'list-row--group',
-                          'swipeable',
-                          isDropTarget ? 'list-row--drop-target' : '',
-                          isValidTarget ? 'list-row--valid-target' : '',
-                        ].join(' ').trim()}
-                        key={category.category_id}
-                        role="button"
-                        tabIndex={0}
-                        onDragEnd={handleDragEnd}
-                        onTouchStart={(e) => handleSwipeStart(category.category_id, 'group', category, e)}
-                        onTouchMove={handleSwipeMove}
-                        onTouchEnd={handleSwipeEnd}
-                        onClick={() => {
-                          if (activeSourceId !== null && activeSourceId !== category.category_id) {
-                            openTransferDialog({
-                              category_id: category.category_id,
-                              name: category.name,
-                              kind: category.kind,
-                              owner_type: category.owner_type,
-                              currency_code: category.currency_code,
-                            }, activeSourceId);
-                          } else {
-                            openCategoryDialog(category);
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            openCategoryDialog(category);
-                          }
-                        }}
-                        onDragOver={(event) => {
-                          if (activeSourceId === null || activeSourceId === category.category_id) return;
-                          if (hasFamily && draggedOwnerType !== category.owner_type) return;
-                          event.preventDefault();
-                          setDropTargetCategoryId(category.category_id);
-                        }}
-                        onDragLeave={() => {
-                          if (dropTargetCategoryId === category.category_id) setDropTargetCategoryId(null);
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          handleDropOnCategory({
-                            category_id: category.category_id,
-                            name: category.name,
-                            kind: category.kind,
-                            owner_type: category.owner_type,
-                            currency_code: category.currency_code,
-                          });
-                        }}
-                      >
-                        <div className="dashboard-budget-row__main dashboard-budget-row__main--group">
-                          <div className="dashboard-budget-row__group-head">
-                            <div className="list-row__title dashboard-budget-row__group-title">
-                              {isValidTarget ? 'Перевести сюда' : categoryDisplayName(category.name)}
-                            </div>
-                            <div className="list-row__value dashboard-budget-row__group-value">
-                              {formatAmount(groupBalance, category.currency_code)}
-                            </div>
-                          </div>
-                          <div className="list-row__meta list-row__meta--group-composition">
-                            {groupMembers.length > 0
-                              ? groupMembers.map((member) => (
-                                  <span className="list-row__meta-line list-row__meta-line--group-chip" key={member.child_category_id}>
-                                    <span className="list-row__meta-name">{groupMemberLabel(member)}</span>
-                                    <span className="list-row__meta-percent">{Number((member.share * 100).toFixed(2))}%</span>
-                                  </span>
-                                ))
-                              : <span className="list-row__meta-line">Состав группы пока не настроен</span>}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+          ) : (
+            <div className="free__single">
+              <span className="free__label">Свободно к распределению</span>
+              <strong className="free__amt free__amt--full">
+                {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(overview.free_budget_in_base)}
+                <span className="ruble">&nbsp;{currencySymbol(overview.base_currency_code)}</span>
+              </strong>
             </div>
-          </div>
+          )}
+          {fxResultSummary && (
+            <div className="free__note">{fxResultSummary}</div>
+          )}
         </div>
+
+        {/* Categories */}
+        <div className="sub">
+          <div className="sub__head">
+            <span className="sub__title">Категории</span>
+            <button className="add-pill" type="button" onClick={() => setCreateDialogKind('regular')}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg>
+              Добавить
+            </button>
+          </div>
+          {regularBudgetCategories.length === 0 ? (
+            <p className="sec__sub" style={{ padding: '4px' }}>Обычных категорий пока нет.</p>
+          ) : (
+            <ul className="catgrid">
+              {[
+                ...personalRegular,
+                ...(hasFamily && familyRegular.length > 0 && personalRegular.length > 0 ? [null] : []),
+                ...familyRegular,
+              ].map((category, idx) => {
+                if (category === null) {
+                  return (
+                    <li className="catgrid__sep" key="cat-family-divider" aria-hidden="true">
+                      <span>Семейные</span>
+                    </li>
+                  );
+                }
+
+                const isDropTarget = dropTargetCategoryId === category.category_id;
+                const isActiveSource = activeSourceId === category.category_id;
+                const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
+                  && (!hasFamily || draggedOwnerType === category.owner_type);
+                const parsed = parseCategoryIcon(category.name);
+                const colorClasses = ['--g', '--o', '--b', '--p', '--r', '--v'] as const;
+                const colorClass = colorClasses[category.category_id % 6];
+                const isNeg = category.balance < 0;
+                const isWarn = category.balance >= 0 && category.balance < 500;
+
+                return (
+                  <li
+                    className={[
+                      'cat',
+                      category.owner_type === 'family' ? 'cat--fam' : '',
+                      draggedCategoryId === category.category_id ? 'cat--dragging' : '',
+                      isActiveSource ? 'cat--active-source' : '',
+                      isDropTarget ? 'cat--drop-target' : '',
+                      isValidTarget ? 'cat--valid-target' : '',
+                    ].filter(Boolean).join(' ')}
+                    key={category.category_id}
+                    draggable
+                    role="button"
+                    tabIndex={0}
+                    onDragStart={(e) => handleDragStart({ ...category, owner_type: category.owner_type }, e)}
+                    onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
+                    onTouchMove={handleSwipeMove}
+                    onTouchEnd={handleSwipeEnd}
+                    onClick={() => {
+                      if (Date.now() < suppressClickUntilRef.current) return;
+                      if (activeSourceId !== null && activeSourceId !== category.category_id) {
+                        openTransferDialog({
+                          category_id: category.category_id,
+                          name: category.name,
+                          kind: category.kind,
+                          owner_type: category.owner_type,
+                          currency_code: category.currency_code,
+                        }, activeSourceId);
+                      } else {
+                        openCategoryDialog(category);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openCategoryDialog(category);
+                      }
+                    }}
+                    onDragOver={(event) => {
+                      if (activeSourceId === null || activeSourceId === category.category_id) return;
+                      if (hasFamily && draggedOwnerType !== category.owner_type) return;
+                      event.preventDefault();
+                      setDropTargetCategoryId(category.category_id);
+                    }}
+                    onDragLeave={() => { if (dropTargetCategoryId === category.category_id) setDropTargetCategoryId(null); }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleDropOnCategory({
+                        category_id: category.category_id,
+                        name: category.name,
+                        kind: category.kind,
+                        owner_type: category.owner_type,
+                        currency_code: category.currency_code,
+                      });
+                    }}
+                  >
+                    {isValidTarget ? (
+                      <>
+                        <span className={`cat__ico cat__ico${colorClass}`} />
+                        <span className="cat__name" style={{ color: 'var(--text)', fontWeight: 700 }}>Перевести сюда</span>
+                        <strong className="cat__amt">{formatAmount(category.balance, category.currency_code)}</strong>
+                      </>
+                    ) : (
+                      <>
+                        <span className={`cat__ico cat__ico${colorClass}`}>
+                          {parsed.kind === 'svg' && parsed.icon
+                            ? <CategorySvgIcon code={parsed.icon} />
+                            : parsed.kind === 'emoji' && parsed.icon
+                              ? <span style={{ fontSize: '18px', lineHeight: 1 }}>{parsed.icon}</span>
+                              : null}
+                        </span>
+                        <span className="cat__name">{parsed.displayName}</span>
+                        <strong className={[
+                          'cat__amt',
+                          isNeg ? 'cat__amt--neg' : '',
+                          isWarn ? 'cat__amt--warn' : '',
+                        ].filter(Boolean).join(' ')}>
+                          {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(category.balance)}
+                          <span className="ruble">&nbsp;{currencySymbol(category.currency_code)}</span>
+                        </strong>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Groups */}
+        {groupBudgetCategories.length > 0 && (
+          <div className="sub">
+            <div className="sub__head">
+              <span className="sub__title">Группы</span>
+              <button className="add-pill" type="button" onClick={() => setCreateDialogKind('group')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg>
+                Группа
+              </button>
+            </div>
+            <ul className="groups">
+              {[
+                ...[...personalGroups].sort((a, b) => {
+                  const am = groupMembersByGroupId[a.category_id] ?? [];
+                  const bm = groupMembersByGroupId[b.category_id] ?? [];
+                  if (bm.length !== am.length) return bm.length - am.length;
+                  return bm.filter((m) => m.child_category_kind === 'group').length
+                    - am.filter((m) => m.child_category_kind === 'group').length;
+                }),
+                ...(hasFamily && familyGroups.length > 0 && personalGroups.length > 0 ? [null] : []),
+                ...[...familyGroups].sort((a, b) => {
+                  const am = groupMembersByGroupId[a.category_id] ?? [];
+                  const bm = groupMembersByGroupId[b.category_id] ?? [];
+                  if (bm.length !== am.length) return bm.length - am.length;
+                  return bm.filter((m) => m.child_category_kind === 'group').length
+                    - am.filter((m) => m.child_category_kind === 'group').length;
+                }),
+              ].map((category) => {
+                if (category === null) {
+                  return (
+                    <li key="family-group-divider" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 2px', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+                      <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                      <span>Семейные</span>
+                      <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                    </li>
+                  );
+                }
+
+                const isDropTarget = dropTargetCategoryId === category.category_id;
+                const isValidTarget = activeSourceId !== null && activeSourceId !== category.category_id
+                  && (!hasFamily || draggedOwnerType === category.owner_type);
+                const groupMembers = [...(groupMembersByGroupId[category.category_id] || [])]
+                  .sort((l, r) => r.share !== l.share ? r.share - l.share : groupMemberLabel(l).localeCompare(groupMemberLabel(r), 'ru'));
+                const groupBalance = groupMembers.length > 0
+                  ? groupMembers.reduce((sum, m) => sum + getNestedGroupBalance(m.child_category_id, new Set([category.category_id])), 0)
+                  : 0;
+                const visibleMembers = groupMembers.slice(0, 4);
+                const segColors = ['group__seg--1', 'group__seg--2', 'group__seg--3', 'group__seg--4'] as const;
+                const lgColors = ['lg--1', 'lg--2', 'lg--3', 'lg--4'] as const;
+
+                return (
+                  <li
+                    className={[
+                      'group',
+                      isDropTarget ? 'group--drop-target' : '',
+                      isValidTarget ? 'group--valid-target' : '',
+                    ].filter(Boolean).join(' ')}
+                    key={category.category_id}
+                    role="button"
+                    tabIndex={0}
+                    onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handleSwipeStart(category.category_id, 'group', category, e)}
+                    onTouchMove={handleSwipeMove}
+                    onTouchEnd={handleSwipeEnd}
+                    onClick={() => {
+                      if (activeSourceId !== null && activeSourceId !== category.category_id) {
+                        openTransferDialog({
+                          category_id: category.category_id,
+                          name: category.name,
+                          kind: category.kind,
+                          owner_type: category.owner_type,
+                          currency_code: category.currency_code,
+                        }, activeSourceId);
+                      } else {
+                        openCategoryDialog(category);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openCategoryDialog(category); }
+                    }}
+                    onDragOver={(event) => {
+                      if (activeSourceId === null || activeSourceId === category.category_id) return;
+                      if (hasFamily && draggedOwnerType !== category.owner_type) return;
+                      event.preventDefault();
+                      setDropTargetCategoryId(category.category_id);
+                    }}
+                    onDragLeave={() => { if (dropTargetCategoryId === category.category_id) setDropTargetCategoryId(null); }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleDropOnCategory({
+                        category_id: category.category_id,
+                        name: category.name,
+                        kind: category.kind,
+                        owner_type: category.owner_type,
+                        currency_code: category.currency_code,
+                      });
+                    }}
+                  >
+                    <div className="group__head">
+                      <div className="group__title-wrap">
+                        <span className="group__title">
+                          {isValidTarget ? 'Перевести сюда' : categoryDisplayName(category.name)}
+                          {category.owner_type === 'family' && (
+                            <span className="group__badge">семья</span>
+                          )}
+                        </span>
+                        <span className="group__sub">{groupMembers.length} {groupMembers.length === 1 ? 'категория' : groupMembers.length < 5 ? 'категории' : 'категорий'}</span>
+                      </div>
+                      <div className="group__amt-block">
+                        <strong className="group__amt">
+                          {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupBalance)}
+                          <span className="ruble">&nbsp;{currencySymbol(category.currency_code)}</span>
+                        </strong>
+                        <span className="group__chev"><IconChevronRight /></span>
+                      </div>
+                    </div>
+                    {visibleMembers.length > 0 && (
+                      <div className="group__bar" aria-hidden="true">
+                        {visibleMembers.map((member, i) => (
+                          <span
+                            key={member.child_category_id}
+                            className={`group__seg ${segColors[i]}`}
+                            style={{ '--w': member.share } as React.CSSProperties}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {visibleMembers.length > 0 && (
+                      <ul className="group__legend">
+                        {visibleMembers.map((member, i) => (
+                          <li key={member.child_category_id}>
+                            <i className={`lg ${lgColors[i]}`} />
+                            {groupMemberLabel(member)}
+                            <em>{Math.round(member.share * 100)}%</em>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {groupMembers.length === 0 && (
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Состав группы пока не настроен</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        {groupBudgetCategories.length === 0 && (
+          <div className="sub">
+            <div className="sub__head">
+              <span className="sub__title">Группы</span>
+              <button className="add-pill" type="button" onClick={() => setCreateDialogKind('group')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg>
+                Группа
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {transferTarget && (

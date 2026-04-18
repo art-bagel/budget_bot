@@ -34,7 +34,7 @@ export function useTheme() {
     localStorage.setItem(STORAGE_KEY, theme);
 
     const webApp = getTelegramWebApp();
-    const backgroundColor = getComputedStyle(root).getPropertyValue('--bg-root').trim();
+    const backgroundColor = getComputedStyle(root).getPropertyValue('--bg').trim();
 
     if (backgroundColor) {
       webApp?.setBackgroundColor?.(backgroundColor);

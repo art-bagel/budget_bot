@@ -41,7 +41,7 @@ export default function EmojiPicker({ selected, onSelect }: Props) {
                   onClick={() => handleSelect(code)}
                   aria-label={code}
                 >
-                  <Icon />
+                  <Icon size={20} strokeWidth={1.8} />
                 </button>
               );
             })}

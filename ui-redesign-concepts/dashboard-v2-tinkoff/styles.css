@@ -907,6 +907,11 @@ body {
 .sheet-ico--sm svg { width: 18px; height: 18px; }
 .sheet-ico--g { background: var(--t-g-b); color: var(--t-g-f); }
 .sheet-ico--o { background: var(--t-o-b); color: var(--t-o-f); }
+.sheet-ico--b { background: var(--t-b-b); color: var(--t-b-f); }
+.sheet-ico--p { background: var(--t-p-b); color: var(--t-p-f); }
+.sheet-ico--r { background: var(--t-r-b); color: var(--t-r-f); }
+.sheet-ico--v { background: var(--t-v-b); color: var(--t-v-f); }
+.sheet-ico--ink { background: var(--ink); color: var(--bg); }
 .sheet-ico--yel { background: var(--yellow); color: var(--ink-on-yellow); }
 
 .sheet-stat {

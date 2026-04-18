@@ -69,7 +69,7 @@ function getImplicitDevTelegramUserId(): string {
   const hostname = window.location.hostname;
 
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
-    return '1';
+    return '478559604';
   }
 
   return '';
