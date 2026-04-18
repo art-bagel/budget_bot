@@ -26,6 +26,7 @@ import type { MoexPrice } from '../utils/moex';
 import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
 import AccountTransferDialog from '../components/AccountTransferDialog';
+import BottomSheet from '../components/BottomSheet';
 import CategoryDialog from '../components/CategoryDialog';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import ExpenseDialog from '../components/ExpenseDialog';
@@ -1217,109 +1218,80 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         />
       )}
 
-      {showBankDetail && (
-        <div className="modal-backdrop" onClick={() => setShowBankDetail(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="section__header">
-                <div>
-                  <div className="section__eyebrow">Банк</div>
-                  <h2 className="section__title">Сколько денег лежит по валютам</h2>
-                </div>
-              </div>
+      <BottomSheet
+        open={showBankDetail}
+        tag="Банк"
+        title="По валютам"
+        onClose={() => setShowBankDetail(false)}
+      >
+        <div className="dashboard-budget-sections">
+          <div className="dashboard-budget-section">
+            <div className="dashboard-budget-section__header">
+              <div className="section__eyebrow">Личный счёт</div>
             </div>
-            <div className="modal-body">
-              <div className="dashboard-budget-sections">
-                <div className="dashboard-budget-section">
-                  <div className="dashboard-budget-section__header">
-                    <div className="section__eyebrow">Личный счет</div>
-                  </div>
-                  {overview.bank_balances.length === 0 ? (
-                    <p className="list-row__sub">На личном счете пока нет валютных остатков.</p>
-                  ) : (
-                    <ul className="bank-detail-list">
-                      {overview.bank_balances.map((balance) => (
-                        <li className="bank-detail-row" key={'personal-' + balance.currency_code}>
-                          <div className="bank-detail-row__main">
-                            <span className="pill">{balance.currency_code}</span>
-                            <strong className="bank-detail-row__amount">
-                              {formatAmount(balance.amount, balance.currency_code)}
-                            </strong>
-                          </div>
-                          <div className="bank-detail-row__sub">
-                            Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                {hasFamily && (
-                  <div className="dashboard-budget-section">
-                    <div className="dashboard-budget-section__header">
-                      <div className="section__eyebrow">Семейный счет</div>
+            {overview.bank_balances.length === 0 ? (
+              <p className="list-row__sub">На личном счёте пока нет валютных остатков.</p>
+            ) : (
+              <ul className="bank-detail-list">
+                {overview.bank_balances.map((balance) => (
+                  <li className="bank-detail-row" key={'personal-' + balance.currency_code}>
+                    <div className="bank-detail-row__main">
+                      <span className="pill">{balance.currency_code}</span>
+                      <strong className="bank-detail-row__amount">
+                        {formatAmount(balance.amount, balance.currency_code)}
+                      </strong>
                     </div>
-                    {overview.family_bank_balances.length === 0 ? (
-                      <p className="list-row__sub">На семейном счете пока нет валютных остатков.</p>
-                    ) : (
-                      <ul className="bank-detail-list">
-                        {overview.family_bank_balances.map((balance) => (
-                          <li className="bank-detail-row" key={'family-' + balance.currency_code}>
-                            <div className="bank-detail-row__main">
-                              <span className="pill">{balance.currency_code}</span>
-                              <strong className="bank-detail-row__amount">
-                                {formatAmount(balance.amount, balance.currency_code)}
-                              </strong>
-                            </div>
-                            <div className="bank-detail-row__sub">
-                              Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button className="btn" type="button" onClick={() => setShowBankDetail(false)}>
-                Закрыть
-              </button>
-            </div>
+                    <div className="bank-detail-row__sub">
+                      Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+          {hasFamily && (
+            <div className="dashboard-budget-section">
+              <div className="dashboard-budget-section__header">
+                <div className="section__eyebrow">Семейный счёт</div>
+              </div>
+              {overview.family_bank_balances.length === 0 ? (
+                <p className="list-row__sub">На семейном счёте пока нет валютных остатков.</p>
+              ) : (
+                <ul className="bank-detail-list">
+                  {overview.family_bank_balances.map((balance) => (
+                    <li className="bank-detail-row" key={'family-' + balance.currency_code}>
+                      <div className="bank-detail-row__main">
+                        <span className="pill">{balance.currency_code}</span>
+                        <strong className="bank-detail-row__amount">
+                          {formatAmount(balance.amount, balance.currency_code)}
+                        </strong>
+                      </div>
+                      <div className="bank-detail-row__sub">
+                        Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </BottomSheet>
 
-      {showBankHub && (
-        <div className="modal-backdrop" onClick={() => setShowBankHub(false)}>
-          <div className="modal-card modal-card--wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="section__header">
-                <div>
-                  <div className="section__eyebrow">Банк</div>
-                  <h2 className="section__title">{bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}</h2>
-                </div>
-              </div>
-            </div>
-            <div className="modal-body">
-              <Operations
-                user={user}
-                embedded
-                initialViewMode={bankHubMode === 'analytics' ? 'analytics' : 'history'}
-                allowedModes={['history', 'analytics']}
-                historyScope="banking"
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn" type="button" onClick={() => setShowBankHub(false)}>
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BottomSheet
+        open={showBankHub}
+        tag="Банк"
+        title={bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}
+        onClose={() => setShowBankHub(false)}
+      >
+        <Operations
+          user={user}
+          embedded
+          initialViewMode={bankHubMode === 'analytics' ? 'analytics' : 'history'}
+          allowedModes={['history', 'analytics']}
+          historyScope="banking"
+        />
+      </BottomSheet>
     </>
   );
 }

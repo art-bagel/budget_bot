@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BottomSheet from './BottomSheet';
 
 import {
   createIncomeSource,
@@ -268,18 +269,15 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       }];
 
   return (
-    <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="section__header">
-            <div>
-              <div className="section__eyebrow">Банк</div>
-              <h2 className="section__title">Записать доход</h2>
-            </div>
-          </div>
+    <BottomSheet open tag="Банк" title="Записать доход" onClose={() => !submitting && onClose()}
+      actions={
+        <div className="action-pill" style={{ width: '100%' }}>
+          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+          <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>{submitting ? '...' : 'Записать'}</button>
         </div>
-
-        <div className="modal-body">
+      }
+    >
+      <div>
           {loading ? (
             <p className="list-row__sub">Загрузка...</p>
           ) : (
@@ -579,18 +577,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
             </>
           )}
         </div>
-
-        <div className="modal-actions">
-          <div className="action-pill">
-            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
-              Отмена
-            </button>
-            <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>
-              {submitting ? '...' : 'Записать'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import BottomSheet from './BottomSheet';
 
 import { fetchBankAccountSnapshot, fetchBankAccounts, transferBetweenAccounts } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -338,18 +339,15 @@ export default function AccountTransferDialog({
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="section__header">
-            <div>
-              <div className="section__eyebrow">Перевод банка</div>
-              <h2 className="section__title">Перевод между счетами</h2>
-            </div>
-          </div>
+    <BottomSheet open tag="Банк" title="Перевод между счетами" onClose={() => !submitting && onClose()}
+      actions={
+        <div className="action-pill" style={{ width: '100%' }}>
+          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+          <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>{submitting ? '...' : 'Перевести'}</button>
         </div>
-
-        <div className="modal-body">
+      }
+    >
+      <div>
           <div className="operations-note">
             {mode === 'credit_to_cash'
               ? 'Выбери кредит, счёт зачисления и сумму. Перевод с кредита увеличит долг и добавит деньги в свободный остаток выбранного счёта.'
@@ -646,18 +644,6 @@ export default function AccountTransferDialog({
             </p>
           )}
         </div>
-
-        <div className="modal-actions">
-          <div className="action-pill">
-            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
-              Отмена
-            </button>
-            <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>
-              {submitting ? '...' : 'Перевести'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

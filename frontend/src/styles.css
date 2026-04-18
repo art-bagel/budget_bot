@@ -1412,6 +1412,110 @@ input { font: inherit; color: inherit; }
 .lg--3 { background: var(--g-3); }
 .lg--4 { background: var(--g-4); }
 
+/* ── Bottom sheet ────────────────────────────────── */
+
+.sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+.sheet-root[data-open] { pointer-events: auto; }
+
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 14, 0);
+  transition: background-color .28s ease;
+}
+.sheet-root[data-open] .sheet-backdrop { background: rgba(5, 8, 14, 0.5); }
+
+.sheet {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  max-width: 440px;
+  margin: 0 auto;
+  background: var(--surface-2);
+  border-radius: 20px 20px 0 0;
+  padding: 8px 18px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: var(--sh-sheet);
+  transform: translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .35s cubic-bezier(.25, 1.1, .4, 1), opacity .25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 88vh;
+  overflow: hidden;
+}
+.sheet[data-visible] { transform: translateY(0); opacity: 1; pointer-events: auto; }
+
+.sheet__handle {
+  width: 36px; height: 4px;
+  border-radius: 4px;
+  background: var(--line);
+  margin: 6px auto 2px;
+  flex-shrink: 0;
+}
+
+.sheet__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.sheet__head-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.sheet__tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.sheet__title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -.025em;
+  line-height: 1.15;
+  margin-top: 1px;
+}
+
+.sheet__close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--surface-inset);
+  color: var(--text-2);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  transition: background-color .15s ease;
+}
+.sheet__close:active { background: var(--line); }
+.sheet__close svg { width: 16px; height: 16px; }
+
+.sheet__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 2px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.sheet__actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.sheet__actions .btn { flex: 1; }
+
 /* ── Bank detail modal list ──────────────────────── */
 
 .bank-detail-list {
