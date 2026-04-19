@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { TouchEvent as ReactTouchEvent } from 'react';
 
 import {
@@ -7,12 +7,13 @@ import {
   reverseOperation,
 } from '../api';
 import { hapticLight } from '../telegram';
-import { IconTag } from '../components/Icons';
+import { IconTag, IconPlus, IconArrowRightLeft, IconPortfolio, IconCredit, IconChevronRight } from '../components/Icons';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { parseCategoryIcon } from '../utils/categoryIcon';
 import { useHints } from '../hooks/useHints';
 import type {
   OperationAnalyticsItem,
+  OperationAnalyticsMonth,
   OperationAnalyticsResponse,
   OperationHistoryItem,
   UserContext,
@@ -387,7 +388,127 @@ function getBankEntryLabel(
 function getBudgetEntryLabel(name: string): string {
   if (name === 'Личный свободный остаток') return 'Личный остаток';
   if (name === 'Семейный свободный остаток') return 'Семейный остаток';
-  return categoryDisplayName(name);
+  return parseCategoryIcon(name).displayName;
+}
+
+const OP_DOT_CLASS: Record<string, string> = {
+  income: 'income', expense: 'expense', account_transfer: 'xfer',
+  allocate: 'alloc', group_allocate: 'alloc', exchange: 'exch',
+  investment_trade: 'invest', investment_income: 'invest', investment_adjustment: 'invest',
+  credit_repayment: 'credit', cancelled: 'cancel',
+};
+function getDotClass(value: string): string { return OP_DOT_CLASS[value] ?? 'xfer'; }
+
+const CAT_COLOR_KEYS = ['g', 'o', 'b', 'p', 'r', 'v'] as const;
+
+function getOpIcoClass(item: OperationHistoryItem): string {
+  if (item.type === 'income') return 'op-ico--income';
+  if (item.type === 'account_transfer') return 'op-ico--xfer';
+  if (item.type === 'allocate' || item.type === 'group_allocate') return 'op-ico--alloc';
+  if (item.type === 'exchange') return 'op-ico--exch';
+  if (item.type === 'investment_trade' || item.type === 'investment_income' || item.type === 'investment_adjustment') return 'op-ico--invest';
+  if (item.type === 'credit_repayment') return 'op-ico--credit';
+  if (item.type === 'expense') {
+    const colorKeys = CAT_COLOR_KEYS;
+    return `op-ico--cat-${colorKeys[(item.budget_entries[0]?.category_id ?? 0) % 6]}`;
+  }
+  return 'op-ico--xfer';
+}
+
+function getOpIcoContent(item: OperationHistoryItem): React.ReactNode {
+  if (item.type === 'expense') {
+    const catName = item.budget_entries[0]?.category_name;
+    if (catName) {
+      const p = parseCategoryIcon(catName);
+      if (p.kind === 'svg' && p.icon) return <CategorySvgIcon code={p.icon} />;
+      if (p.kind === 'emoji' && p.icon) return <span className="op-ico__emoji">{p.icon}</span>;
+    }
+    return <IconTag />;
+  }
+  if (item.type === 'income') return <IconPlus />;
+  if (item.type === 'investment_trade' || item.type === 'investment_income' || item.type === 'investment_adjustment') return <IconPortfolio />;
+  if (item.type === 'credit_repayment') return <IconCredit />;
+  return <IconArrowRightLeft />;
+}
+
+function getOpAmount(item: OperationHistoryItem): { text: string; cls: string } | null {
+  const entry = item.type === 'allocate' || item.type === 'group_allocate'
+    ? item.budget_entries[0]
+    : item.bank_entries[0];
+  if (!entry) return null;
+  const text = formatSignedAmount(entry.amount, entry.currency_code);
+  if (item.type === 'expense') return { text, cls: 'op-row__amt--neg' };
+  if (item.type === 'income' || item.type === 'investment_income') return { text, cls: 'op-row__amt--pos' };
+  return { text, cls: '' };
+}
+
+function getOpSubtitle(item: OperationHistoryItem): string {
+  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(item.created_at));
+  const ownerLabel = (t?: string | null) => t === 'family' ? 'Семейный' : t === 'user' ? 'Личный' : null;
+
+  if (item.type === 'expense' && item.budget_entries.length > 0) {
+    const cat = parseCategoryIcon(item.budget_entries[0].category_name).displayName;
+    const owner = ownerLabel(item.bank_entries[0]?.bank_account_owner_type);
+    return [cat, owner, time].filter(Boolean).join(' · ');
+  }
+  if (item.type === 'income') {
+    const e = item.bank_entries[0];
+    return [ownerLabel(e?.bank_account_owner_type), e?.bank_account_name, time].filter(Boolean).join(' · ');
+  }
+  if (item.type === 'account_transfer' && item.bank_entries.length >= 2) {
+    const from = ownerLabel(item.bank_entries[0].bank_account_owner_type) ?? 'Счет';
+    const to = ownerLabel(item.bank_entries[1].bank_account_owner_type) ?? 'Счет';
+    return `${from} → ${to} · ${time}`;
+  }
+  return [ownerLabel(item.bank_entries[0]?.bank_account_owner_type), time].filter(Boolean).join(' · ');
+}
+
+function formatDateGroupLabel(isoKey: string): string {
+  const date = new Date(isoKey + 'T12:00:00');
+  const todayKey = new Date().toLocaleDateString('en-CA');
+  const yestKey = new Date(Date.now() - 864e5).toLocaleDateString('en-CA');
+  const dayLabel = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
+  if (isoKey === todayKey) return `Сегодня · ${dayLabel}`;
+  if (isoKey === yestKey) return `Вчера · ${dayLabel}`;
+  return dayLabel;
+}
+
+function groupByDate(items: OperationHistoryItem[]): { dateKey: string; dateLabel: string; items: OperationHistoryItem[] }[] {
+  const groups = new Map<string, OperationHistoryItem[]>();
+  for (const item of items) {
+    const key = new Date(item.created_at).toLocaleDateString('en-CA');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(item);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, its]) => ({ dateKey: key, dateLabel: formatDateGroupLabel(key), items: its }));
+}
+
+
+const OP_SYSTEM_COMMENT_PREFIXES = ['Платёж по кредиту', 'Частичное закрытие позиции', 'Пополнение позиции', 'Комиссия по позиции'];
+
+function getOpComment(item: OperationHistoryItem): string | null {
+  if (!item.comment) return null;
+  if (OP_SYSTEM_COMMENT_PREFIXES.some((p) => item.comment!.includes(p))) return null;
+  return item.comment;
+}
+
+function isCancellable(item: OperationHistoryItem): boolean {
+  return !item.has_reversal
+    && item.type !== 'investment_income'
+    && item.type !== 'investment_trade'
+    && item.type !== 'investment_adjustment';
+}
+
+function hasOpDetail(item: OperationHistoryItem): boolean {
+  if (getOpComment(item)) return true;
+  if (item.reversal_of_operation_id) return true;
+  if (item.budget_entries.length > 1) return true;
+  if (item.budget_entries.length === 1 && (item.type === 'allocate' || item.type === 'group_allocate')) return true;
+  if (item.bank_entries.length > 1) return true;
+  if (isCancellable(item)) return true;
+  return false;
 }
 
 
@@ -509,6 +630,7 @@ export default function Operations({
     () => new Set(BANKING_TYPE_FILTER_OPTIONS.filter((o) => o.value !== 'cancelled').map((o) => o.value)),
   );
   const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
+  const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
 
@@ -782,231 +904,183 @@ export default function Operations({
 
           {viewMode !== 'analytics' ? (
             <>
-              <div className="section__header">
-                <h3 className="section__title">
-                  {viewMode === 'investment'
-                    ? 'Инвестиционные операции'
-                    : historyScope === 'banking'
-                      ? 'История по счетам'
-                      : 'История операций'}
-                </h3>
-                <div className="section__header-actions">
-                  {showHistoryTypeFilter ? (
-                    <div className="multiselect" ref={typeFilterRef}>
+              {/* Chip-карусель фильтра по типам */}
+              {(showHistoryTypeFilter || historyScope === 'banking') && (() => {
+                const opts = historyScope === 'banking' ? BANKING_TYPE_FILTER_OPTIONS : HISTORY_TYPE_OPTIONS;
+                const active = historyScope === 'banking' ? bankingTypeFilter : historyTypeFilter;
+                const setActive = historyScope === 'banking' ? setBankingTypeFilter : setHistoryTypeFilter;
+                const allActive = active.size >= opts.length;
+                const toggle = (val: string) => setActive((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(val)) next.delete(val); else next.add(val);
+                  return next;
+                });
+                return (
+                  <div className="op-filter" role="group" aria-label="Фильтр операций">
+                    <button
+                      type="button"
+                      className={`op-filter__chip op-filter__chip--all${allActive ? ' op-filter__chip--active' : ''}`}
+                      onClick={() => setActive(new Set(opts.map((o) => o.value)))}
+                    >Все</button>
+                    {opts.map((opt) => (
                       <button
-                        className="input input--compact multiselect__trigger"
+                        key={opt.value}
                         type="button"
-                        onClick={() => setTypeFilterOpen((prev) => !prev)}
+                        className={`op-filter__chip${active.has(opt.value) ? ' op-filter__chip--active' : ''}`}
+                        onClick={() => toggle(opt.value)}
                       >
-                        {historyTypeFilter.size === HISTORY_TYPE_OPTIONS.length
-                          ? 'Все типы'
-                          : historyTypeFilter.size === 0
-                            ? 'Не выбрано'
-                            : `Выбрано: ${historyTypeFilter.size}`}
+                        <span className={`op-dot op-dot--${getDotClass(opt.value)}`} />
+                        {opt.label}
                       </button>
-                      {typeFilterOpen && (
-                        <div className="multiselect__dropdown">
-                          {HISTORY_TYPE_OPTIONS.map((option) => (
-                            <label key={option.value} className="multiselect__option">
-                              <input
-                                type="checkbox"
-                                checked={historyTypeFilter.has(option.value)}
-                                onChange={() => {
-                                  setHistoryTypeFilter((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(option.value)) {
-                                      next.delete(option.value);
-                                    } else {
-                                      next.add(option.value);
-                                    }
-                                    return next;
-                                  });
-                                }}
-                              />
-                              {option.label}
-                            </label>
-                          ))}
-                          <button
-                            className="multiselect__clear"
-                            type="button"
-                            onClick={() => {
-                              if (historyTypeFilter.size === HISTORY_TYPE_OPTIONS.length) {
-                                setHistoryTypeFilter(new Set());
-                              } else {
-                                setHistoryTypeFilter(new Set(HISTORY_TYPE_OPTIONS.map((o) => o.value)));
-                              }
-                            }}
-                          >
-                            {historyTypeFilter.size === HISTORY_TYPE_OPTIONS.length ? 'Сбросить' : 'Выбрать все'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : showInvestmentTypeFilter ? (
-                    <div className="analytics-toolbar__row">
-                      {INVESTMENT_HISTORY_FILTER_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          className={[
-                            'analytics-chip',
-                            'analytics-chip--compact',
-                            investmentHistoryFilter === option.value ? 'analytics-chip--active' : '',
-                          ].filter(Boolean).join(' ')}
-                          type="button"
-                          onClick={() => setInvestmentHistoryFilter(option.value)}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : historyScope === 'banking' ? (
-                    <div className="multiselect" ref={typeFilterRef}>
-                      <button
-                        className="input input--compact multiselect__trigger"
-                        type="button"
-                        onClick={() => setTypeFilterOpen((prev) => !prev)}
-                      >
-                        {bankingTypeFilter.size === BANKING_TYPE_FILTER_OPTIONS.length
-                          ? 'Все типы'
-                          : bankingTypeFilter.size === 0
-                            ? 'Не выбрано'
-                            : `Выбрано: ${bankingTypeFilter.size}`}
-                      </button>
-                      {typeFilterOpen && (
-                        <div className="multiselect__dropdown">
-                          {BANKING_TYPE_FILTER_OPTIONS.map((option) => (
-                            <label key={option.value} className="multiselect__option">
-                              <input
-                                type="checkbox"
-                                checked={bankingTypeFilter.has(option.value)}
-                                onChange={() => {
-                                  setBankingTypeFilter((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(option.value)) {
-                                      next.delete(option.value);
-                                    } else {
-                                      next.add(option.value);
-                                    }
-                                    return next;
-                                  });
-                                }}
-                              />
-                              {option.label}
-                            </label>
-                          ))}
-                          <button
-                            className="multiselect__clear"
-                            type="button"
-                            onClick={() => {
-                              if (bankingTypeFilter.size === BANKING_TYPE_FILTER_OPTIONS.length) {
-                                setBankingTypeFilter(new Set());
-                              } else {
-                                setBankingTypeFilter(new Set(BANKING_TYPE_FILTER_OPTIONS.map((o) => o.value)));
-                              }
-                            }}
-                          >
-                            {bankingTypeFilter.size === BANKING_TYPE_FILTER_OPTIONS.length ? 'Сбросить' : 'Выбрать все'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                  <span className="tag tag--neutral">{historyTotalCount} всего</span>
-                </div>
-              </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
-              {viewMode === 'investment' && (
-                <p className="list-row__sub" style={{ marginBottom: 12 }}>
-                  Здесь собраны сделки по позициям, доход по инвестициям и переводы между обычными и investment-счетами.
-                </p>
-              )}
-              {viewMode === 'history' && historyScope === 'banking' && (
-                <p className="list-row__sub" style={{ marginBottom: 12 }}>
-                  Здесь только движения по личным и семейным счетам без инвестиционных операций.
-                </p>
+              {showInvestmentTypeFilter && (
+                <div className="op-filter" role="group">
+                  {INVESTMENT_HISTORY_FILTER_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`op-filter__chip${investmentHistoryFilter === option.value ? ' op-filter__chip--active' : ''}`}
+                      onClick={() => setInvestmentHistoryFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               )}
 
               {historyError && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 12 }}>
+                <p style={{ color: 'var(--neg)', fontSize: '0.85rem', marginBottom: 12 }}>
                   {historyError}
                 </p>
               )}
 
               {visibleHistoryItems.length === 0 && !loadingHistory ? (
-                <p className="list-row__sub">Операций пока нет</p>
+                <p className="op-empty">Операций пока нет</p>
               ) : (
-                <div className="history-list">
-                  <ul>
-                    {visibleHistoryItems.map((item) => (
-                      <li
-                        className={[
-                          'list-row',
-                          'list-row--history',
-                          item.type === 'income' || item.type === 'investment_income' ? 'list-row--history-income' : '',
-                          item.type === 'expense' ? 'list-row--history-expense' : '',
-                          item.type === 'exchange' ? 'list-row--history-exchange' : '',
-                        ].filter(Boolean).join(' ')}
-                        key={'history-' + item.operation_id}
-                      >
-                        <div className="history-header">
-                          <div className="list-row__title">
-                            {getOperationTitle(item)}
-                            {item.has_reversal && (
-                              <span className="tag tag--neutral history-status-tag">Отменена</span>
-                            )}
-                          </div>
-                          <div className="history-side">
-                            {!item.has_reversal
-                              && item.type !== 'investment_income'
-                              && item.type !== 'investment_trade'
-                              && item.type !== 'investment_adjustment' && (
-                              <button
-                                className="btn"
-                                type="button"
-                                disabled={reversingOperationId === item.operation_id}
-                                onClick={() => handleReverseOperation(item.operation_id)}
-                              >
-                                {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="history-main">
-                          <div className="list-row__sub">
-                            {item.comment && <span>{item.comment}</span>}
-                            <span>{formatDateTime(item.created_at)}</span>
-                          </div>
-                          <div className="history-lines">
-                            {getOperationLines(item).map((line, index) => (
-                              <div
-                                className="history-line"
-                                key={item.operation_id + '-line-' + index}
-                              >
-                                <span className="history-line__label">{line.label}</span>
-                                {line.amount && (
-                                  <span className="history-line__amount">{line.amount}</span>
-                                )}
+                <div className="op-groups">
+                  {groupByDate(visibleHistoryItems).map((group) => (
+                    <div className="op-group" key={group.dateKey}>
+                      <div className="op-group__head">{group.dateLabel}</div>
+                      {group.items.map((item) => {
+                        const amt = getOpAmount(item);
+                        const canExpand = hasOpDetail(item);
+                        const expanded = expandedOps.has(item.operation_id);
+                        const comment = getOpComment(item);
+
+                        const toggleExpand = canExpand
+                          ? () => setExpandedOps((prev) => {
+                              const next = new Set(prev);
+                              next.has(item.operation_id) ? next.delete(item.operation_id) : next.add(item.operation_id);
+                              return next;
+                            })
+                          : undefined;
+
+                        return (
+                          <div
+                            className={[
+                              'op-row',
+                              item.has_reversal ? 'op-row--cancelled' : '',
+                              canExpand ? 'op-row--expandable' : '',
+                            ].filter(Boolean).join(' ')}
+                            key={item.operation_id}
+                            onClick={toggleExpand}
+                          >
+                            <span className={`op-ico ${getOpIcoClass(item)}`}>
+                              {getOpIcoContent(item)}
+                            </span>
+                            <div className="op-row__body">
+                              <div className="op-row__top">
+                                <span className="op-row__name">
+                                  {getOperationTitle(item)}
+                                  {item.has_reversal && (
+                                    <span className="op-row__tag">Отменена</span>
+                                  )}
+                                </span>
+                                <div className="op-row__top-r">
+                                  {amt && (
+                                    <strong className={`op-row__amt${amt.cls ? ' ' + amt.cls : ''}`}>{amt.text}</strong>
+                                  )}
+                                  {canExpand && (
+                                    <span className={`op-row__chevron${expanded ? ' op-row__chevron--open' : ''}`}>
+                                      <IconChevronRight />
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            ))}
+                              <span className="op-row__sub">{getOpSubtitle(item)}</span>
+                              {expanded && isCancellable(item) && (
+                                <button
+                                  className="op-row__cancel"
+                                  type="button"
+                                  disabled={reversingOperationId === item.operation_id}
+                                  onClick={(e) => { e.stopPropagation(); handleReverseOperation(item.operation_id); }}
+                                >
+                                  {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
+                                </button>
+                              )}
+                              {expanded && (
+                                <div className="op-row__detail">
+                                  {comment && (
+                                    <div className="op-detail__comment">{comment}</div>
+                                  )}
+                                  {item.budget_entries.length > 0 && (item.budget_entries.length > 1 || item.type === 'allocate' || item.type === 'group_allocate') && (
+                                    <div className="op-detail__entries">
+                                      {item.budget_entries.map((entry, i) => {
+                                        const parsed = parseCategoryIcon(entry.category_name);
+                                        const colorKey = CAT_COLOR_KEYS[entry.category_id % CAT_COLOR_KEYS.length];
+                                        return (
+                                          <div className="op-detail__entry" key={i}>
+                                            <span className={`op-detail__ico op-ico--cat-${colorKey}`}>
+                                              {parsed.kind === 'svg' && parsed.icon
+                                                ? <CategorySvgIcon code={parsed.icon} />
+                                                : parsed.kind === 'emoji' && parsed.icon
+                                                  ? <span className="op-ico__emoji">{parsed.icon}</span>
+                                                  : <IconTag />}
+                                            </span>
+                                            <span className="op-detail__name">{parsed.displayName}</span>
+                                            <span className="op-detail__amt">{formatSignedAmount(entry.amount, entry.currency_code)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                  {item.bank_entries.length > 1 && (
+                                    <div className="op-detail__entries op-detail__entries--bank">
+                                      {item.bank_entries.map((entry, i) => (
+                                        <div className="op-detail__entry" key={i}>
+                                          <span className="op-detail__name">{getBankEntryLabel(entry.bank_account_owner_type, entry.bank_account_kind, entry.bank_account_name, entry.bank_account_id)}</span>
+                                          <span className="op-detail__amt">{formatSignedAmount(entry.amount, entry.currency_code)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {item.reversal_of_operation_id && (
+                                    <div className="op-detail__note">Отмена операции #{item.reversal_of_operation_id}</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               )}
 
               {canLoadMoreHistory && (
-                <div className="form-row">
-                  <button
-                    className="btn"
-                    type="button"
-                    disabled={loadingHistory}
-                    onClick={() => loadHistory(historyItems.length)}
-                  >
-                    {loadingHistory ? '...' : 'Показать еще'}
-                  </button>
-                </div>
+                <button
+                  className="op-more"
+                  type="button"
+                  disabled={loadingHistory}
+                  onClick={() => loadHistory(historyItems.length)}
+                >
+                  {loadingHistory ? '...' : 'Показать ещё'}
+                </button>
               )}
             </>
           ) : (
