@@ -5362,6 +5362,12 @@ select.dlg-row__ghost option {
   color: var(--text-2);
 }
 
+.ana-hero__cmp {
+  font-size: 0.78rem;
+  color: var(--text-3);
+  letter-spacing: -.005em;
+}
+
 .ana-scope-sub {
   display: flex;
   gap: 6px;

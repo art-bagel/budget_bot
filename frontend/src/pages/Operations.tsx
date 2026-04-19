@@ -281,6 +281,33 @@ function formatBarLabel(periodStart: string, periodMode: AnalyticsPeriodMode): s
 }
 
 
+const MONTHS_DATIVE = ['январю','февралю','марту','апрелю','маю','июню','июлю','августу','сентябрю','октябрю','ноябрю','декабрю'];
+
+function formatPrevPeriodRef(periodStart: string, periodMode: AnalyticsPeriodMode): string {
+  const date = fromIsoDate(periodStart);
+  if (periodMode === 'month') return `к ${MONTHS_DATIVE[date.getMonth()]} ${date.getFullYear()}`;
+  if (periodMode === 'year') return `к ${date.getFullYear()} г.`;
+  const end = new Date(date);
+  end.setDate(end.getDate() + 6);
+  const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `к ${fmt(date)}–${fmt(end)}`;
+}
+
+function computePeriodDelta(periods: OperationAnalyticsMonth[]): { pct: number; prevStart: string } | null {
+  if (periods.length < 2) return null;
+  const sorted = [...periods].sort((a, b) => a.period_start.localeCompare(b.period_start));
+  const idx = sorted.findIndex((p) => p.is_selected);
+  if (idx <= 0) return null;
+  const current = sorted[idx];
+  if (current.amount === 0) return null;
+  // Ищем ближайшую предыдущую точку с ненулевым значением
+  let prevIdx = idx - 1;
+  while (prevIdx >= 0 && sorted[prevIdx].amount === 0) prevIdx--;
+  if (prevIdx < 0) return null;
+  const prev = sorted[prevIdx];
+  return { pct: ((current.amount - prev.amount) / prev.amount) * 100, prevStart: prev.period_start };
+}
+
 function formatPercent(share: number): string {
   return new Intl.NumberFormat('ru-RU', {
     style: 'percent',
@@ -1069,6 +1096,19 @@ export default function Operations({
                     </div>
                     <div className="ana-hero__meta">
                       <span>{analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}</span>
+                      {(() => {
+                        const delta = computePeriodDelta(analyticsData.periods);
+                        if (!delta) return null;
+                        const isGood = analyticsTypeFilter === 'expense' ? delta.pct < 0 : delta.pct > 0;
+                        return (
+                          <>
+                            <span className={`delta ${isGood ? 'delta--down' : 'delta--up'}`}>
+                              {delta.pct < 0 ? '↓' : '↑'} {Math.abs(delta.pct).toFixed(0)}%
+                            </span>
+                            <span className="ana-hero__cmp">{formatPrevPeriodRef(delta.prevStart, effectivePeriodMode)}</span>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div className="ana-scope-sub">
                       {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
