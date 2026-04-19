@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TouchEvent as ReactTouchEvent } from 'react';
 
 import {
@@ -633,6 +633,7 @@ export default function Operations({
   const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
   const [analyticsData, setAnalyticsData] = useState<OperationAnalyticsResponse | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -794,6 +795,21 @@ export default function Operations({
   }, [analyticsAnchorDate, analyticsPeriodMode]);
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
+
+  const loadMoreHistory = useCallback(() => {
+    if (canLoadMoreHistory) loadHistory(historyItems.length);
+  }, [canLoadMoreHistory, historyItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreHistory(); },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMoreHistory]);
   const visibleHistoryItems = useMemo(() => {
     let items = historyItems;
 
@@ -995,7 +1011,7 @@ export default function Operations({
                             <div className="op-row__body">
                               <div className="op-row__top">
                                 <span className="op-row__name">
-                                  {getOperationTitle(item)}
+                                  <span className="op-row__name-text">{getOperationTitle(item)}</span>
                                   {item.has_reversal && (
                                     <span className="op-row__tag">Отменена</span>
                                   )}
@@ -1072,16 +1088,8 @@ export default function Operations({
                 </div>
               )}
 
-              {canLoadMoreHistory && (
-                <button
-                  className="op-more"
-                  type="button"
-                  disabled={loadingHistory}
-                  onClick={() => loadHistory(historyItems.length)}
-                >
-                  {loadingHistory ? '...' : 'Показать ещё'}
-                </button>
-              )}
+              <div ref={loadMoreSentinelRef} className="op-sentinel" />
+              {loadingHistory && <div className="op-loading">...</div>}
             </>
           ) : (
             <div

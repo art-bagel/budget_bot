@@ -1282,6 +1282,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         open={showBankHub}
         tag="Банк"
         title={bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}
+        icon={bankHubMode === 'analytics' ? <IconChartPie /> : <IconClock />}
+        iconColor={bankHubMode === 'analytics' ? 'b' : 'o'}
         onClose={() => setShowBankHub(false)}
       >
         <Operations
