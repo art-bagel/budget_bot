@@ -1,0 +1,67 @@
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { X } from 'lucide-react';
+
+interface Props {
+  open: boolean;
+  title: string;
+  tag?: string;
+  icon?: ReactNode;
+  iconColor?: string;
+  onClose: () => void;
+  children: ReactNode;
+  actions?: ReactNode;
+}
+
+export default function BottomSheet({ open, title, tag, icon, iconColor, onClose, children, actions }: Props) {
+  const [visible, setVisible] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      requestAnimationFrame(() => setVisible(true));
+    } else {
+      setVisible(false);
+    }
+  }, [open]);
+
+  // close on swipe down
+  const startYRef = useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => { startYRef.current = e.touches[0].clientY; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (startYRef.current === null) return;
+    if (e.changedTouches[0].clientY - startYRef.current > 60) onClose();
+    startYRef.current = null;
+  };
+
+  if (!open && !visible) return null;
+
+  return (
+    <div className="sheet-root" data-open={open ? '' : undefined}>
+      <div className="sheet-backdrop" onClick={onClose} />
+      <div
+        ref={sheetRef}
+        className="sheet"
+        data-visible={visible ? '' : undefined}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="sheet__handle" />
+        <div className="sheet__head">
+          <div className="sheet__head-left">
+            {icon && <div className={`sheet-ico${iconColor ? ` sheet-ico--${iconColor}` : ''}`}>{icon}</div>}
+            <div>
+              {tag && <div className="sheet__tag">{tag}</div>}
+              <div className="sheet__title">{title}</div>
+            </div>
+          </div>
+          <button className="sheet__close" type="button" onClick={onClose} aria-label="Закрыть">
+            <X size={16} strokeWidth={2} />
+          </button>
+        </div>
+        <div className="sheet__body">{children}</div>
+        {actions && <div className="sheet__actions">{actions}</div>}
+      </div>
+    </div>
+  );
+}
