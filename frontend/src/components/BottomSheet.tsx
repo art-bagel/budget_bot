@@ -40,10 +40,10 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
     return () => el.removeEventListener('focusin', handler);
   }, []);
 
-  // close on swipe down
+  // swipe-to-close: only from handle/header, never from scrollable body
   const startYRef = useRef<number | null>(null);
-  const handleTouchStart = (e: React.TouchEvent) => { startYRef.current = e.touches[0].clientY; };
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleDragTouchStart = (e: React.TouchEvent) => { startYRef.current = e.touches[0].clientY; };
+  const handleDragTouchEnd = (e: React.TouchEvent) => {
     if (startYRef.current === null) return;
     if (e.changedTouches[0].clientY - startYRef.current > 60) onClose();
     startYRef.current = null;
@@ -54,15 +54,17 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
   return (
     <div className="sheet-root" data-open={open ? '' : undefined}>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div
-        ref={sheetRef}
-        className="sheet"
-        data-visible={visible ? '' : undefined}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div className="sheet__handle" />
-        <div className="sheet__head">
+      <div ref={sheetRef} className="sheet" data-visible={visible ? '' : undefined}>
+        <div
+          className="sheet__handle"
+          onTouchStart={handleDragTouchStart}
+          onTouchEnd={handleDragTouchEnd}
+        />
+        <div
+          className="sheet__head"
+          onTouchStart={handleDragTouchStart}
+          onTouchEnd={handleDragTouchEnd}
+        >
           <div className="sheet__head-left">
             {icon && <div className={`sheet-ico${iconColor ? ` sheet-ico--${iconColor}` : ''}`}>{icon}</div>}
             <div>
