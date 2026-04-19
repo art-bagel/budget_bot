@@ -3877,12 +3877,19 @@ select.amt__cur option { background: var(--surface); color: var(--text); }
   padding: 12px 14px;
   background: var(--surface-inset);
   border-radius: var(--r-md);
+  font: inherit;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
   position: relative;
   cursor: pointer;
+  border: none;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
 }
+.picker-v2:focus { outline: 2px solid var(--yellow); outline-offset: -2px; }
 .picker-v2::after {
   content: '';
   position: absolute;
@@ -3891,7 +3898,10 @@ select.amt__cur option { background: var(--surface); color: var(--text); }
   border-right: 1.5px solid var(--text-3);
   border-bottom: 1.5px solid var(--text-3);
   transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
 }
+input[type="date"].picker-v2 { padding-right: 28px; }
+input[type="date"].picker-v2::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; }
 
 /* Source segment selector */
 .seg-src {
@@ -3966,6 +3976,59 @@ select.amt__cur option { background: var(--surface); color: var(--text); }
   color: var(--text-3);
   margin-left: 4px;
 }
+
+/* Pattern editor v2 */
+.pat-sel {
+  flex: 1;
+  padding: 9px 32px 9px 12px;
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239AA0A8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  min-width: 0;
+}
+.pat-sel:focus { outline: 2px solid var(--yellow); outline-offset: -2px; }
+.pat-sel option { background: var(--surface); color: var(--text); }
+.pat-sel:disabled { opacity: .5; }
+
+.pat-pct {
+  width: 64px;
+  flex-shrink: 0;
+  padding: 9px 24px 9px 10px;
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+.pat-pct:focus { outline: 2px solid var(--yellow); outline-offset: -2px; }
+.pat-pct:disabled { opacity: .5; }
+.pat-pct::placeholder { color: var(--text-3); font-weight: 400; }
+
+.pat-rm {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: var(--text-3);
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: background-color .15s, color .15s;
+}
+.pat-rm:hover:not(:disabled) { background: var(--line); color: var(--text-2); }
+.pat-rm:disabled { opacity: .3; }
 
 /* Custom currency picker */
 .amt__cur-btn {

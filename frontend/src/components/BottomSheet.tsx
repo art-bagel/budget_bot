@@ -16,6 +16,7 @@ interface Props {
 export default function BottomSheet({ open, title, tag, icon, iconColor, onClose, children, actions }: Props) {
   const [visible, setVisible] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -24,6 +25,20 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
       setVisible(false);
     }
   }, [open]);
+
+  // scroll focused input into view after keyboard appears
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const handler = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
+        setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 350);
+      }
+    };
+    el.addEventListener('focusin', handler);
+    return () => el.removeEventListener('focusin', handler);
+  }, []);
 
   // close on swipe down
   const startYRef = useRef<number | null>(null);
@@ -59,7 +74,7 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
             <X size={16} strokeWidth={2} />
           </button>
         </div>
-        <div className="sheet__body">{children}</div>
+        <div className="sheet__body" ref={bodyRef}>{children}</div>
         {actions && <div className="sheet__actions">{actions}</div>}
       </div>
     </div>

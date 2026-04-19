@@ -387,19 +387,18 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                     <span className="src-dist__label" style={{ color: 'var(--text-3)' }}>...</span>
                   </div>
                 ) : showPatternEditor ? (
-                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <span className="fl">Распределение по счетам</span>
 
                     {patternLines.map((line) => (
                       <div key={line.key} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <select
-                          className="input"
+                          className="pat-sel"
                           value={line.bank_account_id}
                           onChange={(e) => setPatternLines((prev) =>
                             prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
                           )}
                           disabled={savingPattern}
-                          style={{ flex: 1, fontSize: '0.82rem' }}
                         >
                           <option value="">Выбери счёт</option>
                           {bankAccounts.map((ba) => (
@@ -408,9 +407,9 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                             </option>
                           ))}
                         </select>
-                        <div style={{ position: 'relative', width: 68, flexShrink: 0 }}>
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
                           <input
-                            className="input"
+                            className="pat-pct"
                             type="text"
                             inputMode="decimal"
                             placeholder="0"
@@ -419,13 +418,12 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                               prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
                             )}
                             disabled={savingPattern}
-                            style={{ width: '100%', fontSize: '0.82rem', paddingRight: 22, textAlign: 'right' }}
                           />
-                          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)', pointerEvents: 'none' }}>%</span>
+                          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)', pointerEvents: 'none' }}>%</span>
                         </div>
                         <button
                           type="button"
-                          style={{ color: 'var(--text-3)', fontSize: 18 }}
+                          className="pat-rm"
                           onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
                           disabled={savingPattern || patternLines.length === 1}
                         >
@@ -453,35 +451,33 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                     <div style={{ display: 'flex', gap: 8, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
                       {hasPattern && (
                         <button
-                          className="btn btn--danger"
+                          className="sh-btn"
                           type="button"
                           onClick={handleDeletePattern}
                           disabled={savingPattern || deletingPattern}
-                          style={{ fontSize: '0.78rem', padding: '5px 10px' }}
+                          style={{ background: 'var(--neg-bg)', color: 'var(--neg)', flex: 'none', padding: '8px 14px', fontSize: 13 }}
                         >
                           {deletingPattern ? '...' : 'Удалить'}
                         </button>
                       )}
-                      <div className="action-pill" style={{ marginLeft: 'auto' }}>
-                        <button
-                          className="action-pill__cancel"
-                          type="button"
-                          onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
-                          disabled={savingPattern}
-                          style={{ fontSize: '0.78rem', padding: '5px 12px' }}
-                        >
-                          Отмена
-                        </button>
-                        <button
-                          className="action-pill__confirm"
-                          type="button"
-                          onClick={handleSavePattern}
-                          disabled={savingPattern}
-                          style={{ fontSize: '0.78rem', padding: '5px 12px' }}
-                        >
-                          {savingPattern ? '...' : 'Сохранить'}
-                        </button>
-                      </div>
+                      <button
+                        className="sh-btn sh-btn--ghost"
+                        type="button"
+                        onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
+                        disabled={savingPattern}
+                        style={{ fontSize: 13 }}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        className="sh-btn sh-btn--primary"
+                        type="button"
+                        onClick={handleSavePattern}
+                        disabled={savingPattern}
+                        style={{ fontSize: 13 }}
+                      >
+                        {savingPattern ? '...' : 'Сохранить'}
+                      </button>
                     </div>
                   </div>
                 ) : (
