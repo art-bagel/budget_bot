@@ -27,9 +27,8 @@ import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
 import AccountTransferDialog from '../components/AccountTransferDialog';
 import BottomSheet from '../components/BottomSheet';
-import CategoryDialog from '../components/CategoryDialog';
+import CategoryActionSheet from '../components/CategoryActionSheet';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
-import ExpenseDialog from '../components/ExpenseDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
 import {
@@ -85,7 +84,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
-  const [expenseCategory, setExpenseCategory] = useState<DashboardBudgetCategory | null>(null);
   const [transferTarget, setTransferTarget] = useState<TransferTarget | null>(null);
   const [transferInitialSourceId, setTransferInitialSourceId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
@@ -95,19 +93,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
 
   const activeSourceId = draggedCategoryId;
 
-  /* ── swipe tracking ─────────────────────────────── */
-
-  const swipeRef = useRef<{
-    startX: number;
-    startY: number;
-    sourceId: number;
-    kind: 'regular' | 'group' | 'free_budget';
-    category: DashboardBudgetCategory | null;
-    decided: boolean;
-    isHorizontal: boolean;
-    actionTriggered: boolean;
-    element: HTMLElement | null;
-  } | null>(null);
+  /* ── swipe tracking (hero only) ─────────────────── */
 
   const heroSwipeRef = useRef<{
     startX: number;
@@ -179,25 +165,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     }
   };
 
-  const handleSwipeStart = (
-    sourceId: number,
-    kind: 'regular' | 'group' | 'free_budget',
-    category: DashboardBudgetCategory | null,
-    e: React.TouchEvent,
-  ) => {
-    swipeRef.current = {
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-      sourceId,
-      kind,
-      category,
-      decided: false,
-      isHorizontal: false,
-      actionTriggered: false,
-      element: e.currentTarget as HTMLElement,
-    };
-  };
-
   const resetSwipeElement = (element: HTMLElement | null) => {
     if (!element) return;
     element.style.transition = 'transform 0.2s ease';
@@ -210,94 +177,58 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     return Math.max(48, Math.min(80, width * 0.2));
   };
 
-  const openTransferFromSwipe = (
-    sourceId: number,
-    kind: 'regular' | 'group' | 'free_budget',
-    category: DashboardBudgetCategory | null,
-  ) => {
-    const categoryOwnerType = category?.owner_type || 'user';
-    const swipeTarget: TransferTarget = kind === 'free_budget'
-      ? {
-          category_id: user.unallocated_category_id,
-          name: overview?.has_family ? 'Свободный остаток (личный)' : 'Свободный остаток',
-          kind: 'free_budget',
-          owner_type: 'user',
-          currency_code: overview?.base_currency_code || user.base_currency_code,
-        }
-      : {
-          category_id: sourceId,
-          name: category?.name || '',
-          kind: category?.kind || 'regular',
-          owner_type: categoryOwnerType,
-          currency_code: category?.currency_code || (overview?.base_currency_code || user.base_currency_code),
-        };
+  const freeBudgetSwipeRef = useRef<{
+    startX: number; startY: number; decided: boolean; isHorizontal: boolean; actionTriggered: boolean; element: HTMLElement | null;
+  } | null>(null);
 
-    const swipeInitialSource = kind === 'free_budget'
-      ? null
-      : categoryOwnerType === 'family' && overview?.family_unallocated_category_id
-        ? overview.family_unallocated_category_id
-        : user.unallocated_category_id;
-
-    setTransferTarget(swipeTarget);
-    setTransferInitialSourceId(swipeInitialSource);
+  const openFreeBudgetTransfer = () => {
+    if (!overview) return;
+    const target: TransferTarget = {
+      category_id: user.unallocated_category_id,
+      name: overview.has_family ? 'Свободный остаток (личный)' : 'Свободный остаток',
+      kind: 'free_budget',
+      owner_type: 'user',
+      currency_code: overview.base_currency_code,
+    };
+    setTransferTarget(target);
+    setTransferInitialSourceId(null);
     hapticRigid();
   };
 
-  const handleSwipeMove = (e: React.TouchEvent) => {
-    const s = swipeRef.current;
-    if (!s || !s.element) return;
-    if (s.actionTriggered) return;
+  const handleFreeBudgetSwipeStart = (e: React.TouchEvent) => {
+    freeBudgetSwipeRef.current = {
+      startX: e.touches[0].clientX, startY: e.touches[0].clientY,
+      decided: false, isHorizontal: false, actionTriggered: false,
+      element: e.currentTarget as HTMLElement,
+    };
+  };
 
-    const touch = e.touches[0];
-    const dx = touch.clientX - s.startX;
-    const dy = touch.clientY - s.startY;
-
-    if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
-      s.decided = true;
-      s.isHorizontal = Math.abs(dx) > Math.abs(dy);
-    }
-
-    if (s.isHorizontal) {
-      // free_budget/group: only left swipe; regular: both directions
-      const minOffset = -80;
-      const maxOffset = s.kind === 'regular' ? 80 : 0;
-      const offset = Math.min(maxOffset, Math.max(minOffset, dx));
-      s.element.style.transform = `translateX(${offset}px)`;
+  const handleFreeBudgetSwipeMove = (e: React.TouchEvent) => {
+    const s = freeBudgetSwipeRef.current;
+    if (!s || s.actionTriggered) return;
+    const dx = e.touches[0].clientX - s.startX;
+    const dy = e.touches[0].clientY - s.startY;
+    if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) { s.decided = true; s.isHorizontal = Math.abs(dx) > Math.abs(dy); }
+    if (s.isHorizontal && s.element) {
+      s.element.style.transform = `translateX(${Math.max(-96, Math.min(0, dx))}px)`;
       s.element.style.transition = 'none';
-
-      const actionThreshold = getSwipeActionThreshold(s.element);
-
-      if (dx <= -actionThreshold) {
+      if (dx <= -getSwipeActionThreshold(s.element)) {
         s.actionTriggered = true;
         suppressClickUntilRef.current = Date.now() + 300;
         resetSwipeElement(s.element);
-        openTransferFromSwipe(s.sourceId, s.kind, s.category);
+        openFreeBudgetTransfer();
       }
     }
   };
 
-  const handleSwipeEnd = (e: React.TouchEvent) => {
-    const s = swipeRef.current;
-    swipeRef.current = null;
+  const handleFreeBudgetSwipeEnd = (e: React.TouchEvent) => {
+    const s = freeBudgetSwipeRef.current;
+    freeBudgetSwipeRef.current = null;
     if (!s) return;
-
     resetSwipeElement(s.element);
-
-    if (s.actionTriggered) {
-      return;
-    }
-
-    if (s.decided && s.isHorizontal) {
-      suppressClickUntilRef.current = Date.now() + 300;
-      const dx = e.changedTouches[0].clientX - s.startX;
-      if (dx < -50) {
-        openTransferFromSwipe(s.sourceId, s.kind, s.category);
-      } else if (dx > 50 && s.kind === 'regular' && s.category) {
-        // Right swipe → expense
-        setExpenseCategory(s.category);
-        hapticRigid();
-      }
-    }
+    if (s.actionTriggered || !s.decided || !s.isHorizontal) return;
+    const dx = e.changedTouches[0].clientX - s.startX;
+    if (dx < -50) { suppressClickUntilRef.current = Date.now() + 300; openFreeBudgetTransfer(); }
   };
 
   /* ── data loading ───────────────────────────────── */
@@ -472,7 +403,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     setTransferInitialSourceId(null);
     setSelectedCategory(null);
     setCreateDialogKind(null);
-    setExpenseCategory(null);
     await loadOverview();
   };
 
@@ -804,9 +734,9 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           }}
           onDragLeave={() => { if (dropTargetCategoryId === freeBudgetTarget.category_id) setDropTargetCategoryId(null); }}
           onDrop={(event) => { event.preventDefault(); handleDropOnCategory(freeBudgetTarget); }}
-          onTouchStart={(e) => handleSwipeStart(personalFreeBudgetSource.category_id, 'free_budget', null, e)}
-          onTouchMove={handleSwipeMove}
-          onTouchEnd={handleSwipeEnd}
+          onTouchStart={handleFreeBudgetSwipeStart}
+          onTouchMove={handleFreeBudgetSwipeMove}
+          onTouchEnd={handleFreeBudgetSwipeEnd}
           onClick={() => {
             if (Date.now() < suppressClickUntilRef.current) return;
             if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
@@ -914,9 +844,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     tabIndex={0}
                     onDragStart={(e) => handleDragStart({ ...category, owner_type: category.owner_type }, e)}
                     onDragEnd={handleDragEnd}
-                    onTouchStart={(e) => handleSwipeStart(category.category_id, 'regular', category, e)}
-                    onTouchMove={handleSwipeMove}
-                    onTouchEnd={handleSwipeEnd}
                     onClick={() => {
                       if (Date.now() < suppressClickUntilRef.current) return;
                       if (activeSourceId !== null && activeSourceId !== category.category_id) {
@@ -1049,9 +976,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     role="button"
                     tabIndex={0}
                     onDragEnd={handleDragEnd}
-                    onTouchStart={(e) => handleSwipeStart(category.category_id, 'group', category, e)}
-                    onTouchMove={handleSwipeMove}
-                    onTouchEnd={handleSwipeEnd}
                     onClick={() => {
                       if (activeSourceId !== null && activeSourceId !== category.category_id) {
                         openTransferDialog({
@@ -1173,19 +1097,19 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       )}
 
       {selectedCategory && (
-        <CategoryDialog
+        <CategoryActionSheet
           category={selectedCategory}
-          onClose={() => setSelectedCategory(null)}
-          onSuccess={() => void handleDialogSuccess()}
-        />
-      )}
-
-      {expenseCategory && (
-        <ExpenseDialog
-          category={expenseCategory}
           user={user}
+          transferSources={getSourcesFor({
+            category_id: selectedCategory.category_id,
+            name: selectedCategory.name,
+            kind: selectedCategory.kind,
+            currency_code: selectedCategory.currency_code,
+            owner_type: selectedCategory.owner_type,
+          })}
+          baseCurrencyCode={overview.base_currency_code}
           familyBankAccountId={overview.family_bank_account_id}
-          onClose={() => setExpenseCategory(null)}
+          onClose={() => setSelectedCategory(null)}
           onSuccess={() => void handleDialogSuccess()}
         />
       )}

@@ -1,45 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
-import { ChevronDown, Plus } from 'lucide-react';
-import type { Currency } from '../types';
-
-
-function CurrencyPicker({ currencies, value, onChange }: { currencies: Currency[]; value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
-      <button type="button" className="amt__cur-btn" onClick={() => setOpen((v) => !v)}>
-        {value}
-        <ChevronDown size={12} strokeWidth={2.5} />
-      </button>
-      {open && (
-        <div className="cur-drop">
-          {currencies.map((c) => (
-            <button
-              key={c.code}
-              type="button"
-              className={`cur-drop__item${c.code === value ? ' cur-drop__item--on' : ''}`}
-              onClick={() => { onChange(c.code); setOpen(false); }}
-            >
-              {c.code}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+import CurrencyPicker from './CurrencyPicker';
+import { Plus } from 'lucide-react';
 
 import {
   createIncomeSource,
@@ -55,6 +17,7 @@ import {
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
   BankAccount,
+  Currency,
   IncomePattern,
   IncomeSource,
   RecordIncomeRequest,
@@ -481,12 +444,15 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                     </div>
                   </div>
                 ) : (
-                  <>
+                  <button
+                    type="button"
+                    className="src-dist__tap"
+                    onClick={openPatternEditor}
+                    disabled={patternLoading}
+                  >
                     {displayLines.map((line, i) => (
                       <div key={i} className="src-dist__row">
-                        <span className="src-dist__label">
-                          {line.label}
-                        </span>
+                        <span className="src-dist__label">{line.label}</span>
                         <span className="src-dist__pct">{Math.round(line.share * 100)}%</span>
                         {totalAmount > 0 && (
                           <span className="src-dist__amt">
@@ -495,17 +461,13 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                         )}
                       </div>
                     ))}
-                    <div className="src-dist__row" style={{ justifyContent: 'flex-end', borderTop: 'none' }}>
-                      <button
-                        type="button"
-                        className="dlg-tag-btn"
-                        onClick={openPatternEditor}
-                        disabled={patternLoading}
-                      >
-                        Изменить
-                      </button>
+                    <div className="src-dist__row src-dist__edit-hint">
+                      <span className="src-dist__hint-label">Изменить распределение</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
                     </div>
-                  </>
+                  </button>
                 )}
               </div>
             )}
