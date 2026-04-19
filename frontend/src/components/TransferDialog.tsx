@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import BottomSheet from './BottomSheet';
 
 import { useModalOpen } from '../hooks/useModalOpen';
 
@@ -128,18 +129,15 @@ export default function TransferDialog({
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="section__header">
-            <div>
-              <div className="section__eyebrow">Перевод бюджета</div>
-              <h2 className="section__title">Перенос между категориями</h2>
-            </div>
-          </div>
+    <BottomSheet open tag="Бюджет" title="Перенос между категориями" onClose={() => !submitting && onClose()}
+      actions={
+        <div className="action-pill" style={{ width: '100%' }}>
+          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+          <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>{submitting ? '...' : 'Перевести'}</button>
         </div>
-
-        <div className="modal-body">
+      }
+    >
+      <div>
           <div className="operations-note">
             Выбери источник и сумму для перевода.
           </div>
@@ -227,18 +225,6 @@ export default function TransferDialog({
             </p>
           )}
         </div>
-
-        <div className="modal-actions">
-          <div className="action-pill">
-            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
-              Отмена
-            </button>
-            <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>
-              {submitting ? '...' : 'Перевести'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

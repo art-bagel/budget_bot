@@ -1,5 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
+import { ChevronDown, Plus } from 'lucide-react';
+import type { Currency } from '../types';
+
+
+function CurrencyPicker({ currencies, value, onChange }: { currencies: Currency[]; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button type="button" className="amt__cur-btn" onClick={() => setOpen((v) => !v)}>
+        {value}
+        <ChevronDown size={12} strokeWidth={2.5} />
+      </button>
+      {open && (
+        <div className="cur-drop">
+          {currencies.map((c) => (
+            <button
+              key={c.code}
+              type="button"
+              className={`cur-drop__item${c.code === value ? ' cur-drop__item--on' : ''}`}
+              onClick={() => { onChange(c.code); setOpen(false); }}
+            >
+              {c.code}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 import {
   createIncomeSource,
@@ -15,7 +55,6 @@ import {
 import { useModalOpen } from '../hooks/useModalOpen';
 import type {
   BankAccount,
-  Currency,
   IncomePattern,
   IncomeSource,
   RecordIncomeRequest,
@@ -56,6 +95,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [incomeAmount, setIncomeAmount] = useState('');
   const [incomeCurrencyCode, setIncomeCurrencyCode] = useState(user.base_currency_code);
   const [incomeSourceId, setIncomeSourceId] = useState('');
+  const [showAddSource, setShowAddSource] = useState(false);
   const [newIncomeSourceName, setNewIncomeSourceName] = useState('');
   const [incomeBudgetAmountInBase, setIncomeBudgetAmountInBase] = useState('');
   const [incomeTaxPercent, setIncomeTaxPercent] = useState('');
@@ -74,6 +114,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [deletingPattern, setDeletingPattern] = useState(false);
   const [patternError, setPatternError] = useState<string | null>(null);
 
+  const addSourceInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     Promise.all([fetchCurrencies(), fetchIncomeSources(), fetchBankAccounts()])
       .then(([loadedCurrencies, loadedSources, loadedAccounts]) => {
@@ -88,7 +130,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Load pattern when source changes
   useEffect(() => {
     if (!incomeSourceId) {
       setPattern(null);
@@ -102,6 +143,12 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       .catch(() => setPattern(null))
       .finally(() => setPatternLoading(false));
   }, [incomeSourceId]);
+
+  useEffect(() => {
+    if (showAddSource) {
+      requestAnimationFrame(() => addSourceInputRef.current?.focus());
+    }
+  }, [showAddSource]);
 
   const isNonBase = incomeCurrencyCode !== user.base_currency_code;
   const selectedSource = incomeSources.find((s) => String(s.id) === incomeSourceId);
@@ -127,21 +174,15 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const handleCreateSource = async () => {
     const name = newIncomeSourceName.trim();
     if (!name) return;
-
     setCreatingSource(true);
     setError(null);
-
     try {
       const result = await createIncomeSource(name);
-      const created: IncomeSource = {
-        id: result.id,
-        name,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
+      const created: IncomeSource = { id: result.id, name, is_active: true, created_at: new Date().toISOString() };
       setIncomeSources((prev) => [...prev, created]);
       setIncomeSourceId(String(created.id));
       setNewIncomeSourceName('');
+      setShowAddSource(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -151,13 +192,10 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
 
   const handleSubmit = async () => {
     if (!canSubmit || !selectedSource) return;
-
     setSubmitting(true);
     setError(null);
-
     try {
       const operatedAt = incomeDate || undefined;
-
       if (hasPattern) {
         await recordIncomeSplit({
           income_source_id: selectedSource.id,
@@ -180,7 +218,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
           tax_percent: hasTax ? taxPercent : undefined,
         } as RecordIncomeRequest);
       }
-
       onSuccess();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -199,12 +236,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
         })),
       );
     } else {
-      // Default: 100% to personal account
-      setPatternLines([{
-        key: 'line-0',
-        bank_account_id: String(user.bank_account_id),
-        percent: '100',
-      }]);
+      setPatternLines([{ key: 'line-0', bank_account_id: String(user.bank_account_id), percent: '100' }]);
     }
     setPatternError(null);
     setShowPatternEditor(true);
@@ -214,15 +246,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
 
   const handleSavePattern = async () => {
     const validLines = patternLines.filter((l) => l.bank_account_id && parseFloat(l.percent) > 0);
-    if (validLines.length === 0) {
-      setPatternError('Добавьте хотя бы одну строку.');
-      return;
-    }
-    if (Math.abs(totalPercent - 100) > 0.1) {
-      setPatternError(`Сумма должна быть 100%, сейчас ${totalPercent.toFixed(2)}%.`);
-      return;
-    }
-
+    if (validLines.length === 0) { setPatternError('Добавьте хотя бы одну строку.'); return; }
+    if (Math.abs(totalPercent - 100) > 0.1) { setPatternError(`Сумма должна быть 100%, сейчас ${totalPercent.toFixed(2)}%.`); return; }
     setSavingPattern(true);
     setPatternError(null);
     try {
@@ -232,7 +257,6 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       }));
       const totalShare = lines.reduce((s, l) => s + l.share, 0);
       lines[lines.length - 1].share = Math.round((lines[lines.length - 1].share + (1 - totalShare)) * 100000) / 100000;
-
       await upsertIncomeSourcePattern(Number(incomeSourceId), lines);
       const updated = await fetchIncomeSourcePattern(Number(incomeSourceId));
       setPattern(updated);
@@ -257,326 +281,326 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
     }
   };
 
-  // Lines to display in the summary (real pattern or default personal 100%)
   const displayLines = hasPattern
     ? pattern!.lines.map((l) => ({
         label: `${formatOwnerLabel(l.bank_account_owner_type)} · ${l.bank_account_name}`,
         share: l.share,
       }))
-    : [{
-        label: `Личный · ${personalAccount?.name ?? 'счёт'}`,
-        share: 1,
-      }];
+    : [{ label: `Личный · ${personalAccount?.name ?? 'счёт'}`, share: 1 }];
 
   return (
-    <BottomSheet open tag="Банк" title="Записать доход" onClose={() => !submitting && onClose()}
+    <BottomSheet
+      open
+      tag="Приход"
+      title="Пополнить счёт"
+      icon={<Plus size={22} strokeWidth={2} />}
+      iconColor="g"
+      onClose={() => !submitting && onClose()}
       actions={
-        <div className="action-pill" style={{ width: '100%' }}>
-          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-          <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>{submitting ? '...' : 'Записать'}</button>
-        </div>
+        <>
+          <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            Отмена
+          </button>
+          <button className="sh-btn sh-btn--primary" type="button" disabled={!canSubmit} onClick={handleSubmit}>
+            {submitting ? '...' : 'Добавить доход'}
+          </button>
+        </>
       }
     >
-      <div>
-          {loading ? (
-            <p className="list-row__sub">Загрузка...</p>
-          ) : (
-            <>
-              {/* New income source creation */}
-              <div className="form-row">
+      {loading ? (
+        <p className="dlg-hint">Загрузка...</p>
+      ) : (
+        <>
+          {/* ── Источник дохода ── */}
+          <div className="field">
+            <span className="fl">Источник дохода</span>
+
+            <div className="seg-src">
+              {incomeSources.map((source) => (
+                <button
+                  key={source.id}
+                  type="button"
+                  className={`seg-src__o${incomeSourceId === String(source.id) ? ' seg-src__o--on' : ''}`}
+                  onClick={() => { setIncomeSourceId(String(source.id)); setShowAddSource(false); }}
+                  disabled={submitting}
+                >
+                  {source.name}
+                </button>
+              ))}
+              {incomeSources.length === 0 && (
+                <span style={{ padding: '8px 10px', fontSize: 13, color: 'var(--text-3)' }}>
+                  Добавьте первый источник →
+                </span>
+              )}
+              {!showAddSource && (
+                <button
+                  type="button"
+                  className="seg-src__add"
+                  onClick={() => setShowAddSource(true)}
+                  disabled={submitting}
+                >
+                  <Plus size={13} strokeWidth={2.5} />
+                  Новый
+                </button>
+              )}
+            </div>
+
+            {/* Inline add-source form */}
+            {showAddSource && (
+              <div className="src-add-row">
                 <input
-                  className="input"
+                  ref={addSourceInputRef}
+                  className="src-add-row__inp"
                   type="text"
-                  placeholder="Новый источник дохода"
+                  placeholder="Название источника"
                   value={newIncomeSourceName}
                   onChange={(e) => setNewIncomeSourceName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateSource()}
-                  style={{ flex: 1 }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateSource();
+                    if (e.key === 'Escape') { setShowAddSource(false); setNewIncomeSourceName(''); }
+                  }}
+                  disabled={creatingSource}
                 />
                 <button
-                  className="btn"
+                  className="dlg-add-btn"
                   type="button"
-                  disabled={creatingSource || newIncomeSourceName.trim().length === 0}
+                  disabled={creatingSource || !newIncomeSourceName.trim()}
                   onClick={handleCreateSource}
                 >
                   {creatingSource ? '...' : 'Добавить'}
                 </button>
-              </div>
-
-              {/* Income source selector + pattern summary */}
-              <div style={{
-                background: 'var(--bg-inset)',
-                borderRadius: 18,
-                overflow: 'hidden',
-                marginBottom: 4,
-              }}>
-                <select
-                  className="input"
-                  value={incomeSourceId}
-                  onChange={(e) => setIncomeSourceId(e.target.value)}
-                  disabled={incomeSources.length === 0}
-                  style={{
-                    width: '100%',
-                    marginBottom: 0,
-                    borderLeft: 'none',
-                    borderRight: 'none',
-                    borderTop: 'none',
-                    background: 'var(--bg-inset)',
-                  }}
+                <button
+                  type="button"
+                  style={{ color: 'var(--text-3)', fontSize: 18, lineHeight: 1 }}
+                  onClick={() => { setShowAddSource(false); setNewIncomeSourceName(''); }}
                 >
-                  {incomeSources.length === 0 ? (
-                    <option value="">Сначала создайте источник</option>
-                  ) : (
-                    incomeSources.map((source) => (
-                      <option key={source.id} value={source.id}>
-                        {source.name}
-                      </option>
-                    ))
-                  )}
-                </select>
+                  ×
+                </button>
+              </div>
+            )}
 
-                {incomeSourceId && (
-                  patternLoading ? (
-                    <div style={{ padding: '8px 12px' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>...</span>
-                    </div>
-                  ) : showPatternEditor ? (
-                    <div style={{ padding: '8px 12px' }}>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: 6, color: 'var(--text-secondary)' }}>
-                        Распределение по счетам
-                      </div>
+            {/* Distribution area */}
+            {incomeSourceId && (
+              <div className="src-dist">
+                {patternLoading ? (
+                  <div className="src-dist__row">
+                    <span className="src-dist__label" style={{ color: 'var(--text-3)' }}>...</span>
+                  </div>
+                ) : showPatternEditor ? (
+                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <span className="fl">Распределение по счетам</span>
 
-                      {patternLines.map((line) => (
-                        <div key={line.key} className="form-row form-row--group-editor" style={{ padding: '2px 0' }}>
-                          <select
+                    {patternLines.map((line) => (
+                      <div key={line.key} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <select
+                          className="input"
+                          value={line.bank_account_id}
+                          onChange={(e) => setPatternLines((prev) =>
+                            prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
+                          )}
+                          disabled={savingPattern}
+                          style={{ flex: 1, fontSize: '0.82rem' }}
+                        >
+                          <option value="">Выбери счёт</option>
+                          {bankAccounts.map((ba) => (
+                            <option key={ba.id} value={ba.id}>
+                              {formatOwnerLabel(ba.owner_type)} · {ba.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{ position: 'relative', width: 68, flexShrink: 0 }}>
+                          <input
                             className="input"
-                            value={line.bank_account_id}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={line.percent}
                             onChange={(e) => setPatternLines((prev) =>
-                              prev.map((l) => l.key === line.key ? { ...l, bank_account_id: e.target.value } : l)
+                              prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
                             )}
                             disabled={savingPattern}
-                            style={{ fontSize: '0.78rem', padding: '5px 28px 5px 10px' }}
-                          >
-                            <option value="">Выбери счёт</option>
-                            {bankAccounts.map((ba) => (
-                              <option key={ba.id} value={ba.id}>
-                                {formatOwnerLabel(ba.owner_type)} · {ba.name}
-                              </option>
-                            ))}
-                          </select>
-
-                          <div style={{ position: 'relative', width: 54, flexShrink: 0 }}>
-                            <input
-                              className="input"
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="0"
-                              value={line.percent}
-                              onChange={(e) => setPatternLines((prev) =>
-                                prev.map((l) => l.key === line.key ? { ...l, percent: sanitizeDecimalInput(e.target.value) } : l)
-                              )}
-                              disabled={savingPattern}
-                              style={{ width: '100%', fontSize: '0.78rem', padding: '5px 18px 5px 8px', textAlign: 'right' }}
-                            />
-                            <span style={{
-                              position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
-                              fontSize: '0.72rem', color: 'var(--text-secondary)', pointerEvents: 'none',
-                            }}>%</span>
-                          </div>
-
-                          <button
-                            className="btn"
-                            type="button"
-                            onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
-                            disabled={savingPattern || patternLines.length === 1}
-                            style={{ fontSize: '0.78rem', padding: '5px 10px' }}
-                          >
-                            Убрать
-                          </button>
+                            style={{ width: '100%', fontSize: '0.82rem', paddingRight: 22, textAlign: 'right' }}
+                          />
+                          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)', pointerEvents: 'none' }}>%</span>
                         </div>
-                      ))}
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 8 }}>
                         <button
-                          className="btn"
                           type="button"
-                          onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
-                          disabled={savingPattern}
+                          style={{ color: 'var(--text-3)', fontSize: 18 }}
+                          onClick={() => setPatternLines((prev) => prev.filter((l) => l.key !== line.key))}
+                          disabled={savingPattern || patternLines.length === 1}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        className="dlg-tag-btn"
+                        type="button"
+                        onClick={() => setPatternLines((prev) => [...prev, createPatternLine(prev.length + 1)])}
+                        disabled={savingPattern}
+                      >
+                        + Счёт
+                      </button>
+                      <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 'auto', color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--pos)' : 'var(--text-3)' }}>
+                        {totalPercent.toFixed(0)} / 100%
+                      </span>
+                    </div>
+
+                    {patternError && <p className="dlg-error">{patternError}</p>}
+
+                    <div style={{ display: 'flex', gap: 8, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+                      {hasPattern && (
+                        <button
+                          className="btn btn--danger"
+                          type="button"
+                          onClick={handleDeletePattern}
+                          disabled={savingPattern || deletingPattern}
                           style={{ fontSize: '0.78rem', padding: '5px 10px' }}
                         >
-                          + Добавить счёт
+                          {deletingPattern ? '...' : 'Удалить'}
                         </button>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, marginLeft: 'auto',
-                          color: Math.abs(totalPercent - 100) < 0.1 ? 'var(--tag-in-fg)' : 'var(--text-secondary)' }}>
-                          Итого: {totalPercent.toFixed(0)} / 100%
-                        </span>
-                      </div>
-
-                      {patternError && (
-                        <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.75rem', marginBottom: 6 }}>
-                          {patternError}
-                        </p>
                       )}
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {hasPattern && (
-                          <button
-                            className="btn btn--danger"
-                            type="button"
-                            onClick={handleDeletePattern}
-                            disabled={savingPattern || deletingPattern}
-                            style={{ fontSize: '0.78rem', padding: '5px 10px', marginRight: 'auto' }}
-                          >
-                            {deletingPattern ? '...' : 'Удалить'}
-                          </button>
-                        )}
-                        <div className="action-pill" style={{ marginLeft: hasPattern ? 0 : 'auto' }}>
-                          <button
-                            className="action-pill__cancel"
-                            type="button"
-                            onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
-                            disabled={savingPattern}
-                            style={{ fontSize: '0.78rem', padding: '5px 12px' }}
-                          >
-                            Отмена
-                          </button>
-                          <button
-                            className="action-pill__confirm"
-                            type="button"
-                            onClick={handleSavePattern}
-                            style={{ fontSize: '0.78rem', padding: '5px 12px' }}
-                            disabled={savingPattern}
-                          >
-                            {savingPattern ? '...' : 'Сохранить'}
-                          </button>
-                        </div>
+                      <div className="action-pill" style={{ marginLeft: 'auto' }}>
+                        <button
+                          className="action-pill__cancel"
+                          type="button"
+                          onClick={() => { setShowPatternEditor(false); setPatternError(null); }}
+                          disabled={savingPattern}
+                          style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          className="action-pill__confirm"
+                          type="button"
+                          onClick={handleSavePattern}
+                          disabled={savingPattern}
+                          style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                        >
+                          {savingPattern ? '...' : 'Сохранить'}
+                        </button>
                       </div>
                     </div>
-                  ) : (
-                    <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
-                        {displayLines.map((line, i) => (
-                          <span key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            {line.label}
-                            <span style={{ marginLeft: 4, fontWeight: 600 }}>
-                              {Math.round(line.share * 100)}%
-                            </span>
-                            {totalAmount > 0 && (
-                              <span style={{ marginLeft: 4, color: 'var(--text-secondary)' }}>
-                                ({(distributionAmount * line.share).toFixed(2)} {incomeCurrencyCode})
-                              </span>
-                            )}
+                  </div>
+                ) : (
+                  <>
+                    {displayLines.map((line, i) => (
+                      <div key={i} className="src-dist__row">
+                        <span className="src-dist__label">
+                          {line.label}
+                        </span>
+                        <span className="src-dist__pct">{Math.round(line.share * 100)}%</span>
+                        {totalAmount > 0 && (
+                          <span className="src-dist__amt">
+                            {(distributionAmount * line.share).toFixed(2)} {incomeCurrencyCode}
                           </span>
-                        ))}
+                        )}
                       </div>
-                      <button type="button" className="btn" onClick={openPatternEditor} disabled={patternLoading}>
+                    ))}
+                    <div className="src-dist__row" style={{ justifyContent: 'flex-end', borderTop: 'none' }}>
+                      <button
+                        type="button"
+                        className="dlg-tag-btn"
+                        onClick={openPatternEditor}
+                        disabled={patternLoading}
+                      >
                         Изменить
                       </button>
                     </div>
-                  )
+                  </>
                 )}
               </div>
+            )}
+          </div>
 
-              {/* Amount + currency */}
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Сумма"
-                  value={incomeAmount}
-                  onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <select
-                  className="input"
-                  value={incomeCurrencyCode}
-                  onChange={(e) => setIncomeCurrencyCode(e.target.value)}
-                >
-                  {currencies.map((currency) => (
-                    <option key={currency.code} value={currency.code}>
-                      {currency.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {/* ── Сумма ── */}
+          <div className="field">
+            <span className="fl">Сумма</span>
+            <div className="amt">
+              <input
+                className="amt__inp"
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                value={incomeAmount}
+                onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value))}
+                autoFocus
+              />
+              <CurrencyPicker
+                currencies={currencies}
+                value={incomeCurrencyCode}
+                onChange={setIncomeCurrencyCode}
+              />
+            </div>
+            {isNonBase && (
+              <input
+                className="inp-v2"
+                type="text"
+                inputMode="decimal"
+                placeholder={`Сумма в ${user.base_currency_code}`}
+                value={incomeBudgetAmountInBase}
+                onChange={(e) => setIncomeBudgetAmountInBase(sanitizeDecimalInput(e.target.value))}
+              />
+            )}
+          </div>
 
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Налог, %"
-                  value={incomeTaxPercent}
-                  onChange={(e) => setIncomeTaxPercent(sanitizeDecimalInput(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                {hasTax && isTaxValid && totalAmount > 0 && (
-                  <div style={{
-                    flex: 1,
-                    fontSize: '0.78rem',
-                    color: 'var(--text-secondary)',
-                    lineHeight: 1.35,
-                  }}>
-                    Налог {taxAmount.toFixed(2)} {incomeCurrencyCode}
-                    <br />
-                    К распределению {distributionAmount.toFixed(2)} {incomeCurrencyCode}
-                    {isNonBase && taxAmountInBase > 0 && (
-                      <>
-                        <br />
-                        {taxAmountInBase.toFixed(2)} {user.base_currency_code}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+          {/* ── Дата + Налог ── */}
+          <div className="field field--row">
+            <div className="field field--col">
+              <span className="fl">Дата</span>
+              <input
+                className="picker-v2"
+                type="date"
+                value={incomeDate}
+                onChange={(e) => setIncomeDate(e.target.value)}
+                style={{ cursor: 'pointer' }}
+              />
+            </div>
+            <div className="field field--col">
+              <span className="fl">Налог</span>
+              <input
+                className="picker-v2"
+                type="text"
+                inputMode="decimal"
+                placeholder="–"
+                value={incomeTaxPercent}
+                onChange={(e) => setIncomeTaxPercent(sanitizeDecimalInput(e.target.value))}
+                style={{ paddingRight: 28 }}
+              />
+            </div>
+          </div>
 
-              {!isTaxValid && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-                  Налог должен быть больше 0 и меньше 100%.
-                </p>
-              )}
-
-              {isNonBase && (
-                <div className="form-row">
-                  <input
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder={`Стоимость в ${user.base_currency_code}`}
-                    value={incomeBudgetAmountInBase}
-                    onChange={(e) => setIncomeBudgetAmountInBase(sanitizeDecimalInput(e.target.value))}
-                    style={{ flex: 1 }}
-                  />
-                </div>
-              )}
-
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Комментарий (необязательно)"
-                  value={incomeComment}
-                  onChange={(e) => setIncomeComment(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  className="input"
-                  type="date"
-                  value={incomeDate}
-                  onChange={(e) => setIncomeDate(e.target.value)}
-                />
-              </div>
-
-              {error && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-                  {error}
-                </p>
-              )}
-            </>
+          {hasTax && isTaxValid && totalAmount > 0 && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', padding: '0 2px', lineHeight: 1.5 }}>
+              Налог {taxAmount.toFixed(2)} {incomeCurrencyCode}
+              {' · '}
+              К распределению <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>{distributionAmount.toFixed(2)} {incomeCurrencyCode}</span>
+              {isNonBase && taxAmountInBase > 0 && ` · ${taxAmountInBase.toFixed(2)} ${user.base_currency_code}`}
+            </div>
           )}
-        </div>
+
+          {!isTaxValid && (
+            <p className="dlg-error">Налог должен быть больше 0 и меньше 100%.</p>
+          )}
+
+          {/* ── Комментарий ── */}
+          <div className="field">
+            <span className="fl">Комментарий</span>
+            <input
+              className="inp-v2"
+              type="text"
+              placeholder="Необязательно"
+              value={incomeComment}
+              onChange={(e) => setIncomeComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canSubmit && handleSubmit()}
+            />
+          </div>
+
+          {error && <p className="dlg-error">{error}</p>}
+        </>
+      )}
     </BottomSheet>
   );
 }

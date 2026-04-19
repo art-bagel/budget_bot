@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import BottomSheet from './BottomSheet';
 import EmojiPicker from './EmojiPicker';
 import { parseCategoryIcon, buildCategoryName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
@@ -379,19 +380,20 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
   const isBusy = saving || archiving;
 
   return (
-    <div className="modal-backdrop" onClick={() => !isBusy && onClose()}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="section__header">
-            <div>
-              <div className="section__eyebrow">Категория</div>
-              <h2 className="section__title">Редактирование категории</h2>
-            </div>
-            <span className="pill">{category.kind}</span>
+    <BottomSheet open tag="Категория" title="Редактирование" onClose={() => !isBusy && onClose()}
+      actions={
+        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+          <button className="btn btn--danger" type="button" onClick={handleArchive} disabled={isBusy} style={{ flexShrink: 0 }}>
+            {archiving ? '...' : confirmArchive ? 'Точно?' : 'В архив'}
+          </button>
+          <div className="action-pill" style={{ flex: 1 }}>
+            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={isBusy}>Отмена</button>
+            <button className="action-pill__confirm" type="button" onClick={handleSubmit} disabled={!canSubmit}>{saving ? '...' : 'Сохранить'}</button>
           </div>
         </div>
-
-        <div className="modal-body">
+      }
+    >
+      <div>
           <div className="operations-note">
             Тут можно переименовать категорию или убрать её в архив.
           </div>
@@ -686,28 +688,6 @@ export default function CategoryDialog({ category, onClose, onSuccess }: Props) 
             </p>
           )}
         </div>
-
-        <div className="modal-actions modal-actions--split">
-          <button
-            className="btn btn--danger"
-            type="button"
-            onClick={handleArchive}
-            disabled={isBusy}
-          >
-            {archiving ? '...' : confirmArchive ? 'Точно в архив?' : 'В архив'}
-          </button>
-          <div className="modal-actions-group">
-            <div className="action-pill">
-              <button className="action-pill__cancel" type="button" onClick={onClose} disabled={isBusy}>
-                Отмена
-              </button>
-              <button className="action-pill__confirm" type="button" onClick={handleSubmit} disabled={!canSubmit}>
-                {saving ? '...' : 'Сохранить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

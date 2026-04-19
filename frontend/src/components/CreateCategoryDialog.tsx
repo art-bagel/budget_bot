@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BottomSheet from './BottomSheet';
 
 import { archiveCategory, createCategory, fetchCategories, fetchMyFamily, replaceGroupMembers } from '../api';
 import EmojiPicker from './EmojiPicker';
@@ -164,20 +165,15 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => !creating && onClose()}>
-      <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="section__header">
-            <div>
-              <div className="section__eyebrow">Создание</div>
-              <h2 className="section__title">
-                {kind === 'group' ? 'Новая группа' : 'Новая категория'}
-              </h2>
-            </div>
-          </div>
+    <BottomSheet open tag="Создание" title={kind === 'group' ? 'Новая группа' : 'Новая категория'} onClose={() => !creating && onClose()}
+      actions={
+        <div className="action-pill" style={{ width: '100%' }}>
+          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={creating}>Отмена</button>
+          <button className="action-pill__confirm" type="button" onClick={handleCreate} disabled={creating || !name.trim()}>{creating ? '...' : 'Создать'}</button>
         </div>
-
-        <div className="modal-body">
+      }
+    >
+      <div>
           <div className="operations-note">
             {kind === 'group'
               ? 'Можно сразу задать состав группы и доли распределения. Если оставить поля пустыми, группа создастся без состава.'
@@ -310,18 +306,6 @@ export default function CreateCategoryDialog({ kind, onClose, onSuccess }: Props
             </p>
           )}
         </div>
-
-        <div className="modal-actions">
-          <div className="action-pill">
-            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={creating}>
-              Отмена
-            </button>
-            <button className="action-pill__confirm" type="button" onClick={handleCreate} disabled={creating || !name.trim()}>
-              {creating ? '...' : 'Создать'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }

@@ -4,9 +4,6 @@ export function IconDashboard() {
   return <svg viewBox="0 0 24 24" {...s}><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>;
 }
 
-export function IconOperations() {
-  return <svg viewBox="0 0 24 24" {...s}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg>;
-}
 
 export function IconClock() {
   return (
@@ -17,15 +14,6 @@ export function IconClock() {
   );
 }
 
-export function IconPlusCircle() {
-  return (
-    <svg viewBox="0 0 24 24" {...s}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8v8" />
-      <path d="M8 12h8" />
-    </svg>
-  );
-}
 
 export function IconAnalyticsDonut() {
   // Donut ring at r=6.5, circumference ≈ 40.8
@@ -44,9 +32,6 @@ export function IconAnalyticsDonut() {
   );
 }
 
-export function IconExchange() {
-  return <svg viewBox="0 0 24 24" {...s}><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>;
-}
 
 export function IconPortfolio() {
   return <svg viewBox="0 0 24 24" {...s}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>;
@@ -72,17 +57,11 @@ export function IconCredit() {
   return <svg viewBox="0 0 24 24" {...s}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/><circle cx="17" cy="15" r="1" fill="currentColor" stroke="none"/></svg>;
 }
 
-export function IconFamily() {
-  return <svg viewBox="0 0 24 24" {...s}><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a5 5 0 015-5h2"/><circle cx="17" cy="10" r="2.5"/><path d="M13 21v-1.5a3.5 3.5 0 017 0V21"/></svg>;
-}
 
 export function IconChevronRight() {
   return <svg viewBox="0 0 24 24" {...s}><path d="m9 18 6-6-6-6"/></svg>;
 }
 
-export function IconArrowDownRight() {
-  return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m4 4 8 8M5 12h7V5"/></svg>;
-}
 
 export function IconPlus() {
   return <svg viewBox="0 0 24 24" {...s}><path d="M12 5v14M5 12h14"/></svg>;
@@ -92,9 +71,6 @@ export function IconArrowRightLeft() {
   return <svg viewBox="0 0 24 24" {...s}><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>;
 }
 
-export function IconCirclePlus() {
-  return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
-}
 
 export function IconChartPie() {
   return (

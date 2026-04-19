@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BottomSheet from './BottomSheet';
 
 import { fetchBankAccounts, fetchCurrencies, recordExpense } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -80,18 +81,15 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="section__header">
-            <div>
-              <div className="section__eyebrow">Расход</div>
-              <h2 className="section__title">Записать расход</h2>
-            </div>
-          </div>
+    <BottomSheet open tag="Расход" title="Записать расход" onClose={() => !submitting && onClose()}
+      actions={
+        <div className="action-pill" style={{ width: '100%' }}>
+          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+          <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>{submitting ? '...' : 'Списать'}</button>
         </div>
-
-        <div className="modal-body">
+      }
+    >
+      <div>
           <div className="operations-note">
             Списать из <strong>{categoryDisplayName(category.name)}</strong> ({formatAmount(category.balance, category.currency_code)}).
           </div>
@@ -173,18 +171,6 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
             </p>
           )}
         </div>
-
-        <div className="modal-actions">
-          <div className="action-pill">
-            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
-              Отмена
-            </button>
-            <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>
-              {submitting ? '...' : 'Списать'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 }
