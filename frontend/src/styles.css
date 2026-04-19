@@ -5362,6 +5362,40 @@ select.dlg-row__ghost option {
   color: var(--text-2);
 }
 
+.ana-scope-sub {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.ana-scope-sub__chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--surface-inset);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .ana-scope-sub__chip { background: var(--surface-2); }
+
+.ana-scope-sub__chip--active {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+[data-theme="dark"] .ana-scope-sub__chip--active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+
 .delta {
   display: inline-flex;
   align-items: center;
@@ -5496,23 +5530,23 @@ select.dlg-row__ghost option {
 .ana-cat__ico {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 0.75rem;
-  font-weight: 800;
-  color: #fff;
 }
 
-.ana-cat__ico--g  { background: var(--t-g-f); }
-.ana-cat__ico--o  { background: var(--t-o-f); }
-.ana-cat__ico--b  { background: var(--t-b-f); }
-.ana-cat__ico--p  { background: var(--t-p-f); }
-.ana-cat__ico--r  { background: var(--t-r-f); }
-.ana-cat__ico--v  { background: var(--t-v-f); }
-.ana-cat__ico--ink { background: var(--ink); }
+.ana-cat__ico svg { width: 18px; height: 18px; }
+.ana-cat__emoji { font-size: 17px; line-height: 1; }
+
+.ana-cat__ico--g  { background: var(--t-g-b); color: var(--t-g-f); }
+.ana-cat__ico--o  { background: var(--t-o-b); color: var(--t-o-f); }
+.ana-cat__ico--b  { background: var(--t-b-b); color: var(--t-b-f); }
+.ana-cat__ico--p  { background: var(--t-p-b); color: var(--t-p-f); }
+.ana-cat__ico--r  { background: var(--t-r-b); color: var(--t-r-f); }
+.ana-cat__ico--v  { background: var(--t-v-b); color: var(--t-v-f); }
+.ana-cat__ico--ink { background: var(--surface-inset); color: var(--ink); }
 
 .ana-cat__body {
   min-width: 0;
@@ -5545,11 +5579,13 @@ select.dlg-row__ghost option {
 
 .ana-cat__bar-wrap {
   height: 4px;
-  background: var(--line-soft);
+  background: var(--surface-inset);
   border-radius: 999px;
   overflow: hidden;
   margin-bottom: 3px;
 }
+
+[data-theme="dark"] .ana-cat__bar-wrap { background: var(--surface-2); }
 
 .ana-cat__fill {
   height: 100%;

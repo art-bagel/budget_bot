@@ -7,7 +7,9 @@ import {
   reverseOperation,
 } from '../api';
 import { hapticLight } from '../telegram';
-import { categoryDisplayName } from '../utils/categoryIcon';
+import { IconTag } from '../components/Icons';
+import { CategorySvgIcon } from '../components/CategorySvgIcon';
+import { parseCategoryIcon } from '../utils/categoryIcon';
 import { useHints } from '../hooks/useHints';
 import type {
   OperationAnalyticsItem,
@@ -1020,16 +1022,6 @@ export default function Operations({
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
-                  <button
-                    key={option.value}
-                    className={['ana-scope__chip', analyticsOwnerScope === option.value ? 'ana-scope__chip--active' : ''].filter(Boolean).join(' ')}
-                    type="button"
-                    onClick={() => setAnalyticsOwnerScope(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
               </div>
 
               {analyticsError && (
@@ -1077,10 +1069,18 @@ export default function Operations({
                     </div>
                     <div className="ana-hero__meta">
                       <span>{analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}</span>
-                      <span>·</span>
-                      <span>
-                        {analyticsOwnerScope === 'family' ? 'Семейные' : analyticsOwnerScope === 'user' ? 'Личные' : 'Все счета'}
-                      </span>
+                    </div>
+                    <div className="ana-scope-sub">
+                      {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
+                        <button
+                          key={option.value}
+                          className={['ana-scope-sub__chip', analyticsOwnerScope === option.value ? 'ana-scope-sub__chip--active' : ''].filter(Boolean).join(' ')}
+                          type="button"
+                          onClick={() => setAnalyticsOwnerScope(option.value)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -1089,14 +1089,19 @@ export default function Operations({
                       {chartSegments.map((segment, index) => {
                         const colorKeys = ['g', 'o', 'b', 'p', 'r', 'v'];
                         const colorKey = colorKeys[index % colorKeys.length];
+                        const parsed = parseCategoryIcon(segment.label);
                         return (
                           <div className="ana-cat" key={segment.entryKey}>
                             <div className={`ana-cat__ico ana-cat__ico--${colorKey}`}>
-                              {segment.label.slice(0, 2).toUpperCase()}
+                              {parsed.kind === 'svg' && parsed.icon
+                                ? <CategorySvgIcon code={parsed.icon} />
+                                : parsed.kind === 'emoji' && parsed.icon
+                                  ? <span className="ana-cat__emoji">{parsed.icon}</span>
+                                  : <IconTag />}
                             </div>
                             <div className="ana-cat__body">
                               <div className="ana-cat__top">
-                                <span className="ana-cat__name">{segment.label}</span>
+                                <span className="ana-cat__name">{parsed.displayName}</span>
                                 <span className="ana-cat__amt">{formatAmount(segment.amount, analyticsData.base_currency_code)}</span>
                               </div>
                               <div className="ana-cat__bar-wrap">
