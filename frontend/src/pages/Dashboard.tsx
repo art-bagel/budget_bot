@@ -28,6 +28,7 @@ import type { TransferSource, TransferTarget } from '../components/TransferDialo
 import AccountTransferDialog from '../components/AccountTransferDialog';
 import BottomSheet from '../components/BottomSheet';
 import CategoryActionSheet from '../components/CategoryActionSheet';
+import FreeBudgetActionSheet from '../components/FreeBudgetActionSheet';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
@@ -177,59 +178,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     return Math.max(48, Math.min(80, width * 0.2));
   };
 
-  const freeBudgetSwipeRef = useRef<{
-    startX: number; startY: number; decided: boolean; isHorizontal: boolean; actionTriggered: boolean; element: HTMLElement | null;
-  } | null>(null);
-
-  const openFreeBudgetTransfer = () => {
-    if (!overview) return;
-    const target: TransferTarget = {
-      category_id: user.unallocated_category_id,
-      name: overview.has_family ? 'Свободный остаток (личный)' : 'Свободный остаток',
-      kind: 'free_budget',
-      owner_type: 'user',
-      currency_code: overview.base_currency_code,
-    };
-    setTransferTarget(target);
-    setTransferInitialSourceId(null);
-    hapticRigid();
-  };
-
-  const handleFreeBudgetSwipeStart = (e: React.TouchEvent) => {
-    freeBudgetSwipeRef.current = {
-      startX: e.touches[0].clientX, startY: e.touches[0].clientY,
-      decided: false, isHorizontal: false, actionTriggered: false,
-      element: e.currentTarget as HTMLElement,
-    };
-  };
-
-  const handleFreeBudgetSwipeMove = (e: React.TouchEvent) => {
-    const s = freeBudgetSwipeRef.current;
-    if (!s || s.actionTriggered) return;
-    const dx = e.touches[0].clientX - s.startX;
-    const dy = e.touches[0].clientY - s.startY;
-    if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) { s.decided = true; s.isHorizontal = Math.abs(dx) > Math.abs(dy); }
-    if (s.isHorizontal && s.element) {
-      s.element.style.transform = `translateX(${Math.max(-96, Math.min(0, dx))}px)`;
-      s.element.style.transition = 'none';
-      if (dx <= -getSwipeActionThreshold(s.element)) {
-        s.actionTriggered = true;
-        suppressClickUntilRef.current = Date.now() + 300;
-        resetSwipeElement(s.element);
-        openFreeBudgetTransfer();
-      }
-    }
-  };
-
-  const handleFreeBudgetSwipeEnd = (e: React.TouchEvent) => {
-    const s = freeBudgetSwipeRef.current;
-    freeBudgetSwipeRef.current = null;
-    if (!s) return;
-    resetSwipeElement(s.element);
-    if (s.actionTriggered || !s.decided || !s.isHorizontal) return;
-    const dx = e.changedTouches[0].clientX - s.startX;
-    if (dx < -50) { suppressClickUntilRef.current = Date.now() + 300; openFreeBudgetTransfer(); }
-  };
+  const [showFreeBudgetSheet, setShowFreeBudgetSheet] = useState(false);
 
   /* ── data loading ───────────────────────────────── */
 
@@ -734,31 +683,26 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           }}
           onDragLeave={() => { if (dropTargetCategoryId === freeBudgetTarget.category_id) setDropTargetCategoryId(null); }}
           onDrop={(event) => { event.preventDefault(); handleDropOnCategory(freeBudgetTarget); }}
-          onTouchStart={handleFreeBudgetSwipeStart}
-          onTouchMove={handleFreeBudgetSwipeMove}
-          onTouchEnd={handleFreeBudgetSwipeEnd}
           onClick={() => {
             if (Date.now() < suppressClickUntilRef.current) return;
             if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
               openTransferDialog(freeBudgetTarget, activeSourceId);
+            } else {
+              hapticRigid();
+              setShowFreeBudgetSheet(true);
             }
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
-              if (activeSourceId !== null && activeSourceId !== freeBudgetTarget.category_id && draggedOwnerType === 'user') {
-                openTransferDialog(freeBudgetTarget, activeSourceId);
-              }
+              setShowFreeBudgetSheet(true);
             }
           }}
         >
           <div className="free__top">
             <span className="sec-tag">Свободный остаток</span>
-            <span className="free__hint">
-              <svg className="free__hint-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
-                <path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>
-              </svg>
-              перевод
-            </span>
+            <svg className="free__hint-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ color: 'var(--text-3)' }}>
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
           </div>
           {hasFamily ? (
             <div className="free__split">
@@ -1074,16 +1018,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
 
       {transferTarget && (
         <TransferDialog
-          sources={
-            transferTarget.kind === 'free_budget' && hasFamily
-              ? [...personalSources, ...familySources].filter((s) => s.kind !== 'free_budget')
-              : getSourcesFor(transferTarget)
-          }
-          extraTargets={
-            transferTarget.kind === 'free_budget' && hasFamily && familyFreeBudgetTarget
-              ? [familyFreeBudgetTarget]
-              : undefined
-          }
+          sources={getSourcesFor(transferTarget)}
           initialSourceId={
             transferInitialSourceId !== null && transferInitialSourceId !== transferTarget.category_id
               ? transferInitialSourceId
@@ -1093,6 +1028,17 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           baseCurrencyCode={overview.base_currency_code}
           onClose={() => { setTransferTarget(null); setTransferInitialSourceId(null); }}
           onSuccess={() => void handleDialogSuccess()}
+        />
+      )}
+
+      {showFreeBudgetSheet && (
+        <FreeBudgetActionSheet
+          personal={{ ...personalFreeBudgetSource, owner_type: 'user' }}
+          family={familyFreeBudgetSource ? { ...familyFreeBudgetSource, owner_type: 'family' } : null}
+          sources={[...personalSources, ...familySources].filter((s) => s.kind !== 'free_budget')}
+          baseCurrencyCode={overview.base_currency_code}
+          onClose={() => setShowFreeBudgetSheet(false)}
+          onSuccess={() => { setShowFreeBudgetSheet(false); void handleDialogSuccess(); }}
         />
       )}
 
