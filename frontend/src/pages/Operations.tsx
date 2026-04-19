@@ -264,6 +264,21 @@ function getPeriodSelectOptions(periodMode: AnalyticsPeriodMode, anchorDate: str
 }
 
 
+function formatBigNumber(amount: number): string {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(amount));
+}
+
+
+function formatBarLabel(periodStart: string, periodMode: AnalyticsPeriodMode): string {
+  const date = fromIsoDate(periodStart);
+  if (periodMode === 'year') return String(date.getFullYear());
+  if (periodMode === 'month') {
+    return new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(date).replace('.', '');
+  }
+  return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+
 function formatPercent(share: number): string {
   return new Intl.NumberFormat('ru-RU', {
     style: 'percent',
@@ -971,69 +986,54 @@ export default function Operations({
               onTouchStart={handleAnalyticsTouchStart}
               onTouchEnd={handleAnalyticsTouchEnd}
             >
-              <div className="analytics-toolbar">
-                <div className="analytics-toolbar__row">
-                  {ANALYTICS_TYPE_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      className={[
-                        'analytics-chip',
-                        analyticsTypeFilter === option.value ? 'analytics-chip--active' : '',
-                      ].filter(Boolean).join(' ')}
-                      type="button"
-                      onClick={() => setAnalyticsTypeFilter(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="analytics-toolbar__row">
-                  {ANALYTICS_PERIOD_MODE_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      className={[
-                        'analytics-chip',
-                        'analytics-chip--compact',
-                        analyticsPeriodMode === option.value ? 'analytics-chip--active' : '',
-                      ].filter(Boolean).join(' ')}
-                      type="button"
-                      onClick={() => handleAnalyticsPeriodModeChange(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                  <select
-                    ref={periodSelectRef}
-                    className="analytics-period-select"
-                    value={analyticsAnchorDate}
-                    onChange={(event) => setAnalyticsAnchorDate(event.target.value)}
+              <div className="ana-seg">
+                {ANALYTICS_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={['ana-seg__opt', analyticsTypeFilter === option.value ? 'ana-seg__opt--active' : ''].filter(Boolean).join(' ')}
+                    type="button"
+                    onClick={() => setAnalyticsTypeFilter(option.value)}
                   >
-                    {periodSelectOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="analytics-toolbar__row">
-                  {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
-                    <button
-                      key={option.value}
-                      className={[
-                        'analytics-chip',
-                        analyticsOwnerScope === option.value ? 'analytics-chip--active' : '',
-                      ].filter(Boolean).join(' ')}
-                      type="button"
-                      onClick={() => setAnalyticsOwnerScope(option.value)}
-                    >
-                      {option.label}
-                    </button>
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="ana-scope">
+                {ANALYTICS_PERIOD_MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={['ana-scope__chip', analyticsPeriodMode === option.value ? 'ana-scope__chip--active' : ''].filter(Boolean).join(' ')}
+                    type="button"
+                    onClick={() => handleAnalyticsPeriodModeChange(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                <select
+                  ref={periodSelectRef}
+                  className="ana-period-select"
+                  value={analyticsAnchorDate}
+                  onChange={(event) => setAnalyticsAnchorDate(event.target.value)}
+                >
+                  {periodSelectOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
-                </div>
+                </select>
+                {ANALYTICS_SCOPE_OPTIONS.filter((option) => analyticsHasFamily || option.value !== 'family').map((option) => (
+                  <button
+                    key={option.value}
+                    className={['ana-scope__chip', analyticsOwnerScope === option.value ? 'ana-scope__chip--active' : ''].filter(Boolean).join(' ')}
+                    type="button"
+                    onClick={() => setAnalyticsOwnerScope(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
 
               {analyticsError && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 12 }}>
+                <p style={{ color: 'var(--neg)', fontSize: '0.85rem', marginBottom: 12 }}>
                   {analyticsError}
                 </p>
               )}
@@ -1042,70 +1042,76 @@ export default function Operations({
                 <p className="list-row__sub">Собираем аналитику...</p>
               ) : analyticsData ? (
                 <>
-                  <div className="analytics-hero">
-                    <div className="analytics-hero__amount">
-                      {formatAmount(analyticsData.total_amount, analyticsData.base_currency_code)}
+                  {analyticsData.periods.length > 0 && (() => {
+                    const maxAmt = Math.max(...analyticsData.periods.map((p) => p.amount), 1);
+                    return (
+                      <div className="trend">
+                        <div className="trend__nav">
+                          <button className="trend__nav-btn" type="button" onClick={() => shiftAnalyticsPeriod(-1)}>‹</button>
+                          <span className="trend__period-label">{formatPeriodRange(effectivePeriodStart, effectivePeriodMode)}</span>
+                          <button className="trend__nav-btn" type="button" onClick={() => shiftAnalyticsPeriod(1)}>›</button>
+                        </div>
+                        <div className="trend__bars">
+                          {analyticsData.periods.map((period) => {
+                            const heightPct = Math.max((period.amount / maxAmt) * 100, 3);
+                            return (
+                              <div
+                                key={period.period_start}
+                                className={['trend__bar', period.is_selected ? 'trend__bar--active' : ''].filter(Boolean).join(' ')}
+                                onClick={() => setAnalyticsAnchorDate(period.period_start)}
+                              >
+                                <div className="trend__fill" style={{ height: `${heightPct}%` }} />
+                                <span className="trend__lbl">{formatBarLabel(period.period_start, effectivePeriodMode)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="ana-hero">
+                    <div className="ana-hero__val">
+                      <span className="ana-hero__num">{formatBigNumber(analyticsData.total_amount)}</span>
+                      <span className="ana-hero__sym">{analyticsData.base_currency_code}</span>
                     </div>
-                    <div className="analytics-hero__label">
-                      {analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}
-                    </div>
-                    <div className="analytics-hero__meta">
+                    <div className="ana-hero__meta">
+                      <span>{analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}</span>
+                      <span>·</span>
                       <span>
-                        {analyticsOwnerScope === 'family'
-                          ? 'Семейный срез'
-                          : analyticsOwnerScope === 'user'
-                            ? 'Личный срез'
-                            : 'Все счета'}
+                        {analyticsOwnerScope === 'family' ? 'Семейные' : analyticsOwnerScope === 'user' ? 'Личные' : 'Все счета'}
                       </span>
-                      {hintsEnabled && <span>{getPeriodHint(effectivePeriodMode)}</span>}
                     </div>
                   </div>
 
-                  <section className="analytics-showcase">
-                    <div className="analytics-showcase__chart">
-                      <div className="analytics-donut-nav">
-                        <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(-1)}>‹</button>
-                        <div className="analytics-donut-wrap">
-                          <div className="analytics-donut analytics-donut--glow" style={{ backgroundImage: donutGradient }}>
-                            <div className="analytics-donut__inner">
-                              {analyticsData.total_amount <= 0 ? (
-                                <>
-                                  <span className="analytics-donut__label">Нет операций</span>
-                                  <strong>—</strong>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="analytics-donut__label">Структура</span>
-                                  <strong>{chartSegments[0] ? formatPercent(chartSegments[0].share) : '0%'}</strong>
-                                </>
-                              )}
+                  {chartSegments.length > 0 && (
+                    <div className="ana-cats">
+                      {chartSegments.map((segment, index) => {
+                        const colorKeys = ['g', 'o', 'b', 'p', 'r', 'v'];
+                        const colorKey = colorKeys[index % colorKeys.length];
+                        return (
+                          <div className="ana-cat" key={segment.entryKey}>
+                            <div className={`ana-cat__ico ana-cat__ico--${colorKey}`}>
+                              {segment.label.slice(0, 2).toUpperCase()}
                             </div>
-                          </div>
-                        </div>
-                        <button className="analytics-donut-nav__arrow" type="button" onClick={() => shiftAnalyticsPeriod(1)}>›</button>
-                      </div>
-                    </div>
-
-                    {chartSegments.length > 0 && (
-                      <div className="analytics-pill-grid">
-                        {chartSegments.map((segment) => (
-                          <div className="analytics-pill" key={segment.entryKey}>
-                            <span
-                              className="analytics-pill__dot"
-                              style={{ backgroundColor: segment.color, color: segment.color }}
-                            />
-                            <div className="analytics-pill__content">
-                              <div className="analytics-pill__title">{segment.label}</div>
-                              <div className="analytics-pill__meta">
-                                <span>{formatAmount(segment.amount, analyticsData.base_currency_code)}</span>
+                            <div className="ana-cat__body">
+                              <div className="ana-cat__top">
+                                <span className="ana-cat__name">{segment.label}</span>
+                                <span className="ana-cat__amt">{formatAmount(segment.amount, analyticsData.base_currency_code)}</span>
+                              </div>
+                              <div className="ana-cat__bar-wrap">
+                                <div className={`ana-cat__fill ana-cat__fill--${colorKey}`} style={{ width: `${Math.round(segment.share * 100)}%` }} />
+                              </div>
+                              <div className="ana-cat__foot">
+                                <span>{segment.operationsCount} операций</span>
                                 <span>{formatPercent(segment.share)}</span>
                               </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
+                        );
+                      })}
+                    </div>
+                  )}
                 </>
               ) : (
                 <p className="list-row__sub">Аналитика пока не загружена.</p>
