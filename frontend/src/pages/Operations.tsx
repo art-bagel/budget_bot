@@ -623,11 +623,11 @@ export default function Operations({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyTypeFilter, setHistoryTypeFilter] = useState<Set<string>>(
-    () => new Set(HISTORY_TYPE_OPTIONS.filter((o) => o.value !== 'cancelled').map((o) => o.value)),
+    () => new Set(['income', 'expense']),
   );
   const [investmentHistoryFilter, setInvestmentHistoryFilter] = useState<InvestmentHistoryFilter>('all');
   const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(
-    () => new Set(BANKING_TYPE_FILTER_OPTIONS.filter((o) => o.value !== 'cancelled').map((o) => o.value)),
+    () => new Set(['income', 'expense']),
   );
   const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
   const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
@@ -918,7 +918,10 @@ export default function Operations({
             ))}
           </div>}
 
-          {viewMode !== 'analytics' ? (
+          {viewMode !== 'analytics' ? (() => {
+            const activeFilter = historyScope === 'banking' ? bankingTypeFilter : historyTypeFilter;
+            const activeFilterEmpty = activeFilter.size === 0;
+            return (
             <>
               {/* Chip-карусель фильтра по типам */}
               {(showHistoryTypeFilter || historyScope === 'banking') && (() => {
@@ -931,12 +934,15 @@ export default function Operations({
                   if (next.has(val)) next.delete(val); else next.add(val);
                   return next;
                 });
+                const toggleAll = () => setActive(
+                  allActive ? new Set<string>() : new Set(opts.map((o) => o.value)),
+                );
                 return (
                   <div className="op-filter" role="group" aria-label="Фильтр операций">
                     <button
                       type="button"
                       className={`op-filter__chip op-filter__chip--all${allActive ? ' op-filter__chip--active' : ''}`}
-                      onClick={() => setActive(new Set(opts.map((o) => o.value)))}
+                      onClick={toggleAll}
                     >Все</button>
                     {opts.map((opt) => (
                       <button
@@ -974,8 +980,10 @@ export default function Operations({
                 </p>
               )}
 
-              {visibleHistoryItems.length === 0 && !loadingHistory ? (
-                <p className="op-empty">Операций пока нет</p>
+              {activeFilterEmpty ? (
+                <p className="op-empty op-empty__msg">Выберите тип операций</p>
+              ) : visibleHistoryItems.length === 0 && !loadingHistory ? (
+                <p className="op-empty op-empty__msg">Операций пока нет</p>
               ) : (
                 <div className="op-groups">
                   {groupByDate(visibleHistoryItems).map((group) => (
@@ -1088,10 +1096,11 @@ export default function Operations({
                 </div>
               )}
 
-              <div ref={loadMoreSentinelRef} className="op-sentinel" />
+              {!activeFilterEmpty && <div ref={loadMoreSentinelRef} className="op-sentinel" />}
               {loadingHistory && <div className="op-loading">...</div>}
             </>
-          ) : (
+            );
+          })() : (
             <div
               className="analytics-view swipeable"
               onTouchStart={handleAnalyticsTouchStart}
