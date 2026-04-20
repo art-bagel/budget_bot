@@ -242,19 +242,10 @@ export default function CategoryActionSheet({
 
   const selectedSource = visibleSources.find((s) => String(s.category_id) === xferSourceId) || null;
   const xferAmountValue = parseFloat(xferAmount);
-  const hasPositiveBalance = (selectedSource?.balance || 0) > 0;
-  const exceedsBalance = !!selectedSource && xferAmountValue > selectedSource.balance;
-  const xferValidationMsg = !selectedSource
-    ? null
-    : !hasPositiveBalance
-      ? 'В выбранной категории нет денег для перевода.'
-      : exceedsBalance
-        ? `Нельзя перевести больше: ${formatAmount(selectedSource.balance, selectedSource.currency_code)}.`
-        : null;
-  const canSubmitTransfer = !xferSubmitting && !!selectedSource && xferAmountValue > 0 && !xferValidationMsg;
+  const canSubmitTransfer = !xferSubmitting && !!selectedSource && xferAmountValue > 0;
 
   const handleSubmitTransfer = async () => {
-    if (!selectedSource || xferAmountValue <= 0 || xferValidationMsg) return;
+    if (!selectedSource || xferAmountValue <= 0) return;
     setXferSubmitting(true);
     setXferError(null);
     try {
@@ -728,8 +719,6 @@ export default function CategoryActionSheet({
               </>
             )}
           </div>
-
-          {xferValidationMsg && <p className="dlg-error">{xferValidationMsg}</p>}
 
           {/* Amount */}
           <div className="field">
