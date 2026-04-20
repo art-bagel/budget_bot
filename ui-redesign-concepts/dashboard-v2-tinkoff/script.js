@@ -46,6 +46,7 @@
   const sheetRoot = document.getElementById('sheetRoot');
   const sheets = {
     category: document.getElementById('sheet-category'),
+    group: document.getElementById('sheet-group'),
     income: document.getElementById('sheet-income'),
     transfer: document.getElementById('sheet-transfer'),
     account: document.getElementById('sheet-account'),
@@ -63,6 +64,7 @@
     sheetRoot?.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
     if (meta && key === 'category') populateCategorySheet(meta);
+    if (meta && key === 'group') populateGroupSheet(meta);
     if (meta && key === 'account') populateAccountSheet(meta);
     if (meta && key === 'op-detail') populateOpDetail(meta);
   };
@@ -139,6 +141,144 @@
         if (key) openSheet('category', key);
       }
     });
+  });
+
+  /* ── Group tile → group distribution sheet ─────────────── */
+  const GROUP_DATA = {
+    mandatory: {
+      name: 'Обязательные платежи',
+      source: { name: 'Свободный остаток (личный)', avail: 42300 },
+      ico: '#i-bolt', tint: 'p',
+      cats: [
+        { name: 'Коммуналка', pct: 40 },
+        { name: 'Страховка',  pct: 30 },
+        { name: 'Интернет',   pct: 20 },
+        { name: 'Связь',      pct: 10 },
+      ],
+    },
+    food: {
+      name: 'Питание',
+      source: { name: 'Свободный остаток (личный)', avail: 42300 },
+      ico: '#i-cart', tint: 'g',
+      cats: [
+        { name: 'Продукты', pct: 70 },
+        { name: 'Кафе',     pct: 30 },
+      ],
+    },
+    family: {
+      name: 'Семейные расходы',
+      tag: 'Семейная группа',
+      source: { name: 'Свободный остаток (семейный)', avail: 58600 },
+      ico: '#i-heart', tint: 'o',
+      cats: [
+        { name: 'Школа',       pct: 40 },
+        { name: 'Развлечения', pct: 40 },
+        { name: 'Питомцы',     pct: 20 },
+      ],
+    },
+  };
+
+  const fmtRub = (n) => Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' ');
+  const parseRub = (s) => {
+    const cleaned = String(s || '').replace(/[^\d.,]/g, '').replace(',', '.');
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  function populateGroupSheet(key) {
+    const sheet = sheets.group;
+    const data = GROUP_DATA[key];
+    if (!sheet || !data) return;
+
+    const title = sheet.querySelector('#sheetGroupTitle');
+    const tag = sheet.querySelector('#sheetGroupTag');
+    const icoBox = sheet.querySelector('#sheetGroupIco');
+    const icoUse = icoBox?.querySelector('use');
+    const srcName = sheet.querySelector('#sheetGroupSrcName');
+    const srcSub = sheet.querySelector('#sheetGroupSrcSub');
+    const barEl = sheet.querySelector('#sheetGroupBar');
+    const listEl = sheet.querySelector('#sheetGroupList');
+    const totalEl = sheet.querySelector('#sheetGroupTotalPct');
+    const amtInput = sheet.querySelector('#sheetGroupAmt');
+    const confirm = sheet.querySelector('#sheetGroupConfirm');
+
+    if (title) title.textContent = data.name;
+    if (tag) tag.textContent = data.tag || 'Группа';
+    if (icoBox) icoBox.className = `sheet-ico sheet-ico--${data.tint}`;
+    if (icoUse) icoUse.setAttribute('href', data.ico);
+    if (srcName) srcName.textContent = data.source.name;
+    if (srcSub) srcSub.textContent = `Доступно ${fmtRub(data.source.avail)} ₽`;
+
+    if (barEl) {
+      barEl.innerHTML = data.cats
+        .map((c, i) => `<span class="grp-bar__seg grp-bar__seg--${i + 1}" style="--w:${c.pct}%"></span>`)
+        .join('');
+    }
+
+    const totalPct = data.cats.reduce((s, c) => s + c.pct, 0);
+    if (totalEl) totalEl.textContent = `${totalPct}%`;
+
+    if (listEl) {
+      listEl.innerHTML = data.cats
+        .map((c, i) => (
+          `<li class="grp-row" data-idx="${i}">` +
+            `<span class="grp-row__dot grp-row__dot--${i + 1}"></span>` +
+            `<div><span class="grp-row__name">${c.name}</span><span class="grp-row__pct">· ${c.pct}%</span></div>` +
+            `<span class="grp-row__amt" data-amt><span>₽</span></span>` +
+          `</li>`
+        ))
+        .join('');
+    }
+
+    const recalc = () => {
+      const sum = parseRub(amtInput?.value);
+      const rows = listEl?.querySelectorAll('.grp-row') || [];
+      rows.forEach((row, i) => {
+        const pct = data.cats[i].pct;
+        const amt = sum * pct / 100;
+        const amtEl = row.querySelector('[data-amt]');
+        if (!amtEl) return;
+        amtEl.classList.toggle('grp-row__amt--active', sum > 0);
+        amtEl.innerHTML = (sum > 0 ? fmtRub(amt) : '—') + '<span>₽</span>';
+      });
+      if (confirm) {
+        const overflow = sum > data.source.avail;
+        confirm.disabled = sum <= 0 || overflow;
+        confirm.textContent = overflow ? 'Недостаточно средств' : 'Распределить';
+      }
+    };
+
+    if (amtInput) {
+      amtInput.value = '';
+      amtInput.oninput = (e) => {
+        const raw = e.target.value.replace(/[^\d]/g, '');
+        e.target.value = raw ? Number(raw).toLocaleString('ru-RU').replace(/,/g, ' ') : '';
+        recalc();
+      };
+      setTimeout(() => amtInput.focus(), 250);
+    }
+    recalc();
+  }
+
+  document.querySelectorAll('.group[data-group]').forEach((tile) => {
+    const open = () => {
+      const key = tile.getAttribute('data-group');
+      if (key) openSheet('group', key);
+    };
+    tile.addEventListener('click', open);
+    tile.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
+
+  document.getElementById('sheetGroupConfirm')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    if (!(btn instanceof HTMLElement) || btn.hasAttribute('disabled')) return;
+    btn.animate(
+      [{ transform: 'scale(.97)' }, { transform: 'scale(1)' }],
+      { duration: 160, easing: 'cubic-bezier(.2, 1.35, .4, 1)' }
+    );
+    setTimeout(closeSheets, 180);
   });
 
   /* ── Category & account actions ─────────────────────────── */
@@ -475,5 +615,259 @@
       );
     });
   });
+
+  /* ── Account transfer (accordion pickers + currency) ──── */
+  const ATX_ACCOUNTS = [
+    { id: 'personal_rub', group: 'personal', name: 'Личный счёт',     type: 'cash',       currency: 'RUB', balance: 845200,  ico: '#i-card',  bg: 'var(--text)',    fg: 'var(--surface)' },
+    { id: 'personal_usd', group: 'personal', name: 'Личный счёт',     type: 'cash',       currency: 'USD', balance: 5820,    ico: '#i-card',  bg: 'var(--text)',    fg: 'var(--surface)' },
+    { id: 'family_rub',   group: 'family',   name: 'Семейный счёт',   type: 'cash',       currency: 'RUB', balance: 420100,  ico: '#i-card',  bg: '#E86A4F',        fg: '#fff' },
+    { id: 'family_usd',   group: 'family',   name: 'Семейный счёт',   type: 'cash',       currency: 'USD', balance: 1200,    ico: '#i-card',  bg: '#E86A4F',        fg: '#fff' },
+    { id: 'wallet_rub',   group: 'wallet',   name: 'Наличные',        type: 'cash',       currency: 'RUB', balance: 25000,   ico: '#i-card',  bg: 'var(--t-g-f)',   fg: '#fff' },
+    { id: 'broker',       group: 'broker',   name: 'Брокерский счёт', type: 'investment', currency: 'RUB', balance: 1520000, ico: '#i-donut', bg: 'var(--t-b-f)',   fg: '#fff' },
+    { id: 'credit',       group: 'credit',   name: 'Кредитка',        type: 'credit',     currency: 'RUB', balance: 45000,   ico: '#i-card',  bg: 'var(--t-r-f)',   fg: '#fff' },
+  ];
+  const CUR_NAME = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' };
+
+  const ATX_TYPE_GROUPS = [
+    { type: 'cash',       label: 'Счета и наличные' },
+    { type: 'investment', label: 'Инвестиции' },
+    { type: 'credit',     label: 'Кредиты' },
+  ];
+
+  const ATX_COMPAT = {
+    cash:       { cash: true,  investment: true,  credit: false },
+    investment: { cash: true,  investment: false, credit: false },
+    credit:     { cash: true,  investment: false, credit: false },
+  };
+
+  const ATX_MODE_LABELS = {
+    'cash>cash':       'Перевод между счетами',
+    'cash>investment': 'Пополнение инвестиций',
+    'investment>cash': 'Вывод из инвестиций',
+    'credit>cash':     'Погашение долга',
+  };
+
+  const CUR_SYM = { RUB: '₽', USD: '$', EUR: '€' };
+  const fmtN = (n, cur) => {
+    const fmtOpts = { maximumFractionDigits: cur === 'RUB' ? 0 : 2 };
+    return new Intl.NumberFormat('ru-RU', fmtOpts).format(n);
+  };
+
+  const atxState = { from: null, to: null, openRole: null };
+
+  const atxSheet = sheets['account-transfer'];
+  const atxSwapBtn  = document.getElementById('atxSwap');
+  const atxAmtInp   = document.getElementById('atxAmount');
+  const atxFromCur  = document.getElementById('atxFromCur');
+  const atxConfirm  = document.getElementById('atxConfirm');
+  const atxModeBox  = document.getElementById('atxMode');
+  const atxModeText = document.getElementById('atxModeText');
+
+  const atxPairAllowed = (fT, tT) => {
+    if (!fT || !tT) return false;
+    if (fT === 'cash' && tT === 'cash') return true;
+    return !!ATX_COMPAT[fT]?.[tT];
+  };
+
+  const atxCompatible = (role, acct) => {
+    const other = role === 'from' ? atxState.to : atxState.from;
+    const otherAcct = other ? ATX_ACCOUNTS.find(a => a.id === other) : null;
+    if (otherAcct) {
+      if (acct.id === otherAcct.id) return false;
+      if (acct.currency !== otherAcct.currency) return false;
+      const fT = role === 'from' ? acct.type : otherAcct.type;
+      const tT = role === 'from' ? otherAcct.type : acct.type;
+      return atxPairAllowed(fT, tT);
+    }
+    return true;
+  };
+
+  const atxRenderVal = (role) => {
+    const block = atxSheet?.querySelector(`[data-atx-role="${role}"]`);
+    const val = block?.querySelector(`[data-atx-val="${role}"]`);
+    if (!val) return;
+    const id = atxState[role];
+    if (!id) {
+      val.innerHTML = `<span class="atx__ph">${role === 'from' ? 'Выберите счёт-источник' : 'Выберите счёт-получатель'}</span>`;
+      return;
+    }
+    const a = ATX_ACCOUNTS.find(x => x.id === id);
+    if (!a) return;
+    const groupSiblings = ATX_ACCOUNTS.filter(x => x.group === a.group);
+    const multiCur = groupSiblings.length > 1;
+    const subLabel = a.type === 'credit' ? 'Задолженность' : (role === 'from' ? 'Доступно' : 'Остаток');
+    const sym = CUR_SYM[a.currency] || a.currency;
+    const nameLine = multiCur
+      ? `${a.name} · <span style="color:var(--text-2)">${CUR_NAME[a.currency] || a.currency}</span>`
+      : a.name;
+    val.innerHTML = `
+      <span class="atx__sel">
+        <span class="atx__sel-ico" style="background:${a.bg}; color:${a.fg};"><svg><use href="${a.ico}"/></svg></span>
+        <span class="atx__sel-text">
+          <span class="atx__sel-name">${nameLine}</span>
+          <span class="atx__sel-sub">${subLabel}: ${fmtN(a.balance, a.currency)} ${sym}</span>
+        </span>
+      </span>`;
+  };
+
+  const atxRenderList = (role) => {
+    const list = atxSheet?.querySelector(`[data-atx-list="${role}"]`);
+    if (!list) return;
+    const html = [];
+    ATX_TYPE_GROUPS.forEach(({ type, label }) => {
+      const items = ATX_ACCOUNTS.filter(a => a.type === type);
+      if (!items.length) return;
+      html.push(`<li class="atx__group-label">${label}</li>`);
+      const seenGroups = new Set();
+      items.forEach(a => {
+        const compat = atxCompatible(role, a);
+        const selected = atxState[role] === a.id;
+        const sym = CUR_SYM[a.currency] || a.currency;
+        const groupItems = items.filter(x => x.group === a.group);
+        const isMulti = groupItems.length > 1;
+
+        if (isMulti && !seenGroups.has(a.group)) {
+          seenGroups.add(a.group);
+          html.push(`
+            <li class="atx__acct-head" aria-hidden="true">
+              <span class="atx__acct-head-ico" style="background:${a.bg}; color:${a.fg};"><svg><use href="${a.ico}"/></svg></span>
+              <span>${a.name}</span>
+            </li>`);
+        }
+
+        if (isMulti) {
+          const subLabel = a.type === 'credit' ? 'Задолженность' : 'Остаток';
+          const badge = !compat ? 'нельзя' : (selected ? 'выбран' : '');
+          html.push(`
+            <li><button type="button"
+                        class="atx__item atx__item--cur${selected ? ' atx__item--selected' : ''}"
+                        data-atx-id="${a.id}"
+                        ${compat ? '' : 'disabled'}>
+              <span class="atx__cur-sym">${sym}</span>
+              <span class="atx__item-text">
+                <span class="atx__item-name">${CUR_NAME[a.currency] || a.currency}</span>
+                <span class="atx__item-sub">${subLabel}: ${fmtN(a.balance, a.currency)} ${sym}</span>
+              </span>
+              <span class="atx__item-badge">${badge}</span>
+            </button></li>`);
+        } else {
+          const subLabel = a.type === 'credit' ? 'Задолженность' : 'Остаток';
+          const badge = !compat ? 'нельзя' : (selected ? 'выбран' : sym);
+          html.push(`
+            <li><button type="button"
+                        class="atx__item${selected ? ' atx__item--selected' : ''}"
+                        data-atx-id="${a.id}"
+                        ${compat ? '' : 'disabled'}>
+              <span class="atx__item-ico" style="background:${a.bg}; color:${a.fg};"><svg><use href="${a.ico}"/></svg></span>
+              <span class="atx__item-text">
+                <span class="atx__item-name">${a.name}</span>
+                <span class="atx__item-sub">${subLabel}: ${fmtN(a.balance, a.currency)} ${sym}</span>
+              </span>
+              <span class="atx__item-badge">${badge}</span>
+            </button></li>`);
+        }
+      });
+    });
+    list.innerHTML = html.join('');
+  };
+
+  const atxOpenBlock = (role) => {
+    if (atxState.openRole === role) {
+      atxCloseAll();
+      return;
+    }
+    atxState.openRole = role;
+    atxSheet?.querySelectorAll('.atx__block').forEach(b => {
+      const r = b.getAttribute('data-atx-role');
+      b.classList.toggle('atx__block--open', r === role);
+    });
+    atxRenderList(role);
+  };
+
+  const atxCloseAll = () => {
+    atxState.openRole = null;
+    atxSheet?.querySelectorAll('.atx__block').forEach(b => b.classList.remove('atx__block--open'));
+  };
+
+  const atxParseAmt = () => {
+    const raw = (atxAmtInp?.value || '').replace(/\s+/g, '').replace(',', '.');
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+
+  const atxUpdateAll = () => {
+    const fAcct = atxState.from ? ATX_ACCOUNTS.find(a => a.id === atxState.from) : null;
+    const tAcct = atxState.to   ? ATX_ACCOUNTS.find(a => a.id === atxState.to)   : null;
+
+    if (atxFromCur && fAcct) atxFromCur.textContent = CUR_SYM[fAcct.currency] || fAcct.currency;
+
+    if (atxModeBox && atxModeText) {
+      if (fAcct && tAcct) {
+        atxModeText.textContent = ATX_MODE_LABELS[`${fAcct.type}>${tAcct.type}`] || 'Перевод между счетами';
+        atxModeBox.removeAttribute('hidden');
+      } else {
+        atxModeBox.setAttribute('hidden', '');
+      }
+    }
+
+    const ok = atxState.from && atxState.to && atxParseAmt() > 0;
+    if (atxConfirm) atxConfirm.disabled = !ok;
+
+    if (atxSwapBtn) {
+      const canSwap = fAcct && tAcct && atxPairAllowed(tAcct.type, fAcct.type);
+      atxSwapBtn.disabled = !canSwap;
+    }
+  };
+
+  atxSheet?.querySelectorAll('.atx__trigger').forEach((trigger) => {
+    trigger.addEventListener('click', () => {
+      const block = trigger.closest('[data-atx-role]');
+      const role = block?.getAttribute('data-atx-role');
+      if (role) atxOpenBlock(role);
+    });
+  });
+
+  atxSheet?.querySelectorAll('.atx__list').forEach((list) => {
+    list.addEventListener('click', (e) => {
+      const btn = e.target.closest('.atx__item');
+      if (!(btn instanceof HTMLButtonElement) || btn.disabled) return;
+      const id = btn.getAttribute('data-atx-id');
+      const listEl = btn.closest('[data-atx-list]');
+      const role = listEl?.getAttribute('data-atx-list');
+      if (!id || !role) return;
+      atxState[role] = id;
+      atxRenderVal(role);
+      atxCloseAll();
+      atxUpdateAll();
+    });
+  });
+
+  atxSwapBtn?.addEventListener('click', () => {
+    if (atxSwapBtn.disabled) return;
+    [atxState.from, atxState.to] = [atxState.to, atxState.from];
+    atxRenderVal('from');
+    atxRenderVal('to');
+    atxUpdateAll();
+  });
+
+  atxAmtInp?.addEventListener('input', atxUpdateAll);
+
+  atxConfirm?.addEventListener('click', () => {
+    if (atxConfirm.disabled) return;
+    atxConfirm.animate(
+      [{ transform: 'scale(.97)' }, { transform: 'scale(1)' }],
+      { duration: 180, easing: 'cubic-bezier(.2, 1.35, .4, 1)' }
+    );
+    setTimeout(closeSheets, 160);
+  });
+
+  atxSheet?.querySelectorAll('[data-close]').forEach((b) => {
+    b.addEventListener('click', atxCloseAll);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') atxCloseAll(); });
+
+  atxRenderVal('from');
+  atxRenderVal('to');
+  atxUpdateAll();
 
 })();

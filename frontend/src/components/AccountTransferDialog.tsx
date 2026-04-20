@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import BottomSheet from './BottomSheet';
-
 import { fetchBankAccountSnapshot, fetchBankAccounts, transferBetweenAccounts } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, DashboardBankBalance } from '../types';
@@ -18,14 +17,53 @@ interface Props {
   onSuccess: () => void;
 }
 
-type TransferMode = 'between_cash' | 'investment' | 'credit_to_cash';
-type TransferDirection =
-  | 'personal_to_family'
-  | 'family_to_personal'
-  | 'cash_to_cash'
-  | 'cash_to_investment'
-  | 'investment_to_cash'
-  | 'credit_to_cash';
+type AcctKind = 'cash' | 'investment' | 'credit';
+type Selection = { accountId: number; currency: string };
+interface AccountEntry { account: BankAccount; kind: AcctKind }
+interface PickerItem  { account: BankAccount; kind: AcctKind; currency: string; balance: number }
+
+const COMPAT: Record<AcctKind, Partial<Record<AcctKind, boolean>>> = {
+  cash:       { cash: true, investment: true },
+  investment: { cash: true },
+  credit:     { cash: true },
+};
+const KIND_ORDER: AcctKind[] = ['cash', 'investment', 'credit'];
+const KIND_LABEL: Record<AcctKind, string> = {
+  cash: 'Счета и наличные', investment: 'Инвестиции', credit: 'Кредиты',
+};
+const MODE_LABEL: Partial<Record<string, string>> = {
+  'cash>cash':       'Перевод между счетами',
+  'cash>investment': 'Пополнение инвестиций',
+  'investment>cash': 'Вывод из инвестиций',
+  'credit>cash':     'Погашение долга',
+};
+const CUR_SYM: Record<string, string>  = { RUB: '₽', USD: '$', EUR: '€' };
+const CUR_NAME: Record<string, string> = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' };
+
+function acctIcoClass(account: BankAccount, kind: AcctKind): string {
+  if (kind === 'investment') return 'sheet-ico--b';
+  if (kind === 'credit')     return 'sheet-ico--r';
+  return account.owner_type === 'family' ? 'sheet-ico--o' : 'sheet-ico--ink';
+}
+
+function AcctIcon({ kind }: { kind: AcctKind }) {
+  if (kind === 'investment') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="M5 19V11M10 19V6M15 19v-6M20 19v-9"/>
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3.5" y="6" width="17" height="12" rx="2"/>
+      <path d="M3.5 10.5h17M7 15h3"/>
+    </svg>
+  );
+}
+
+function curSym(code: string)  { return CUR_SYM[code]  ?? code; }
+function curName(code: string) { return CUR_NAME[code] ?? code; }
 
 
 export default function AccountTransferDialog({
@@ -39,611 +77,351 @@ export default function AccountTransferDialog({
 }: Props) {
   useModalOpen();
 
-  const hasFamily = familyAccountId !== null;
-  const [mode, setMode] = useState<TransferMode>('between_cash');
-  const [direction, setDirection] = useState<TransferDirection>(hasFamily ? 'personal_to_family' : 'cash_to_cash');
-  const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
-  const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
-  const [creditAccounts, setCreditAccounts] = useState<BankAccount[]>([]);
-  const [balancesByAccountId, setBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({
-    [personalAccountId]: personalBalances,
-    ...(familyAccountId ? { [familyAccountId]: familyBalances } : {}),
-  });
-  const [cashFromAccountId, setCashFromAccountId] = useState(String(personalAccountId));
-  const [cashToAccountId, setCashToAccountId] = useState(familyAccountId ? String(familyAccountId) : '');
-  const [cashAccountId, setCashAccountId] = useState(String(personalAccountId));
-  const [investmentAccountId, setInvestmentAccountId] = useState('');
-  const [creditAccountId, setCreditAccountId] = useState('');
-  const [currencyCode, setCurrencyCode] = useState('');
-  const [amount, setAmount] = useState('');
-  const [comment, setComment] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [allAccounts, setAllAccounts] = useState<AccountEntry[]>([]);
+  const [balancesMap, setBalancesMap] = useState<Record<number, DashboardBankBalance[]>>({});
+  const [fromSel, setFromSel] = useState<Selection | null>(null);
+  const [toSel,   setToSel]   = useState<Selection | null>(null);
+  const [openRole, setOpenRole] = useState<'from' | 'to' | null>(null);
+  const [amount,   setAmount]  = useState('');
+  const [comment,  setComment] = useState('');
+  const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
-  const [loadingBalances, setLoadingBalances] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-
-    const loadAccountContext = async () => {
-      setLoadingAccounts(true);
+    const initialMap: Record<number, DashboardBankBalance[]> = {
+      [personalAccountId]: personalBalances,
+      ...(familyAccountId ? { [familyAccountId]: familyBalances } : {}),
+    };
+    const load = async () => {
+      setLoading(true);
       try {
-        const [loadedCashAccounts, loadedInvestmentAccounts, loadedCreditAccounts] = await Promise.all([
+        const [cash, invest, credit] = await Promise.all([
           fetchBankAccounts('cash'),
           fetchBankAccounts('investment'),
           fetchBankAccounts('credit'),
         ]);
-
-        if (cancelled) {
-          return;
-        }
-
-        setCashAccounts(loadedCashAccounts);
-        setInvestmentAccounts(loadedInvestmentAccounts);
-        setCreditAccounts(loadedCreditAccounts);
-
-        const resolvedCashFromId = loadedCashAccounts.some((account) => String(account.id) === cashFromAccountId)
-          ? cashFromAccountId
-          : String(loadedCashAccounts[0]?.id ?? '');
-        const resolvedCashToId = loadedCashAccounts.some((account) => String(account.id) === cashToAccountId)
-          && cashToAccountId !== resolvedCashFromId
-          ? cashToAccountId
-          : String(loadedCashAccounts.find((account) => String(account.id) !== resolvedCashFromId)?.id ?? '');
-
-        if (resolvedCashFromId !== cashFromAccountId) {
-          setCashFromAccountId(resolvedCashFromId);
-        }
-
-        if (resolvedCashToId !== cashToAccountId) {
-          setCashToAccountId(resolvedCashToId);
-        }
-
-        if (!loadedCashAccounts.some((account) => String(account.id) === cashAccountId) && loadedCashAccounts[0]) {
-          setCashAccountId(String(loadedCashAccounts[0].id));
-        }
-
-        if (!loadedInvestmentAccounts.some((account) => String(account.id) === investmentAccountId) && loadedInvestmentAccounts[0]) {
-          setInvestmentAccountId(String(loadedInvestmentAccounts[0].id));
-        }
-
-        if (!loadedCreditAccounts.some((account) => String(account.id) === creditAccountId) && loadedCreditAccounts[0]) {
-          setCreditAccountId(String(loadedCreditAccounts[0].id));
-        }
-      } catch (reason: unknown) {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : String(reason));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingAccounts(false);
-        }
-      }
-    };
-
-    void loadAccountContext();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cashAccountId, cashFromAccountId, cashToAccountId, creditAccountId, investmentAccountId]);
-
-  useEffect(() => {
-    const idsToLoad = new Set<number>();
-    if (mode === 'between_cash') {
-      if (hasFamily) {
-        if (direction === 'personal_to_family') idsToLoad.add(personalAccountId);
-        if (direction === 'family_to_personal' && familyAccountId) idsToLoad.add(familyAccountId);
-      } else if (cashFromAccountId) {
-        idsToLoad.add(Number(cashFromAccountId));
-      }
-    } else if (mode === 'investment') {
-      if (cashAccountId) idsToLoad.add(Number(cashAccountId));
-      if (investmentAccountId) idsToLoad.add(Number(investmentAccountId));
-    } else if (creditAccountId) {
-      idsToLoad.add(Number(creditAccountId));
-    }
-
-    const missingIds = [...idsToLoad].filter((id) => balancesByAccountId[id] === undefined);
-    if (missingIds.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingBalances(true);
-
-    Promise.all(missingIds.map(async (accountId) => {
-      const balances = await fetchBankAccountSnapshot(accountId);
-      return { accountId, balances };
-    }))
-      .then((results) => {
-        if (cancelled) {
-          return;
-        }
-
-        setBalancesByAccountId((prev) => {
-          const next = { ...prev };
-          results.forEach(({ accountId, balances }) => {
-            next[accountId] = balances;
-          });
-          return next;
+        if (cancelled) return;
+        const entries: AccountEntry[] = [
+          ...cash.map(a   => ({ account: a, kind: 'cash'       as AcctKind })),
+          ...invest.map(a => ({ account: a, kind: 'investment' as AcctKind })),
+          ...credit.map(a => ({ account: a, kind: 'credit'     as AcctKind })),
+        ];
+        setAllAccounts(entries);
+        const toLoad = entries.map(e => e.account.id).filter(id => !(id in initialMap));
+        const snaps = toLoad.length
+          ? await Promise.all(toLoad.map(async id => ({ id, balances: await fetchBankAccountSnapshot(id) })))
+          : [];
+        if (cancelled) return;
+        setBalancesMap({
+          ...initialMap,
+          ...Object.fromEntries(snaps.map(({ id, balances }) => [id, balances])),
         });
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : String(reason));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingBalances(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    mode,
-    direction,
-    hasFamily,
-    personalAccountId,
-    familyAccountId,
-    cashAccountId,
-    cashFromAccountId,
-    creditAccountId,
-    investmentAccountId,
-    balancesByAccountId,
-  ]);
-
-  const selectedCreditAccount = creditAccounts.find((account) => String(account.id) === creditAccountId) ?? null;
-  const creditAvailableBalances = useMemo<DashboardBankBalance[]>(() => {
-    if (!selectedCreditAccount) return [];
-
-    const creditLimit = selectedCreditAccount.credit_limit ?? 0;
-    const creditBalances = balancesByAccountId[selectedCreditAccount.id];
-    if (creditBalances === undefined) return [];
-    if (creditBalances.length === 0) {
-      return [{
-        currency_code: baseCurrencyCode,
-        amount: creditLimit,
-        historical_cost_in_base: creditLimit,
-        base_currency_code: baseCurrencyCode,
-      }];
-    }
-
-    return creditBalances.map((balance) => {
-      const availableAmount = Math.max(0, creditLimit + balance.amount);
-      return {
-        ...balance,
-        amount: availableAmount,
-        historical_cost_in_base: balance.currency_code === baseCurrencyCode
-          ? availableAmount
-          : Math.max(0, creditLimit + balance.historical_cost_in_base),
-      };
-    });
-  }, [balancesByAccountId, baseCurrencyCode, selectedCreditAccount]);
-
-  const fromBalances = useMemo(() => {
-    if (mode === 'between_cash') {
-      if (hasFamily) {
-        return direction === 'personal_to_family' ? personalBalances : familyBalances;
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      return balancesByAccountId[Number(cashFromAccountId)] || [];
-    }
-    if (mode === 'credit_to_cash') {
-      return creditAvailableBalances;
-    }
-    return balancesByAccountId[
-      direction === 'cash_to_investment' ? Number(cashAccountId) : Number(investmentAccountId)
-    ] || [];
-  }, [
-    mode,
-    direction,
-    hasFamily,
-    personalBalances,
-    familyBalances,
-    balancesByAccountId,
-    cashAccountId,
-    cashFromAccountId,
-    creditAvailableBalances,
-    investmentAccountId,
-  ]);
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fromAccountId = mode === 'between_cash'
-    ? hasFamily
-      ? (direction === 'personal_to_family' ? personalAccountId : Number(familyAccountId))
-      : Number(cashFromAccountId)
-    : mode === 'credit_to_cash'
-      ? Number(creditAccountId)
-    : (direction === 'cash_to_investment' ? Number(cashAccountId) : Number(investmentAccountId));
-  const toAccountId = mode === 'between_cash'
-    ? hasFamily
-      ? (direction === 'personal_to_family' ? Number(familyAccountId) : personalAccountId)
-      : Number(cashToAccountId)
-    : mode === 'credit_to_cash'
-      ? Number(cashAccountId)
-    : (direction === 'cash_to_investment' ? Number(investmentAccountId) : Number(cashAccountId));
+  const allItems = useMemo<PickerItem[]>(() => {
+    const result: PickerItem[] = [];
+    for (const { account, kind } of allAccounts) {
+      const bals = balancesMap[account.id];
+      if (bals === undefined) continue;
+      if (bals.length === 0) {
+        result.push({ account, kind, currency: baseCurrencyCode, balance: 0 });
+      } else {
+        for (const b of bals) result.push({ account, kind, currency: b.currency_code, balance: b.amount });
+      }
+    }
+    return result;
+  }, [allAccounts, balancesMap, baseCurrencyCode]);
 
-  const availableCurrencies = fromBalances.filter((b) => b.amount > 0);
-  const selectedBalance = fromBalances.find((b) => b.currency_code === currencyCode);
+  const isCompat = (role: 'from' | 'to', item: PickerItem): boolean => {
+    const other = role === 'from' ? toSel : fromSel;
+    if (!other) return true;
+    if (other.accountId === item.account.id && other.currency === item.currency) return false;
+    if (other.currency !== item.currency) return false;
+    const otherItem = allItems.find(pi => pi.account.id === other.accountId && pi.currency === other.currency);
+    if (!otherItem) return false;
+    const fK = role === 'from' ? item.kind : otherItem.kind;
+    const tK = role === 'from' ? otherItem.kind : item.kind;
+    return !!COMPAT[fK]?.[tK];
+  };
+
+  const fromItem = useMemo(() =>
+    fromSel ? allItems.find(pi => pi.account.id === fromSel.accountId && pi.currency === fromSel.currency) ?? null : null,
+    [fromSel, allItems]);
+  const toItem = useMemo(() =>
+    toSel ? allItems.find(pi => pi.account.id === toSel.accountId && pi.currency === toSel.currency) ?? null : null,
+    [toSel, allItems]);
+  const fromBalance = useMemo(() =>
+    fromSel ? (balancesMap[fromSel.accountId] ?? []).find(b => b.currency_code === fromSel.currency) ?? null : null,
+    [fromSel, balancesMap]);
+
+  const canSwap = !!(fromItem && toItem && COMPAT[toItem.kind]?.[fromItem.kind]);
+  const modeLabel = useMemo(() => {
+    if (!fromItem || !toItem) return null;
+    return MODE_LABEL[`${fromItem.kind}>${toItem.kind}`] ?? null;
+  }, [fromItem, toItem]);
+
   const amountValue = parseFloat(amount) || 0;
-  const exceedsBalance = !!selectedBalance && amountValue > selectedBalance.amount;
+  const exceedsBalance = fromItem?.kind !== 'credit' && !!fromBalance && amountValue > fromBalance.amount;
+  const canSubmit = !submitting && !loading && !!fromSel && !!toSel && amountValue > 0 && !exceedsBalance;
 
-  const validationMessage = mode === 'investment' && !investmentAccounts.length
-    ? 'Сначала создай инвестиционный счет.'
-    : mode === 'credit_to_cash' && !creditAccounts.length
-      ? 'Сначала создай кредитный счет.'
-    : mode === 'between_cash' && !hasFamily && cashAccounts.length < 2
-      ? 'Для перевода между cash-счетами нужно минимум два счёта.'
-    : mode === 'between_cash' && !hasFamily && fromAccountId === toAccountId
-      ? 'Выбери разные счета.'
-    : !currencyCode
-      ? null
-      : availableCurrencies.length === 0
-        ? mode === 'credit_to_cash'
-          ? 'На кредитном счёте нет доступного лимита.'
-          : 'На исходном счёте нет средств для перевода.'
-        : !selectedBalance || selectedBalance.amount <= 0
-          ? mode === 'credit_to_cash'
-            ? 'На кредитном счёте нет доступного лимита в выбранной валюте.'
-            : 'На исходном счёте нет средств в выбранной валюте.'
-          : exceedsBalance
-            ? mode === 'credit_to_cash'
-              ? `Доступный лимит: ${formatAmount(selectedBalance.amount, currencyCode)}`
-              : `Недостаточно средств: ${formatAmount(selectedBalance.amount, currencyCode)}`
-            : null;
-
-  const canSubmit =
-    !submitting
-    && !loadingAccounts
-    && !loadingBalances
-    && fromAccountId > 0
-    && toAccountId > 0
-    && fromAccountId !== toAccountId
-    && !!currencyCode
-    && amountValue > 0
-    && !validationMessage;
-
-  const handleDirectionChange = (newDirection: TransferDirection) => {
-    setDirection(newDirection);
-    setCurrencyCode('');
+  const handleSelect = (role: 'from' | 'to', item: PickerItem) => {
+    const sel: Selection = { accountId: item.account.id, currency: item.currency };
+    if (role === 'from') {
+      setFromSel(sel);
+      if (toSel && toSel.currency !== item.currency) setToSel(null);
+    } else {
+      setToSel(sel);
+      if (fromSel && fromSel.currency !== item.currency) setFromSel(null);
+    }
+    setOpenRole(null);
     setAmount('');
     setError(null);
   };
 
+  const handleSwap = () => {
+    if (!canSwap || !fromSel || !toSel) return;
+    setFromSel(toSel); setToSel(fromSel); setAmount('');
+  };
+
   const handleSubmit = async () => {
-    if (!canSubmit) return;
-
-    if (validationMessage) {
-      setError(validationMessage);
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-
+    if (!canSubmit || !fromSel || !toSel) return;
+    setSubmitting(true); setError(null);
     try {
       await transferBetweenAccounts({
-        from_account_id: fromAccountId,
-        to_account_id: toAccountId,
-        currency_code: currencyCode,
-        amount: amountValue,
-        comment: comment.trim() || undefined,
+        from_account_id: fromSel.accountId,
+        to_account_id:   toSel.accountId,
+        currency_code:   fromSel.currency,
+        amount:          amountValue,
+        comment:         comment.trim() || undefined,
       });
       onSuccess();
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <BottomSheet open tag="Банк" title="Перевод между счетами" onClose={() => !submitting && onClose()}
-      actions={
-        <div className="action-pill" style={{ width: '100%' }}>
-          <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-          <button className="action-pill__confirm" type="button" disabled={!canSubmit} onClick={handleSubmit}>{submitting ? '...' : 'Перевести'}</button>
-        </div>
-      }
-    >
-      <div>
-          <div className="operations-note">
-            {mode === 'credit_to_cash'
-              ? 'Выбери кредит, счёт зачисления и сумму. Перевод с кредита увеличит долг и добавит деньги в свободный остаток выбранного счёта.'
-              : mode === 'between_cash'
-                ? 'Выбери cash-счета, валюту и сумму. Деньги перейдут между банковскими счетами без изменения общего бюджета.'
-                : 'Выбери направление, валюту и сумму. Перевод в инвестиции уменьшает бюджет, обратный перевод возвращает деньги в свободный остаток.'}
-          </div>
+  const renderSlot = (role: 'from' | 'to') => {
+    const sel  = role === 'from' ? fromSel  : toSel;
+    const item = role === 'from' ? fromItem : toItem;
+    if (!sel || !item) {
+      return <span className="atx__ph">{role === 'from' ? 'Выберите счёт-источник' : 'Выберите счёт-получатель'}</span>;
+    }
+    const siblings = allItems.filter(pi => pi.account.id === item.account.id);
+    const isMulti  = siblings.length > 1;
+    const subLabel = item.kind === 'credit' ? 'Задолженность' : (role === 'from' ? 'Доступно' : 'Остаток');
+    const bal      = (balancesMap[sel.accountId] ?? []).find(b => b.currency_code === sel.currency);
+    return (
+      <span className="atx__sel">
+        <span className={`sheet-ico sheet-ico--sm ${acctIcoClass(item.account, item.kind)}`}>
+          <AcctIcon kind={item.kind} />
+        </span>
+        <span className="atx__sel-text">
+          <span className="atx__sel-name">
+            {item.account.name}{isMulti && <span className="atx__sel-cur"> · {curSym(sel.currency)}</span>}
+          </span>
+          <span className="atx__sel-sub">{subLabel}: {bal ? formatAmount(bal.amount, sel.currency) : '—'}</span>
+        </span>
+      </span>
+    );
+  };
 
-          <div className="form-row">
-            {([
-              { key: 'between_cash', label: 'Между cash', disabled: false },
-              { key: 'investment', label: 'С инвестициями', disabled: false },
-              { key: 'credit_to_cash', label: 'С кредита', disabled: false },
-            ] as const).map((item) => (
+  const renderList = (role: 'from' | 'to') =>
+    KIND_ORDER.flatMap(kind => {
+      const items = allItems.filter(pi => pi.kind === kind);
+      if (!items.length) return [];
+      const rows: React.ReactNode[] = [
+        <li key={`grp-${kind}`} className="atx__group-label">{KIND_LABEL[kind]}</li>,
+      ];
+      const seen = new Set<number>();
+      for (const item of items) {
+        const compat   = isCompat(role, item);
+        const selected = role === 'from'
+          ? fromSel?.accountId === item.account.id && fromSel?.currency === item.currency
+          : toSel?.accountId   === item.account.id && toSel?.currency   === item.currency;
+        const siblings = items.filter(pi => pi.account.id === item.account.id);
+        const isMulti  = siblings.length > 1;
+        const subLabel = item.kind === 'credit' ? 'Задолженность' : 'Остаток';
+        const icoClass = acctIcoClass(item.account, item.kind);
+        const key      = `${item.account.id}-${item.currency}`;
+
+        if (isMulti && !seen.has(item.account.id)) {
+          seen.add(item.account.id);
+          rows.push(
+            <li key={`head-${item.account.id}`} className="atx__acct-head" aria-hidden="true">
+              <span className={`sheet-ico sheet-ico--sm ${icoClass}`} style={{ width: 26, height: 26, borderRadius: 7 }}>
+                <AcctIcon kind={item.kind} />
+              </span>
+              <span>{item.account.name}</span>
+            </li>,
+          );
+        }
+
+        if (isMulti) {
+          rows.push(
+            <li key={key}>
               <button
-                key={item.key}
                 type="button"
-                onClick={() => {
-                  if (item.disabled) return;
-                  setMode(item.key);
-                  handleDirectionChange(
-                    item.key === 'between_cash'
-                      ? hasFamily ? 'personal_to_family' : 'cash_to_cash'
-                      : item.key === 'credit_to_cash'
-                        ? 'credit_to_cash'
-                        : 'cash_to_investment',
-                  );
-                }}
-                disabled={submitting || item.disabled}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  fontSize: '0.9rem',
-                  background: mode === item.key ? 'var(--bg-accent)' : 'transparent',
-                  color: mode === item.key ? 'var(--text-on-accent)' : 'var(--text-primary)',
-                  border: 'none',
-                  borderRadius: 8,
-                  cursor: item.disabled || submitting ? 'default' : 'pointer',
-                  outline: 'none',
-                  opacity: item.disabled ? 0.45 : 1,
-                }}
+                className={`atx__item atx__item--cur${selected ? ' atx__item--selected' : ''}`}
+                disabled={!compat}
+                onClick={() => compat && handleSelect(role, item)}
               >
-                {item.label}
+                <span className="atx__cur-sym">{curSym(item.currency)}</span>
+                <span className="atx__item-text">
+                  <span className="atx__item-name">{curName(item.currency)}</span>
+                  <span className="atx__item-sub">{subLabel}: {formatAmount(item.balance, item.currency)}</span>
+                </span>
+                <span className="atx__item-badge">{!compat ? 'нельзя' : selected ? 'выбран' : ''}</span>
               </button>
+            </li>,
+          );
+        } else {
+          if (!seen.has(item.account.id)) seen.add(item.account.id);
+          rows.push(
+            <li key={key}>
+              <button
+                type="button"
+                className={`atx__item${selected ? ' atx__item--selected' : ''}`}
+                disabled={!compat}
+                onClick={() => compat && handleSelect(role, item)}
+              >
+                <span className={`sheet-ico sheet-ico--sm ${icoClass}`}><AcctIcon kind={item.kind} /></span>
+                <span className="atx__item-text">
+                  <span className="atx__item-name">{item.account.name}</span>
+                  <span className="atx__item-sub">{subLabel}: {formatAmount(item.balance, item.currency)}</span>
+                </span>
+                <span className="atx__item-badge">
+                  {!compat ? 'нельзя' : selected ? 'выбран' : curSym(item.currency)}
+                </span>
+              </button>
+            </li>,
+          );
+        }
+      }
+      return rows;
+    });
+
+  return (
+    <BottomSheet
+      open
+      tag="Банк"
+      title="Перевод между счетами"
+      icon={
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 8h12l-3-3M17 16H5l3 3"/>
+        </svg>
+      }
+      iconColor="b"
+      onClose={() => !submitting && onClose()}
+      actions={<>
+        <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+        <button className="sh-btn sh-btn--primary" type="button" disabled={!canSubmit} onClick={handleSubmit} style={{ flex: 2 }}>
+          {submitting ? '…' : 'Перевести'}
+        </button>
+      </>}
+    >
+      {loading ? (
+        <p style={{ color: 'var(--text-3)', textAlign: 'center', padding: '24px 0' }}>Загружаем счета…</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* FROM / TO accordion */}
+          <div className="atx">
+            {(['from', 'to'] as const).map((role, idx) => (
+              <>
+                {idx === 1 && (
+                  <div key="conn" className="atx__conn">
+                    <button
+                      className="atx__swap"
+                      type="button"
+                      disabled={!canSwap}
+                      aria-label="Поменять местами"
+                      onClick={handleSwap}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7 8h12l-3-3M17 16H5l3 3"/>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                <div key={role} className={`atx__block${openRole === role ? ' atx__block--open' : ''}`}>
+                  <button
+                    className="atx__trigger"
+                    type="button"
+                    onClick={() => setOpenRole(openRole === role ? null : role)}
+                  >
+                    <span className="atx__tag">{role === 'from' ? 'Откуда' : 'Куда'}</span>
+                    <div className="atx__val">{renderSlot(role)}</div>
+                    <svg className="atx__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m10 6 6 6-6 6"/>
+                    </svg>
+                  </button>
+                  <div className="atx__drawer">
+                    <div className="atx__drawer-inner">
+                      <ul className="atx__list">{renderList(role)}</ul>
+                    </div>
+                  </div>
+                </div>
+              </>
             ))}
           </div>
 
-          {mode === 'between_cash' && hasFamily && (
-            <div className="form-row">
-              {(['personal_to_family', 'family_to_personal'] as const).map((dir) => (
-                <button
-                  key={dir}
-                  type="button"
-                  onClick={() => handleDirectionChange(dir)}
-                  disabled={submitting}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    fontSize: '0.9rem',
-                    background: direction === dir ? 'var(--bg-accent)' : 'transparent',
-                    color: direction === dir ? 'var(--text-on-accent)' : 'var(--text-primary)',
-                    border: 'none',
-                    borderRadius: 8,
-                    cursor: submitting ? 'default' : 'pointer',
-                    outline: 'none',
-                  }}
-                >
-                  {dir === 'personal_to_family' ? 'Личный → Семейный' : 'Семейный → Личный'}
-                </button>
-              ))}
+          {/* Mode hint */}
+          {modeLabel && (
+            <div className="atx__mode">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 8h12l-3-3M17 16H5l3 3"/>
+              </svg>
+              {modeLabel}
             </div>
           )}
 
-          {mode === 'investment' && (
-            <div className="form-row">
-              {(['cash_to_investment', 'investment_to_cash'] as const).map((dir) => (
-                <button
-                  key={dir}
-                  type="button"
-                  onClick={() => handleDirectionChange(dir)}
-                  disabled={submitting}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    fontSize: '0.9rem',
-                    background: direction === dir ? 'var(--bg-accent)' : 'transparent',
-                    color: direction === dir ? 'var(--text-on-accent)' : 'var(--text-primary)',
-                    border: 'none',
-                    borderRadius: 8,
-                    cursor: submitting ? 'default' : 'pointer',
-                    outline: 'none',
-                  }}
-                >
-                  {dir === 'cash_to_investment' ? 'Cash → Invest' : 'Invest → Cash'}
-                </button>
-              ))}
+          {/* Amount */}
+          <div className="field">
+            <span className="fl">Сумма</span>
+            <div className="amt">
+              <input
+                className="amt__inp"
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                value={amount}
+                onChange={e => setAmount(sanitizeDecimalInput(e.target.value))}
+                disabled={!fromSel || !toSel || submitting}
+              />
+              <span className="amt__cur">{fromSel ? curSym(fromSel.currency) : '₽'}</span>
             </div>
-          )}
-
-          {mode === 'between_cash' && !hasFamily && (
-            <>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={cashFromAccountId}
-                  onChange={(e) => {
-                    setCashFromAccountId(e.target.value);
-                    setCurrencyCode('');
-                    setAmount('');
-                  }}
-                  disabled={submitting || loadingAccounts || cashAccounts.length < 2}
-                >
-                  <option value="">Счёт списания</option>
-                  {cashAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={cashToAccountId}
-                  onChange={(e) => {
-                    setCashToAccountId(e.target.value);
-                    setCurrencyCode('');
-                    setAmount('');
-                  }}
-                  disabled={submitting || loadingAccounts || cashAccounts.length < 2}
-                >
-                  <option value="">Счёт зачисления</option>
-                  {cashAccounts
-                    .filter((account) => String(account.id) !== cashFromAccountId)
-                    .map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          {mode === 'investment' && (
-            <>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={cashAccountId}
-                  onChange={(e) => {
-                    setCashAccountId(e.target.value);
-                    setCurrencyCode('');
-                    setAmount('');
-                  }}
-                  disabled={submitting || loadingAccounts || !cashAccounts.length}
-                >
-                  <option value="">Cash-счет</option>
-                  {cashAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={investmentAccountId}
-                  onChange={(e) => {
-                    setInvestmentAccountId(e.target.value);
-                    setCurrencyCode('');
-                    setAmount('');
-                  }}
-                  disabled={submitting || loadingAccounts || !investmentAccounts.length}
-                >
-                  <option value="">{loadingAccounts ? 'Загружаем investment-счета...' : 'Инвестиционный счет'}</option>
-                  {investmentAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
-                      {account.provider_name ? ` · ${account.provider_name}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          {mode === 'credit_to_cash' && (
-            <>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={creditAccountId}
-                  onChange={(e) => {
-                    setCreditAccountId(e.target.value);
-                    setCurrencyCode('');
-                    setAmount('');
-                  }}
-                  disabled={submitting || loadingAccounts || !creditAccounts.length}
-                >
-                  <option value="">{loadingAccounts ? 'Загружаем кредитные счета...' : 'Кредитный счет'}</option>
-                  {creditAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={cashAccountId}
-                  onChange={(e) => {
-                    setCashAccountId(e.target.value);
-                    setCurrencyCode('');
-                    setAmount('');
-                  }}
-                  disabled={submitting || loadingAccounts || !cashAccounts.length}
-                >
-                  <option value="">Счёт зачисления</option>
-                  {cashAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.owner_type === 'family' ? 'Семейный' : 'Личный'} · {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          <div className="form-row">
-            <select
-              className="input"
-              value={currencyCode}
-              onChange={(e) => { setCurrencyCode(e.target.value); setAmount(''); }}
-              disabled={submitting || loadingAccounts || loadingBalances}
-            >
-              <option value="">{loadingBalances ? 'Загружаем валюты...' : 'Выбери валюту'}</option>
-              {availableCurrencies.map((b) => (
-                <option key={b.currency_code} value={b.currency_code}>
-                  {b.currency_code} · {formatAmount(b.amount, b.currency_code)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {validationMessage && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginBottom: 14 }}>
-              {validationMessage}
-            </p>
-          )}
-
-          <div className="form-row">
-            <input
-              className="input"
-              type="text"
-              inputMode="decimal"
-              placeholder={`Сумма${currencyCode ? ` в ${currencyCode}` : ''}`}
-              value={amount}
-              onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))}
-              disabled={!currencyCode || submitting || loadingAccounts || loadingBalances}
-            />
-            {selectedBalance && (
-              <button
-                className="btn"
-                type="button"
-                disabled={submitting}
-                onClick={() => setAmount(String(selectedBalance.amount))}
-              >
-                Всё
-              </button>
+            {exceedsBalance && fromBalance && (
+              <span className="atx__err">Недостаточно: {formatAmount(fromBalance.amount, fromSel!.currency)}</span>
             )}
           </div>
 
-          <div className="form-row">
+          {/* Comment */}
+          <div className="field">
+            <span className="fl">Комментарий</span>
             <input
-              className="input"
+              className="inp-v2"
               type="text"
-              placeholder="Комментарий (необязательно)"
+              placeholder="Необязательно"
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !submitting && handleSubmit()}
-              style={{ flex: 1 }}
+              onChange={e => setComment(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !submitting && void handleSubmit()}
             />
           </div>
 
-          {error && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-              {error}
-            </p>
-          )}
+          {error && <p className="dlg-error">{error}</p>}
         </div>
+      )}
     </BottomSheet>
   );
 }

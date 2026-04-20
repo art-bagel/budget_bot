@@ -1833,6 +1833,458 @@ body {
 }
 [data-theme='dark'] .btn--ghost { background: var(--surface-2); }
 
+/* --- Group distribution sheet ---------------------------- */
+.grp-src {
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+[data-theme='dark'] .grp-src { background: var(--surface-inset); }
+.grp-src__tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.grp-src__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.grp-src__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grp-src__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.01em;
+}
+.grp-src__sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.grp-src__chev {
+  width: 14px; height: 14px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.grp-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 2px;
+  background: var(--surface-inset);
+}
+.grp-bar__seg {
+  width: var(--w, 0%);
+  border-radius: 2px;
+  transition: width .2s ease;
+}
+.grp-bar__seg--1 { background: var(--g-1); }
+.grp-bar__seg--2 { background: var(--g-2); }
+.grp-bar__seg--3 { background: var(--g-3); }
+.grp-bar__seg--4 { background: var(--g-4); }
+
+.grp-dist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.grp-dist__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px 4px;
+}
+.grp-dist__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.grp-dist__total {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.grp-dist__list {
+  display: flex;
+  flex-direction: column;
+}
+.grp-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.grp-row:last-child { border-bottom: 0; }
+.grp-row__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.grp-row__dot--1 { background: var(--g-1); }
+.grp-row__dot--2 { background: var(--g-2); }
+.grp-row__dot--3 { background: var(--g-3); }
+.grp-row__dot--4 { background: var(--g-4); }
+.grp-row__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.005em;
+}
+.grp-row__pct {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-left: 6px;
+  font-weight: 500;
+}
+.grp-row__amt {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums;
+  transition: color .15s ease;
+}
+.grp-row__amt--active { color: var(--text); }
+.grp-row__amt span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-left: 2px;
+}
+
+.btn[disabled] {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* --- Account transfer (accordion pickers) ---------------- */
+.atx {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Each FROM / TO block */
+.atx__block {
+  background: var(--surface);
+}
+
+/* Trigger button: the visible "row" you tap */
+.atx__trigger {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 20px;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 64px;
+  position: relative;
+}
+.atx__trigger:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
+
+.atx__tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  grid-column: 1 / -1;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+.atx__val {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.atx__ph {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.atx__chev {
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: transform .28s cubic-bezier(.25, 1, .4, 1);
+}
+.atx__block--open .atx__chev { transform: rotate(90deg); }
+.atx__block--open .atx__trigger { background: var(--yellow-tint); }
+
+/* Selected account inside trigger */
+.atx__sel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.atx__sel-ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.atx__sel-ico svg { width: 18px; height: 18px; }
+.atx__sel-text { display: flex; flex-direction: column; min-width: 0; }
+.atx__sel-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atx__sel-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accordion drawer */
+.atx__drawer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .35s cubic-bezier(.25, 1, .4, 1);
+}
+.atx__block--open .atx__drawer { max-height: 480px; }
+.atx__drawer-inner {
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-inset);
+}
+
+/* Connector (divider line + centered swap button) */
+.atx__conn {
+  height: 1px;
+  background: var(--line);
+  position: relative;
+  z-index: 1;
+}
+.atx__line { display: none; }
+.atx__swap {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--text-2);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: border-color .15s, color .15s, transform .3s cubic-bezier(.3,1.4,.5,1);
+}
+.atx__swap svg { width: 14px; height: 14px; }
+.atx__swap:not([disabled]):hover { border-color: var(--yellow); color: var(--text); }
+.atx__swap:not([disabled]):active { transform: translate(-50%, -50%) rotate(180deg); }
+.atx__swap[disabled] { opacity: .4; cursor: not-allowed; }
+
+/* List inside drawer */
+.atx__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.atx__group-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 10px 14px 5px;
+}
+.atx__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  transition: background .12s ease;
+}
+.atx__item:hover:not([disabled]) { background: var(--surface); }
+.atx__item[disabled] { opacity: .38; cursor: not-allowed; }
+.atx__item--selected { background: var(--yellow-tint); }
+.atx__item-ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.atx__item-ico svg { width: 17px; height: 17px; }
+.atx__item-text { display: flex; flex-direction: column; min-width: 0; }
+.atx__item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.005em;
+}
+.atx__item-sub {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.atx__item-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+.atx__item--selected .atx__item-badge {
+  background: var(--yellow);
+  border-color: var(--yellow-deep);
+  color: var(--text);
+}
+.atx__item[disabled] .atx__item-badge {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-3);
+}
+
+/* Account group header inside picker (for multi-currency accounts) */
+.atx__acct-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px 3px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.01em;
+}
+.atx__acct-head-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.atx__acct-head-ico svg { width: 13px; height: 13px; }
+
+/* Compact currency sub-row */
+.atx__item--cur { padding-left: 28px; }
+.atx__cur-sym {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-2);
+  flex-shrink: 0;
+  letter-spacing: -.02em;
+}
+.atx__item--selected .atx__cur-sym {
+  background: var(--yellow);
+  border-color: var(--yellow-deep);
+  color: var(--text);
+}
+.atx__item--cur .atx__item-name { font-size: 13.5px; }
+.atx__item--cur .atx__item-sub  { font-size: 11px; }
+
+/* Transfer mode badge */
+.atx__mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--surface-inset);
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-top: 8px;
+}
+.atx__mode svg { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; }
+
+/* Cross-currency receive row */
+.atx__receive {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 9px 14px;
+  background: var(--surface-inset);
+  border-radius: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.atx__receive-label {
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-right: 2px;
+}
+.atx__receive-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+.atx__receive-cur {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.atx__rate-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+
 /* --- Entrance animations --------------------------------- */
 @keyframes in-slide {
   from { opacity: 0; transform: translateY(6px); }

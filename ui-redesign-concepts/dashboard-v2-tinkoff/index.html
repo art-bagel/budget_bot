@@ -267,7 +267,7 @@
             </button>
           </div>
           <ul class="groups">
-            <li class="group" tabindex="0">
+            <li class="group" data-group="mandatory" tabindex="0">
               <div class="group__head">
                 <div>
                   <span class="group__title">Обязательные платежи</span>
@@ -292,7 +292,7 @@
               </ul>
             </li>
 
-            <li class="group" tabindex="0">
+            <li class="group" data-group="food" tabindex="0">
               <div class="group__head">
                 <div>
                   <span class="group__title">Питание</span>
@@ -313,7 +313,7 @@
               </ul>
             </li>
 
-            <li class="group group--fam" tabindex="0">
+            <li class="group group--fam" data-group="family" tabindex="0">
               <div class="group__head">
                 <div>
                   <span class="group__title">Семейные расходы<span class="group__badge">семья</span></span>
@@ -417,6 +417,59 @@
           <div class="sl-row"><div><span class="sl-name">ВкусВилл</span><span class="sl-sub">16 апреля</span></div><strong class="sl-val sl-val--neg">−2 180 ₽</strong></div>
           <div class="sl-row"><div><span class="sl-name">Ашан</span><span class="sl-sub">14 апреля</span></div><strong class="sl-val sl-val--neg">−3 620 ₽</strong></div>
         </div>
+      </div>
+    </div>
+
+    <div class="sheet" id="sheet-group" role="dialog" aria-labelledby="sheetGroupTitle">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <div class="sheet__head-left">
+          <span class="sheet-ico sheet-ico--ink" id="sheetGroupIco"><svg><use href="#i-donut"/></svg></span>
+          <div>
+            <span class="sheet__tag" id="sheetGroupTag">Группа</span>
+            <h3 id="sheetGroupTitle" class="sheet__title">Обязательные платежи</h3>
+          </div>
+        </div>
+        <button class="sheet__close" data-close type="button" aria-label="Закрыть">
+          <svg><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <div class="sheet__body">
+
+        <div class="grp-src" id="sheetGroupSrc">
+          <span class="grp-src__tag">Источник распределения</span>
+          <div class="grp-src__row">
+            <span class="sheet-ico sheet-ico--yel sheet-ico--sm"><svg><use href="#i-plus"/></svg></span>
+            <div class="grp-src__text">
+              <span class="grp-src__name" id="sheetGroupSrcName">Свободный остаток (личный)</span>
+              <span class="grp-src__sub" id="sheetGroupSrcSub">Доступно 42 300 ₽</span>
+            </div>
+            <svg class="grp-src__chev"><use href="#i-chev"/></svg>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="fl">Сумма к распределению</span>
+          <div class="amt">
+            <input id="sheetGroupAmt" class="amt__inp" type="text" inputmode="decimal" placeholder="0" />
+            <span class="amt__cur">₽</span>
+          </div>
+        </div>
+
+        <div class="grp-bar" id="sheetGroupBar" aria-hidden="true"></div>
+
+        <div class="grp-dist">
+          <div class="grp-dist__head">
+            <span class="grp-dist__label">Разложится по категориям</span>
+            <span class="grp-dist__total" id="sheetGroupTotalPct">100%</span>
+          </div>
+          <ul class="grp-dist__list" id="sheetGroupList"></ul>
+        </div>
+
+      </div>
+      <div class="sheet__actions">
+        <button class="btn btn--ghost" data-close type="button">Отмена</button>
+        <button class="btn btn--primary" id="sheetGroupConfirm" type="button" disabled>Распределить</button>
       </div>
     </div>
 
@@ -626,38 +679,62 @@
         <button class="sheet__close" data-close type="button" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
       </div>
       <div class="sheet__body">
-        <div class="xfer">
-          <div class="xfer__card">
-            <span class="xfer__tag">Откуда</span>
-            <button class="xfer__row" type="button">
-              <span class="sheet-ico sheet-ico--sm" style="background:var(--text); color:var(--surface);"><svg><use href="#i-card"/></svg></span>
-              <div class="xfer__text">
-                <span class="xfer__name">Личный счёт</span>
-                <span class="xfer__sub">Доступно: 845 200 ₽</span>
+        <!-- FROM / TO accordion blocks -->
+        <div class="atx">
+          <div class="atx__block" data-atx-role="from">
+            <button class="atx__trigger" type="button">
+              <span class="atx__tag">Откуда</span>
+              <div class="atx__val" data-atx-val="from">
+                <span class="atx__ph">Выберите счёт</span>
               </div>
-              <svg class="xfer__chev"><use href="#i-chev"/></svg>
+              <svg class="atx__chev"><use href="#i-chev"/></svg>
             </button>
+            <div class="atx__drawer">
+              <div class="atx__drawer-inner">
+                <ul class="atx__list" data-atx-list="from"></ul>
+              </div>
+            </div>
           </div>
-          <div class="xfer__arrow"><svg><use href="#i-arrow-down"/></svg></div>
-          <div class="xfer__card xfer__card--to">
-            <span class="xfer__tag">Куда</span>
-            <button class="xfer__row" type="button">
-              <span class="sheet-ico sheet-ico--sm" style="background:#E86A4F; color:#fff;"><svg><use href="#i-card"/></svg></span>
-              <div class="xfer__text">
-                <span class="xfer__name">Семейный счёт</span>
-                <span class="xfer__sub">Остаток: 420 100 ₽</span>
-              </div>
-              <svg class="xfer__chev"><use href="#i-chev"/></svg>
+
+          <div class="atx__conn">
+            <div class="atx__line"></div>
+            <button class="atx__swap" id="atxSwap" type="button" disabled aria-label="Поменять местами">
+              <svg><use href="#i-swap"/></svg>
             </button>
+            <div class="atx__line"></div>
+          </div>
+
+          <div class="atx__block" data-atx-role="to">
+            <button class="atx__trigger" type="button">
+              <span class="atx__tag">Куда</span>
+              <div class="atx__val" data-atx-val="to">
+                <span class="atx__ph">Выберите счёт</span>
+              </div>
+              <svg class="atx__chev"><use href="#i-chev"/></svg>
+            </button>
+            <div class="atx__drawer">
+              <div class="atx__drawer-inner">
+                <ul class="atx__list" data-atx-list="to"></ul>
+              </div>
+            </div>
           </div>
         </div>
+
+        <!-- Mode badge -->
+        <div class="atx__mode" id="atxMode" hidden>
+          <svg><use href="#i-swap"/></svg>
+          <span id="atxModeText">Перевод между счетами</span>
+        </div>
+
+        <!-- Amount -->
         <div class="field">
           <span class="fl">Сумма</span>
           <div class="amt">
-            <input class="amt__inp" type="text" value="15 000" inputmode="decimal" />
-            <span class="amt__cur">₽</span>
+            <input class="amt__inp" id="atxAmount" type="text" inputmode="decimal" placeholder="0" />
+            <span class="amt__cur" id="atxFromCur">₽</span>
           </div>
         </div>
+
         <div class="field">
           <span class="fl">Комментарий</span>
           <input class="inp" type="text" placeholder="Необязательно" />
@@ -665,7 +742,7 @@
       </div>
       <div class="sheet__actions">
         <button class="btn btn--ghost" data-close type="button">Отмена</button>
-        <button class="btn btn--primary" type="button">Перевести</button>
+        <button class="btn btn--primary" id="atxConfirm" type="button" disabled>Перевести</button>
       </div>
     </div>
 

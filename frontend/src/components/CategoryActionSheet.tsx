@@ -27,6 +27,7 @@ import type {
   AccountCurrency,
   Category,
   DashboardBudgetCategory,
+  GroupMember,
   ParentGroup,
   ScheduledExpense,
   BankAccount,
@@ -293,6 +294,7 @@ export default function CategoryActionSheet({
   const [groupRows, setGroupRows] = useState<GroupDraftRow[]>([createDraftRow(1)]);
   const [initialGroupRowsSnapshot, setInitialGroupRowsSnapshot] = useState('[]');
   const [groupSelectableCategories, setGroupSelectableCategories] = useState<Category[]>([]);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [parentGroups, setParentGroups] = useState<ParentGroup[]>([]);
   const [loadingGroupSettings, setLoadingGroupSettings] = useState(false);
   const groupRequestIdRef = useRef(0);
@@ -395,6 +397,7 @@ export default function CategoryActionSheet({
           ),
         );
         setGroupRows(nextRows);
+        setGroupMembers(members);
         setInitialGroupRowsSnapshot(serializeGroupRows(nextRows));
       })
       .catch((reason: unknown) => { if (groupRequestIdRef.current === reqId) setSettingsError(reason instanceof Error ? reason.message : String(reason)); })
@@ -472,6 +475,8 @@ export default function CategoryActionSheet({
   const colorClasses = ['--g', '--o', '--b', '--p', '--r', '--v'] as const;
   const colorClass = colorClasses[category.category_id % 6];
   const iconColorSuffix = colorClass.slice(2); // 'g' | 'o' | 'b' | 'p' | 'r' | 'v'
+  const isGroup = category.kind === 'group';
+  const sheetTag = isGroup ? (category.owner_type === 'family' ? 'Семейная группа' : 'Группа') : 'Категория';
 
   const categoryIconNode = parsed.kind === 'svg' && parsed.icon
     ? <CategorySvgIcon code={parsed.icon} />
@@ -494,7 +499,7 @@ export default function CategoryActionSheet({
         <>
           <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={xferSubmitting}>Отмена</button>
           <button className="sh-btn sh-btn--primary" type="button" disabled={!canSubmitTransfer} onClick={handleSubmitTransfer} style={{ flex: 1 }}>
-            {xferSubmitting ? '...' : 'Перевести'}
+            {xferSubmitting ? '...' : isGroup ? 'Распределить' : 'Перевести'}
           </button>
         </>
       )}
@@ -515,23 +520,25 @@ export default function CategoryActionSheet({
   return (
     <BottomSheet
       open
-      tag="Категория"
+      tag={sheetTag}
       title={categoryDisplayName(category.name)}
       icon={categoryIconNode}
       iconColor={iconColorSuffix}
       onClose={() => !isBusy && onClose()}
       actions={tabActions}
     >
-      {/* Category stat */}
-      <div className="sheet-stat">
-        <span className="sheet-stat__tag">Остаток в категории</span>
-        <div className="sheet-stat__num">
-          <span className="sheet-stat__val">
-            {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(category.balance)}
-          </span>
-          <span className="sheet-stat__sym">{category.currency_code}</span>
+      {/* Category stat — hidden for groups (they don't have a balance, only rules) */}
+      {!isGroup && (
+        <div className="sheet-stat">
+          <span className="sheet-stat__tag">Остаток в категории</span>
+          <div className="sheet-stat__num">
+            <span className="sheet-stat__val">
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(category.balance)}
+            </span>
+            <span className="sheet-stat__sym">{category.currency_code}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tab switcher */}
       <div className="cat-actions" role="group" aria-label="Действие с категорией">
@@ -559,7 +566,7 @@ export default function CategoryActionSheet({
               <path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/>
             </svg>
           </span>
-          <span className="cat-act__label">Перевод</span>
+          <span className="cat-act__label">{isGroup ? 'Распределить' : 'Перевод'}</span>
         </button>
         <button
           className={`cat-act${activeTab === 'settings' ? ' cat-act--primary' : ''}`}
@@ -698,33 +705,35 @@ export default function CategoryActionSheet({
               </div>
             )}
 
-            {/* Arrow */}
-            <div className="xfer__arrow">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 5v14M6 13l6 6 6-6"/>
-              </svg>
-            </div>
-
-            {/* TO card — fixed, yellow tint */}
-            <div className="xfer__card xfer__card--to">
-              <span className="xfer__tag">Куда</span>
-              <div className="xfer__row">
-                <span className={`sheet-ico sheet-ico--sm sheet-ico${colorClass}`}>
-                  {parsed.kind === 'svg' && parsed.icon ? <CategorySvgIcon code={parsed.icon} /> : parsed.kind === 'emoji' && parsed.icon ? <span style={{ fontSize: 14 }}>{parsed.icon}</span> : null}
-                </span>
-                <div className="xfer__text">
-                  <span className="xfer__name">{categoryDisplayName(activeTarget.name)}</span>
-                  <span className="xfer__sub">{formatAmount(category.balance, category.currency_code)}</span>
+            {/* Arrow + "Куда" — hidden for groups (target is the group itself, shown in the sheet header) */}
+            {!isGroup && (
+              <>
+                <div className="xfer__arrow">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M6 13l6 6 6-6"/>
+                  </svg>
                 </div>
-              </div>
-            </div>
+                <div className="xfer__card xfer__card--to">
+                  <span className="xfer__tag">Куда</span>
+                  <div className="xfer__row">
+                    <span className={`sheet-ico sheet-ico--sm sheet-ico${colorClass}`}>
+                      {parsed.kind === 'svg' && parsed.icon ? <CategorySvgIcon code={parsed.icon} /> : parsed.kind === 'emoji' && parsed.icon ? <span style={{ fontSize: 14 }}>{parsed.icon}</span> : null}
+                    </span>
+                    <div className="xfer__text">
+                      <span className="xfer__name">{categoryDisplayName(activeTarget.name)}</span>
+                      <span className="xfer__sub">{formatAmount(category.balance, category.currency_code)}</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {xferValidationMsg && <p className="dlg-error">{xferValidationMsg}</p>}
 
           {/* Amount */}
           <div className="field">
-            <span className="fl">Сумма</span>
+            <span className="fl">{activeTarget.kind === 'group' ? 'Сумма к распределению' : 'Сумма'}</span>
             <div className="amt">
               <input
                 className="amt__inp"
@@ -751,6 +760,46 @@ export default function CategoryActionSheet({
               onKeyDown={(e) => e.key === 'Enter' && !xferSubmitting && handleSubmitTransfer()}
             />
           </div>
+
+          {/* Live distribution preview — only when target is a group */}
+          {activeTarget.kind === 'group' && groupMembers.length > 0 && (
+            <div className="grp-dist">
+              <div className="grp-dist__head">
+                <span className="grp-dist__label">Разложится по категориям</span>
+                <span className="grp-dist__total">
+                  {Math.round(groupMembers.reduce((s, m) => s + m.share, 0) * 100)}%
+                </span>
+              </div>
+              <div className="grp-bar" aria-hidden="true">
+                {[...groupMembers].sort((a, b) => b.share - a.share).slice(0, 4).map((m, i) => (
+                  <span
+                    key={m.child_category_id}
+                    className={`grp-bar__seg grp-bar__seg--${i + 1}`}
+                    style={{ ['--w' as string]: `${Math.round(m.share * 100)}%` } as React.CSSProperties}
+                  />
+                ))}
+              </div>
+              <ul className="grp-dist__list">
+                {[...groupMembers].sort((a, b) => b.share - a.share).map((m, i) => {
+                  const active = xferAmountValue > 0;
+                  const amt = active ? xferAmountValue * m.share : 0;
+                  return (
+                    <li key={m.child_category_id} className="grp-row">
+                      <span className={`grp-row__dot grp-row__dot--${(i % 4) + 1}`} />
+                      <div>
+                        <span className="grp-row__name">{categoryDisplayName(m.child_category_name)}</span>
+                        <span className="grp-row__pct"> · {Math.round(m.share * 100)}%</span>
+                      </div>
+                      <span className={`grp-row__amt${active ? ' grp-row__amt--active' : ''}`}>
+                        {active ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(amt) : '—'}
+                        <span> {baseCurrencyCode}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {xferError && <p className="dlg-error">{xferError}</p>}
         </div>
