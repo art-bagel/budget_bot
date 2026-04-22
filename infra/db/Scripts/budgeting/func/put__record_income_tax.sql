@@ -1,5 +1,7 @@
 DROP FUNCTION IF EXISTS budgeting.put__record_income_tax(bigint, bigint, numeric, character, numeric, numeric, timestamptz);
 DROP FUNCTION IF EXISTS budgeting.put__record_income_tax(bigint, bigint, numeric, character, numeric, numeric, timestamptz, bigint);
+DROP FUNCTION IF EXISTS budgeting.put__record_income_tax(bigint, bigint, numeric, character, numeric, numeric, date);
+DROP FUNCTION IF EXISTS budgeting.put__record_income_tax(bigint, bigint, numeric, character, numeric, numeric, date, bigint);
 CREATE FUNCTION budgeting.put__record_income_tax(
     _user_id             bigint,
     _bank_account_id     bigint,
@@ -7,7 +9,7 @@ CREATE FUNCTION budgeting.put__record_income_tax(
     _currency_code       char(3),
     _tax_cost_in_base    numeric,
     _tax_percent         numeric,
-    _operated_at         timestamptz DEFAULT NULL,
+    _operated_at         date DEFAULT NULL,
     _income_source_id    bigint DEFAULT NULL
 )
 RETURNS jsonb
@@ -183,7 +185,7 @@ BEGIN
         owner_family_id,
         type,
         comment,
-        created_at
+        operated_on
     )
     VALUES (
         _user_id,
@@ -192,7 +194,7 @@ BEGIN
         _owner_family_id,
         'expense',
         _tax_comment,
-        COALESCE(_operated_at, current_timestamp)
+        COALESCE(_operated_at::date, current_date)
     )
     RETURNING id
     INTO _operation_id;

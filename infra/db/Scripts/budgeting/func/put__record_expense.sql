@@ -6,7 +6,7 @@ CREATE FUNCTION budgeting.put__record_expense(
     _amount          numeric,
     _currency_code   char(3),
     _comment         text DEFAULT NULL,
-    _operated_at     timestamptz DEFAULT NULL
+    _operated_at     date DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -165,8 +165,8 @@ BEGIN
     WHERE category_id = _category_id AND currency_code = _base_currency_code
     FOR UPDATE;
 
-    INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at)
-    VALUES (_user_id, _category_owner_type, _category_owner_user_id, _category_owner_family_id, 'expense', _comment, COALESCE(_operated_at, current_timestamp))
+    INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, operated_on)
+    VALUES (_user_id, _category_owner_type, _category_owner_user_id, _category_owner_family_id, 'expense', _comment, COALESCE(_operated_at::date, current_date))
     RETURNING id INTO _operation_id;
 
     INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)

@@ -187,6 +187,7 @@ export interface OperationHistoryItem {
   operation_id: number;
   type: string;
   comment?: string | null;
+  operated_at?: string | null;
   created_at: string;
   reversal_of_operation_id?: number | null;
   has_reversal: boolean;

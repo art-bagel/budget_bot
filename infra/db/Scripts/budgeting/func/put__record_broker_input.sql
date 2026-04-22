@@ -42,11 +42,11 @@ BEGIN
     END IF;
 
     INSERT INTO operations (
-        actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at
+        actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, operated_on
     )
     VALUES (
         _user_id, _owner_type, _owner_user_id, _owner_family_id,
-        'broker_input', _comment, COALESCE(_operation_at, CURRENT_TIMESTAMP)
+        'broker_input', _comment, COALESCE(_operation_at::date, CURRENT_DATE)
     )
     RETURNING id INTO _operation_id;
 

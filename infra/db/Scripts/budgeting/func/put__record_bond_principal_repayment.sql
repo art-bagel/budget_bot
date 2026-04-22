@@ -109,7 +109,7 @@ BEGIN
         owner_family_id,
         type,
         comment,
-        created_at
+        operated_on
     )
     VALUES (
         _user_id,
@@ -118,7 +118,7 @@ BEGIN
         _owner_family_id,
         'investment_adjustment',
         COALESCE(_comment, 'Погашение облигации · ' || _title),
-        COALESCE(_operation_at, CURRENT_TIMESTAMP)
+        COALESCE(_operation_at::date, CURRENT_DATE)
     )
     RETURNING id INTO _operation_id;
 

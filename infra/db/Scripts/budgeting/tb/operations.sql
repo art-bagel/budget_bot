@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS budgeting.operations (
     type varchar(30) NOT NULL CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal')),
     reversal_of_operation_id bigint REFERENCES budgeting.operations(id),
     comment text,
+    operated_on date NOT NULL DEFAULT current_date,
     created_at timestamptz NOT NULL DEFAULT current_timestamp,
     CONSTRAINT chk_operations_owner CHECK (
         (owner_type = 'user' AND owner_user_id IS NOT NULL AND owner_family_id IS NULL)
@@ -29,14 +30,14 @@ ALTER TABLE budgeting.operations
     CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal', 'credit_taken'));
 
 CREATE INDEX IF NOT EXISTS idx_operations_actor_created_at_id
-    ON budgeting.operations (actor_user_id, created_at DESC, id DESC);
+    ON budgeting.operations (actor_user_id, operated_on DESC, created_at DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_operations_user_owner_type_created_at_id
-    ON budgeting.operations (owner_user_id, type, created_at DESC, id DESC)
+    ON budgeting.operations (owner_user_id, type, operated_on DESC, created_at DESC, id DESC)
     WHERE owner_type = 'user';
 
 CREATE INDEX IF NOT EXISTS idx_operations_family_owner_type_created_at_id
-    ON budgeting.operations (owner_family_id, type, created_at DESC, id DESC)
+    ON budgeting.operations (owner_family_id, type, operated_on DESC, created_at DESC, id DESC)
     WHERE owner_type = 'family';
 
 CREATE INDEX IF NOT EXISTS idx_operations_reversal_of_operation_id

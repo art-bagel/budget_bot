@@ -271,7 +271,7 @@ BEGIN
         owner_family_id,
         type,
         comment,
-        created_at
+        operated_on
     )
     VALUES (
         _user_id,
@@ -280,7 +280,7 @@ BEGIN
         _from_owner_family_id,
         'account_transfer',
         COALESCE(NULLIF(btrim(_comment), ''), 'Платёж по кредиту · ' || _credit_name),
-        COALESCE(_payment_at, CURRENT_TIMESTAMP)
+        COALESCE(_payment_at::date, CURRENT_DATE)
     )
     RETURNING id INTO _operation_id;
 

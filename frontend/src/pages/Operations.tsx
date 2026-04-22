@@ -476,7 +476,7 @@ function formatDateGroupLabel(isoKey: string): string {
 function groupByDate(items: OperationHistoryItem[]): { dateKey: string; dateLabel: string; items: OperationHistoryItem[] }[] {
   const groups = new Map<string, OperationHistoryItem[]>();
   for (const item of items) {
-    const key = new Date(item.created_at).toLocaleDateString('en-CA');
+    const key = item.operated_at ?? new Date(item.created_at).toLocaleDateString('en-CA');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(item);
   }

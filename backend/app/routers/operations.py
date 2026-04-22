@@ -215,6 +215,7 @@ class OperationHistoryItem(BaseModel):
     operation_id: int
     type: str
     comment: Optional[str] = None
+    operated_at: Optional[str] = None
     created_at: str
     reversal_of_operation_id: Optional[int] = None
     has_reversal: bool = False

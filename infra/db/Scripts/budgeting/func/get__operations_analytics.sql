@@ -76,13 +76,14 @@ BEGIN
     WITH filtered_operations AS (
         SELECT
             o.id,
+            o.operated_on,
             o.created_at,
             o.owner_type,
             o.income_source_id
         FROM operations o
         WHERE o.type = _normalized_operation_type
-          AND o.created_at >= _series_start
-          AND o.created_at < _selected_period_end
+          AND o.operated_on >= _series_start
+          AND o.operated_on < _selected_period_end
           AND NOT EXISTS (
               SELECT 1 FROM operations ro
               WHERE ro.reversal_of_operation_id = o.id
@@ -109,8 +110,8 @@ BEGIN
         JOIN categories c
           ON c.id = bue.category_id
         WHERE _normalized_operation_type = 'expense'
-          AND fo.created_at >= _selected_period_start
-          AND fo.created_at < _selected_period_end
+          AND fo.operated_on >= _selected_period_start
+          AND fo.operated_on < _selected_period_end
           AND c.kind = 'regular'
           AND bue.amount < 0
         GROUP BY c.id, c.name, c.owner_type
@@ -130,8 +131,8 @@ BEGIN
         LEFT JOIN income_sources ins
           ON ins.id = fo.income_source_id
         WHERE _normalized_operation_type = 'income'
-          AND fo.created_at >= _selected_period_start
-          AND fo.created_at < _selected_period_end
+          AND fo.operated_on >= _selected_period_start
+          AND fo.operated_on < _selected_period_end
           AND c.kind = 'system'
           AND c.name = 'Unallocated'
           AND bue.amount > 0
@@ -151,9 +152,9 @@ BEGIN
     series_source_expense AS (
         SELECT
             CASE
-                WHEN _normalized_period_mode = 'week' THEN date_trunc('week', fo.created_at)::date
-                WHEN _normalized_period_mode = 'month' THEN date_trunc('month', fo.created_at)::date
-                ELSE date_trunc('year', fo.created_at)::date
+                WHEN _normalized_period_mode = 'week' THEN date_trunc('week', fo.operated_on)::date
+                WHEN _normalized_period_mode = 'month' THEN date_trunc('month', fo.operated_on)::date
+                ELSE date_trunc('year', fo.operated_on)::date
             END AS period_start,
             abs(bue.amount) AS amount
         FROM filtered_operations fo
@@ -168,9 +169,9 @@ BEGIN
     series_source_income AS (
         SELECT
             CASE
-                WHEN _normalized_period_mode = 'week' THEN date_trunc('week', fo.created_at)::date
-                WHEN _normalized_period_mode = 'month' THEN date_trunc('month', fo.created_at)::date
-                ELSE date_trunc('year', fo.created_at)::date
+                WHEN _normalized_period_mode = 'week' THEN date_trunc('week', fo.operated_on)::date
+                WHEN _normalized_period_mode = 'month' THEN date_trunc('month', fo.operated_on)::date
+                ELSE date_trunc('year', fo.operated_on)::date
             END AS period_start,
             bue.amount AS amount
         FROM filtered_operations fo

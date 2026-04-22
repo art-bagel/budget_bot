@@ -174,10 +174,10 @@ BEGIN
         END IF;
     END IF;
 
-    INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at)
+    INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, operated_on)
     VALUES (
         _user_id, _from_owner_type, _from_owner_user_id, _from_owner_family_id,
-        'account_transfer', _comment, COALESCE(_operation_at, CURRENT_TIMESTAMP)
+        'account_transfer', _comment, COALESCE(_operation_at::date, CURRENT_DATE)
     )
     RETURNING id INTO _operation_id;
 

@@ -56,6 +56,7 @@ BEGIN
             o.id,
             o.type,
             o.comment,
+            o.operated_on,
             o.created_at,
             o.reversal_of_operation_id,
             o.actor_user_id,
@@ -124,7 +125,7 @@ BEGIN
                     AND o.type = ANY(string_to_array(_normalized_operation_type, ','))
                 )
           )
-        ORDER BY o.created_at DESC, o.id DESC
+        ORDER BY o.operated_on DESC, o.created_at DESC, o.id DESC
         LIMIT _limit OFFSET _offset
     ),
     bank_agg AS (
@@ -179,6 +180,7 @@ BEGIN
                 'operation_id', so.id,
                 'type', so.type,
                 'comment', so.comment,
+                'operated_at', so.operated_on,
                 'created_at', so.created_at,
                 'reversal_of_operation_id', so.reversal_of_operation_id,
                 'has_reversal', so.has_reversal,
@@ -197,7 +199,7 @@ BEGIN
           ON ba.operation_id = so.id
         LEFT JOIN budget_agg bga
           ON bga.operation_id = so.id
-        ORDER BY so.created_at DESC, so.id DESC
+        ORDER BY so.operated_on DESC, so.created_at DESC, so.id DESC
     )
     SELECT jsonb_build_object(
         'items',       COALESCE((SELECT jsonb_agg(item) FROM items), '[]'::jsonb),

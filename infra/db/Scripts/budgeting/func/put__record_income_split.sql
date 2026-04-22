@@ -1,5 +1,7 @@
 DROP FUNCTION IF EXISTS budgeting.put__record_income_split(bigint, bigint, numeric, character, numeric, text, timestamptz);
 DROP FUNCTION IF EXISTS budgeting.put__record_income_split(bigint, bigint, numeric, character, numeric, text, timestamptz, numeric);
+DROP FUNCTION IF EXISTS budgeting.put__record_income_split(bigint, bigint, numeric, character, numeric, text, date);
+DROP FUNCTION IF EXISTS budgeting.put__record_income_split(bigint, bigint, numeric, character, numeric, text, date, numeric);
 CREATE FUNCTION budgeting.put__record_income_split(
     _user_id              bigint,
     _income_source_id     bigint,
@@ -7,7 +9,7 @@ CREATE FUNCTION budgeting.put__record_income_split(
     _currency_code        char(3),
     _budget_amount_in_base numeric DEFAULT NULL,
     _comment              text     DEFAULT NULL,
-    _operated_at          timestamptz DEFAULT NULL,
+    _operated_at          date DEFAULT NULL,
     _tax_percent          numeric DEFAULT NULL
 )
 RETURNS jsonb
