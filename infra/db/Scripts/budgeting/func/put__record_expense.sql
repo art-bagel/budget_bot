@@ -16,7 +16,6 @@ DECLARE
     _category_kind            text;
     _bank_balance             numeric(20, 8);
     _bank_credit_limit        numeric(20, 2);
-    _category_balance         numeric(20, 2);
     _operation_id             bigint;
     _remaining_to_consume     numeric(20, 8);
     _expense_cost_base        numeric(20, 2) := 0;
@@ -159,18 +158,12 @@ BEGIN
         END IF;
     END IF;
 
-    -- Lock the budget row to prevent concurrent over-spend.
+    -- Categories may go negative: spending is limited by the source bank account,
+    -- not by the current category balance. We still lock the row if it exists to
+    -- serialize concurrent updates and keep balance history deterministic.
     PERFORM 1 FROM current_budget_balances
     WHERE category_id = _category_id AND currency_code = _base_currency_code
     FOR UPDATE;
-
-    SELECT COALESCE(amount, 0) INTO _category_balance
-    FROM current_budget_balances
-    WHERE category_id = _category_id AND currency_code = _base_currency_code;
-
-    IF _category_balance < _expense_cost_base THEN
-        RAISE EXCEPTION 'Сумма превышает остаток';
-    END IF;
 
     INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, created_at)
     VALUES (_user_id, _category_owner_type, _category_owner_user_id, _category_owner_family_id, 'expense', _comment, COALESCE(_operated_at, current_timestamp))

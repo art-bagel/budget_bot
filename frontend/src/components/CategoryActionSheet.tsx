@@ -4,7 +4,7 @@ import CurrencyPicker from './CurrencyPicker';
 import EmojiPicker from './EmojiPicker';
 import { parseCategoryIcon, buildCategoryName, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
-import { formatAmount } from '../utils/format';
+import { formatAmount, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import {
   archiveCategory,
@@ -524,7 +524,7 @@ export default function CategoryActionSheet({
           <span className="sheet-stat__tag">Остаток в категории</span>
           <div className="sheet-stat__num">
             <span className="sheet-stat__val">
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(category.balance)}
+              {formatNumericAmount(category.balance)}
             </span>
             <span className="sheet-stat__sym">{category.currency_code}</span>
           </div>

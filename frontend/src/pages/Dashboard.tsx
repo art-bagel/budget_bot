@@ -20,7 +20,7 @@ import type {
   TinkoffLivePrice,
   UserContext,
 } from '../types';
-import { currencySymbol, formatAmount } from '../utils/format';
+import { currencySymbol, formatAmount, formatNumericAmount } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import TransferDialog from '../components/TransferDialog';
@@ -847,7 +847,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                           isNeg ? 'cat__amt--neg' : '',
                           isWarn ? 'cat__amt--warn' : '',
                         ].filter(Boolean).join(' ')}>
-                          {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(category.balance)}
+                          {formatNumericAmount(category.balance)}
                           <span className="ruble">&nbsp;{currencySymbol(category.currency_code)}</span>
                         </strong>
                       </>

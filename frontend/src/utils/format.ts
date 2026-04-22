@@ -9,8 +9,12 @@ export function currencySymbol(code: string): string {
   return CURRENCY_SYMBOLS[code] ?? code;
 }
 
-export function formatAmount(amount: number, currencyCode: string): string {
+export function formatNumericAmount(amount: number, maximumFractionDigits = 2): string {
   return new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: 2,
-  }).format(amount) + ' ' + currencySymbol(currencyCode);
+    maximumFractionDigits,
+  }).format(amount);
+}
+
+export function formatAmount(amount: number, currencyCode: string): string {
+  return formatNumericAmount(amount) + ' ' + currencySymbol(currencyCode);
 }
