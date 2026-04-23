@@ -20,6 +20,7 @@ DECLARE
     _owner_user_id bigint;
     _owner_family_id bigint;
     _account_kind text;
+    _investment_asset_type text;
     _position_id bigint;
     _operation_id bigint;
     _normalized_title text := btrim(_title);
@@ -55,8 +56,8 @@ BEGIN
         RAISE EXCEPTION 'Position quantity must be positive when provided';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind
-    INTO _owner_type, _owner_user_id, _owner_family_id, _account_kind
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, investment_asset_type
+    INTO _owner_type, _owner_user_id, _owner_family_id, _account_kind, _investment_asset_type
     FROM bank_accounts
     WHERE id = _investment_account_id
       AND is_active;
@@ -67,6 +68,10 @@ BEGIN
 
     IF _account_kind <> 'investment' THEN
         RAISE EXCEPTION 'Portfolio positions can only be created for investment accounts';
+    END IF;
+
+    IF COALESCE(NULLIF(BTRIM(_investment_asset_type), ''), _normalized_asset_type) <> _normalized_asset_type THEN
+        RAISE EXCEPTION 'Investment account asset type mismatch: expected %, got %', _investment_asset_type, _normalized_asset_type;
     END IF;
 
     IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN

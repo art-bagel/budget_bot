@@ -60,6 +60,7 @@ type IncomeDraft = {
   currencyCode: string;
   baseAmount: string;
   incomeKind: string;
+  destination: 'account' | 'position';
   receivedAt: string;
   comment: string;
 };
@@ -164,9 +165,10 @@ const ASSET_TYPE_OPTIONS = [
   { value: 'security', label: 'Ценные бумаги' },
   { value: 'deposit', label: 'Депозит' },
   { value: 'crypto', label: 'Криптовалюта' },
+  { value: 'other', label: 'Разное' },
 ] as const;
 
-const DEFAULT_PORTFOLIO_ASSET_TYPE_CODES = ['security', 'deposit', 'crypto'] as const;
+const DEFAULT_PORTFOLIO_ASSET_TYPE_CODES = ['security', 'deposit', 'crypto', 'other'] as const;
 
 const SECURITY_KIND_OPTIONS = [
   { value: 'stock', label: 'Акции' },
@@ -318,7 +320,12 @@ function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
     amount: '',
     currencyCode: position.currency_code,
     baseAmount: '',
-    incomeKind: position.asset_type_code === 'deposit' ? 'interest' : 'dividend',
+    incomeKind: position.asset_type_code === 'deposit'
+      ? 'interest'
+      : position.asset_type_code === 'security'
+        ? 'dividend'
+        : 'other',
+    destination: position.asset_type_code === 'deposit' ? 'position' : 'account',
     receivedAt: todayIso(),
     comment: '',
   };
@@ -356,7 +363,14 @@ function createInitialFeeDraft(position: PortfolioPosition): FeeDraft {
 }
 
 function canRecordPositionIncome(position: PortfolioPosition): boolean {
-  return position.asset_type_code === 'security' || position.asset_type_code === 'deposit';
+  return position.asset_type_code === 'security'
+    || position.asset_type_code === 'deposit'
+    || position.asset_type_code === 'crypto'
+    || position.asset_type_code === 'other';
+}
+
+function getPositionRealizedResult(position: PortfolioPosition): number {
+  return Number(position.metadata?.income_in_base ?? 0) + Number(position.metadata?.realized_result_in_base ?? 0);
 }
 
 function getEventLabel(item: PortfolioEvent): string {
@@ -645,7 +659,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         .reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
       incomeInBase: positions
         .filter((position) => position.asset_type_code === code)
-        .reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
+        .reduce((sum, position) => sum + getPositionRealizedResult(position), 0),
       totalInBase: 0,
     })).map((tab) => ({
       ...tab,
@@ -1073,6 +1087,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
           ? undefined
           : Number(draft.baseAmount),
         income_kind: draft.incomeKind,
+        destination: draft.destination,
         received_at: draft.receivedAt || undefined,
         comment: draft.comment.trim() || undefined,
       });
@@ -1484,8 +1499,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
       estimatedValue: visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
       investedPrincipal: visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
       cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
-      resultValue: visibleAssetPositions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0),
-      resultLabel: 'Доход',
+      resultValue: visibleAssetPositions.reduce((sum, position) => sum + getPositionRealizedResult(position), 0),
+      resultLabel: activeAssetTypeCode === 'deposit' ? 'Доход' : 'Результат',
     };
   }, [
     activeAssetTypeCode,
@@ -1530,7 +1545,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       const investedPrincipal = group.positions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
       const resultValue = activeAssetTypeCode === 'security'
         ? group.positions.reduce((sum, position) => sum + (getResolvedPositionCurrentResult(position) ?? 0), 0)
-        : group.positions.reduce((sum, position) => sum + Number(position.metadata?.income_in_base ?? 0), 0);
+        : group.positions.reduce((sum, position) => sum + getPositionRealizedResult(position), 0);
       return {
         key: `${group.ownerType}:${group.accountId}`,
         accountName: group.accountName,
@@ -2197,6 +2212,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0
                         ? <span>Комиссии: {formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
                         : null}
+                      {getPositionRealizedResult(selectedPosition) !== 0
+                        ? <span>Реализованный результат: {formatAmount(getPositionRealizedResult(selectedPosition), user.base_currency_code)}</span>
+                        : null}
                     </>
                   )}
                 </div>
@@ -2441,7 +2459,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       className="input"
                       type="text"
                       inputMode="decimal"
-                      placeholder={selectedPosition.asset_type_code === 'deposit' ? 'Сумма процентов' : 'Сумма дивидендов'}
+                      placeholder={selectedPosition.asset_type_code === 'deposit' ? 'Сумма процентов' : selectedPosition.asset_type_code === 'security' ? 'Сумма дивидендов' : 'Сумма дохода'}
                       value={incomeDrafts[selectedPosition.id].amount}
                       onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: event.target.value })}
                       disabled={submittingIncomeId === selectedPosition.id}
@@ -2470,13 +2488,27 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           <option value="interest">Проценты</option>
                           <option value="other">Другой доход</option>
                         </>
-                      ) : (
+                      ) : selectedPosition.asset_type_code === 'security' ? (
                         <>
                           <option value="dividend">Дивиденды</option>
                           <option value="coupon">Купон</option>
                           <option value="other">Другой доход</option>
                         </>
+                      ) : (
+                        <>
+                          <option value="other">Другой доход</option>
+                          <option value="interest">Проценты</option>
+                        </>
                       )}
+                    </select>
+                    <select
+                      className="input"
+                      value={incomeDrafts[selectedPosition.id].destination}
+                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
+                      disabled={submittingIncomeId === selectedPosition.id}
+                    >
+                      <option value="account">На счёт</option>
+                      <option value="position">Оставить в активе</option>
                     </select>
                     <input
                       className="input"
@@ -2688,10 +2720,17 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           </strong>
                         </div>
                         <div className="bank-detail-row__sub">
-                          {formatDateLabel(item.event_at)}
-                          {item.quantity ? ` · Количество: ${item.quantity}` : ''}
+                        {formatDateLabel(item.event_at)}
+                        {typeof item.metadata?.destination === 'string'
+                          ? ` · ${item.metadata.destination === 'position' ? 'В актив' : 'На счёт'}`
+                          : ''}
+                        {item.quantity ? ` · Количество: ${item.quantity}` : ''}
                           {item.event_type === 'partial_close' && typeof item.metadata?.principal_amount_in_currency === 'number'
                             ? ` · Principal: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}`
+                            : ''}
+                          {(item.event_type === 'close' || item.event_type === 'partial_close')
+                            && typeof item.metadata?.realized_result_in_base === 'number'
+                            ? ` · Результат: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}`
                             : ''}
                           {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
                           {item.comment ? ` · ${item.comment}` : ''}

@@ -67,6 +67,14 @@ BEGIN
             COALESCE(sum(
                 CASE
                     WHEN pe.event_type = 'income' THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
+                    WHEN pe.event_type = 'close'
+                        THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                      (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),
+                                      0)
+                    WHEN pe.event_type = 'partial_close'
+                        THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                      (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pe.metadata ->> 'principal_amount_in_base')::numeric, 0),
+                                      0)
                     WHEN pe.event_type = 'adjustment' AND (pe.metadata ->> 'action') = 'cancel_income'
                         THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
                     ELSE 0

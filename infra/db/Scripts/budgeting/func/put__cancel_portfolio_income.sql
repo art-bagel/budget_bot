@@ -17,12 +17,17 @@ DECLARE
     _linked_operation_id bigint;
     _amount numeric(20, 8);
     _currency_code char(3);
+    _income_destination text;
+    _event_amount_in_base numeric(20, 2);
+    _position_status text;
     _base_currency_code char(3);
     _bank_balance numeric(20, 8);
     _operation_id bigint;
     _operation_comment text;
     _bank_cost_delta numeric(20, 2) := 0;
     _current_income_in_base numeric(20, 2);
+    _current_amount_in_currency numeric(20, 8);
+    _current_amount_in_base numeric(20, 2);
     _created_lot record;
 BEGIN
     SET search_path TO budgeting;
@@ -34,9 +39,12 @@ BEGIN
         pp.owner_family_id,
         pp.investment_account_id,
         pp.title,
+        pp.status,
         pe.linked_operation_id,
         pe.amount,
-        pe.currency_code
+        pe.currency_code,
+        COALESCE(pe.metadata ->> 'destination', 'account'),
+        COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
     INTO
         _position_id,
         _owner_type,
@@ -44,9 +52,12 @@ BEGIN
         _owner_family_id,
         _investment_account_id,
         _position_title,
+        _position_status,
         _linked_operation_id,
         _amount,
-        _currency_code
+        _currency_code,
+        _income_destination,
+        _event_amount_in_base
     FROM portfolio_events pe
     JOIN portfolio_positions pp
       ON pp.id = pe.position_id
@@ -95,51 +106,89 @@ BEGIN
         RAISE EXCEPTION 'Active investment account is missing for income event %', _event_id;
     END IF;
 
-    PERFORM 1
-    FROM current_bank_balances
-    WHERE bank_account_id = _investment_account_id
-      AND currency_code = _currency_code
-    FOR UPDATE;
-
-    SELECT COALESCE(amount, 0)
-    INTO _bank_balance
-    FROM current_bank_balances
-    WHERE bank_account_id = _investment_account_id
-      AND currency_code = _currency_code;
-
-    _bank_balance := COALESCE(_bank_balance, 0);
-
-    IF _bank_balance < _amount THEN
-        RAISE EXCEPTION 'Insufficient bank balance for cancelling portfolio income';
-    END IF;
-
     _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
-    FOR _created_lot IN
-        SELECT id, amount_initial, amount_remaining, cost_base_initial, cost_base_remaining
-        FROM fx_lots
-        WHERE opened_by_operation_id = _linked_operation_id
-    LOOP
-        IF _created_lot.amount_remaining <> _created_lot.amount_initial
-           OR _created_lot.cost_base_remaining <> _created_lot.cost_base_initial THEN
-            RAISE EXCEPTION 'Cannot cancel income event % because the received currency was already used', _event_id;
+    IF _income_destination = 'account' THEN
+        PERFORM 1
+        FROM current_bank_balances
+        WHERE bank_account_id = _investment_account_id
+          AND currency_code = _currency_code
+        FOR UPDATE;
+
+        SELECT COALESCE(amount, 0)
+        INTO _bank_balance
+        FROM current_bank_balances
+        WHERE bank_account_id = _investment_account_id
+          AND currency_code = _currency_code;
+
+        _bank_balance := COALESCE(_bank_balance, 0);
+
+        IF _bank_balance < _amount THEN
+            RAISE EXCEPTION 'Insufficient bank balance for cancelling portfolio income';
         END IF;
 
-        _bank_cost_delta := _bank_cost_delta + _created_lot.cost_base_initial;
-    END LOOP;
+        FOR _created_lot IN
+            SELECT id, amount_initial, amount_remaining, cost_base_initial, cost_base_remaining
+            FROM fx_lots
+            WHERE opened_by_operation_id = _linked_operation_id
+        LOOP
+            IF _created_lot.amount_remaining <> _created_lot.amount_initial
+               OR _created_lot.cost_base_remaining <> _created_lot.cost_base_initial THEN
+                RAISE EXCEPTION 'Cannot cancel income event % because the received currency was already used', _event_id;
+            END IF;
 
-    IF _bank_cost_delta = 0 THEN
-        IF _currency_code = _base_currency_code THEN
-            _bank_cost_delta := round(_amount, 2);
-        ELSE
-            RAISE EXCEPTION 'Cannot cancel income event % because historical cost is missing', _event_id;
+            _bank_cost_delta := _bank_cost_delta + _created_lot.cost_base_initial;
+        END LOOP;
+
+        IF _bank_cost_delta = 0 THEN
+            IF _currency_code = _base_currency_code THEN
+                _bank_cost_delta := round(_amount, 2);
+            ELSE
+                RAISE EXCEPTION 'Cannot cancel income event % because historical cost is missing', _event_id;
+            END IF;
+        END IF;
+    ELSE
+        IF _position_status <> 'open' THEN
+            RAISE EXCEPTION 'Capitalized income can only be cancelled while the position is open';
+        END IF;
+
+        PERFORM 1
+        FROM portfolio_events pe
+        WHERE pe.position_id = _position_id
+          AND pe.id > _event_id
+          AND pe.event_type IN ('partial_close', 'close');
+
+        IF FOUND THEN
+            RAISE EXCEPTION 'Capitalized income cannot be cancelled after partial or full close';
+        END IF;
+
+        SELECT
+            amount_in_currency,
+            COALESCE((metadata ->> 'amount_in_base')::numeric, 0),
+            COALESCE((metadata ->> 'income_in_base')::numeric, 0)
+        INTO
+            _current_amount_in_currency,
+            _current_amount_in_base,
+            _current_income_in_base
+        FROM portfolio_positions
+        WHERE id = _position_id
+        FOR UPDATE;
+
+        IF _current_amount_in_currency < _amount THEN
+            RAISE EXCEPTION 'Position amount is too small to cancel capitalized income';
+        END IF;
+
+        IF _current_amount_in_base < _event_amount_in_base THEN
+            RAISE EXCEPTION 'Position base amount is too small to cancel capitalized income';
         END IF;
     END IF;
 
-    SELECT COALESCE((metadata ->> 'income_in_base')::numeric, 0)
-    INTO _current_income_in_base
-    FROM portfolio_positions
-    WHERE id = _position_id;
+    IF _income_destination = 'account' THEN
+        SELECT COALESCE((metadata ->> 'income_in_base')::numeric, 0)
+        INTO _current_income_in_base
+        FROM portfolio_positions
+        WHERE id = _position_id;
+    END IF;
 
     _operation_comment := 'Отмена дохода · ' || _position_title;
     IF NULLIF(btrim(_comment), '') IS NOT NULL THEN
@@ -165,29 +214,48 @@ BEGIN
     RETURNING id
     INTO _operation_id;
 
-    INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
-    VALUES (_operation_id, _investment_account_id, _currency_code, -_amount);
+    IF _income_destination = 'account' THEN
+        INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
+        VALUES (_operation_id, _investment_account_id, _currency_code, -_amount);
 
-    UPDATE fx_lots
-    SET amount_remaining = 0,
-        cost_base_remaining = 0
-    WHERE opened_by_operation_id = _linked_operation_id;
+        UPDATE fx_lots
+        SET amount_remaining = 0,
+            cost_base_remaining = 0
+        WHERE opened_by_operation_id = _linked_operation_id;
 
-    PERFORM budgeting.put__apply_current_bank_delta(
-        _investment_account_id,
-        _currency_code,
-        -_amount,
-        -_bank_cost_delta
-    );
+        PERFORM budgeting.put__apply_current_bank_delta(
+            _investment_account_id,
+            _currency_code,
+            -_amount,
+            -_bank_cost_delta
+        );
 
-    UPDATE portfolio_positions
-    SET metadata = jsonb_set(
-        COALESCE(metadata, '{}'::jsonb),
-        '{income_in_base}',
-        to_jsonb(GREATEST(_current_income_in_base - _bank_cost_delta, 0)),
-        true
-    )
-    WHERE id = _position_id;
+        UPDATE portfolio_positions
+        SET metadata = jsonb_set(
+            COALESCE(metadata, '{}'::jsonb),
+            '{income_in_base}',
+            to_jsonb(GREATEST(_current_income_in_base - _bank_cost_delta, 0)),
+            true
+        )
+        WHERE id = _position_id;
+    ELSE
+        _bank_cost_delta := _event_amount_in_base;
+
+        UPDATE portfolio_positions
+        SET amount_in_currency = amount_in_currency - _amount,
+            metadata = jsonb_set(
+                jsonb_set(
+                    COALESCE(metadata, '{}'::jsonb),
+                    '{income_in_base}',
+                    to_jsonb(GREATEST(_current_income_in_base - _bank_cost_delta, 0)),
+                    true
+                ),
+                '{amount_in_base}',
+                to_jsonb(GREATEST(_current_amount_in_base - _bank_cost_delta, 0)),
+                true
+            )
+        WHERE id = _position_id;
+    END IF;
 
     INSERT INTO portfolio_events (
         position_id,
@@ -212,7 +280,8 @@ BEGIN
             'action', 'cancel_income',
             'cancelled_event_id', _event_id,
             'source_operation_id', _linked_operation_id,
-            'amount_in_base', -_bank_cost_delta
+            'amount_in_base', -_bank_cost_delta,
+            'destination', _income_destination
         ),
         _user_id
     );

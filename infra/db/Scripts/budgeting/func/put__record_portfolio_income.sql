@@ -8,7 +8,8 @@ CREATE FUNCTION budgeting.put__record_portfolio_income(
     _income_kind text DEFAULT NULL,
     _received_at date DEFAULT CURRENT_DATE,
     _comment text DEFAULT NULL,
-    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP
+    _operation_at timestamptz DEFAULT CURRENT_TIMESTAMP,
+    _destination text DEFAULT 'account'
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -23,8 +24,10 @@ DECLARE
     _base_currency_code char(3);
     _effective_amount_in_base numeric(20, 2);
     _current_income_in_base numeric(20, 2);
+    _current_amount_in_base numeric(20, 2);
     _operation_id bigint;
     _normalized_income_kind text := lower(coalesce(nullif(btrim(_income_kind), ''), 'income'));
+    _normalized_destination text := lower(coalesce(nullif(btrim(_destination), ''), 'account'));
 BEGIN
     SET search_path TO budgeting;
 
@@ -34,6 +37,10 @@ BEGIN
 
     IF _normalized_income_kind !~ '^[a-z][a-z0-9_]{1,29}$' THEN
         RAISE EXCEPTION 'Unsupported portfolio income kind: %', _income_kind;
+    END IF;
+
+    IF _normalized_destination NOT IN ('account', 'position') THEN
+        RAISE EXCEPTION 'Unsupported portfolio income destination: %', _destination;
     END IF;
 
     SELECT
@@ -89,8 +96,12 @@ BEGIN
         RAISE EXCEPTION 'Base currency is missing for portfolio position %', _position_id;
     END IF;
 
-    SELECT COALESCE((metadata ->> 'income_in_base')::numeric, 0)
-    INTO _current_income_in_base
+    SELECT
+        COALESCE((metadata ->> 'income_in_base')::numeric, 0),
+        COALESCE((metadata ->> 'amount_in_base')::numeric, 0)
+    INTO
+        _current_income_in_base,
+        _current_amount_in_base
     FROM portfolio_positions
     WHERE id = _position_id;
 
@@ -125,47 +136,64 @@ BEGIN
     RETURNING id
     INTO _operation_id;
 
-    INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
-    VALUES (_operation_id, _investment_account_id, _currency_code, _amount);
+    IF _normalized_destination = 'account' THEN
+        INSERT INTO bank_entries (operation_id, bank_account_id, currency_code, amount)
+        VALUES (_operation_id, _investment_account_id, _currency_code, _amount);
 
-    PERFORM budgeting.put__apply_current_bank_delta(
-        _investment_account_id,
-        _currency_code,
-        _amount,
-        _effective_amount_in_base
-    );
-
-    IF _currency_code <> _base_currency_code THEN
-        INSERT INTO fx_lots (
-            bank_account_id,
-            currency_code,
-            amount_initial,
-            amount_remaining,
-            buy_rate_in_base,
-            cost_base_initial,
-            cost_base_remaining,
-            opened_by_operation_id
-        )
-        VALUES (
+        PERFORM budgeting.put__apply_current_bank_delta(
             _investment_account_id,
             _currency_code,
             _amount,
-            _amount,
-            _effective_amount_in_base / _amount,
-            _effective_amount_in_base,
-            _effective_amount_in_base,
-            _operation_id
+            _effective_amount_in_base
         );
-    END IF;
 
-    UPDATE portfolio_positions
-    SET metadata = jsonb_set(
-        COALESCE(metadata, '{}'::jsonb),
-        '{income_in_base}',
-        to_jsonb(_current_income_in_base + _effective_amount_in_base),
-        true
-    )
-    WHERE id = _position_id;
+        IF _currency_code <> _base_currency_code THEN
+            INSERT INTO fx_lots (
+                bank_account_id,
+                currency_code,
+                amount_initial,
+                amount_remaining,
+                buy_rate_in_base,
+                cost_base_initial,
+                cost_base_remaining,
+                opened_by_operation_id
+            )
+            VALUES (
+                _investment_account_id,
+                _currency_code,
+                _amount,
+                _amount,
+                _effective_amount_in_base / _amount,
+                _effective_amount_in_base,
+                _effective_amount_in_base,
+                _operation_id
+            );
+        END IF;
+
+        UPDATE portfolio_positions
+        SET metadata = jsonb_set(
+            COALESCE(metadata, '{}'::jsonb),
+            '{income_in_base}',
+            to_jsonb(_current_income_in_base + _effective_amount_in_base),
+            true
+        )
+        WHERE id = _position_id;
+    ELSE
+        UPDATE portfolio_positions
+        SET amount_in_currency = amount_in_currency + _amount,
+            metadata = jsonb_set(
+                jsonb_set(
+                    COALESCE(metadata, '{}'::jsonb),
+                    '{income_in_base}',
+                    to_jsonb(_current_income_in_base + _effective_amount_in_base),
+                    true
+                ),
+                '{amount_in_base}',
+                to_jsonb(_current_amount_in_base + _effective_amount_in_base),
+                true
+            )
+        WHERE id = _position_id;
+    END IF;
 
     INSERT INTO portfolio_events (
         position_id,
@@ -189,7 +217,8 @@ BEGIN
         jsonb_build_object(
             'income_kind', _normalized_income_kind,
             'asset_type_code', _asset_type_code,
-            'amount_in_base', _effective_amount_in_base
+            'amount_in_base', _effective_amount_in_base,
+            'destination', _normalized_destination
         ),
         _user_id
     );

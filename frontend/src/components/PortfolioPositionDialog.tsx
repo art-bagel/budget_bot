@@ -89,15 +89,14 @@ export default function PortfolioPositionDialog({
 
   // Deposit-specific state
   const isDeposit = defaultAssetTypeCode === 'deposit';
+  const isSecurity = defaultAssetTypeCode === 'security';
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
   const [endDate, setEndDate] = useState(todayIso());
   const [interestPayout, setInterestPayout] = useState<InterestPayout>('capitalize');
   const [capitalizationPeriod, setCapitalizationPeriod] = useState<CapitalizationPeriod>('monthly');
 
-  const { results: tickerResults, loading: tickerLoading } = useMoexSearch(
-    defaultAssetTypeCode === 'security' ? tickerQuery : '',
-  );
+  const { results: tickerResults, loading: tickerLoading } = useMoexSearch(isSecurity ? tickerQuery : '');
 
   const handleSelectTicker = (item: MoexSecurityInfo) => {
     setTicker(item.ticker);
@@ -165,7 +164,7 @@ export default function PortfolioPositionDialog({
 
     try {
       let metadata: Record<string, unknown> | undefined;
-      if (defaultAssetTypeCode === 'security') {
+      if (isSecurity) {
         metadata = { security_kind: securityKind, ...(ticker ? { ticker, moex_market: moexMarket } : {}) };
       } else if (isDeposit) {
         const showCapPeriod = depositKind === 'savings_account' || interestPayout === 'capitalize';
@@ -237,7 +236,7 @@ export default function PortfolioPositionDialog({
             <div className="input input--read-only">{defaultAssetTypeLabel}</div>
           </div>
 
-          {defaultAssetTypeCode === 'security' && (
+          {isSecurity && (
             <>
               <div className="form-row">
                 <select
@@ -337,7 +336,7 @@ export default function PortfolioPositionDialog({
             <input
               className="input"
               type="text"
-              placeholder={isDeposit ? 'Название вклада' : 'Название позиции'}
+              placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Название актива или направления' : 'Название позиции'}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               disabled={submitting}
@@ -349,7 +348,7 @@ export default function PortfolioPositionDialog({
                 className="input"
                 type="text"
                 inputMode="decimal"
-                placeholder="Количество, если есть"
+                placeholder={defaultAssetTypeCode === 'other' ? 'Количество, если есть' : 'Количество, если есть'}
                 value={quantity}
                 onChange={(event) => setQuantity(sanitizeDecimalInput(event.target.value))}
                 disabled={submitting}

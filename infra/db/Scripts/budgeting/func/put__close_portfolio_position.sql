@@ -21,7 +21,13 @@ DECLARE
     _investment_account_id bigint;
     _title text;
     _base_currency_code char(3);
+    _current_amount_in_base numeric(20, 2);
+    _current_realized_result_in_base numeric(20, 2);
+    _current_returned_amount_in_base numeric(20, 2);
     _effective_close_amount_in_base numeric(20, 2);
+    _released_principal_in_base numeric(20, 2);
+    _next_realized_result_in_base numeric(20, 2);
+    _next_returned_amount_in_base numeric(20, 2);
     _operation_id bigint;
     _operation_comment text;
 BEGIN
@@ -31,8 +37,28 @@ BEGIN
         RAISE EXCEPTION 'Close amount must be positive';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, status, quantity, investment_account_id, title
-    INTO _owner_type, _owner_user_id, _owner_family_id, _status, _quantity, _investment_account_id, _title
+    SELECT
+        owner_type,
+        owner_user_id,
+        owner_family_id,
+        status,
+        quantity,
+        investment_account_id,
+        title,
+        COALESCE((metadata ->> 'amount_in_base')::numeric, 0),
+        COALESCE((metadata ->> 'realized_result_in_base')::numeric, 0),
+        COALESCE((metadata ->> 'returned_amount_in_base')::numeric, 0)
+    INTO
+        _owner_type,
+        _owner_user_id,
+        _owner_family_id,
+        _status,
+        _quantity,
+        _investment_account_id,
+        _title,
+        _current_amount_in_base,
+        _current_realized_result_in_base,
+        _current_returned_amount_in_base
     FROM portfolio_positions
     WHERE id = _position_id;
 
@@ -77,6 +103,12 @@ BEGIN
 
         _effective_close_amount_in_base := round(_close_amount_in_base, 2);
     END IF;
+
+    _released_principal_in_base := COALESCE(_current_amount_in_base, 0);
+    _next_realized_result_in_base := COALESCE(_current_realized_result_in_base, 0)
+        + (_effective_close_amount_in_base - _released_principal_in_base);
+    _next_returned_amount_in_base := COALESCE(_current_returned_amount_in_base, 0)
+        + _effective_close_amount_in_base;
 
     _operation_comment := 'Закрытие позиции · ' || _title;
     IF NULLIF(btrim(_comment), '') IS NOT NULL THEN
@@ -142,6 +174,17 @@ BEGIN
         closed_at = COALESCE(_closed_at, CURRENT_DATE),
         close_amount_in_currency = _close_amount_in_currency,
         close_currency_code = _close_currency_code,
+        metadata = jsonb_set(
+            jsonb_set(
+                COALESCE(metadata, '{}'::jsonb),
+                '{realized_result_in_base}',
+                to_jsonb(_next_realized_result_in_base),
+                true
+            ),
+            '{returned_amount_in_base}',
+            to_jsonb(_next_returned_amount_in_base),
+            true
+        ),
         comment = COALESCE(NULLIF(btrim(_comment), ''), comment)
     WHERE id = _position_id;
 
@@ -166,7 +209,11 @@ BEGIN
         _close_currency_code,
         _operation_id,
         NULLIF(btrim(_comment), ''),
-        jsonb_build_object('amount_in_base', _effective_close_amount_in_base),
+        jsonb_build_object(
+            'amount_in_base', _effective_close_amount_in_base,
+            'principal_amount_in_base', _released_principal_in_base,
+            'realized_result_in_base', _effective_close_amount_in_base - _released_principal_in_base
+        ),
         _user_id
     );
 

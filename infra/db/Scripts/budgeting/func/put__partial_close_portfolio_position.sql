@@ -252,7 +252,8 @@ BEGIN
         jsonb_build_object(
             'amount_in_base', _effective_return_amount_in_base,
             'principal_amount_in_currency', _principal_reduction_in_currency,
-            'principal_amount_in_base', _released_principal_in_base
+            'principal_amount_in_base', _released_principal_in_base,
+            'realized_result_in_base', _effective_return_amount_in_base - _released_principal_in_base
         ),
         _user_id
     );

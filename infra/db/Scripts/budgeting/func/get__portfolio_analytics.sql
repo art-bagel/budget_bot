@@ -64,7 +64,19 @@ BEGIN
             date_trunc('month', pe.event_at)::date AS period,
             pp.asset_type_code,
             pp.investment_account_id,
-            SUM(COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0)) AS total_amount,
+            SUM(
+                CASE
+                    WHEN pe.event_type = 'close'
+                        THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                      (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),
+                                      0)
+                    WHEN pe.event_type = 'partial_close'
+                        THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                      (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pe.metadata ->> 'principal_amount_in_base')::numeric, 0),
+                                      0)
+                    ELSE 0
+                END
+            ) AS total_amount,
             COUNT(*) AS events_count
         FROM portfolio_events pe
         JOIN portfolio_positions pp
@@ -104,7 +116,16 @@ BEGIN
             SUM(CASE WHEN pe.event_type = 'income'
                 THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0) ELSE 0 END) AS income_total,
             SUM(CASE WHEN pe.event_type IN ('close', 'partial_close')
-                THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0) ELSE 0 END) AS trade_total,
+                THEN CASE
+                    WHEN pe.event_type = 'close'
+                        THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                      (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),
+                                      0)
+                    ELSE COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                  (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pe.metadata ->> 'principal_amount_in_base')::numeric, 0),
+                                  0)
+                END
+                ELSE 0 END) AS trade_total,
             SUM(CASE WHEN pe.event_type = 'adjustment' AND (pe.metadata ->> 'action') = 'cancel_income'
                 THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0) ELSE 0 END) AS adjustment_total,
             COUNT(*) FILTER (WHERE pe.event_type = 'income') AS income_count,
@@ -131,7 +152,16 @@ BEGIN
             SUM(CASE WHEN pe.event_type = 'income'
                 THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0) ELSE 0 END) AS income_total,
             SUM(CASE WHEN pe.event_type IN ('close', 'partial_close')
-                THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0) ELSE 0 END) AS trade_total,
+                THEN CASE
+                    WHEN pe.event_type = 'close'
+                        THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                      (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),
+                                      0)
+                    ELSE COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
+                                  (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pe.metadata ->> 'principal_amount_in_base')::numeric, 0),
+                                  0)
+                END
+                ELSE 0 END) AS trade_total,
             SUM(CASE WHEN pe.event_type = 'adjustment' AND (pe.metadata ->> 'action') = 'cancel_income'
                 THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0) ELSE 0 END) AS adjustment_total,
             COUNT(*) FILTER (WHERE pe.event_type = 'income') AS income_count,

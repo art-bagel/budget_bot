@@ -90,6 +90,7 @@ class Ledger(DataBase):
         income_kind: Optional[str] = None,
         received_at: Optional[str] = None,
         comment: Optional[str] = None,
+        destination: Optional[str] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__RECORD_PORTFOLIO_INCOME),
@@ -101,6 +102,8 @@ class Ledger(DataBase):
             income_kind,
             received_at,
             comment,
+            None,
+            destination,
         )
 
     async def put__allocate_budget(

@@ -124,6 +124,7 @@ class RecordPortfolioIncomeRequest(BaseModel):
     currency_code: str
     amount_in_base: float | None = None
     income_kind: str | None = None
+    destination: Literal['account', 'position'] = 'account'
     received_at: date | None = None
     comment: str | None = None
 
@@ -251,22 +252,15 @@ async def _accrue_deposit_interest(
         amount=accrued,
         currency_code=currency_code,
         income_kind='interest',
+        destination='position' if should_capitalize(meta) else 'account',
         received_at=eff_date,
         comment='Начисление процентов',
     )
 
-    # Update position: capitalize or just update last_accrual_date
-    if should_capitalize(meta):
-        await context.set__update_deposit_after_accrual(
-            position_id=position_id,
-            interest_amount=accrued,
-            last_accrual_date=str(eff_date),
-        )
-    else:
-        await context.set__merge_portfolio_position_metadata(
-            position_id=position_id,
-            metadata_patch={'last_accrual_date': str(eff_date)},
-        )
+    await context.set__merge_portfolio_position_metadata(
+        position_id=position_id,
+        metadata_patch={'last_accrual_date': str(eff_date)},
+    )
 
     return accrued
 
@@ -424,6 +418,7 @@ async def record_portfolio_income(
         currency_code=body.currency_code,
         amount_in_base=body.amount_in_base,
         income_kind=body.income_kind,
+        destination=body.destination,
         received_at=body.received_at,
         comment=body.comment,
     )
