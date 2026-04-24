@@ -586,7 +586,10 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           >
             <dt><span className="hero__mark hero__mark--ink" />&nbsp;Личный счёт</dt>
             <dd>
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(personalBankTotal)}&nbsp;{currencySymbol(overview.base_currency_code)}
+              <span className="hero__row-amount">
+                {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(personalBankTotal)}
+                <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
+              </span>
               <span className="hero__row-chev"><IconChevronRight /></span>
             </dd>
           </div>
@@ -600,7 +603,10 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
             >
               <dt><span className="hero__mark hero__mark--coral" />&nbsp;Семейный счёт</dt>
               <dd>
-                {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(familyBankTotal)}&nbsp;{currencySymbol(overview.base_currency_code)}
+                <span className="hero__row-amount">
+                  {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(familyBankTotal)}
+                  <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
+                </span>
                 <span className="hero__row-chev"><IconChevronRight /></span>
               </dd>
             </div>
@@ -614,7 +620,10 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           >
             <dt><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</dt>
             <dd>
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investmentBankTotal)}&nbsp;{currencySymbol(overview.base_currency_code)}
+              <span className="hero__row-amount">
+                {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investmentBankTotal)}
+                <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
+              </span>
               <span className="hero__row-chev"><IconChevronRight /></span>
             </dd>
           </div>
@@ -627,9 +636,12 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           >
             <dt><span className={`hero__mark${totalCreditDebtInBase > 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</dt>
             <dd>
-              {totalCreditDebtInBase > 0
-                ? `−${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(totalCreditDebtInBase)}`
-                : '0'}&nbsp;{currencySymbol(overview.base_currency_code)}
+              <span className="hero__row-amount">
+                {totalCreditDebtInBase > 0
+                  ? `−${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(totalCreditDebtInBase)}`
+                  : '0'}
+                <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
+              </span>
               <span className="hero__row-chev"><IconChevronRight /></span>
             </dd>
           </div>

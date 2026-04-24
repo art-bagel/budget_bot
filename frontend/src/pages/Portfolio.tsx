@@ -37,7 +37,7 @@ import type {
   PortfolioAnalyticsData,
 } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { formatAmount, currencySymbol } from '../utils/format';
+import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import Operations from './Operations';
@@ -1822,7 +1822,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
           >
             <span className={`pf-hero__row-dot pf-hero__row-dot--${tab.code}`} />
             <span className="pf-hero__row-label">{tab.label}</span>
-            <span className="pf-hero__row-count">{tab.openCount}</span>
             <span className="pf-hero__row-value">
               {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
               <span className="pf-hero__row-sym">{currencySymbol(user.base_currency_code)}</span>
@@ -1975,6 +1974,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   <div className="pf-alloc__t-cell">
                     <span>Вложено</span>
                     <strong>{fmt(invested)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+                    <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
                   </div>
                   <span className="pf-alloc__t-sep" />
                   <div className="pf-alloc__t-cell">
@@ -2104,7 +2104,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             </div>
                             <div className="pf-pos__right">
                               <div className="pf-pos__amount">
-                                {formatAmount(displayValue, position.currency_code)}
+                                {formatNumericAmount(displayValue)}
+                                <span className="pf-sym">{currencySymbol(position.currency_code)}</span>
                               </div>
                               {isDeposit && depositAccrued > 0 ? (
                                 <div className="pf-pos__pnl pf-pos__pnl--pos">

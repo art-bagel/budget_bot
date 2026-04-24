@@ -948,6 +948,19 @@ input { font: inherit; color: inherit; }
 
 .hero__row--neg dd { color: #B8301D; }
 
+.hero__row-amount {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.hero__row-sym {
+  font-size: .62em;
+  font-weight: 600;
+  opacity: .55;
+  margin-left: 2px;
+  letter-spacing: 0;
+}
+
 .hero__row-chev {
   width: 12px; height: 12px;
   color: rgba(10, 11, 13, 0.4);
@@ -6565,14 +6578,6 @@ select.dlg-row__ghost option {
   color: rgba(10, 11, 13, 0.78);
 }
 
-.pf-hero__row-count {
-  font-size: 11px;
-  font-weight: 500;
-  opacity: .5;
-  min-width: 16px;
-  text-align: right;
-}
-
 .pf-hero__row-value {
   font-size: 14.5px;
   font-weight: 700;
@@ -7002,6 +7007,8 @@ select.dlg-row__ghost option {
 }
 
 .pf-pos__amount {
+  display: inline-flex;
+  align-items: baseline;
   font-size: 14.5px;
   font-weight: 700;
   letter-spacing: -.015em;
@@ -7221,7 +7228,7 @@ select.dlg-row__ghost option {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 12px;
-  align-items: center;
+  align-items: start;
   padding-top: 10px;
   border-top: 1px solid var(--line, rgba(0,0,0,.08));
 }
@@ -7256,6 +7263,10 @@ select.dlg-row__ghost option {
   font-weight: 600;
   font-style: normal;
   letter-spacing: -.005em;
+}
+
+.pf-alloc__t-placeholder {
+  visibility: hidden;
 }
 
 .pf-alloc__t-sep {
