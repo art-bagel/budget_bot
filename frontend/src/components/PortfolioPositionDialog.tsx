@@ -24,6 +24,7 @@ type Props = {
   defaultAssetTypeLabel: string;
   onClose: () => void;
   onSuccess: () => void;
+  bare?: boolean;
 };
 
 const SECURITY_KIND_OPTIONS = [
@@ -68,6 +69,7 @@ export default function PortfolioPositionDialog({
   defaultAssetTypeLabel,
   onClose,
   onSuccess,
+  bare = false,
 }: Props) {
   useModalOpen();
 
@@ -203,6 +205,231 @@ export default function PortfolioPositionDialog({
     }
   };
 
+  const depositProjection = isDeposit && parseFloat(amount) > 0 && parseFloat(interestRate) > 0
+    ? (() => {
+        const proj = depositKind === 'term_deposit' && endDate
+          ? calculateProjectedInterest({ depositKind, principal: Number(amount), annualRate: Number(interestRate), startDate: openedAt || todayIso(), endDate, interestPayout, capitalizationPeriod })
+          : null;
+        const total = proj !== null ? Number(amount) + proj : null;
+        return proj !== null
+          ? `+${formatAmount(proj, currencyCode)} за срок (итого ${formatAmount(total!, currencyCode)})`
+          : depositKind === 'savings_account' ? 'Накопительный — бессрочный' : null;
+      })()
+    : null;
+
+  const formBody = (
+    <div className="apf-body">
+
+      {/* Account */}
+      <div className="apf-field">
+        <label className="apf-label">Счёт</label>
+        <div className="apf-select-wrap">
+        <select className="apf-input" value={investmentAccountId} onChange={(e) => setInvestmentAccountId(e.target.value)} disabled={submitting}>
+          {accounts.map(({ account }) => (
+            <option key={account.id} value={account.id}>
+              {account.name} · {account.owner_type === 'family' ? 'семейный' : 'личный'}
+            </option>
+          ))}
+        </select>
+        </div>
+      </div>
+
+      {/* Security kind segmented */}
+      {isSecurity && (
+        <div className="apf-field">
+          <label className="apf-label">Тип бумаги</label>
+          <div className="apf-segtog">
+            {SECURITY_KIND_OPTIONS.map((o) => (
+              <button key={o.value} type="button"
+                className={`apf-segtog__opt${securityKind === o.value ? ' apf-segtog__opt--on' : ''}`}
+                onClick={() => setSecurityKind(o.value)} disabled={submitting}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Deposit kind segmented */}
+      {isDeposit && (
+        <div className="apf-field">
+          <label className="apf-label">Тип</label>
+          <div className="apf-segtog">
+            {DEPOSIT_KIND_OPTIONS.map((o) => (
+              <button key={o.value} type="button"
+                className={`apf-segtog__opt${depositKind === o.value ? ' apf-segtog__opt--on' : ''}`}
+                onClick={() => setDepositKind(o.value as DepositKind)} disabled={submitting}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ticker search */}
+      {isSecurity && (
+        <div className="apf-field">
+          <label className="apf-label">Тикер MOEX</label>
+          <div style={{ position: 'relative' }}>
+            <input ref={tickerInputRef} className="apf-input" type="text"
+              placeholder="SBER, GAZP, YNDX…" value={tickerQuery}
+              onChange={(e) => { setTickerQuery(e.target.value); setTicker(''); setShowTickerDropdown(true); }}
+              onFocus={() => setShowTickerDropdown(true)}
+              onBlur={() => setTimeout(() => setShowTickerDropdown(false), 200)}
+              disabled={submitting} autoComplete="off" />
+            {ticker && (
+              <div className="apf-ticker-chosen">
+                <span>{ticker}</span>
+                <button type="button" className="apf-ticker-clear" onClick={handleClearTicker}>✕</button>
+              </div>
+            )}
+            {showTickerDropdown && (tickerLoading || tickerResults.length > 0) && (
+              <div className="ticker-dropdown">
+                {tickerLoading && <div className="ticker-dropdown__hint">Поиск…</div>}
+                {!tickerLoading && tickerResults.map((item) => (
+                  <button key={item.ticker} type="button" className="ticker-dropdown__item"
+                    onMouseDown={(e) => { e.preventDefault(); handleSelectTicker(item); }}>
+                    <span className="ticker-dropdown__ticker">{item.ticker}</span>
+                    <span className="ticker-dropdown__name">{item.shortName}</span>
+                    <span className="ticker-dropdown__badge">
+                      {item.market === 'bonds' ? 'облиг' : item.group === 'stock_etf' ? 'фонд' : 'акция'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Title */}
+      <div className="apf-field">
+        <label className="apf-label">Название</label>
+        <input className="apf-input" type="text" autoFocus
+          placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Актив или направление' : 'Позиция'}
+          value={title} onChange={(e) => setTitle(e.target.value)} disabled={submitting} />
+      </div>
+
+      {/* Amount + Currency */}
+      <div className="apf-row">
+        <div className="apf-field" style={{ flex: 2 }}>
+          <label className="apf-label">{isDeposit ? 'Сумма' : 'Сумма входа'}</label>
+          <input className="apf-input" type="text" inputMode="decimal"
+            placeholder="0" value={amount}
+            onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
+        </div>
+        <div className="apf-field" style={{ flex: 1 }}>
+          <label className="apf-label">Валюта</label>
+          <div className="apf-select-wrap">
+            <select className="apf-input" value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)} disabled={submitting}>
+              {currencies.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Quantity + Date (non-deposit) */}
+      {!isDeposit && (
+        <div className="apf-row">
+          <div className="apf-field" style={{ flex: 1 }}>
+            <label className="apf-label">Количество</label>
+            <input className="apf-input" type="text" inputMode="decimal" placeholder="—"
+              value={quantity} onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
+          </div>
+          <div className="apf-field" style={{ flex: 1 }}>
+            <label className="apf-label">Дата входа</label>
+            <input className="apf-input" type="date" value={openedAt}
+              onChange={(e) => setOpenedAt(e.target.value)} disabled={submitting} />
+          </div>
+        </div>
+      )}
+
+      {/* Deposit-specific fields */}
+      {isDeposit && (
+        <>
+          <div className="apf-field">
+            <label className="apf-label">Ставка, % годовых</label>
+            <input className="apf-input" type="text" inputMode="decimal" placeholder="0.0"
+              value={interestRate} onChange={(e) => setInterestRate(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
+          </div>
+
+          {depositKind === 'term_deposit' && (
+            <div className="apf-field">
+              <label className="apf-label">Выплата процентов</label>
+              <div className="apf-select-wrap">
+                <select className="apf-input" value={interestPayout}
+                  onChange={(e) => setInterestPayout(e.target.value as InterestPayout)} disabled={submitting}>
+                  {INTEREST_PAYOUT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {(depositKind === 'savings_account' || interestPayout === 'capitalize') && (
+            <div className="apf-field">
+              <label className="apf-label">Капитализация</label>
+              <div className="apf-select-wrap">
+                <select className="apf-input" value={capitalizationPeriod}
+                  onChange={(e) => setCapitalizationPeriod(e.target.value as CapitalizationPeriod)} disabled={submitting}>
+                  {CAPITALIZATION_PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div className="apf-row">
+            <div className="apf-field" style={{ flex: 1 }}>
+              <label className="apf-label">Дата открытия</label>
+              <input className="apf-input" type="date" value={openedAt}
+                onChange={(e) => setOpenedAt(e.target.value)} disabled={submitting} />
+            </div>
+            {depositKind === 'term_deposit' && (
+              <div className="apf-field" style={{ flex: 1 }}>
+                <label className="apf-label">Дата закрытия</label>
+                <input className="apf-input" type="date" value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)} disabled={submitting} />
+              </div>
+            )}
+          </div>
+
+          {depositProjection && (
+            <div className="apf-projection">
+              <span className="apf-projection__label">Прогноз дохода</span>
+              <span className="apf-projection__value">{depositProjection}</span>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Balance */}
+      <div className="apf-balance">
+        Доступно: {formatAmount(selectedCurrencyBalance, currencyCode)}
+      </div>
+
+      {/* Comment */}
+      <div className="apf-field">
+        <label className="apf-label">Комментарий</label>
+        <input className="apf-input" type="text" placeholder="Необязательно"
+          value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
+      </div>
+
+      {error && <div className="apf-error">{error}</div>}
+    </div>
+  );
+
+  const actions = (
+    <div className="apf-actions">
+      <button className="apf-cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+      <button className="apf-submit" type="button" onClick={handleSubmit} disabled={!canSubmit}>
+        {submitting ? 'Сохраняем…' : isDeposit ? 'Открыть вклад' : 'Добавить позицию'}
+      </button>
+    </div>
+  );
+
+  if (bare) {
+    return <>{formBody}{actions}</>;
+  }
+
   return (
     <div className="modal-backdrop" onClick={() => !submitting && onClose()}>
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
@@ -214,326 +441,8 @@ export default function PortfolioPositionDialog({
             </div>
           </div>
         </div>
-
-        <div className="modal-body">
-          <div className="operations-note">
-            Новая позиция будет добавлена в раздел <strong>{defaultAssetTypeLabel}</strong>.
-          </div>
-
-          <div className="form-row">
-            <select
-              className="input"
-              value={investmentAccountId}
-              onChange={(event) => setInvestmentAccountId(event.target.value)}
-              disabled={submitting}
-            >
-              {accounts.map(({ account }) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} · {account.owner_type === 'family' ? 'семейный' : 'личный'}
-                </option>
-              ))}
-            </select>
-            <div className="input input--read-only">{defaultAssetTypeLabel}</div>
-          </div>
-
-          {isSecurity && (
-            <>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={securityKind}
-                  onChange={(event) => setSecurityKind(event.target.value as (typeof SECURITY_KIND_OPTIONS)[number]['value'])}
-                  disabled={submitting}
-                >
-                  {SECURITY_KIND_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row" style={{ position: 'relative' }}>
-                <div style={{ position: 'relative', flex: '1 1 200px' }}>
-                  <input
-                    ref={tickerInputRef}
-                    className="input"
-                    type="text"
-                    placeholder="Тикер MOEX (SBER, GAZP…)"
-                    value={tickerQuery}
-                    onChange={(e) => {
-                      setTickerQuery(e.target.value);
-                      setTicker('');
-                      setShowTickerDropdown(true);
-                    }}
-                    onFocus={() => setShowTickerDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowTickerDropdown(false), 200)}
-                    disabled={submitting}
-                    autoComplete="off"
-                  />
-                  {showTickerDropdown && (tickerLoading || tickerResults.length > 0) && (
-                    <div className="ticker-dropdown">
-                      {tickerLoading && (
-                        <div className="ticker-dropdown__hint">Поиск...</div>
-                      )}
-                      {!tickerLoading && tickerResults.map((item) => (
-                        <button
-                          key={item.ticker}
-                          type="button"
-                          className="ticker-dropdown__item"
-                          onMouseDown={(e) => { e.preventDefault(); handleSelectTicker(item); }}
-                        >
-                          <span className="ticker-dropdown__ticker">{item.ticker}</span>
-                          <span className="ticker-dropdown__name">{item.shortName}</span>
-                          <span className="ticker-dropdown__badge">
-                            {item.market === 'bonds' ? 'облиг' : item.group === 'stock_etf' ? 'фонд' : 'акция'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {ticker && (
-                  <span className="tag tag--in" style={{ alignSelf: 'center' }}>
-                    {ticker}
-                  </span>
-                )}
-                {ticker && (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={handleClearTicker}
-                    disabled={submitting}
-                    style={{ alignSelf: 'center' }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-
-          {isDeposit && (
-            <>
-              <div className="form-row">
-                <select
-                  className="input"
-                  value={depositKind}
-                  onChange={(event) => setDepositKind(event.target.value as DepositKind)}
-                  disabled={submitting}
-                >
-                  {DEPOSIT_KIND_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          <div className="form-row">
-            <input
-              className="input"
-              type="text"
-              placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Название актива или направления' : 'Название позиции'}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              disabled={submitting}
-              autoFocus
-              style={{ flex: '1 1 280px' }}
-            />
-            {!isDeposit && (
-              <input
-                className="input"
-                type="text"
-                inputMode="decimal"
-                placeholder={defaultAssetTypeCode === 'other' ? 'Количество, если есть' : 'Количество, если есть'}
-                value={quantity}
-                onChange={(event) => setQuantity(sanitizeDecimalInput(event.target.value))}
-                disabled={submitting}
-                style={{ width: 180 }}
-              />
-            )}
-          </div>
-
-          {isDeposit && (
-            <>
-              <div className="form-row">
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Процентная ставка, % годовых"
-                  value={interestRate}
-                  onChange={(event) => setInterestRate(sanitizeDecimalInput(event.target.value))}
-                  disabled={submitting}
-                  style={{ flex: '1 1 200px' }}
-                />
-              </div>
-
-              {depositKind === 'term_deposit' && (
-                <div className="form-row">
-                  <select
-                    className="input"
-                    value={interestPayout}
-                    onChange={(event) => setInterestPayout(event.target.value as InterestPayout)}
-                    disabled={submitting}
-                  >
-                    {INTEREST_PAYOUT_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {(depositKind === 'savings_account' || interestPayout === 'capitalize') && (
-                <div className="form-row">
-                  <select
-                    className="input"
-                    value={capitalizationPeriod}
-                    onChange={(event) => setCapitalizationPeriod(event.target.value as CapitalizationPeriod)}
-                    disabled={submitting}
-                  >
-                    {CAPITALIZATION_PERIOD_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        Капитализация: {option.label.toLowerCase()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="form-row">
-            <input
-              className="input"
-              type="text"
-              inputMode="decimal"
-              placeholder={isDeposit ? 'Сумма вклада' : 'Сумма входа'}
-              value={amount}
-              onChange={(event) => setAmount(sanitizeDecimalInput(event.target.value))}
-              disabled={submitting}
-              style={{ width: 180 }}
-            />
-            <select
-              className="input"
-              value={currencyCode}
-              onChange={(event) => setCurrencyCode(event.target.value)}
-              disabled={submitting}
-            >
-              {currencies.map((currency) => (
-                <option key={currency.code} value={currency.code}>
-                  {currency.code}
-                </option>
-              ))}
-            </select>
-            {!isDeposit && (
-              <input
-                className="input"
-                type="date"
-                title="Дата входа"
-                value={openedAt}
-                onChange={(event) => setOpenedAt(event.target.value)}
-                disabled={submitting}
-              />
-            )}
-          </div>
-
-          {isDeposit && (
-            <div>
-              <div className="list-row__sub" style={{ marginBottom: 4 }}>Период</div>
-              <div className="form-row" style={{ alignItems: 'center' }}>
-                <input
-                  className="input"
-                  type="date"
-                  value={openedAt}
-                  onChange={(event) => setOpenedAt(event.target.value)}
-                  disabled={submitting}
-                  style={{ width: 'auto', flex: '0 0 auto' }}
-                />
-                {depositKind === 'term_deposit' && (
-                  <>
-                    <input
-                      className="input"
-                      type="date"
-                      value={endDate}
-                      onChange={(event) => setEndDate(event.target.value)}
-                      disabled={submitting}
-                      style={{ width: 'auto', flex: '0 0 auto' }}
-                    />
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="form-row">
-            <div className="input input--read-only" style={{ flex: '1 1 280px' }}>
-              Доступно: {formatAmount(selectedCurrencyBalance, currencyCode)}
-            </div>
-          </div>
-
-          {isDeposit && parseFloat(amount) > 0 && parseFloat(interestRate) > 0 && (
-            (() => {
-              const projectedEnd = depositKind === 'term_deposit' && endDate
-                ? calculateProjectedInterest({
-                    depositKind,
-                    principal: Number(amount),
-                    annualRate: Number(interestRate),
-                    startDate: openedAt || todayIso(),
-                    endDate,
-                    interestPayout,
-                    capitalizationPeriod,
-                  })
-                : null;
-              const totalAtEnd = projectedEnd !== null ? Number(amount) + projectedEnd : null;
-              return (
-                <div className="form-row">
-                  <div className="input input--read-only" style={{ flex: '1 1 280px', color: 'var(--tag-in-fg)' }}>
-                    {projectedEnd !== null
-                      ? `Доход за весь срок: +${formatAmount(projectedEnd, currencyCode)} (итого ${formatAmount(totalAtEnd!, currencyCode)})`
-                      : depositKind === 'savings_account'
-                        ? 'Накопительный счёт — бессрочный'
-                        : 'Укажите дату окончания для расчёта'}
-                  </div>
-                </div>
-              );
-            })()
-          )}
-
-          <div className="form-row">
-            <input
-              className="input"
-              type="text"
-              placeholder="Комментарий"
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              disabled={submitting}
-              style={{ flex: '1 1 320px' }}
-            />
-          </div>
-
-          {error && (
-            <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 4 }}>
-              {error}
-            </p>
-          )}
-        </div>
-
-        <div className="modal-actions">
-          <div className="action-pill">
-            <button className="action-pill__cancel" type="button" onClick={onClose} disabled={submitting}>
-              Отмена
-            </button>
-            <button className="action-pill__confirm" type="button" onClick={handleSubmit} disabled={!canSubmit}>
-              {submitting ? 'Сохраняем...' : isDeposit ? 'Открыть вклад' : 'Добавить позицию'}
-            </button>
-          </div>
-        </div>
+        {formBody}
+        {actions}
       </div>
     </div>
   );

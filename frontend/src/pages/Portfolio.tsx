@@ -20,6 +20,7 @@ import {
   topUpPortfolioPosition,
   fetchPortfolioAnalytics,
 } from '../api';
+import BottomSheet from '../components/BottomSheet';
 import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
 import TinkoffSyncDialog from '../components/TinkoffSyncDialog';
 import type {
@@ -35,7 +36,7 @@ import type {
   PortfolioAnalyticsData,
 } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { formatAmount } from '../utils/format';
+import { formatAmount, currencySymbol } from '../utils/format';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import Operations from './Operations';
@@ -407,6 +408,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [activeAssetTypeCode, setActiveAssetTypeCode] = useState<string>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [addSheetTypeCode, setAddSheetTypeCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
   const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
@@ -443,6 +446,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
   const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
+  const [heroTypeSheetCode, setHeroTypeSheetCode] = useState<string | null>(null);
   const [valueMode, setValueMode] = useState<'now' | 'potential'>('now');
   const [portfolioView, setPortfolioView] = useState<'positions' | 'ops' | 'analytics'>('positions');
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
@@ -1505,7 +1509,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         investedPrincipal: totalInvestedPrincipalInBase,
         cashValue: totalInvestmentCashInBase,
         resultValue: hasPricedPositions ? totalUnrealizedPnl : totalRealizedIncomeInBase,
-        resultLabel: hasPricedPositions ? 'Нереализованный P&L' : 'Зафиксированный доход',
+        resultLabel: 'Доход',
       };
     }
     if (activeAssetTypeCode === 'security') {
@@ -1525,7 +1529,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         investedPrincipal,
         cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
         resultValue: currentResult,
-        resultLabel: 'Текущий результат',
+        resultLabel: 'Доход',
       };
     }
 
@@ -1534,7 +1538,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       investedPrincipal: visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
       cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
       resultValue: visibleAssetPositions.reduce((sum, position) => sum + getPositionRealizedResult(position), 0),
-      resultLabel: activeAssetTypeCode === 'deposit' ? 'Доход' : 'Результат',
+      resultLabel: 'Доход',
     };
   }, [
     activeAssetTypeCode,
@@ -1790,12 +1794,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
           </div>
         </div>
 
-        <strong className="pf-hero__value">
-          {formatAmount(
-            valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue,
-            user.base_currency_code,
-          )}
-        </strong>
+        <div className="pf-hero__amount">
+          <strong className="pf-hero__value">
+            {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(
+              valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue,
+            )}
+          </strong>
+          <span className="pf-hero__sym">{currencySymbol(user.base_currency_code)}</span>
+        </div>
 
         {hasPricedPositions && totalPricedEntry > 0 && (
           <div className={`pf-hero__pnl${totalUnrealizedPnl >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}>
@@ -1810,15 +1816,17 @@ export default function Portfolio({ user }: { user: UserContext }) {
           <button
             key={tab.code}
             type="button"
-            className={`pf-hero__row${activeAssetTypeCode === tab.code ? ' pf-hero__row--active' : ''}`}
-            onClick={() => setActiveAssetTypeCode(tab.code)}
+            className="pf-hero__row"
+            onClick={() => setHeroTypeSheetCode(tab.code)}
           >
             <span className={`pf-hero__row-dot pf-hero__row-dot--${tab.code}`} />
             <span className="pf-hero__row-label">{tab.label}</span>
             <span className="pf-hero__row-count">{tab.openCount}</span>
             <span className="pf-hero__row-value">
-              {formatAmount(tab.totalInBase, user.base_currency_code)}
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
+              <span className="pf-hero__row-sym">{currencySymbol(user.base_currency_code)}</span>
             </span>
+            <span className="pf-hero__row-chev">›</span>
           </button>
         ))}
 
@@ -1828,23 +1836,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
           </div>
         )}
 
-        <div className="pf-hero__footer">
-          <button
-            className="pf-hero__accounts-btn"
-            type="button"
-            onClick={() => setShowAccountsModal(true)}
-          >
-            {accounts.length} {accounts.length === 1 ? 'счёт' : accounts.length < 5 ? 'счёта' : 'счетов'}
-          </button>
-          <button
-            className="pf-hero__add-btn"
-            type="button"
-            onClick={() => setIsCreateDialogOpen(true)}
-            disabled={accounts.length === 0}
-          >
-            + Позиция
-          </button>
-        </div>
       </div>
 
       {/* ── Asset type tabs ── */}
@@ -1889,27 +1880,52 @@ export default function Portfolio({ user }: { user: UserContext }) {
         <div className="pf-view">
           {activeAssetTypeCode !== 'all' && filteredOpenPositions.length > 0 && (
             <div className="pf-tsum">
-              <div className="pf-tsum__header">
-                <div className="pf-tsum__eyebrow">
-                  {activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)} · {filteredOpenPositions.length} поз.
-                </div>
+              <div className="pf-tsum__eyebrow">
+                {activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)} · {filteredOpenPositions.length} поз.
+              </div>
+              <div className="pf-tsum__now">
                 <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
-                <div className="pf-tsum__now-value">
-                  {formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
+                <div className="pf-tsum__now-row">
+                  <div className="pf-tsum__now-value">
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.estimatedValue)}
+                    <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                  </div>
+                  {activeScopeDisplayMetrics.investedPrincipal > 0 && (() => {
+                    const rv = activeScopeDisplayMetrics.resultValue;
+                    const pct = (rv / activeScopeDisplayMetrics.investedPrincipal) * 100;
+                    const isPos = rv >= 0;
+                    return (
+                      <span className={`pf-tsum__delta${isPos ? ' pf-tsum__delta--pos' : ' pf-tsum__delta--neg'}`}>
+                        {isPos ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(rv)}{currencySymbol(user.base_currency_code)}
+                        <span className="pf-tsum__delta-sep">·</span>
+                        {isPos ? '+' : ''}{pct.toFixed(1)}%
+                      </span>
+                    );
+                  })()}
                 </div>
+                <div className="pf-tsum__now-period">{activeScopeDisplayMetrics.resultLabel}</div>
               </div>
               <div className="pf-tsum__grid">
                 <div className="pf-tsum__cell">
                   <div className="pf-tsum__cell-label">Вложено</div>
                   <div className="pf-tsum__cell-value">
-                    {formatAmount(activeScopeDisplayMetrics.investedPrincipal, user.base_currency_code)}
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.investedPrincipal)}
+                    <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                 </div>
                 <div className="pf-tsum__cell pf-tsum__cell--mid">
                   <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
                   <div className={`pf-tsum__cell-value${activeScopeDisplayMetrics.resultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
-                    {formatAmount(activeScopeDisplayMetrics.resultValue, user.base_currency_code)}
+                    {activeScopeDisplayMetrics.resultValue >= 0 ? '+' : ''}
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.resultValue)}
+                    <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
+                  {activeScopeDisplayMetrics.investedPrincipal > 0 && (
+                    <div className="pf-tsum__cell-note">
+                      {activeScopeDisplayMetrics.resultValue >= 0 ? '+' : ''}
+                      {((activeScopeDisplayMetrics.resultValue / activeScopeDisplayMetrics.investedPrincipal) * 100).toFixed(1)}%
+                    </div>
+                  )}
                 </div>
                 <div className="pf-tsum__cell">
                   <div className="pf-tsum__cell-label">Позиций</div>
@@ -1918,6 +1934,83 @@ export default function Portfolio({ user }: { user: UserContext }) {
               </div>
             </div>
           )}
+
+          {activeAssetTypeCode === 'all' && openPositions.length > 0 && (() => {
+            const typeTabs = assetTabs.filter((t) => t.code !== 'all' && t.totalInBase > 0);
+            const total = typeTabs.reduce((s, t) => s + t.totalInBase, 0);
+            const invested = totalInvestedPrincipalInBase;
+            const income = hasPricedPositions ? totalUnrealizedPnl : totalRealizedIncomeInBase;
+            const incomeIsPos = income >= 0;
+            const incomePct = invested > 0 ? (income / invested) * 100 : 0;
+            const fmt = (n: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
+            const colorMap: Record<string, string> = {
+              security: '#0A0B0D', deposit: '#137534', crypto: '#9B1C1C', other: '#4B2D8F',
+            };
+            return (
+              <div className="pf-alloc">
+                <div className="pf-alloc__head">
+                  <span className="pf-alloc__tag">Распределение</span>
+                  <span className="pf-alloc__meta">{typeTabs.length} {typeTabs.length === 1 ? 'тип' : typeTabs.length < 5 ? 'типа' : 'типов'}</span>
+                </div>
+                <div className="pf-alloc__bar" role="img" aria-label="Распределение по типам активов">
+                  {typeTabs.map((t) => (
+                    <span
+                      key={t.code}
+                      className="pf-alloc__seg"
+                      style={{ flex: t.totalInBase, background: colorMap[t.code] ?? '#999' }}
+                    />
+                  ))}
+                </div>
+                <ul className="pf-alloc__legend">
+                  {typeTabs.map((t) => (
+                    <li key={t.code}>
+                      <span className="pf-alloc__dot" style={{ background: colorMap[t.code] ?? '#999' }} />
+                      {t.label}
+                      <em>{total > 0 ? ((t.totalInBase / total) * 100).toFixed(1) : '0'}%</em>
+                    </li>
+                  ))}
+                </ul>
+                <div className="pf-alloc__totals">
+                  <div className="pf-alloc__t-cell">
+                    <span>Вложено</span>
+                    <strong>{fmt(invested)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+                  </div>
+                  <span className="pf-alloc__t-sep" />
+                  <div className="pf-alloc__t-cell">
+                    <span>Доход</span>
+                    <strong className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
+                      {incomeIsPos ? '+' : ''}{fmt(income)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                    </strong>
+                    <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
+                      {incomeIsPos ? '+' : ''}{incomePct.toFixed(1)}%
+                    </em>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="pf-sec__head">
+            <div>
+              <h2 className="pf-sec__title">Позиции</h2>
+              <span className="pf-sec__sub">
+                {activeAssetTypeCode === 'all'
+                  ? 'Сгруппированы по счёту и типу'
+                  : `${activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)} — по счёту`}
+              </span>
+            </div>
+            <button
+              className="pf-add-pill"
+              type="button"
+              onClick={() => {
+                setAddSheetTypeCode(activeAssetTypeCode === 'all' ? null : activeAssetTypeCode);
+                setAddSheetOpen(true);
+              }}
+              disabled={accounts.length === 0}
+            >
+              + Новая
+            </button>
+          </div>
 
           {accounts.length === 0 ? (
             <p className="pf-empty">Создай инвестиционный счёт в Настройках, затем добавь позиции.</p>
@@ -1939,7 +2032,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       </div>
                     </div>
                     <div className="pf-grp__total">
-                      {formatAmount(groupValue, user.base_currency_code)}
+                      {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
+                      <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </div>
                   </div>
                   {sections.map((section) => (
@@ -3089,41 +3183,94 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
       )}
 
-      {isCreateDialogOpen && (
-        <PortfolioPositionDialog
-          accounts={filteredAccounts}
-          currencies={currencies}
-          user={user}
-          defaultAssetTypeCode={activeAssetTypeCode === 'all' ? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0] : activeAssetTypeCode}
-          defaultAssetTypeLabel={activeAssetTypeCode === 'all' ? assetTypeLabel(DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0]) : (activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode))}
-          onClose={() => setIsCreateDialogOpen(false)}
-          onSuccess={() => {
-            setIsCreateDialogOpen(false);
-            void loadPortfolio();
-          }}
-        />
-      )}
+      {/* ── Add position sheet ── */}
+      {(() => {
+        const TYPE_TILES = [
+          { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', color: '#0A0B0D', icon: '📈' },
+          { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', color: '#137534', icon: '🏦' },
+          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  color: '#9B1C1C', icon: '₿' },
+          { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  color: '#4B2D8F', icon: '◆' },
+        ];
+        const resolvedTypeCode = addSheetTypeCode ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0];
+        const resolvedTypeLabel = assetTypeLabel(resolvedTypeCode);
+        const sheetTitle = addSheetTypeCode ? `Новая позиция · ${resolvedTypeLabel}` : 'Добавить позицию';
+        const sheetAccounts = addSheetTypeCode
+          ? accounts.filter(({ account }) =>
+              !account.investment_asset_type || account.investment_asset_type === addSheetTypeCode,
+            )
+          : accounts;
+        return (
+          <BottomSheet
+            open={addSheetOpen}
+            title={sheetTitle}
+            onClose={() => { setAddSheetOpen(false); setAddSheetTypeCode(null); }}
+          >
+            {addSheetTypeCode === null ? (
+              <div className="add-pos-types">
+                {TYPE_TILES.map((t) => (
+                  <button
+                    key={t.code}
+                    type="button"
+                    className="add-pos-type-tile"
+                    onClick={() => setAddSheetTypeCode(t.code)}
+                  >
+                    <span className="add-pos-type-tile__icon" style={{ background: t.color }}>{t.icon}</span>
+                    <div className="add-pos-type-tile__copy">
+                      <span className="add-pos-type-tile__label">{t.label}</span>
+                      <span className="add-pos-type-tile__sub">{t.sub}</span>
+                    </div>
+                    <span className="add-pos-type-tile__chev">›</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <PortfolioPositionDialog
+                accounts={sheetAccounts.length > 0 ? sheetAccounts : accounts}
+                currencies={currencies}
+                user={user}
+                defaultAssetTypeCode={resolvedTypeCode}
+                defaultAssetTypeLabel={resolvedTypeLabel}
+                bare
+                onClose={() => { setAddSheetOpen(false); setAddSheetTypeCode(null); }}
+                onSuccess={() => {
+                  setAddSheetOpen(false);
+                  setAddSheetTypeCode(null);
+                  void loadPortfolio();
+                }}
+              />
+            )}
+          </BottomSheet>
+        );
+      })()}
 
-      {showAccountsModal && (
-        <div className="modal-backdrop" onClick={() => setShowAccountsModal(false)}>
-          <div className="modal-card modal-card--compact" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="section__title" style={{ fontSize: '1.05rem' }}>Инвестиционные счета</h2>
-            </div>
-            <div className="modal-body">
-              {accounts.map(({ account, balances }) => {
+      {/* ── Hero type sheet ── */}
+      {(() => {
+        const sheetTab = assetTabs.find((t) => t.code === heroTypeSheetCode);
+        const sheetAccounts = heroTypeSheetCode
+          ? accounts.filter(({ account }) =>
+              !account.investment_asset_type || account.investment_asset_type === heroTypeSheetCode,
+            )
+          : [];
+        return (
+          <BottomSheet
+            open={heroTypeSheetCode !== null}
+            title={sheetTab?.label ?? ''}
+            onClose={() => setHeroTypeSheetCode(null)}
+          >
+            <div className="pf-sheet-accounts">
+              {sheetAccounts.map(({ account, balances }) => {
                 const summary = summaryByAccountId[account.id];
-                const conn = tinkoffConnections.find((c) => c.linked_account_id === account.id);
                 const liveMetrics = getConnectedSecurityMetrics(account.id);
-                const estimatedValue = liveMetrics.estimatedValue;
-                const investedPrincipal = liveMetrics.investedPrincipal;
-                const currentResult = liveMetrics.currentResult;
+                const conn = heroTypeSheetCode === 'security'
+                  ? tinkoffConnections.find((c) => c.linked_account_id === account.id)
+                  : null;
+                const isSecurities = heroTypeSheetCode === 'security';
                 return (
-                  <div key={account.id} className="portfolio-account-modal-item">
-                    <div className="portfolio-account-modal-item__header">
+                  <div key={account.id} className="pf-sheet-account">
+                    <div className="pf-sheet-account__head">
                       <div>
-                        <div className="portfolio-account-modal-item__name">{account.name}</div>
-                        <div className="portfolio-account-modal-item__owner">
+                        <div className="pf-sheet-account__name">{account.name}</div>
+                        <div className="pf-sheet-account__meta">
                           {account.owner_type === 'family' ? 'Семейный' : 'Личный'}
                           {account.provider_name ? ` · ${account.provider_name}` : ''}
                         </div>
@@ -3131,70 +3278,63 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       {conn && (
                         <button
                           type="button"
-                          className="tinkoff-sync-btn"
+                          className="pf-sheet-sync-btn"
                           onClick={() => {
-                            setShowAccountsModal(false);
+                            setHeroTypeSheetCode(null);
                             setSyncDialogConnection(conn);
                           }}
                         >
                           ↻ Подтянуть
                           {conn.last_synced_at && (
-                            <span className="tinkoff-sync-btn__last">
+                            <span className="pf-sheet-sync-btn__date">
                               {new Date(conn.last_synced_at).toLocaleDateString('ru')}
                             </span>
                           )}
                         </button>
                       )}
                     </div>
-                    <div className="hero-card__breakdown" style={{ marginTop: 8 }}>
+                    <div className="pf-sheet-account__rows">
                       {balances.map((b) => (
-                        <div key={b.currency_code} className="hero-card__breakdown-row">
+                        <div key={b.currency_code} className="pf-sheet-account__row">
                           <span>Кэш {b.currency_code}</span>
-                          <strong>{formatAmount(b.amount, b.currency_code)}</strong>
+                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(b.amount)} {currencySymbol(b.currency_code)}</strong>
                         </div>
                       ))}
-                      {estimatedValue > 0 && (
-                        <div className="hero-card__breakdown-row">
+                      {isSecurities && liveMetrics.estimatedValue > 0 && (
+                        <div className="pf-sheet-account__row">
                           <span>Оценочная стоимость</span>
-                          <strong>{formatAmount(estimatedValue, user.base_currency_code)}</strong>
+                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(liveMetrics.estimatedValue)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {investedPrincipal > 0 && (
-                        <div className="hero-card__breakdown-row">
+                      {isSecurities && liveMetrics.investedPrincipal > 0 && (
+                        <div className="pf-sheet-account__row">
                           <span>Вложено</span>
-                          <strong>{formatAmount(investedPrincipal, user.base_currency_code)}</strong>
+                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(liveMetrics.investedPrincipal)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {currentResult !== 0 && (
-                        <div className="hero-card__breakdown-row">
-                          <span>Текущий результат</span>
-                          <strong>{formatAmount(currentResult, user.base_currency_code)}</strong>
+                      {isSecurities && liveMetrics.currentResult !== 0 && (
+                        <div className={`pf-sheet-account__row${liveMetrics.currentResult >= 0 ? ' pf-sheet-account__row--pos' : ' pf-sheet-account__row--neg'}`}>
+                          <span>Доход</span>
+                          <strong>{liveMetrics.currentResult >= 0 ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(liveMetrics.currentResult)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {summary && summary.realized_income_in_base !== 0 && (
-                        <div className="hero-card__breakdown-row">
-                          <span>Зафиксированный доход</span>
-                          <strong>{formatAmount(summary.realized_income_in_base, user.base_currency_code)}</strong>
+                      {!isSecurities && summary && summary.realized_income_in_base !== 0 && (
+                        <div className={`pf-sheet-account__row${summary.realized_income_in_base >= 0 ? ' pf-sheet-account__row--pos' : ' pf-sheet-account__row--neg'}`}>
+                          <span>Доход</span>
+                          <strong>{summary.realized_income_in_base >= 0 ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(summary.realized_income_in_base)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
                     </div>
                   </div>
                 );
               })}
-              {accounts.length === 0 && (
-                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.88rem' }}>
-                  Инвестиционных счетов нет. Создай в Настройках → Инвестиции.
-                </p>
+              {sheetAccounts.length === 0 && (
+                <p className="pf-sheet-empty">Счетов этого типа нет.</p>
               )}
             </div>
-            <div className="modal-actions">
-              <button className="btn" type="button" onClick={() => setShowAccountsModal(false)}>
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </BottomSheet>
+        );
+      })()}
 
 
       {syncDialogConnection && (
