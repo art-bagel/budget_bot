@@ -6467,32 +6467,161 @@ select.dlg-row__ghost option {
   opacity: .72;
 }
 
-.pf-segtog {
-  display: flex;
-  background: rgba(0,0,0,.1);
+/* ── pf-chiptog: single-toggle on yellow hero ─────────── */
+.pf-chiptog {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px 5px 6px;
   border-radius: 999px;
-  padding: 2px;
-  gap: 0;
-}
-
-.pf-segtog__opt {
-  appearance: none;
-  border: none;
-  background: transparent;
-  border-radius: 999px;
-  padding: 4px 11px;
   font-size: 12px;
   font-weight: 700;
-  color: rgba(0,0,0,.55);
+  color: rgba(10,11,13,.7);
+  background: rgba(10,11,13,.1);
+  border: none;
   cursor: pointer;
-  transition: background .15s, color .15s;
+  font-family: inherit;
+  transition: background .15s, color .15s, transform .1s;
   white-space: nowrap;
 }
+.pf-chiptog:active { transform: scale(.95); }
 
-.pf-segtog__opt--on {
+.pf-chiptog__glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(10,11,13,.14);
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1;
+  transition: background .15s, color .15s;
+}
+
+.pf-chiptog--on {
   background: #0A0B0D;
   color: var(--yellow);
 }
+.pf-chiptog--on .pf-chiptog__glyph {
+  background: var(--yellow);
+  color: #0A0B0D;
+}
+
+/* ── Income row + popup ────────────────────────────────── */
+.pf-hero__income-row {
+  margin-top: 8px;
+  position: relative;
+}
+
+.pf-hero__income-trigger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(10,11,13,.1);
+  border: none;
+  border-radius: var(--r-sm, 6px);
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(10,11,13,.75);
+  cursor: pointer;
+  transition: background .12s;
+  width: 100%;
+  text-align: left;
+}
+.pf-hero__income-trigger:active { background: rgba(10,11,13,.16); }
+
+.pf-hero__income-ico { opacity: .7; flex-shrink: 0; }
+
+.pf-hero__income-label { flex: 1; }
+
+.pf-hero__income-chev {
+  opacity: .5;
+  font-size: 14px;
+  transition: transform .2s;
+  display: inline-block;
+}
+.pf-hero__income-chev--open { transform: rotate(90deg); }
+
+.pf-income-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #fff;
+  border-radius: var(--r-md);
+  box-shadow: 0 6px 24px rgba(0,0,0,.14), 0 1px 4px rgba(0,0,0,.06);
+  padding: 14px 14px 12px;
+  animation: income-popup-in .15s ease;
+  color: #0A0B0D;
+}
+
+@keyframes income-popup-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.pf-income-popup__title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  opacity: .45;
+  margin-bottom: 10px;
+}
+
+.pf-income-popup__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.pf-income-popup__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pf-income-popup__row-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  opacity: .85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.pf-income-popup__row-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #137534;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pf-income-popup__note {
+  font-size: 11.5px;
+  font-weight: 500;
+  opacity: .5;
+  border-top: 1px solid rgba(0,0,0,.07);
+  padding-top: 8px;
+}
+
+[data-theme='dark'] .pf-income-popup {
+  background: var(--surface, #1C1D21);
+  color: var(--text, #F5F5F7);
+  box-shadow: 0 6px 28px rgba(0,0,0,.4);
+}
+[data-theme='dark'] .pf-income-popup__note {
+  border-top-color: rgba(255,255,255,.08);
+}
+[data-theme='dark'] .pf-income-popup__row-val { color: #34C759; }
 
 .pf-hero__amount {
   display: flex;
@@ -6527,17 +6656,40 @@ select.dlg-row__ghost option {
 .pf-hero__pnl {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 14px;
   font-weight: 700;
-  border-radius: 999px;
-  padding: 2px 8px;
-  margin-bottom: 10px;
-  background: rgba(0,0,0,.08);
+  line-height: 1.25;
+  margin: -2px 0 18px;
+  color: rgba(10,11,13,.82);
+}
+
+.pf-hero__pnl-arrow {
+  font-size: 18px;
+  line-height: 1;
+  color: currentColor;
+}
+
+.pf-hero__pnl-sym {
+  font-size: .72em;
+  font-weight: 700;
+  margin-left: 2px;
+  opacity: .8;
+}
+
+.pf-hero__pnl-sep,
+.pf-hero__pnl-period {
+  color: rgba(10,11,13,.62);
 }
 
 .pf-hero__pnl--pos { color: #137534; }
 .pf-hero__pnl--neg { color: #9B1C1C; }
+.pf-hero__pnl--pos .pf-hero__pnl-period,
+.pf-hero__pnl--pos .pf-hero__pnl-sep,
+.pf-hero__pnl--neg .pf-hero__pnl-period,
+.pf-hero__pnl--neg .pf-hero__pnl-sep {
+  color: rgba(10,11,13,.62);
+}
 
 .pf-hero__row {
   display: flex;
@@ -6601,15 +6753,7 @@ select.dlg-row__ghost option {
   line-height: 1;
 }
 
-.pf-hero__pot-note {
-  font-size: 11.5px;
-  font-weight: 600;
-  background: rgba(0,0,0,.08);
-  border-radius: var(--r-sm);
-  padding: 5px 8px;
-  margin: 6px 0 2px;
-  opacity: .8;
-}
+/* .pf-hero__pot-note replaced by .pf-hero__income-row */
 
 
 /* ── Positions section header ─────────────────────────── */

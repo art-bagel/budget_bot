@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { TrendingUp, Landmark, Coins, Package } from 'lucide-react';
+import { TrendingUp, Landmark, Coins, Package, Info } from 'lucide-react';
 
 import {
   cancelPortfolioIncome,
@@ -449,6 +449,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [showAccountsModal, setShowAccountsModal] = useState(false);
   const [heroTypeSheetCode, setHeroTypeSheetCode] = useState<string | null>(null);
   const [valueMode, setValueMode] = useState<'now' | 'potential'>('now');
+  const [showIncomePopup, setShowIncomePopup] = useState(false);
   const [portfolioView, setPortfolioView] = useState<'positions' | 'ops' | 'analytics'>('positions');
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
   const [analyticsData, setAnalyticsData] = useState<PortfolioAnalyticsData | null>(null);
@@ -864,6 +865,19 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }, totalInvestmentCashInBase),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase],
+  );
+
+  const depositAccruedItems = useMemo(
+    () => openPositions
+      .filter((p) => p.asset_type_code === 'deposit')
+      .map((p) => ({ title: p.title, accrued: typeof p.metadata?.accrued_interest === 'number' ? p.metadata.accrued_interest as number : 0, currency: p.currency_code }))
+      .filter((p) => p.accrued > 0),
+    [openPositions],
+  );
+
+  const totalDepositAccrued = useMemo(
+    () => depositAccruedItems.reduce((s, p) => s + p.accrued, 0),
+    [depositAccruedItems],
   );
 
   const accountEstimatedValueById = useMemo(
@@ -1775,24 +1789,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
       <div className="pf-hero">
         <div className="pf-hero__toprow">
           <span className="pf-hero__eyebrow">
-            {valueMode === 'now' ? 'Сейчас в портфеле' : 'Потенциал с доходом'}
+            {valueMode === 'potential' ? 'Потенциал с доходом' : 'Сейчас в портфеле'}
           </span>
-          <div className="pf-segtog" role="group" aria-label="Режим отображения">
-            <button
-              className={`pf-segtog__opt${valueMode === 'now' ? ' pf-segtog__opt--on' : ''}`}
-              type="button"
-              onClick={() => setValueMode('now')}
-            >
-              Сейчас
-            </button>
-            <button
-              className={`pf-segtog__opt${valueMode === 'potential' ? ' pf-segtog__opt--on' : ''}`}
-              type="button"
-              onClick={() => setValueMode('potential')}
-            >
-              С доходом
-            </button>
-          </div>
+          <button
+            className={`pf-chiptog${valueMode === 'potential' ? ' pf-chiptog--on' : ''}`}
+            type="button"
+            onClick={() => { setValueMode((v) => v === 'now' ? 'potential' : 'now'); setShowIncomePopup(false); }}
+          >
+            <span className="pf-chiptog__glyph" aria-hidden="true">{valueMode === 'potential' ? '−' : '+'}</span>
+            с доходом
+          </button>
         </div>
 
         <div className="pf-hero__amount">
@@ -1806,10 +1812,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
         {hasPricedPositions && totalPricedEntry > 0 && (
           <div className={`pf-hero__pnl${totalUnrealizedPnl >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}>
-            {totalUnrealizedPnl >= 0 ? '+' : ''}
-            {formatAmount(totalUnrealizedPnl, user.base_currency_code)}
-            {' '}({totalUnrealizedPnl >= 0 ? '+' : ''}
-            {((totalUnrealizedPnl / totalPricedEntry) * 100).toFixed(1)}%)
+            <span className="pf-hero__pnl-arrow" aria-hidden="true">
+              {totalUnrealizedPnl >= 0 ? '↗' : '↘'}
+            </span>
+            <span>
+              {totalUnrealizedPnl >= 0 ? '+' : '−'}
+              {formatNumericAmount(Math.abs(totalUnrealizedPnl), 0)}
+              <span className="pf-hero__pnl-sym">{currencySymbol(user.base_currency_code)}</span>
+            </span>
+            <span className="pf-hero__pnl-sep">·</span>
+            <span>
+              {totalUnrealizedPnl >= 0 ? '+' : '−'}
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(Math.abs((totalUnrealizedPnl / totalPricedEntry) * 100))}%
+            </span>
+            <span className="pf-hero__pnl-period">к вложенному</span>
           </div>
         )}
 
@@ -1830,9 +1846,35 @@ export default function Portfolio({ user }: { user: UserContext }) {
           </button>
         ))}
 
-        {valueMode === 'potential' && totalWithPotential > totalRealPortfolioValue && (
-          <div className="pf-hero__pot-note">
-            +{formatAmount(totalWithPotential - totalRealPortfolioValue, user.base_currency_code)} с учётом начислений
+        {valueMode === 'potential' && totalDepositAccrued > 0 && (
+          <div className="pf-hero__income-row">
+            <button
+              type="button"
+              className="pf-hero__income-trigger"
+              onClick={() => setShowIncomePopup((v) => !v)}
+            >
+              <Info size={13} strokeWidth={2.2} className="pf-hero__income-ico" />
+              <span className="pf-hero__income-label">
+                +{formatAmount(totalDepositAccrued, user.base_currency_code)} начислено
+              </span>
+              <span className={`pf-hero__income-chev${showIncomePopup ? ' pf-hero__income-chev--open' : ''}`}>›</span>
+            </button>
+            {showIncomePopup && (
+              <div className="pf-income-popup">
+                <div className="pf-income-popup__title">Начисленный доход</div>
+                <div className="pf-income-popup__rows">
+                  {depositAccruedItems.map((item) => (
+                    <div key={item.title} className="pf-income-popup__row">
+                      <span className="pf-income-popup__row-name">{item.title}</span>
+                      <span className="pf-income-popup__row-val">+{formatAmount(item.accrued, item.currency)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="pf-income-popup__note">
+                  Выплатится при закрытии вклада
+                </div>
+              </div>
+            )}
           </div>
         )}
 
