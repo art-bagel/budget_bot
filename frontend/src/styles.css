@@ -6423,3 +6423,512 @@ select.dlg-row__ghost option {
   font-size: 12px; color: var(--tag-out-fg);
   margin-top: 6px; padding: 0 2px;
 }
+
+
+/* ═══════════════════════════════════════════════════════
+   Portfolio v2 — redesigned layout
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Hero ─────────────────────────────────────────────── */
+.pf-hero {
+  background: var(--yellow);
+  border-radius: var(--r-lg);
+  padding: 18px 18px 14px;
+  box-shadow: var(--sh-hero);
+  color: #0A0B0D;
+  margin-bottom: 2px;
+}
+
+.pf-hero__toprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.pf-hero__eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  opacity: .65;
+}
+
+.pf-segtog {
+  display: flex;
+  background: rgba(0,0,0,.1);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 0;
+}
+
+.pf-segtog__opt {
+  appearance: none;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0,0,0,.55);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+
+.pf-segtog__opt--on {
+  background: #0A0B0D;
+  color: var(--yellow);
+}
+
+.pf-hero__value {
+  display: block;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.08;
+  margin: 8px 0 4px;
+}
+
+.pf-hero__pnl {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 10px;
+  background: rgba(0,0,0,.08);
+}
+
+.pf-hero__pnl--pos { color: #137534; }
+.pf-hero__pnl--neg { color: #9B1C1C; }
+
+.pf-hero__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-top: 1px solid rgba(0,0,0,.08);
+  text-align: left;
+  color: inherit;
+  transition: background .1s;
+}
+
+.pf-hero__row:active { background: rgba(0,0,0,.06); border-radius: 6px; }
+
+.pf-hero__row--active .pf-hero__row-label,
+.pf-hero__row--active .pf-hero__row-value {
+  font-weight: 800;
+}
+
+.pf-hero__row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pf-hero__row-dot--security { background: #0A0B0D; }
+.pf-hero__row-dot--deposit  { background: #137534; }
+.pf-hero__row-dot--crypto   { background: #9B1C1C; }
+.pf-hero__row-dot--other    { background: #4B2D8F; }
+
+.pf-hero__row-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-hero__row-count {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: .5;
+  min-width: 16px;
+  text-align: right;
+}
+
+.pf-hero__row-value {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 80px;
+  text-align: right;
+}
+
+.pf-hero__pot-note {
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(0,0,0,.08);
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+  margin: 6px 0 2px;
+  opacity: .8;
+}
+
+.pf-hero__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.1);
+}
+
+.pf-hero__accounts-btn {
+  appearance: none;
+  border: 1px solid rgba(0,0,0,.2);
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0A0B0D;
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.pf-hero__accounts-btn:hover { background: rgba(0,0,0,.08); }
+
+.pf-hero__add-btn {
+  appearance: none;
+  border: none;
+  background: #0A0B0D;
+  color: var(--yellow);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .12s;
+}
+
+.pf-hero__add-btn:disabled { opacity: .45; cursor: not-allowed; }
+.pf-hero__add-btn:not(:disabled):hover { opacity: .85; }
+
+/* ── Asset type tabs ──────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 4px;
+  margin: 4px -4px 0;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tabs__item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2, #6B7380);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color .12s, border-color .12s;
+}
+
+.tabs__item--on {
+  color: var(--text);
+  border-bottom-color: var(--yellow);
+}
+
+/* ── View switcher ────────────────────────────────────── */
+.pf-viewtog {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: 3px;
+  box-shadow: var(--sh-1);
+  margin: 8px 0 4px;
+}
+
+.pf-viewtog__opt {
+  appearance: none;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--r-lg) - 3px);
+  padding: 8px 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-2, #6B7380);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.pf-viewtog__opt--on {
+  background: var(--text);
+  color: var(--surface);
+}
+
+[data-theme='dark'] .pf-viewtog { background: var(--surface-2, #222); }
+[data-theme='dark'] .pf-viewtog__opt--on {
+  background: var(--yellow);
+  color: #0A0B0D;
+}
+
+/* ── View panes ───────────────────────────────────────── */
+.pf-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+/* ── Type summary card ────────────────────────────────── */
+.pf-tsum {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--sh-1);
+}
+
+.pf-tsum__header {
+  margin-bottom: 14px;
+}
+
+.pf-tsum__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-2, #6B7380);
+  margin-bottom: 4px;
+}
+
+.pf-tsum__now-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2, #6B7380);
+}
+
+.pf-tsum__now-value {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+
+.pf-tsum__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.pf-tsum__cell { padding: 0 12px; }
+.pf-tsum__cell:first-child { padding-left: 0; }
+.pf-tsum__cell:last-child  { padding-right: 0; }
+
+.pf-tsum__cell--mid {
+  border-left: 1px solid var(--line, rgba(0,0,0,.08));
+  border-right: 1px solid var(--line, rgba(0,0,0,.08));
+}
+
+.pf-tsum__cell-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-2, #6B7380);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  margin-bottom: 2px;
+}
+
+.pf-tsum__cell-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.pf-tsum__cell-value--pos { color: var(--pos, #137534); }
+.pf-tsum__cell-value--neg { color: var(--neg); }
+
+/* ── Account group card ───────────────────────────────── */
+.pf-grp {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--sh-1);
+}
+
+.pf-grp--muted { opacity: .75; }
+
+.pf-grp__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,.06));
+}
+
+.pf-grp__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.pf-grp__meta {
+  font-size: 11.5px;
+  color: var(--text-2, #6B7380);
+  margin-top: 1px;
+}
+
+.pf-grp__total {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pf-grp__subhead {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-2, #6B7380);
+  padding: 8px 16px 4px;
+  background: var(--bg, #EEF0F3);
+}
+
+/* ── Position row ─────────────────────────────────────── */
+.pf-pos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,.06));
+  transition: background .1s;
+}
+
+.pf-pos:last-child { border-bottom: none; }
+.pf-pos:active { background: var(--bg, #EEF0F3); }
+
+.pf-pos--closed {
+  cursor: default;
+  opacity: .7;
+}
+
+.pf-pos__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-pos__logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pf-pos__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  flex-shrink: 0;
+  color: var(--surface);
+}
+
+.pf-pos__icon--security { background: #0A0B0D; }
+.pf-pos__icon--deposit  { background: #137534; }
+.pf-pos__icon--crypto   { background: #9B1C1C; }
+.pf-pos__icon--other    { background: #4B2D8F; }
+
+[data-theme='dark'] .pf-pos__icon--security { background: var(--yellow); color: #0A0B0D; }
+
+.pf-pos__copy { min-width: 0; flex: 1; }
+
+.pf-pos__title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-pos__sub {
+  font-size: 11.5px;
+  color: var(--text-2, #6B7380);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-pos__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pf-pos__amount {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.pf-pos__pnl {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pf-pos__pnl--pos { color: var(--pos, #137534); }
+.pf-pos__pnl--neg { color: var(--neg); }
+
+/* ── Closed positions ─────────────────────────────────── */
+.pf-closed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-closed__toggle {
+  appearance: none;
+  border: 1px solid var(--line, rgba(0,0,0,.12));
+  background: transparent;
+  border-radius: var(--r-md);
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2, #6B7380);
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+}
+
+/* ── Empty state ──────────────────────────────────────── */
+.pf-empty {
+  color: var(--text-2, #6B7380);
+  font-size: 13.5px;
+  padding: 20px 16px;
+  text-align: center;
+}
+
