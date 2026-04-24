@@ -193,6 +193,7 @@ class PortfolioSummaryItem(BaseModel):
     cash_balance_in_base: float
     invested_principal_in_base: float
     realized_income_in_base: float
+    net_contributed_in_base: float
     open_positions_count: int
 
 

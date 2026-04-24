@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { TrendingUp, Landmark, Coins, Package, Info } from 'lucide-react';
 
 import {
@@ -269,6 +269,16 @@ function assetTypeLabel(assetTypeCode: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function pluralRu(value: number, forms: [string, string, string]): string {
+  const absValue = Math.abs(value);
+  const mod100 = absValue % 100;
+  const mod10 = absValue % 10;
+  if (mod100 >= 11 && mod100 <= 14) return forms[2];
+  if (mod10 === 1) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4) return forms[1];
+  return forms[2];
+}
+
 function formatUnitPrice(amount: number, quantity: number | null | undefined, currencyCode: string): string | null {
   if (!quantity || quantity <= 0) {
     return null;
@@ -449,6 +459,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [showAccountsModal, setShowAccountsModal] = useState(false);
   const [heroTypeSheetCode, setHeroTypeSheetCode] = useState<string | null>(null);
   const [valueMode, setValueMode] = useState<'now' | 'potential'>('now');
+  const [heroPnlMode, setHeroPnlMode] = useState<'external' | 'cost'>('cost');
   const [showIncomePopup, setShowIncomePopup] = useState(false);
   const [portfolioView, setPortfolioView] = useState<'positions' | 'ops' | 'analytics'>('positions');
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
@@ -824,6 +835,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [summaryItems],
   );
 
+  const totalNetContributedInBase = useMemo(
+    () => summaryItems.reduce((sum, item) => sum + Number(item.net_contributed_in_base ?? 0), 0),
+    [summaryItems],
+  );
+
   // For each open position: MOEX-priced shares at market value, everything else at cost (amount_in_currency)
   const { totalPositionsValue, totalPricedMarketValue, totalPricedEntry, totalUnrealizedPnl, hasPricedPositions } = useMemo(() => {
     let total = 0;
@@ -866,6 +882,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase],
   );
+
+  const heroDisplayedPortfolioValue = valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue;
+  const heroExternalPnl = heroDisplayedPortfolioValue - totalNetContributedInBase;
+  const heroCostBasisPnl = totalUnrealizedPnl;
+  const heroPnlValue = heroPnlMode === 'external' ? heroExternalPnl : heroCostBasisPnl;
+  const heroPnlBase = heroPnlMode === 'external' ? totalNetContributedInBase : totalInvestedPrincipalInBase;
+  const heroPnlPercent = heroPnlBase > 0 ? (heroPnlValue / heroPnlBase) * 100 : 0;
+  const canToggleHeroPnl = totalNetContributedInBase > 0 && hasPricedPositions && totalInvestedPrincipalInBase > 0;
+  const shouldShowHeroPnl = heroPnlBase > 0 && (heroPnlMode === 'external' || hasPricedPositions);
 
   const depositAccruedItems = useMemo(
     () => openPositions
@@ -1573,6 +1598,48 @@ export default function Portfolio({ user }: { user: UserContext }) {
     visibleOpenPositions,
   ]);
 
+  const activeScopeContributedInBase = useMemo(() => {
+    if (activeAssetTypeCode === 'all') {
+      return totalNetContributedInBase;
+    }
+
+    return visibleOpenPositionGroups.reduce(
+      (sum, group) => sum + Number(summaryByAccountId[group.accountId]?.net_contributed_in_base ?? 0),
+      0,
+    );
+  }, [activeAssetTypeCode, summaryByAccountId, totalNetContributedInBase, visibleOpenPositionGroups]);
+
+  const activeScopeCurrentValue = activeAssetTypeCode === 'all'
+    ? heroDisplayedPortfolioValue
+    : activeScopeDisplayMetrics.estimatedValue;
+  const activeScopeBaseValue = heroPnlMode === 'external'
+    ? activeScopeContributedInBase
+    : activeScopeDisplayMetrics.investedPrincipal;
+  const activeScopeResultValue = heroPnlMode === 'external'
+    ? activeScopeCurrentValue - activeScopeContributedInBase
+    : activeScopeDisplayMetrics.resultValue;
+  const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
+  const activeScopeBasisLabel = heroPnlMode === 'external' ? 'Внесено' : 'Вложено';
+  const canToggleActiveScopeBasis = activeScopeContributedInBase > 0 && activeScopeDisplayMetrics.investedPrincipal > 0;
+  const togglePortfolioPnlMode = () => {
+    if (canToggleActiveScopeBasis) {
+      setHeroPnlMode((mode) => mode === 'external' ? 'cost' : 'external');
+    }
+  };
+  const handlePortfolioPnlKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      togglePortfolioPnlMode();
+    }
+  };
+  const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
+    ? Landmark
+    : activeAssetTypeCode === 'crypto'
+      ? Coins
+      : activeAssetTypeCode === 'other'
+        ? Package
+        : TrendingUp;
+
   const portfolioAnalyticsBuckets = useMemo<PortfolioAnalyticsBucket[]>(() => {
     if (activeAssetTypeCode !== 'security') {
       return [];
@@ -1804,29 +1871,41 @@ export default function Portfolio({ user }: { user: UserContext }) {
         <div className="pf-hero__amount">
           <strong className="pf-hero__value">
             {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(
-              valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue,
+              heroDisplayedPortfolioValue,
             )}
           </strong>
           <span className="pf-hero__sym">{currencySymbol(user.base_currency_code)}</span>
         </div>
 
-        {hasPricedPositions && totalPricedEntry > 0 && (
-          <div className={`pf-hero__pnl${totalUnrealizedPnl >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}>
+        {shouldShowHeroPnl && (
+          <button
+            className={`pf-hero__pnl${heroPnlValue >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}
+            type="button"
+            onClick={() => {
+              if (canToggleHeroPnl) {
+                setHeroPnlMode((mode) => mode === 'external' ? 'cost' : 'external');
+              }
+            }}
+            aria-pressed={heroPnlMode === 'cost'}
+            title={canToggleHeroPnl ? 'Переключить расчет дохода' : undefined}
+          >
             <span className="pf-hero__pnl-arrow" aria-hidden="true">
-              {totalUnrealizedPnl >= 0 ? '↗' : '↘'}
+              {heroPnlValue >= 0 ? '↗' : '↘'}
             </span>
             <span>
-              {totalUnrealizedPnl >= 0 ? '+' : '−'}
-              {formatNumericAmount(Math.abs(totalUnrealizedPnl), 0)}
+              {heroPnlValue >= 0 ? '+' : '−'}
+              {formatNumericAmount(Math.abs(heroPnlValue), 0)}
               <span className="pf-hero__pnl-sym">{currencySymbol(user.base_currency_code)}</span>
             </span>
             <span className="pf-hero__pnl-sep">·</span>
             <span>
-              {totalUnrealizedPnl >= 0 ? '+' : '−'}
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(Math.abs((totalUnrealizedPnl / totalPricedEntry) * 100))}%
+              {heroPnlValue >= 0 ? '+' : '−'}
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(Math.abs(heroPnlPercent))}%
             </span>
-            <span className="pf-hero__pnl-period">к вложенному</span>
-          </div>
+            <span className="pf-hero__pnl-period">
+              {heroPnlMode === 'external' ? 'к внесенным' : 'к вложенному'}
+            </span>
+          </button>
         )}
 
         {assetTabs.filter((t) => t.code !== 'all').map((tab) => (
@@ -1921,9 +2000,27 @@ export default function Portfolio({ user }: { user: UserContext }) {
       {portfolioView === 'positions' && (
         <div className="pf-view">
           {activeAssetTypeCode !== 'all' && filteredOpenPositions.length > 0 && (
-            <div className="pf-tsum">
-              <div className="pf-tsum__eyebrow">
-                {activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)} · {filteredOpenPositions.length} поз.
+            <div
+              className="pf-tsum pf-tsum--button"
+              role="button"
+              tabIndex={0}
+              onClick={togglePortfolioPnlMode}
+              onKeyDown={handlePortfolioPnlKeyDown}
+              aria-pressed={heroPnlMode === 'external'}
+              title={canToggleActiveScopeBasis ? 'Переключить расчет дохода' : undefined}
+            >
+              <div className="pf-tsum__head">
+                <div className={`pf-tsum__icon pf-tsum__icon--${activeAssetTypeCode}`} aria-hidden="true">
+                  <ActiveAssetIcon size={22} strokeWidth={2.4} />
+                </div>
+                <div className="pf-tsum__titlebox">
+                  <div className="pf-tsum__title">{activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)}</div>
+                  <div className="pf-tsum__meta">
+                    {filteredOpenPositions.length} {pluralRu(filteredOpenPositions.length, ['позиция', 'позиции', 'позиций'])}
+                    <span>·</span>
+                    {visibleOpenPositionGroups.length} {pluralRu(visibleOpenPositionGroups.length, ['счёт', 'счёта', 'счетов'])}
+                  </div>
+                </div>
               </div>
               <div className="pf-tsum__now">
                 <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
@@ -1932,9 +2029,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.estimatedValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
-                  {activeScopeDisplayMetrics.investedPrincipal > 0 && (() => {
-                    const rv = activeScopeDisplayMetrics.resultValue;
-                    const pct = (rv / activeScopeDisplayMetrics.investedPrincipal) * 100;
+                  {activeScopeBaseValue > 0 && (() => {
+                    const rv = activeScopeResultValue;
+                    const pct = activeScopeResultPct;
                     const isPos = rv >= 0;
                     return (
                       <span className={`pf-tsum__delta${isPos ? ' pf-tsum__delta--pos' : ' pf-tsum__delta--neg'}`}>
@@ -1949,29 +2046,32 @@ export default function Portfolio({ user }: { user: UserContext }) {
               </div>
               <div className="pf-tsum__grid">
                 <div className="pf-tsum__cell">
-                  <div className="pf-tsum__cell-label">Вложено</div>
+                  <div className="pf-tsum__cell-label">{activeScopeBasisLabel}</div>
                   <div className="pf-tsum__cell-value">
-                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.investedPrincipal)}
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                 </div>
                 <div className="pf-tsum__cell pf-tsum__cell--mid">
                   <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
-                  <div className={`pf-tsum__cell-value${activeScopeDisplayMetrics.resultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
-                    {activeScopeDisplayMetrics.resultValue >= 0 ? '+' : ''}
-                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.resultValue)}
+                  <div className={`pf-tsum__cell-value${activeScopeResultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
+                    {activeScopeResultValue >= 0 ? '+' : ''}
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeResultValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
-                  {activeScopeDisplayMetrics.investedPrincipal > 0 && (
+                  {activeScopeBaseValue > 0 && (
                     <div className="pf-tsum__cell-note">
-                      {activeScopeDisplayMetrics.resultValue >= 0 ? '+' : ''}
-                      {((activeScopeDisplayMetrics.resultValue / activeScopeDisplayMetrics.investedPrincipal) * 100).toFixed(1)}%
+                      {activeScopeResultValue >= 0 ? '+' : ''}
+                      {activeScopeResultPct.toFixed(1)}%
                     </div>
                   )}
                 </div>
                 <div className="pf-tsum__cell">
-                  <div className="pf-tsum__cell-label">Позиций</div>
-                  <div className="pf-tsum__cell-value">{filteredOpenPositions.length}</div>
+                  <div className="pf-tsum__cell-label">Свободно</div>
+                  <div className="pf-tsum__cell-value">
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.cashValue)}
+                    <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1980,16 +2080,24 @@ export default function Portfolio({ user }: { user: UserContext }) {
           {activeAssetTypeCode === 'all' && openPositions.length > 0 && (() => {
             const typeTabs = assetTabs.filter((t) => t.code !== 'all' && t.totalInBase > 0);
             const total = typeTabs.reduce((s, t) => s + t.totalInBase, 0);
-            const invested = totalInvestedPrincipalInBase;
-            const income = hasPricedPositions ? totalUnrealizedPnl : totalRealizedIncomeInBase;
+            const basisValue = activeScopeBaseValue;
+            const income = activeScopeResultValue;
             const incomeIsPos = income >= 0;
-            const incomePct = invested > 0 ? (income / invested) * 100 : 0;
+            const incomePct = activeScopeResultPct;
             const fmt = (n: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
             const colorMap: Record<string, string> = {
               security: '#0A0B0D', deposit: '#137534', crypto: '#9B1C1C', other: '#4B2D8F',
             };
             return (
-              <div className="pf-alloc">
+              <div
+                className="pf-alloc pf-alloc--button"
+                role="button"
+                tabIndex={0}
+                onClick={togglePortfolioPnlMode}
+                onKeyDown={handlePortfolioPnlKeyDown}
+                aria-pressed={heroPnlMode === 'external'}
+                title={canToggleActiveScopeBasis ? 'Переключить расчет дохода' : undefined}
+              >
                 <div className="pf-alloc__head">
                   <span className="pf-alloc__tag">Распределение</span>
                   <span className="pf-alloc__meta">{typeTabs.length} {typeTabs.length === 1 ? 'тип' : typeTabs.length < 5 ? 'типа' : 'типов'}</span>
@@ -2014,8 +2122,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 </ul>
                 <div className="pf-alloc__totals">
                   <div className="pf-alloc__t-cell">
-                    <span>Вложено</span>
-                    <strong>{fmt(invested)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+                    <span>{activeScopeBasisLabel}</span>
+                    <strong>{fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
                     <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
                   </div>
                   <span className="pf-alloc__t-sep" />

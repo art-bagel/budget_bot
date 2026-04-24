@@ -6657,11 +6657,24 @@ select.dlg-row__ghost option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: fit-content;
+  padding: 0;
+  border: none;
+  background: transparent;
   font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
   margin: -2px 0 18px;
   color: rgba(10,11,13,.82);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.pf-hero__pnl:focus-visible {
+  outline: 2px solid rgba(10, 11, 13, .72);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 
 .pf-hero__pnl-arrow {
@@ -6889,12 +6902,45 @@ select.dlg-row__ghost option {
   gap: 14px;
 }
 
-.pf-tsum__eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--text-2, #6B7380);
+.pf-tsum__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pf-tsum__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: #E1E5EB;
+  color: #0A0B0D;
+}
+
+.pf-tsum__titlebox {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-tsum__title {
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--text);
+}
+
+.pf-tsum__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3, #A0A7B1);
 }
 
 .pf-tsum__now {
@@ -6961,6 +7007,16 @@ select.dlg-row__ghost option {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
+}
+
+.pf-tsum--button {
+  cursor: pointer;
+}
+
+.pf-tsum--button:focus-visible {
+  outline: 2px solid rgba(10, 11, 13, .72);
+  outline-offset: 6px;
+  border-radius: 8px;
 }
 
 .pf-tsum__cell {
@@ -7375,6 +7431,16 @@ select.dlg-row__ghost option {
   align-items: start;
   padding-top: 10px;
   border-top: 1px solid var(--line, rgba(0,0,0,.08));
+}
+
+.pf-alloc--button {
+  cursor: pointer;
+}
+
+.pf-alloc--button:focus-visible {
+  outline: 2px solid rgba(10, 11, 13, .72);
+  outline-offset: 6px;
+  border-radius: 8px;
 }
 
 .pf-alloc__t-cell {

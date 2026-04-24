@@ -516,6 +516,7 @@ export interface PortfolioSummaryItem {
   cash_balance_in_base: number;
   invested_principal_in_base: number;
   realized_income_in_base: number;
+  net_contributed_in_base: number;
   open_positions_count: number;
 }
 
