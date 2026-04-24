@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { TrendingUp, Landmark, Coins, Package } from 'lucide-react';
 
 import {
   cancelPortfolioIncome,
@@ -3186,10 +3187,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
       {/* ── Add position sheet ── */}
       {(() => {
         const TYPE_TILES = [
-          { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', color: '#0A0B0D', icon: '📈' },
-          { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', color: '#137534', icon: '🏦' },
-          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  color: '#9B1C1C', icon: '₿' },
-          { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  color: '#4B2D8F', icon: '◆' },
+          { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', color: '#0A0B0D', icon: <TrendingUp size={20} strokeWidth={2} /> },
+          { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', color: '#137534', icon: <Landmark   size={20} strokeWidth={2} /> },
+          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  color: '#9B1C1C', icon: <Coins      size={20} strokeWidth={2} /> },
+          { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  color: '#4B2D8F', icon: <Package    size={20} strokeWidth={2} /> },
         ];
         const resolvedTypeCode = addSheetTypeCode ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0];
         const resolvedTypeLabel = assetTypeLabel(resolvedTypeCode);

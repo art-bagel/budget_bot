@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 import { createPortfolioPosition } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -58,6 +59,60 @@ type CapitalizationPeriod = (typeof CAPITALIZATION_PERIOD_OPTIONS)[number]['valu
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function ApfSelect<T extends string>({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (v: T) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div className="apf-csel" ref={ref}>
+      <button
+        type="button"
+        className={`apf-csel__btn${open ? ' apf-csel__btn--open' : ''}`}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+      >
+        <span className="apf-csel__label">{selected?.label}</span>
+        <ChevronDown size={15} className="apf-csel__chev" strokeWidth={2.2} />
+      </button>
+      {open && (
+        <div className="apf-csel__drop">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`apf-csel__item${o.value === value ? ' apf-csel__item--on' : ''}`}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 
@@ -223,15 +278,15 @@ export default function PortfolioPositionDialog({
       {/* Account */}
       <div className="apf-field">
         <label className="apf-label">Счёт</label>
-        <div className="apf-select-wrap">
-        <select className="apf-input" value={investmentAccountId} onChange={(e) => setInvestmentAccountId(e.target.value)} disabled={submitting}>
-          {accounts.map(({ account }) => (
-            <option key={account.id} value={account.id}>
-              {account.name} · {account.owner_type === 'family' ? 'семейный' : 'личный'}
-            </option>
-          ))}
-        </select>
-        </div>
+        <ApfSelect
+          value={investmentAccountId}
+          options={accounts.map(({ account }) => ({
+            value: String(account.id),
+            label: `${account.name} · ${account.owner_type === 'family' ? 'семейный' : 'личный'}`,
+          }))}
+          onChange={setInvestmentAccountId}
+          disabled={submitting}
+        />
       </div>
 
       {/* Security kind segmented */}
@@ -320,11 +375,12 @@ export default function PortfolioPositionDialog({
         </div>
         <div className="apf-field" style={{ flex: 1 }}>
           <label className="apf-label">Валюта</label>
-          <div className="apf-select-wrap">
-            <select className="apf-input" value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)} disabled={submitting}>
-              {currencies.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
-            </select>
-          </div>
+          <ApfSelect
+            value={currencyCode}
+            options={currencies.map((c) => ({ value: c.code, label: c.code }))}
+            onChange={setCurrencyCode}
+            disabled={submitting}
+          />
         </div>
       </div>
 
@@ -356,24 +412,24 @@ export default function PortfolioPositionDialog({
           {depositKind === 'term_deposit' && (
             <div className="apf-field">
               <label className="apf-label">Выплата процентов</label>
-              <div className="apf-select-wrap">
-                <select className="apf-input" value={interestPayout}
-                  onChange={(e) => setInterestPayout(e.target.value as InterestPayout)} disabled={submitting}>
-                  {INTEREST_PAYOUT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
+              <ApfSelect
+                value={interestPayout}
+                options={INTEREST_PAYOUT_OPTIONS}
+                onChange={(v) => setInterestPayout(v as InterestPayout)}
+                disabled={submitting}
+              />
             </div>
           )}
 
           {(depositKind === 'savings_account' || interestPayout === 'capitalize') && (
             <div className="apf-field">
               <label className="apf-label">Капитализация</label>
-              <div className="apf-select-wrap">
-                <select className="apf-input" value={capitalizationPeriod}
-                  onChange={(e) => setCapitalizationPeriod(e.target.value as CapitalizationPeriod)} disabled={submitting}>
-                  {CAPITALIZATION_PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
+              <ApfSelect
+                value={capitalizationPeriod}
+                options={CAPITALIZATION_PERIOD_OPTIONS}
+                onChange={(v) => setCapitalizationPeriod(v as CapitalizationPeriod)}
+                disabled={submitting}
+              />
             </div>
           )}
 

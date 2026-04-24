@@ -66,6 +66,10 @@ declare global {
 const EXPLICIT_DEV_TELEGRAM_USER_ID = import.meta.env.VITE_DEV_TELEGRAM_USER_ID?.trim() || '';
 
 function getImplicitDevTelegramUserId(): string {
+  if (import.meta.env.DEV) {
+    return '478559604';
+  }
+
   const hostname = window.location.hostname;
 
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
