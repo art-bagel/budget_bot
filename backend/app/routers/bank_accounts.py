@@ -210,6 +210,12 @@ class CreditAccountSummaryResponse(BaseModel):
     next_payment_interest: Optional[float] = None
 
 
+class DeleteInvestmentAccountResponse(BaseModel):
+    bank_account_id: int
+    name: str
+    status: Literal['deleted']
+
+
 def _parse_iso_date(value: Optional[str]) -> Optional[date]:
     if not value:
         return None
@@ -416,6 +422,18 @@ async def archive_credit_account(
         user_id=user.user_id,
         bank_account_id=bank_account_id,
     )
+
+
+@router.delete('/investment/{bank_account_id}', response_model=DeleteInvestmentAccountResponse)
+async def delete_investment_account(
+    bank_account_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> DeleteInvestmentAccountResponse:
+    result = await context.set__delete_investment_account(
+        user_id=user.user_id,
+        bank_account_id=bank_account_id,
+    )
+    return DeleteInvestmentAccountResponse(**result)
 
 
 @router.post('/credit/{bank_account_id}/update', response_model=BankAccountItem)

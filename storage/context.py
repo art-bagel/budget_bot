@@ -29,6 +29,7 @@ class Context(DataBase):
     F_SET__UPDATE_USER_SETTINGS = 'set__update_user_settings'
     F_SET__LEAVE_FAMILY = 'set__leave_family'
     F_SET__DISSOLVE_FAMILY = 'set__dissolve_family'
+    F_SET__DELETE_INVESTMENT_ACCOUNT = 'set__delete_investment_account'
     F_SET__ARCHIVE_CREDIT_ACCOUNT = 'set__archive_credit_account'
     F_SET__UPDATE_CREDIT_ACCOUNT = 'set__update_credit_account'
     F_SET__UPDATE_DEPOSIT_AFTER_ACCRUAL = 'set__update_deposit_after_accrual'
@@ -124,6 +125,13 @@ class Context(DataBase):
     async def set__archive_credit_account(self, user_id: int, bank_account_id: int) -> dict:
         return await self.call_function(
             self._fn(self.F_SET__ARCHIVE_CREDIT_ACCOUNT),
+            user_id,
+            bank_account_id,
+        )
+
+    async def set__delete_investment_account(self, user_id: int, bank_account_id: int) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__DELETE_INVESTMENT_ACCOUNT),
             user_id,
             bank_account_id,
         )

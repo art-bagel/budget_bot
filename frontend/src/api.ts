@@ -129,6 +129,22 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Сначала нужно отменить более поздний платёж по этому кредиту';
   }
 
+  if (text.includes('Cannot delete investment account: account still has money')) {
+    return 'На инвестиционном счёте ещё есть деньги';
+  }
+
+  if (text.includes('Cannot delete investment account: account has portfolio positions')) {
+    return 'Сначала удалите позиции на этом инвестиционном счёте';
+  }
+
+  if (text.includes('Cannot delete investment account: account has bank operations')) {
+    return 'Нельзя удалить счёт с историей операций';
+  }
+
+  if (text.includes('Cannot delete investment account: account is linked to an external connection')) {
+    return 'Сначала удалите привязку к внешнему подключению';
+  }
+
   if (text.includes('Interest rate must be non-negative')) {
     return 'Ставка не может быть отрицательной';
   }
@@ -504,6 +520,10 @@ export async function createCreditAccount(data: CreateCreditAccountRequest): Pro
 
 export async function archiveCreditAccount(bankAccountId: number): Promise<{ bank_account_id: number; name: string; is_active: boolean }> {
   return apiFetch(`/bank-accounts/credit/${bankAccountId}/archive`, { method: 'POST' });
+}
+
+export async function deleteInvestmentAccount(bankAccountId: number): Promise<{ bank_account_id: number; name: string; status: 'deleted' }> {
+  return apiFetch(`/bank-accounts/investment/${bankAccountId}`, { method: 'DELETE' });
 }
 
 export async function updateCreditAccount(

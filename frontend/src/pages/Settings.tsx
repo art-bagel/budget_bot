@@ -8,6 +8,7 @@ import { IconSun, IconMoon, IconMonitor } from '../components/Icons';
 import {
   createBankAccount,
   deleteAccount,
+  deleteInvestmentAccount,
   deleteTinkoffConnection,
   dissolveFamily,
   fetchBankAccounts,
@@ -64,6 +65,8 @@ export default function Settings({
   const [newInvestmentAssetType, setNewInvestmentAssetType] = useState<'security' | 'deposit' | 'crypto' | 'other'>('security');
   const [creatingInvestmentAccount, setCreatingInvestmentAccount] = useState(false);
   const [createInvestmentError, setCreateInvestmentError] = useState<string | null>(null);
+  const [deletingInvestmentAccountId, setDeletingInvestmentAccountId] = useState<number | null>(null);
+  const [deleteInvestmentError, setDeleteInvestmentError] = useState<string | null>(null);
 
   // Integrations tab state
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
@@ -234,6 +237,28 @@ export default function Settings({
       setCreateInvestmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setCreatingInvestmentAccount(false);
+    }
+  };
+
+  const handleDeleteInvestmentAccount = async (account: BankAccount) => {
+    const isConfirmed = window.confirm(
+      `Удалить инвестиционный счёт "${account.name}"? Это сработает только если счёт пустой и без остатка.`,
+    );
+
+    if (!isConfirmed) {
+      return;
+    }
+
+    setDeletingInvestmentAccountId(account.id);
+    setDeleteInvestmentError(null);
+
+    try {
+      await deleteInvestmentAccount(account.id);
+      await loadAccounts();
+    } catch (reason: unknown) {
+      setDeleteInvestmentError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingInvestmentAccountId(null);
     }
   };
 
@@ -470,6 +495,7 @@ export default function Settings({
             )}
 
             {accountsError && <div className="settings-danger__error">{accountsError}</div>}
+            {deleteInvestmentError && <div className="settings-danger__error">{deleteInvestmentError}</div>}
 
             {accountsLoading ? (
               <div className="settings-row__sub">Загружаем счета...</div>
@@ -487,7 +513,17 @@ export default function Settings({
                         {account.provider_name ? ` · ${account.provider_name}` : ''}
                       </div>
                     </div>
-                    <span className="tag tag--neutral">#{account.id}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span className="tag tag--neutral">#{account.id}</span>
+                      <button
+                        className="btn btn--danger"
+                        type="button"
+                        onClick={() => void handleDeleteInvestmentAccount(account)}
+                        disabled={deletingInvestmentAccountId === account.id}
+                      >
+                        {deletingInvestmentAccountId === account.id ? 'Удаляем...' : 'Удалить'}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
