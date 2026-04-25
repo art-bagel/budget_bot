@@ -5,6 +5,7 @@ import {
   cancelPortfolioIncome,
   changeDepositRate,
   closePortfolioPosition,
+  createBankAccount,
   deletePortfolioPosition,
   fetchBankAccountSnapshot,
   fetchBankAccounts,
@@ -467,6 +468,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsPeriodType, setAnalyticsPeriodType] = useState<'month' | 'quarter' | 'year'>('year');
   const [analyticsPeriodOffset, setAnalyticsPeriodOffset] = useState(0);
+
+  // New investment account form
+  const [showNewAccountModal, setShowNewAccountModal] = useState(false);
+  const [newAccountName, setNewAccountName] = useState('');
+  const [newAccountOwnerType, setNewAccountOwnerType] = useState<'user' | 'family'>('user');
+  const [newAccountAssetType, setNewAccountAssetType] = useState<'security' | 'deposit' | 'crypto' | 'other'>('security');
+  const [newAccountProvider, setNewAccountProvider] = useState('');
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [createAccountError, setCreateAccountError] = useState<string | null>(null);
 
   const loadPortfolio = async () => {
     setLoading(true);
@@ -1835,6 +1845,31 @@ export default function Portfolio({ user }: { user: UserContext }) {
     switchAccountTab('prev');
   };
 
+  const handleCreateAccount = async () => {
+    if (!newAccountName.trim() || creatingAccount) return;
+    setCreatingAccount(true);
+    setCreateAccountError(null);
+    try {
+      await createBankAccount({
+        name: newAccountName.trim(),
+        owner_type: newAccountOwnerType,
+        account_kind: 'investment',
+        investment_asset_type: newAccountAssetType,
+        provider_name: newAccountProvider.trim() || undefined,
+      });
+      setShowNewAccountModal(false);
+      setNewAccountName('');
+      setNewAccountProvider('');
+      setNewAccountAssetType('security');
+      setNewAccountOwnerType('user');
+      await loadPortfolio();
+    } catch (err) {
+      setCreateAccountError(err instanceof Error ? err.message : 'Ошибка создания счёта');
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="status-screen">
@@ -1959,25 +1994,37 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       </div>
 
-      {/* ── Asset type tabs ── */}
-      <div
-        className="tabs"
-        role="tablist"
-        onTouchStart={(e) => handleAssetSwipeStart(e.touches[0].clientX)}
-        onTouchEnd={(e) => handleAssetSwipeEnd(e.changedTouches[0].clientX)}
-      >
-        {assetTabs.map((tab) => (
-          <button
-            key={tab.code}
-            role="tab"
-            type="button"
-            className={`tabs__item${activeAssetTypeCode === tab.code ? ' tabs__item--on' : ''}`}
-            aria-selected={activeAssetTypeCode === tab.code}
-            onClick={() => setActiveAssetTypeCode(tab.code)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* ── Asset type tabs + add button ── */}
+      <div className="tabs-row">
+        <div
+          className="tabs"
+          role="tablist"
+          onTouchStart={(e) => handleAssetSwipeStart(e.touches[0].clientX)}
+          onTouchEnd={(e) => handleAssetSwipeEnd(e.changedTouches[0].clientX)}
+        >
+          {assetTabs.map((tab) => (
+            <button
+              key={tab.code}
+              role="tab"
+              type="button"
+              className={`tabs__item${activeAssetTypeCode === tab.code ? ' tabs__item--on' : ''}`}
+              aria-selected={activeAssetTypeCode === tab.code}
+              onClick={() => setActiveAssetTypeCode(tab.code)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <button
+          className="tabs-add-btn tabs-add-btn--yellow"
+          type="button"
+          aria-label="Новый инвестиционный счёт"
+          onClick={() => setShowNewAccountModal(true)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
       </div>
 
       {/* ── View switcher ── */}
@@ -3500,6 +3547,112 @@ export default function Portfolio({ user }: { user: UserContext }) {
             void loadPortfolio();
           }}
         />
+      )}
+
+      {showNewAccountModal && (
+        <BottomSheet
+          open={showNewAccountModal}
+          title="Новый инвестиционный счёт"
+          onClose={() => {
+            setShowNewAccountModal(false);
+            setNewAccountName('');
+            setNewAccountProvider('');
+            setNewAccountAssetType('security');
+            setNewAccountOwnerType('user');
+            setCreateAccountError(null);
+          }}
+        >
+          <div className="pf-new-account-form apf-body">
+            <div className="apf-field">
+              <label className="apf-label">Название счёта</label>
+              <input
+                className="apf-input"
+                type="text"
+                placeholder="Например: ИИС Тинькофф"
+                value={newAccountName}
+                onChange={(e) => setNewAccountName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="apf-field">
+              <label className="apf-label">Тип активов</label>
+              <div className="apf-segtog pf-new-account-form__seg pf-new-account-form__seg--asset">
+                {([
+                  ['security', 'Бумаги'],
+                  ['deposit', 'Депозиты'],
+                  ['crypto', 'Крипто'],
+                  ['other', 'Другое'],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    className={`apf-segtog__opt${newAccountAssetType === val ? ' apf-segtog__opt--on' : ''}`}
+                    onClick={() => setNewAccountAssetType(val)}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="apf-field">
+              <label className="apf-label">Брокер / провайдер</label>
+              <input
+                className="apf-input"
+                type="text"
+                placeholder="Например: Тинькофф Инвестиции"
+                value={newAccountProvider}
+                onChange={(e) => setNewAccountProvider(e.target.value)}
+              />
+            </div>
+            <div className="apf-field">
+              <label className="apf-label">Владелец</label>
+              <div className="apf-segtog pf-new-account-form__seg">
+                <button
+                  type="button"
+                  className={`apf-segtog__opt${newAccountOwnerType === 'user' ? ' apf-segtog__opt--on' : ''}`}
+                  onClick={() => setNewAccountOwnerType('user')}
+                >
+                  Личный
+                </button>
+                <button
+                  type="button"
+                  className={`apf-segtog__opt${newAccountOwnerType === 'family' ? ' apf-segtog__opt--on' : ''}`}
+                  onClick={() => setNewAccountOwnerType('family')}
+                >
+                  Семейный
+                </button>
+              </div>
+            </div>
+            {createAccountError && (
+              <p className="pf-new-account-form__error">{createAccountError}</p>
+            )}
+            <div className="apf-actions">
+              <button
+                type="button"
+                className="apf-cancel"
+                onClick={() => {
+                  setShowNewAccountModal(false);
+                  setNewAccountName('');
+                  setNewAccountProvider('');
+                  setNewAccountAssetType('security');
+                  setNewAccountOwnerType('user');
+                  setCreateAccountError(null);
+                }}
+                disabled={creatingAccount}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="apf-submit"
+                onClick={() => void handleCreateAccount()}
+                disabled={!newAccountName.trim() || creatingAccount}
+              >
+                {creatingAccount ? 'Создаём…' : 'Создать счёт'}
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
       )}
     </>
   );

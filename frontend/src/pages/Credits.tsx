@@ -20,7 +20,7 @@ import type {
   DashboardBankBalance,
   UserContext,
 } from '../types';
-import { formatAmount } from '../utils/format';
+import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
 
 type CreditKind = 'loan' | 'credit_card' | 'mortgage';
 
@@ -170,6 +170,8 @@ export default function Credits({ user }: { user: UserContext }) {
   const [viewTab, setViewTab] = useState<ViewTab>('credits');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [segtogMode, setSegtogMode] = useState<'now' | 'withint'>('now');
+  const [totalAccruedInterest, setTotalAccruedInterest] = useState<number>(0);
+  const [interestLoading, setInterestLoading] = useState(false);
 
   // Selected credit for detail panel
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -240,6 +242,28 @@ export default function Credits({ user }: { user: UserContext }) {
   };
 
   useEffect(() => { void load(); }, []);
+
+  // Fetch accrued interest for all term credits in the background
+  useEffect(() => {
+    const termIds = credits
+      .filter(({ account }) => isTermCredit(account.credit_kind))
+      .map(({ account }) => account.id);
+    if (termIds.length === 0) { setTotalAccruedInterest(0); return; }
+
+    let cancelled = false;
+    setInterestLoading(true);
+    void Promise.all(termIds.map((id) => fetchCreditAccountSummary(id).catch(() => null)))
+      .then((summaries) => {
+        if (cancelled) return;
+        const total = summaries.reduce(
+          (sum, s) => sum + (s?.accrued_interest ?? 0),
+          0,
+        );
+        setTotalAccruedInterest(total);
+      })
+      .finally(() => { if (!cancelled) setInterestLoading(false); });
+    return () => { cancelled = true; };
+  }, [credits]);
 
   const selectedCredit = useMemo(
     () => credits.find(({ account }) => account.id === selectedId) ?? null,
@@ -616,37 +640,35 @@ export default function Credits({ user }: { user: UserContext }) {
       {/* ── Hero ── */}
       <article className="hero hero--ink">
         <div className="hero__head">
-          <span className="hero__eyebrow">Общий долг</span>
-          <div className="credits-segtog" role="tablist">
-            <button
-              className={`credits-segtog__opt${segtogMode === 'now' ? ' credits-segtog__opt--on' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={segtogMode === 'now'}
-              onClick={() => setSegtogMode('now')}
-            >
-              Остаток
-            </button>
-            <button
-              className={`credits-segtog__opt${segtogMode === 'withint' ? ' credits-segtog__opt--on' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={segtogMode === 'withint'}
-              onClick={() => setSegtogMode('withint')}
-            >
-              С процентами
-            </button>
-          </div>
+          <span className="hero__eyebrow">
+            Общий долг
+          </span>
+          <button
+            className={`credits-chiptog${segtogMode === 'withint' ? ' credits-chiptog--on' : ''}`}
+            type="button"
+            aria-pressed={segtogMode === 'withint'}
+            onClick={() => setSegtogMode((m) => m === 'now' ? 'withint' : 'now')}
+          >
+            <span className="credits-chiptog__glyph" aria-hidden="true">
+              {segtogMode === 'withint' ? '−' : '+'}
+            </span>
+            с процентами
+          </button>
         </div>
 
         <div className="hero__amount">
-          <span className="hero__value">{formatAmount(totalDebt, user.base_currency_code)}</span>
+          <span className="hero__value">
+            {formatNumericAmount(segtogMode === 'withint' ? totalDebt + totalAccruedInterest : totalDebt, 0)}
+          </span>
+          <span className="hero__sym">{currencySymbol(user.base_currency_code)}</span>
         </div>
 
         {credits.length > 0 && (
           <div className="hero__delta-row">
             <span className="hero__delta">
-              {segtogMode === 'now' ? 'Текущий остаток по всем кредитам' : 'С учётом начисленных процентов'}
+              {segtogMode === 'now'
+                ? 'Текущий остаток'
+                : 'Текущий остаток с процентами'}
             </span>
           </div>
         )}
@@ -708,39 +730,61 @@ export default function Credits({ user }: { user: UserContext }) {
             )}
           </div>
         )}
+
+        {segtogMode === 'withint' && !interestLoading && totalAccruedInterest > 0 && (
+          <div className="hero__potnote">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M8 7v4M8 5v.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>+{formatAmount(totalAccruedInterest, user.base_currency_code)} начислено по срочным кредитам на сегодня</span>
+          </div>
+        )}
       </article>
 
       {error && <p style={{ color: 'var(--tag-out-fg)', marginBottom: 12 }}>{error}</p>}
 
-      {/* ── Type filter tabs ── */}
-      <nav className="tabs" role="tablist" aria-label="Тип кредита">
-        {(
-          [
-            { key: 'all', label: 'Все' },
-            hasMortgage && { key: 'mortgage', label: 'Ипотека' },
-            hasLoans && { key: 'loan', label: 'Кредиты' },
-            hasCards && { key: 'card', label: 'Карты' },
-          ] as Array<{ key: string; label: string } | false>
-        )
-          .filter(Boolean)
-          .map((item) => {
-            if (!item) return null;
-            const tabKey = item.key === 'card' ? 'credit_card' : item.key as FilterTab;
-            const isOn = filterTab === tabKey || (item.key === 'all' && filterTab === 'all');
-            return (
-              <button
-                key={item.key}
-                className={`tabs__item${isOn ? ' tabs__item--on' : ''}`}
-                type="button"
-                role="tab"
-                aria-selected={isOn}
-                onClick={() => setFilterTab(tabKey)}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-      </nav>
+      {/* ── Type filter tabs + add button ── */}
+      <div className="tabs-row">
+        <nav className="tabs" role="tablist" aria-label="Тип кредита">
+          {(
+            [
+              { key: 'all', label: 'Все' },
+              hasMortgage && { key: 'mortgage', label: 'Ипотека' },
+              hasLoans && { key: 'loan', label: 'Кредиты' },
+              hasCards && { key: 'card', label: 'Карты' },
+            ] as Array<{ key: string; label: string } | false>
+          )
+            .filter(Boolean)
+            .map((item) => {
+              if (!item) return null;
+              const tabKey = item.key === 'card' ? 'credit_card' : item.key as FilterTab;
+              const isOn = filterTab === tabKey || (item.key === 'all' && filterTab === 'all');
+              return (
+                <button
+                  key={item.key}
+                  className={`tabs__item${isOn ? ' tabs__item--on' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isOn}
+                  onClick={() => setFilterTab(tabKey)}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+        </nav>
+        <button
+          className="tabs-add-btn"
+          type="button"
+          onClick={() => setShowNewForm(true)}
+          aria-label="Новый кредитный счёт"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
 
       {/* ── View switcher ── */}
       <div className="viewtog" role="tablist" aria-label="Раздел">
@@ -767,26 +811,13 @@ export default function Credits({ user }: { user: UserContext }) {
       {/* ── Pane: Кредиты ── */}
       <div className={`view-pane${viewTab === 'credits' ? ' view-pane--on' : ''}`}>
         <section className="sec">
-          <div className="sec__head sec__head--row">
-            <div>
-              <h2 className="sec__title">Кредиты</h2>
-              <span className="sec__sub">
-                {filteredCredits.length === 0
-                  ? 'Нет активных кредитов'
-                  : `${filteredCredits.length} активных`}
-              </span>
-            </div>
-            <button
-              className="add-pill"
-              type="button"
-              onClick={() => setShowNewForm(true)}
-              aria-label="Новый кредитный счёт"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Новый
-            </button>
+          <div className="sec__head">
+            <h2 className="sec__title">Кредиты</h2>
+            <span className="sec__sub">
+              {filteredCredits.length === 0
+                ? 'Нет активных кредитов'
+                : `${filteredCredits.length} активных`}
+            </span>
           </div>
 
           {filteredCredits.length === 0 ? (

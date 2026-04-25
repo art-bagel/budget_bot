@@ -954,10 +954,10 @@ input { font: inherit; color: inherit; }
 }
 
 .hero__row-sym {
-  font-size: .62em;
-  font-weight: 600;
-  opacity: .55;
-  margin-left: 2px;
+  font-size: 1em;
+  font-weight: inherit;
+  opacity: 1;
+  margin-left: 4px;
   letter-spacing: 0;
 }
 
@@ -6744,6 +6744,8 @@ select.dlg-row__ghost option {
 }
 
 .pf-hero__row-value {
+  display: inline-flex;
+  align-items: baseline;
   font-size: 14.5px;
   font-weight: 700;
   letter-spacing: -.015em;
@@ -6751,10 +6753,11 @@ select.dlg-row__ghost option {
 }
 
 .pf-hero__row-sym {
-  font-size: .65em;
-  font-weight: 600;
-  opacity: .6;
-  margin-left: 1px;
+  font-size: 1em;
+  font-weight: inherit;
+  opacity: 1;
+  margin-left: 4px;
+  letter-spacing: 0;
 }
 
 .pf-hero__row-chev {
@@ -6854,8 +6857,9 @@ select.dlg-row__ghost option {
   grid-template-columns: repeat(3, 1fr);
   background: var(--surface);
   border-radius: var(--r-lg);
-  padding: 3px;
+  padding: 4px;
   box-shadow: var(--sh-1);
+  gap: 2px;
   margin: 8px 0 4px;
 }
 
@@ -6863,13 +6867,16 @@ select.dlg-row__ghost option {
   appearance: none;
   border: none;
   background: transparent;
-  border-radius: calc(var(--r-lg) - 3px);
-  padding: 8px 4px;
-  font-size: 12.5px;
+  border-radius: var(--r-md);
+  padding: 10px 6px;
+  font-size: 13.5px;
   font-weight: 700;
+  letter-spacing: -.01em;
   color: var(--text-2, #6B7380);
   cursor: pointer;
   transition: background .15s, color .15s;
+  white-space: nowrap;
+  font-family: inherit;
 }
 
 .pf-viewtog__opt--on {
@@ -7896,31 +7903,42 @@ select.dlg-row__ghost option {
 .hero--ink .hero__mark--mint { background: #2F9E7F; }
 .hero--ink .hero__mark--coral { background: #E86A4F; }
 
-/* Segtog on ink hero */
-.credits-segtog {
+/* Chiptog on ink hero (mirrors pf-chiptog but for dark background) */
+.credits-chiptog {
   display: inline-flex;
-  padding: 3px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px 5px 6px;
   border-radius: 999px;
-  gap: 1px;
-  background: rgba(255, 255, 255, .08);
-}
-.credits-segtog__opt {
-  padding: 5px 11px;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: -.005em;
-  border-radius: 999px;
-  color: rgba(255, 255, 255, .55);
-  transition: background-color .22s ease, color .22s ease, transform .12s ease;
-  white-space: nowrap;
-  font-family: inherit;
-  background: none;
+  color: rgba(255, 255, 255, .65);
+  background: rgba(255, 255, 255, .10);
   border: none;
   cursor: pointer;
+  font-family: inherit;
+  transition: background .15s, color .15s, transform .1s;
+  white-space: nowrap;
 }
-.credits-segtog__opt:active { transform: scale(.96); }
-.credits-segtog__opt--on {
+.credits-chiptog:active { transform: scale(.95); }
+.credits-chiptog__glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .15);
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1;
+  transition: background .15s, color .15s;
+}
+.credits-chiptog--on {
   background: var(--yellow);
+  color: var(--ink-on-yellow, #0A0B0D);
+}
+.credits-chiptog--on .credits-chiptog__glyph {
+  background: rgba(10, 11, 13, .18);
   color: var(--ink-on-yellow, #0A0B0D);
 }
 
@@ -7983,6 +8001,42 @@ select.dlg-row__ghost option {
   color: #FFE066;
 }
 .hero__potnote svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* Tabs row: scrollable tabs + add button pinned to the right */
+.tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tabs-row .tabs { flex: 1; min-width: 0; }
+
+.tabs-add-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--surface);
+  display: grid;
+  place-items: center;
+  border: none;
+  cursor: pointer;
+  transition: transform .12s ease, opacity .15s ease;
+  margin-top: 2px;
+}
+.tabs-add-btn:active { transform: scale(.9); }
+.tabs-add-btn svg { width: 16px; height: 16px; }
+[data-theme='dark'] .tabs-add-btn { background: var(--surface); color: var(--text); }
+
+.tabs-add-btn--yellow {
+  background: var(--yellow);
+  color: var(--ink-on-yellow, #0A0B0D);
+}
+[data-theme='dark'] .tabs-add-btn--yellow {
+  background: var(--yellow);
+  color: var(--ink-on-yellow, #0A0B0D);
+}
+.tabs-add-btn--yellow:disabled { opacity: .4; cursor: not-allowed; }
 
 /* Section head — row layout (for add-pill alignment) */
 .sec__head--row {
@@ -8516,3 +8570,10 @@ select.dlg-row__ghost option {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ── New investment account form ── */
+.pf-new-account-form { padding: 0 0 8px; }
+.pf-new-account-form__seg--asset .apf-segtog__opt {
+  font-size: 12.5px;
+}
+.pf-new-account-form__error { font-size: 13px; color: var(--red, #e53935); margin: 0; }
