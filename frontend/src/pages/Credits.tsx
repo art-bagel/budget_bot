@@ -319,16 +319,9 @@ export default function Credits({ user }: { user: UserContext }) {
   };
 
   const openNewCreditSheet = () => {
-    const presetKind = resolveKindFromFilterTab(filterTab);
-    if (presetKind) {
-      resetNewCreditForm(presetKind);
-      setNewKindStep('form');
-      setNewKindLocked(true);
-    } else {
-      resetNewCreditForm('mortgage');
-      setNewKindStep('pick');
-      setNewKindLocked(false);
-    }
+    resetNewCreditForm('mortgage');
+    setNewKindStep('pick');
+    setNewKindLocked(false);
     setShowNewForm(true);
   };
 

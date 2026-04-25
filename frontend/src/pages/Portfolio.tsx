@@ -2022,13 +2022,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
           type="button"
           aria-label="Новый инвестиционный счёт"
           onClick={() => {
-            if (activeAssetTypeCode !== 'all' && ['security','deposit','crypto','other'].includes(activeAssetTypeCode)) {
-              setNewAccountAssetType(activeAssetTypeCode as 'security' | 'deposit' | 'crypto' | 'other');
-              setNewAccountStep('form');
-            } else {
-              setNewAccountAssetType('security');
-              setNewAccountStep('pick');
-            }
+            setNewAccountAssetType('security');
+            setNewAccountStep('pick');
             setShowNewAccountModal(true);
           }}
         >
