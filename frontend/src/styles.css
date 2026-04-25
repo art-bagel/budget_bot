@@ -7525,8 +7525,13 @@ select.dlg-row__ghost option {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #fff;
 }
+.add-pos-type-tile__icon--g { background: var(--t-g-b); color: var(--t-g-f); }
+.add-pos-type-tile__icon--b { background: var(--t-b-b); color: var(--t-b-f); }
+.add-pos-type-tile__icon--o { background: var(--t-o-b); color: var(--t-o-f); }
+.add-pos-type-tile__icon--p { background: var(--t-p-b); color: var(--t-p-f); }
+.add-pos-type-tile__icon--v { background: var(--t-v-b); color: var(--t-v-f); }
+.add-pos-type-tile__icon--r { background: var(--t-r-b); color: var(--t-r-f); }
 
 .add-pos-type-tile__copy {
   flex: 1;
@@ -8481,6 +8486,7 @@ select.dlg-row__ghost option {
   flex-direction: column;
   gap: 8px;
 }
+
 
 /* Util bar (credit card limit) */
 .credits-util {

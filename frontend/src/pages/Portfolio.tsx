@@ -471,6 +471,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
   // New investment account form
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
+  const [newAccountStep, setNewAccountStep] = useState<'pick' | 'form'>('pick');
   const [newAccountName, setNewAccountName] = useState('');
   const [newAccountOwnerType, setNewAccountOwnerType] = useState<'user' | 'family'>('user');
   const [newAccountAssetType, setNewAccountAssetType] = useState<'security' | 'deposit' | 'crypto' | 'other'>('security');
@@ -1858,6 +1859,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         provider_name: newAccountProvider.trim() || undefined,
       });
       setShowNewAccountModal(false);
+      setNewAccountStep('pick');
       setNewAccountName('');
       setNewAccountProvider('');
       setNewAccountAssetType('security');
@@ -2019,7 +2021,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
           className="tabs-add-btn tabs-add-btn--yellow"
           type="button"
           aria-label="Новый инвестиционный счёт"
-          onClick={() => setShowNewAccountModal(true)}
+          onClick={() => {
+            if (activeAssetTypeCode !== 'all' && ['security','deposit','crypto','other'].includes(activeAssetTypeCode)) {
+              setNewAccountAssetType(activeAssetTypeCode as 'security' | 'deposit' | 'crypto' | 'other');
+              setNewAccountStep('form');
+            } else {
+              setNewAccountAssetType('security');
+              setNewAccountStep('pick');
+            }
+            setShowNewAccountModal(true);
+          }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M12 5v14M5 12h14" />
@@ -3385,10 +3396,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
       {/* ── Add position sheet ── */}
       {(() => {
         const TYPE_TILES = [
-          { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', color: '#0A0B0D', icon: <TrendingUp size={20} strokeWidth={2} /> },
-          { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', color: '#137534', icon: <Landmark   size={20} strokeWidth={2} /> },
-          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  color: '#9B1C1C', icon: <Coins      size={20} strokeWidth={2} /> },
-          { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  color: '#4B2D8F', icon: <Package    size={20} strokeWidth={2} /> },
+          { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
+          { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
+          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
+          { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
         ];
         const resolvedTypeCode = addSheetTypeCode ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0];
         const resolvedTypeLabel = assetTypeLabel(resolvedTypeCode);
@@ -3413,7 +3424,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     className="add-pos-type-tile"
                     onClick={() => setAddSheetTypeCode(t.code)}
                   >
-                    <span className="add-pos-type-tile__icon" style={{ background: t.color }}>{t.icon}</span>
+                    <span className={`add-pos-type-tile__icon add-pos-type-tile__icon--${t.tint}`}>{t.icon}</span>
                     <div className="add-pos-type-tile__copy">
                       <span className="add-pos-type-tile__label">{t.label}</span>
                       <span className="add-pos-type-tile__sub">{t.sub}</span>
@@ -3549,111 +3560,110 @@ export default function Portfolio({ user }: { user: UserContext }) {
         />
       )}
 
-      {showNewAccountModal && (
-        <BottomSheet
-          open={showNewAccountModal}
-          title="Новый инвестиционный счёт"
-          onClose={() => {
-            setShowNewAccountModal(false);
-            setNewAccountName('');
-            setNewAccountProvider('');
-            setNewAccountAssetType('security');
-            setNewAccountOwnerType('user');
-            setCreateAccountError(null);
-          }}
-        >
-          <div className="pf-new-account-form apf-body">
-            <div className="apf-field">
-              <label className="apf-label">Название счёта</label>
-              <input
-                className="apf-input"
-                type="text"
-                placeholder="Например: ИИС Тинькофф"
-                value={newAccountName}
-                onChange={(e) => setNewAccountName(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="apf-field">
-              <label className="apf-label">Тип активов</label>
-              <div className="apf-segtog pf-new-account-form__seg pf-new-account-form__seg--asset">
-                {([
-                  ['security', 'Бумаги'],
-                  ['deposit', 'Депозиты'],
-                  ['crypto', 'Крипто'],
-                  ['other', 'Другое'],
-                ] as const).map(([val, lbl]) => (
+      {showNewAccountModal && (() => {
+        const ACCOUNT_TYPE_TILES = [
+          { code: 'security' as const, label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
+          { code: 'deposit'  as const, label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
+          { code: 'crypto'   as const, label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
+          { code: 'other'    as const, label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
+        ];
+        const selectedTile = ACCOUNT_TYPE_TILES.find((t) => t.code === newAccountAssetType);
+        const resetAndClose = () => {
+          setShowNewAccountModal(false);
+          setNewAccountStep('pick');
+          setNewAccountName('');
+          setNewAccountProvider('');
+          setNewAccountAssetType('security');
+          setNewAccountOwnerType('user');
+          setCreateAccountError(null);
+        };
+        return (
+          <BottomSheet
+            open={showNewAccountModal}
+            title={newAccountStep === 'pick' ? 'Новый инвестиционный счёт' : `Новый счёт · ${selectedTile?.label ?? ''}`}
+            onClose={resetAndClose}
+          >
+            {newAccountStep === 'pick' ? (
+              <div className="add-pos-types">
+                {ACCOUNT_TYPE_TILES.map((t) => (
                   <button
-                    key={val}
+                    key={t.code}
                     type="button"
-                    className={`apf-segtog__opt${newAccountAssetType === val ? ' apf-segtog__opt--on' : ''}`}
-                    onClick={() => setNewAccountAssetType(val)}
+                    className="add-pos-type-tile"
+                    onClick={() => { setNewAccountAssetType(t.code); setNewAccountStep('form'); }}
                   >
-                    {lbl}
+                    <span className={`add-pos-type-tile__icon add-pos-type-tile__icon--${t.tint}`}>{t.icon}</span>
+                    <div className="add-pos-type-tile__copy">
+                      <span className="add-pos-type-tile__label">{t.label}</span>
+                      <span className="add-pos-type-tile__sub">{t.sub}</span>
+                    </div>
+                    <span className="add-pos-type-tile__chev">›</span>
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="apf-field">
-              <label className="apf-label">Брокер / провайдер</label>
-              <input
-                className="apf-input"
-                type="text"
-                placeholder="Например: Тинькофф Инвестиции"
-                value={newAccountProvider}
-                onChange={(e) => setNewAccountProvider(e.target.value)}
-              />
-            </div>
-            <div className="apf-field">
-              <label className="apf-label">Владелец</label>
-              <div className="apf-segtog pf-new-account-form__seg">
-                <button
-                  type="button"
-                  className={`apf-segtog__opt${newAccountOwnerType === 'user' ? ' apf-segtog__opt--on' : ''}`}
-                  onClick={() => setNewAccountOwnerType('user')}
-                >
-                  Личный
-                </button>
-                <button
-                  type="button"
-                  className={`apf-segtog__opt${newAccountOwnerType === 'family' ? ' apf-segtog__opt--on' : ''}`}
-                  onClick={() => setNewAccountOwnerType('family')}
-                >
-                  Семейный
-                </button>
+            ) : (
+              <div className="pf-new-account-form apf-body">
+                <div className="apf-field">
+                  <label className="apf-label">Название счёта</label>
+                  <input
+                    className="apf-input"
+                    type="text"
+                    placeholder="Например: ИИС Тинькофф"
+                    value={newAccountName}
+                    onChange={(e) => setNewAccountName(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="apf-field">
+                  <label className="apf-label">Брокер / провайдер</label>
+                  <input
+                    className="apf-input"
+                    type="text"
+                    placeholder="Например: Тинькофф Инвестиции"
+                    value={newAccountProvider}
+                    onChange={(e) => setNewAccountProvider(e.target.value)}
+                  />
+                </div>
+                <div className="apf-field">
+                  <label className="apf-label">Владелец</label>
+                  <div className="apf-segtog pf-new-account-form__seg">
+                    <button
+                      type="button"
+                      className={`apf-segtog__opt${newAccountOwnerType === 'user' ? ' apf-segtog__opt--on' : ''}`}
+                      onClick={() => setNewAccountOwnerType('user')}
+                    >
+                      Личный
+                    </button>
+                    <button
+                      type="button"
+                      className={`apf-segtog__opt${newAccountOwnerType === 'family' ? ' apf-segtog__opt--on' : ''}`}
+                      onClick={() => setNewAccountOwnerType('family')}
+                    >
+                      Семейный
+                    </button>
+                  </div>
+                </div>
+                {createAccountError && (
+                  <p className="pf-new-account-form__error">{createAccountError}</p>
+                )}
+                <div className="apf-actions">
+                  <button type="button" className="apf-cancel" onClick={resetAndClose} disabled={creatingAccount}>
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    className="apf-submit"
+                    onClick={() => void handleCreateAccount()}
+                    disabled={!newAccountName.trim() || creatingAccount}
+                  >
+                    {creatingAccount ? 'Создаём…' : 'Создать счёт'}
+                  </button>
+                </div>
               </div>
-            </div>
-            {createAccountError && (
-              <p className="pf-new-account-form__error">{createAccountError}</p>
             )}
-            <div className="apf-actions">
-              <button
-                type="button"
-                className="apf-cancel"
-                onClick={() => {
-                  setShowNewAccountModal(false);
-                  setNewAccountName('');
-                  setNewAccountProvider('');
-                  setNewAccountAssetType('security');
-                  setNewAccountOwnerType('user');
-                  setCreateAccountError(null);
-                }}
-                disabled={creatingAccount}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="apf-submit"
-                onClick={() => void handleCreateAccount()}
-                disabled={!newAccountName.trim() || creatingAccount}
-              >
-                {creatingAccount ? 'Создаём…' : 'Создать счёт'}
-              </button>
-            </div>
-          </div>
-        </BottomSheet>
-      )}
+          </BottomSheet>
+        );
+      })()}
     </>
   );
 }

@@ -1,4 +1,60 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, House, Landmark, CreditCard } from 'lucide-react';
+import BottomSheet from '../components/BottomSheet';
+
+function ApfSelect<T extends string>({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (v: T) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div className="apf-csel" ref={ref}>
+      <button
+        type="button"
+        className={`apf-csel__btn${open ? ' apf-csel__btn--open' : ''}`}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+      >
+        <span className="apf-csel__label">{selected?.label ?? '—'}</span>
+        <ChevronDown size={15} className="apf-csel__chev" strokeWidth={2.2} />
+      </button>
+      {open && (
+        <div className="apf-csel__drop">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`apf-csel__item${o.value === value ? ' apf-csel__item--on' : ''}`}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 import { sanitizeDecimalInput } from '../utils/validation';
 import {
   archiveCreditAccount,
@@ -32,6 +88,28 @@ const CREDIT_KIND_OPTIONS: { value: CreditKind; label: string }[] = [
 
 function creditKindLabel(kind: CreditKind | null | undefined): string {
   return CREDIT_KIND_OPTIONS.find((o) => o.value === kind)?.label ?? '—';
+}
+
+function creditKindTitle(kind: CreditKind): string {
+  if (kind === 'mortgage') return 'Новая ипотека';
+  if (kind === 'credit_card') return 'Новая кредитная карта';
+  return 'Новый кредит';
+}
+
+function creditKindPlaceholder(kind: CreditKind): string {
+  if (kind === 'mortgage') return 'Например, Ипотека Сбербанк';
+  if (kind === 'credit_card') return 'Например, Кредитная карта Т-Банк';
+  return 'Например, Кредит Альфа-Банк';
+}
+
+function creditProviderPlaceholder(kind: CreditKind): string {
+  if (kind === 'credit_card') return 'Например, Т-Банк (необязательно)';
+  return 'Например, Сбербанк (необязательно)';
+}
+
+function resolveKindFromFilterTab(tab: FilterTab): CreditKind | null {
+  if (tab === 'mortgage' || tab === 'loan' || tab === 'credit_card') return tab;
+  return null;
 }
 
 function todayIso(): string {
@@ -200,8 +278,10 @@ export default function Credits({ user }: { user: UserContext }) {
 
   // New credit form
   const [showNewForm, setShowNewForm] = useState(false);
+  const [newKindStep, setNewKindStep] = useState<'pick' | 'form'>('pick');
+  const [newKindLocked, setNewKindLocked] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newKind, setNewKind] = useState<CreditKind>('loan');
+  const [newKind, setNewKind] = useState<CreditKind>('mortgage');
   const [newCurrency, setNewCurrency] = useState(user.base_currency_code);
   const [newOwnerType] = useState<'user' | 'family'>('user');
   const [newInterestRate, setNewInterestRate] = useState('');
@@ -215,6 +295,42 @@ export default function Credits({ user }: { user: UserContext }) {
   const [newError, setNewError] = useState<string | null>(null);
 
   const sheetRef = useRef<HTMLDivElement>(null);
+
+  const resetNewCreditForm = (kind: CreditKind = 'mortgage') => {
+    setNewName('');
+    setNewKind(kind);
+    setNewCurrency(user.base_currency_code);
+    setNewInterestRate('');
+    setNewPaymentDay('');
+    setNewStartedAt('');
+    setNewEndsAt('');
+    setNewCreditLimit('');
+    setNewTargetAccountId('');
+    setNewProvider('');
+    setNewError(null);
+  };
+
+  const closeNewCreditSheet = () => {
+    if (submittingNew) return;
+    setShowNewForm(false);
+    setNewKindStep('pick');
+    setNewKindLocked(false);
+    resetNewCreditForm();
+  };
+
+  const openNewCreditSheet = () => {
+    const presetKind = resolveKindFromFilterTab(filterTab);
+    if (presetKind) {
+      resetNewCreditForm(presetKind);
+      setNewKindStep('form');
+      setNewKindLocked(true);
+    } else {
+      resetNewCreditForm('mortgage');
+      setNewKindStep('pick');
+      setNewKindLocked(false);
+    }
+    setShowNewForm(true);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -530,7 +646,13 @@ export default function Credits({ user }: { user: UserContext }) {
     if (!newName.trim() || submittingNew) return;
     setSubmittingNew(true);
     setNewError(null);
+    const parsedCreditLimit = parseDecimalInput(newCreditLimit);
     const parsedInterestRate = parseDecimalInput(newInterestRate);
+    if (parsedCreditLimit == null || parsedCreditLimit <= 0) {
+      setNewError(newKind === 'credit_card' ? 'Введите корректный кредитный лимит' : 'Введите корректную сумму кредита');
+      setSubmittingNew(false);
+      return;
+    }
     if (newInterestRate.trim() && parsedInterestRate == null) {
       setNewError('Ставку нужно ввести числом, например 10,4');
       setSubmittingNew(false);
@@ -541,7 +663,7 @@ export default function Credits({ user }: { user: UserContext }) {
         name: newName.trim(),
         credit_kind: newKind,
         currency_code: newCurrency,
-        credit_limit: Number(newCreditLimit),
+        credit_limit: parsedCreditLimit,
         target_account_id: newTargetAccountId ? Number(newTargetAccountId) : undefined,
         owner_type: newOwnerType,
         interest_rate: parsedInterestRate ?? undefined,
@@ -551,16 +673,9 @@ export default function Credits({ user }: { user: UserContext }) {
         provider_name: newProvider.trim() || undefined,
       });
       setShowNewForm(false);
-      setNewName('');
-      setNewKind('loan');
-      setNewCurrency(user.base_currency_code);
-      setNewInterestRate('');
-      setNewPaymentDay('');
-      setNewStartedAt('');
-      setNewEndsAt('');
-      setNewCreditLimit('');
-      setNewTargetAccountId('');
-      setNewProvider('');
+      setNewKindStep('pick');
+      setNewKindLocked(false);
+      resetNewCreditForm();
       await load();
     } catch (err) {
       setNewError(err instanceof Error ? err.message : 'Ошибка создания');
@@ -777,7 +892,7 @@ export default function Credits({ user }: { user: UserContext }) {
         <button
           className="tabs-add-btn"
           type="button"
-          onClick={() => setShowNewForm(true)}
+          onClick={openNewCreditSheet}
           aria-label="Новый кредитный счёт"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -1530,153 +1645,178 @@ export default function Credits({ user }: { user: UserContext }) {
         </div>
       )}
 
-      {/* ── New credit modal ── */}
+      {/* ── New credit sheet ── */}
       {showNewForm && (
-        <div className="modal-backdrop" onClick={() => !submittingNew && setShowNewForm(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="section__title">Новый кредитный счёт</div>
+        <BottomSheet
+          open={showNewForm}
+          tag="Создать"
+          title={newKindStep === 'pick' ? 'Новый кредитный счёт' : creditKindTitle(newKind)}
+          onClose={closeNewCreditSheet}
+        >
+          {newKindStep === 'pick' ? (
+            <div className="add-pos-types">
+              <button type="button" className="add-pos-type-tile" onClick={() => { resetNewCreditForm('mortgage'); setNewKindStep('form'); setNewKindLocked(true); }}>
+                <span className="add-pos-type-tile__icon add-pos-type-tile__icon--b"><House size={20} strokeWidth={2} /></span>
+                <div className="add-pos-type-tile__copy">
+                  <span className="add-pos-type-tile__label">Ипотека</span>
+                  <span className="add-pos-type-tile__sub">Срок, ставка, платёж и счёт зачисления</span>
+                </div>
+                <span className="add-pos-type-tile__chev">›</span>
+              </button>
+              <button type="button" className="add-pos-type-tile" onClick={() => { resetNewCreditForm('loan'); setNewKindStep('form'); setNewKindLocked(true); }}>
+                <span className="add-pos-type-tile__icon add-pos-type-tile__icon--g"><Landmark size={20} strokeWidth={2} /></span>
+                <div className="add-pos-type-tile__copy">
+                  <span className="add-pos-type-tile__label">Кредит</span>
+                  <span className="add-pos-type-tile__sub">Обычный кредит с погашением по графику</span>
+                </div>
+                <span className="add-pos-type-tile__chev">›</span>
+              </button>
+              <button type="button" className="add-pos-type-tile" onClick={() => { resetNewCreditForm('credit_card'); setNewKindStep('form'); setNewKindLocked(true); }}>
+                <span className="add-pos-type-tile__icon add-pos-type-tile__icon--p"><CreditCard size={20} strokeWidth={2} /></span>
+                <div className="add-pos-type-tile__copy">
+                  <span className="add-pos-type-tile__label">Кредитная карта</span>
+                  <span className="add-pos-type-tile__sub">Лимит, ставка и день обязательного платежа</span>
+                </div>
+                <span className="add-pos-type-tile__chev">›</span>
+              </button>
             </div>
-            <div className="modal-body">
-              <form onSubmit={(e) => { e.preventDefault(); void handleCreateCredit(); }}>
-                <div className="form-row">
-                  <select
-                    className="input"
-                    value={newKind}
-                    onChange={(e) => setNewKind(e.target.value as CreditKind)}
-                    disabled={submittingNew}
-                  >
-                    {CREDIT_KIND_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-row" style={{ marginTop: 8 }}>
+          ) : (
+          <form
+            className="apf-body credits-create-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleCreateCredit();
+            }}
+          >
+
+              <div className="apf-field">
+                <label className="apf-label">Название</label>
+                <input
+                  className="apf-input"
+                  type="text"
+                  placeholder={creditKindPlaceholder(newKind)}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  disabled={submittingNew}
+                  autoFocus
+                />
+              </div>
+
+              <div className="apf-field">
+                <label className="apf-label">Банк</label>
+                <input
+                  className="apf-input"
+                  type="text"
+                  placeholder={creditProviderPlaceholder(newKind)}
+                  value={newProvider}
+                  onChange={(e) => setNewProvider(e.target.value)}
+                  disabled={submittingNew}
+                />
+              </div>
+
+              <div className="apf-row">
+                <div className="apf-field" style={{ flex: 1 }}>
+                  <label className="apf-label">
+                    {hasTerm(newKind) ? 'Сумма кредита' : 'Кредитный лимит'}
+                  </label>
                   <input
-                    className="input"
-                    type="text"
-                    placeholder="Название (например, Ипотека Сбербанк)"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    disabled={submittingNew}
-                    style={{ flex: '1 1 260px' }}
-                    autoFocus
-                  />
-                </div>
-                <div className="form-row" style={{ marginTop: 8 }}>
-                  <input
-                    className="input"
+                    className="apf-input"
                     type="text"
                     inputMode="decimal"
-                    placeholder="Кредитный лимит"
+                    placeholder="0"
                     value={newCreditLimit}
-                    onChange={(e) => setNewCreditLimit(e.target.value)}
+                    onChange={(e) => setNewCreditLimit(sanitizeDecimalInput(e.target.value))}
                     disabled={submittingNew}
-                    style={{ width: 160 }}
                   />
-                  <select
-                    className="input"
-                    value={newCurrency}
-                    onChange={(e) => setNewCurrency(e.target.value)}
-                    disabled={submittingNew}
-                  >
-                    {currencies.map((c) => (
-                      <option key={c.code} value={c.code}>{c.code}</option>
-                    ))}
-                  </select>
                 </div>
-                <div className="form-row" style={{ marginTop: 8 }}>
+                <div className="apf-field" style={{ flex: 1 }}>
+                  <label className="apf-label">Валюта</label>
+                  <ApfSelect
+                    value={newCurrency}
+                    options={currencies.map((c) => ({ value: c.code, label: c.code }))}
+                    onChange={setNewCurrency}
+                    disabled={submittingNew}
+                  />
+                </div>
+              </div>
+
+              <div className="apf-row">
+                <div className="apf-field" style={{ flex: 1 }}>
+                  <label className="apf-label">Ставка, %</label>
                   <input
-                    className="input"
+                    className="apf-input"
                     type="text"
                     inputMode="decimal"
-                    placeholder="Процентная ставка, % годовых"
+                    placeholder="12,4"
                     value={newInterestRate}
-                    onChange={(e) => setNewInterestRate(e.target.value)}
+                    onChange={(e) => setNewInterestRate(sanitizeDecimalInput(e.target.value))}
                     disabled={submittingNew}
-                    style={{ width: 190 }}
                   />
+                </div>
+                <div className="apf-field" style={{ flex: 1 }}>
+                  <label className="apf-label">День платежа</label>
                   <input
-                    className="input"
+                    className="apf-input"
                     type="text"
                     inputMode="numeric"
-                    placeholder="День платежа (1–31)"
+                    placeholder="15"
                     value={newPaymentDay}
-                    onChange={(e) => setNewPaymentDay(e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => setNewPaymentDay(e.target.value.replace(/\D/g, '').slice(0, 2))}
                     disabled={submittingNew}
-                    style={{ width: 160 }}
                   />
                 </div>
-                {hasTerm(newKind) && (
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    <select
-                      className="input"
-                      value={newTargetAccountId}
-                      onChange={(e) => setNewTargetAccountId(e.target.value)}
+              </div>
+
+              {hasTerm(newKind) && (
+                <div className="apf-row">
+                  <div className="apf-field" style={{ flex: 1 }}>
+                    <label className="apf-label">Дата начала</label>
+                    <input
+                      className="apf-input"
+                      type="date"
+                      value={newStartedAt}
+                      onChange={(e) => setNewStartedAt(e.target.value)}
                       disabled={submittingNew}
-                      style={{ flex: 1 }}
-                    >
-                      <option value="">Выберите счёт зачисления</option>
-                      {cashAccounts.map((a) => (
-                        <option key={a.id} value={a.id}>{a.name}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
-                )}
-                {hasTerm(newKind) && (
-                  <div className="form-row" style={{ marginTop: 8, gap: 8 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-                      <label className="settings-row__sub" style={{ fontSize: '0.75rem' }}>Дата начала</label>
-                      <input
-                        className="input"
-                        type="date"
-                        value={newStartedAt}
-                        onChange={(e) => setNewStartedAt(e.target.value)}
-                        disabled={submittingNew}
-                        style={{ width: '100%' }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-                      <label className="settings-row__sub" style={{ fontSize: '0.75rem' }}>Дата окончания</label>
-                      <input
-                        className="input"
-                        type="date"
-                        value={newEndsAt}
-                        onChange={(e) => setNewEndsAt(e.target.value)}
-                        disabled={submittingNew}
-                        style={{ width: '100%' }}
-                      />
-                    </div>
+                  <div className="apf-field" style={{ flex: 1 }}>
+                    <label className="apf-label">Дата окончания</label>
+                    <input
+                      className="apf-input"
+                      type="date"
+                      value={newEndsAt}
+                      onChange={(e) => setNewEndsAt(e.target.value)}
+                      disabled={submittingNew}
+                    />
                   </div>
-                )}
-                <div className="form-row" style={{ marginTop: 8 }}>
-                  <input
-                    className="input"
-                    type="text"
-                    placeholder="Банк / провайдер (необязательно)"
-                    value={newProvider}
-                    onChange={(e) => setNewProvider(e.target.value)}
+                </div>
+              )}
+
+              {hasTerm(newKind) && (
+                <div className="apf-field">
+                  <label className="apf-label">Зачислить на счёт</label>
+                  <ApfSelect
+                    value={newTargetAccountId}
+                    options={[
+                      { value: '', label: 'Выберите счёт' },
+                      ...cashAccounts.map((a) => ({ value: String(a.id), label: a.name })),
+                    ]}
+                    onChange={setNewTargetAccountId}
                     disabled={submittingNew}
-                    style={{ flex: '1 1 260px' }}
                   />
                 </div>
-                {newError && (
-                  <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{newError}</p>
-                )}
-              </form>
-            </div>
-            <div className="modal-actions">
-              <div className="action-pill">
-                <button
-                  className="action-pill__cancel"
-                  type="button"
-                  disabled={submittingNew}
-                  onClick={() => setShowNewForm(false)}
-                >
+              )}
+
+              {newError && (
+                <div className="apf-error">{newError}</div>
+              )}
+
+              <div className="apf-actions">
+                <button className="apf-cancel" type="button" onClick={closeNewCreditSheet} disabled={submittingNew}>
                   Отмена
                 </button>
                 <button
-                  className="action-pill__confirm"
+                  className="apf-submit"
                   type="button"
                   disabled={submittingNew || !newName.trim() || !newCreditLimit.trim() || (hasTerm(newKind) && !newTargetAccountId)}
                   onClick={() => void handleCreateCredit()}
@@ -1684,9 +1824,9 @@ export default function Credits({ user }: { user: UserContext }) {
                   {submittingNew ? 'Создаём...' : 'Создать'}
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
+            </form>
+          )}
+        </BottomSheet>
       )}
     </>
   );
