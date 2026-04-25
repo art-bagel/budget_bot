@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, House, Landmark, CreditCard } from 'lucide-react';
+import { ChevronDown, House, Landmark, CreditCard, Pencil, Trash2, ArrowDownLeft, ArrowRight, CalendarDays } from 'lucide-react';
 import BottomSheet from '../components/BottomSheet';
 
 function ApfSelect<T extends string>({
@@ -143,6 +143,16 @@ interface CreditTransferDraft {
   comment: string;
 }
 
+const BADGE_COLORS = [
+  { key: 'r', label: 'Красный' },
+  { key: 'o', label: 'Оранжевый' },
+  { key: 'y', label: 'Жёлтый' },
+  { key: 'g', label: 'Зелёный' },
+  { key: 'b', label: 'Синий' },
+  { key: 'p', label: 'Фиолетовый' },
+  { key: 'v', label: 'Сиреневый' },
+] as const;
+
 interface CreditEditDraft {
   name: string;
   creditLimit: string;
@@ -151,6 +161,7 @@ interface CreditEditDraft {
   creditStartedAt: string;
   creditEndsAt: string;
   providerName: string;
+  badgeColor: string;
 }
 
 function isTermCredit(kind: CreditKind | null | undefined): boolean {
@@ -166,6 +177,7 @@ function buildCreditEditDraft(account: BankAccount): CreditEditDraft {
     creditStartedAt: account.credit_started_at ?? '',
     creditEndsAt: account.credit_ends_at ?? '',
     providerName: account.provider_name ?? '',
+    badgeColor: account.badge_color ?? '',
   };
 }
 
@@ -291,6 +303,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const [newCreditLimit, setNewCreditLimit] = useState('');
   const [newTargetAccountId, setNewTargetAccountId] = useState('');
   const [newProvider, setNewProvider] = useState('');
+  const [newBadgeColor, setNewBadgeColor] = useState('');
   const [submittingNew, setSubmittingNew] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
 
@@ -307,6 +320,7 @@ export default function Credits({ user }: { user: UserContext }) {
     setNewCreditLimit('');
     setNewTargetAccountId('');
     setNewProvider('');
+    setNewBadgeColor('');
     setNewError(null);
   };
 
@@ -412,6 +426,9 @@ export default function Credits({ user }: { user: UserContext }) {
     setEditDraft(credit ? buildCreditEditDraft(credit.account) : null);
   };
 
+  const [repaySheetOpen, setRepaySheetOpen] = useState(false);
+  const [transferSheetOpen, setTransferSheetOpen] = useState(false);
+
   const handleCloseDetail = () => {
     setSelectedId(null);
     setArchiveError(null);
@@ -424,6 +441,8 @@ export default function Credits({ user }: { user: UserContext }) {
     setEditingCredit(false);
     setEditDraft(null);
     setEditError(null);
+    setRepaySheetOpen(false);
+    setTransferSheetOpen(false);
   };
 
   useEffect(() => {
@@ -542,6 +561,7 @@ export default function Credits({ user }: { user: UserContext }) {
         credit_started_at: editDraft.creditStartedAt || null,
         credit_ends_at: editDraft.creditEndsAt || null,
         provider_name: editDraft.providerName.trim() || null,
+        badge_color: editDraft.badgeColor || null,
       });
       setEditingCredit(false);
       setScheduleOpen(false);
@@ -664,6 +684,7 @@ export default function Credits({ user }: { user: UserContext }) {
         credit_started_at: newStartedAt.trim() || undefined,
         credit_ends_at: newEndsAt.trim() || undefined,
         provider_name: newProvider.trim() || undefined,
+        badge_color: newBadgeColor || undefined,
       });
       setShowNewForm(false);
       setNewKindStep('pick');
@@ -966,7 +987,7 @@ export default function Credits({ user }: { user: UserContext }) {
                               <div className="tile__head">
                                 <div className="tile__head-left">
                                   {item.account.provider_name && (
-                                    <span className="tile__bank">{item.account.provider_name}</span>
+                                    <span className={`tile__bank${item.account.badge_color ? ` tile__bank--${item.account.badge_color}` : ''}`}>{item.account.provider_name}</span>
                                   )}
                                   <span className="tile__name">{item.account.name}</span>
                                 </div>
@@ -1078,565 +1099,360 @@ export default function Credits({ user }: { user: UserContext }) {
       </div>
 
       {/* ── Detail sheet ── */}
-      {selectedCredit && (
-        <div className="modal-backdrop" onClick={handleCloseDetail}>
-          <div
-            ref={sheetRef}
-            className="modal-card"
-            onClick={(e) => e.stopPropagation()}
+      {selectedCredit && (() => {
+        const isTerm = isTermCredit(selectedCredit.account.credit_kind);
+        const isCard = selectedCredit.account.credit_kind === 'credit_card';
+        const debtNow = isTerm && selectedSummary
+          ? selectedSummary.principal_outstanding
+          : getCreditDebt(selectedCredit);
+        const accruedInt = isTerm && selectedSummary ? selectedSummary.accrued_interest : 0;
+        const totalDue  = isTerm && selectedSummary ? selectedSummary.total_due_as_of : debtNow;
+        const ccy = isTerm && selectedSummary ? selectedSummary.currency_code : user.base_currency_code;
+        const creditLimit = selectedCredit.account.credit_limit ?? 0;
+        const usedPct = isCard && creditLimit > 0
+          ? Math.min(100, Math.round((debtNow / creditLimit) * 100))
+          : 0;
+        const utilLvl = usedPct < 30 ? 'low' : usedPct < 70 ? 'mid' : 'high';
+
+        return (
+        <>
+          <BottomSheet
+            open
+            gray
+            title={selectedCredit.account.name}
+            tag={creditKindLabel(selectedCredit.account.credit_kind)}
+            onClose={handleCloseDetail}
           >
-            <div className="modal-header">
-              <div>
-                <div className="section__eyebrow">{creditKindLabel(selectedCredit.account.credit_kind)}</div>
-                <div className="section__title">{selectedCredit.account.name}</div>
-                {selectedCredit.account.provider_name && (
-                  <div className="settings-row__sub">{selectedCredit.account.provider_name}</div>
-                )}
+            <div className="credits-detail-body">
+              {/* dstats */}
+              <div className="credits-dstats">
+                <div className="credits-dstats__cell">
+                  <span className="credits-dstats__label">Остаток</span>
+                  <span className="credits-dstats__value">{formatNumericAmount(debtNow, 0)}</span>
+                  <span className="credits-dstats__sub">{isTerm ? 'основной долг' : 'использовано'} {ccy}</span>
+                </div>
+                <div className="credits-dstats__cell">
+                  <span className="credits-dstats__label">Проценты</span>
+                  <span className="credits-dstats__value">{formatNumericAmount(accruedInt, 0)}</span>
+                  <span className="credits-dstats__sub">начислено сегодня</span>
+                </div>
+                <div className="credits-dstats__cell">
+                  <span className="credits-dstats__label">К оплате</span>
+                  <span className="credits-dstats__value">{formatNumericAmount(totalDue, 0)}</span>
+                  <span className="credits-dstats__sub">если закрыть</span>
+                </div>
               </div>
-            </div>
-            <div className="modal-body">
-              <div className="portfolio-position-detail">
 
-                {/* Debt info stats */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                  {isTermCredit(selectedCredit.account.credit_kind) && selectedSummary ? (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                        <span className="settings-row__sub">Основной долг <span className="pill">{selectedSummary.currency_code}</span></span>
-                        <strong style={{ color: 'var(--tag-out-fg)' }}>
-                          {formatAmount(selectedSummary.principal_outstanding, selectedSummary.currency_code)}
-                        </strong>
+              {/* dnext */}
+              {isTerm && selectedSummary?.next_payment_date && selectedSummary.next_payment_total != null && (
+                <div className="credits-dnext">
+                  <div className="credits-dnext__left">
+                    <span className="credits-dnext__label">Следующий платёж</span>
+                    <span className="credits-dnext__date">{new Date(selectedSummary.next_payment_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span>
+                    {selectedSummary.next_payment_interest != null && (
+                      <div className="credits-dnext__row">
+                        <span className="credits-dnext__row-label">Проценты</span>
+                        <span className="credits-dnext__row-val">{formatAmount(selectedSummary.next_payment_interest, ccy)}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                        <span className="settings-row__sub">Начислено процентов на сегодня</span>
-                        <strong>{formatAmount(selectedSummary.accrued_interest, selectedSummary.currency_code)}</strong>
+                    )}
+                    {selectedSummary.next_payment_principal != null && (
+                      <div className="credits-dnext__row">
+                        <span className="credits-dnext__row-label">Тело</span>
+                        <span className="credits-dnext__row-val">{formatAmount(selectedSummary.next_payment_principal, ccy)}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                        <span className="settings-row__sub">К оплате на сегодня</span>
-                        <strong>{formatAmount(selectedSummary.total_due_as_of, selectedSummary.currency_code)}</strong>
-                      </div>
-                      {selectedSummary.next_payment_date && selectedSummary.next_payment_total != null && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                          <span className="settings-row__sub">
-                            Следующий платёж · {new Date(selectedSummary.next_payment_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
-                          </span>
-                          <strong>{formatAmount(selectedSummary.next_payment_total, selectedSummary.currency_code)}</strong>
-                        </div>
-                      )}
-                      {selectedSummary.next_payment_interest != null && selectedSummary.next_payment_principal != null && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                          <span className="settings-row__sub">В следующем платеже</span>
-                          <span className="settings-row__sub">
-                            {formatAmount(selectedSummary.next_payment_interest, selectedSummary.currency_code)} проценты
-                            {' · '}
-                            {formatAmount(selectedSummary.next_payment_principal, selectedSummary.currency_code)} долг
-                          </span>
-                        </div>
-                      )}
-                      {selectedSummary.payments_count > 0 && (
-                        <>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                            <span className="settings-row__sub">Погашено основного долга</span>
-                            <span>{formatAmount(selectedSummary.paid_principal_total, selectedSummary.currency_code)}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                            <span className="settings-row__sub">Уплачено процентов</span>
-                            <span>{formatAmount(selectedSummary.paid_interest_total, selectedSummary.currency_code)}</span>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    selectedCredit.balances.map((b) => (
-                      <div key={b.currency_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                        <span className="settings-row__sub">Остаток долга <span className="pill">{b.currency_code}</span></span>
-                        <strong style={{ color: 'var(--tag-out-fg)' }}>
-                          −{formatAmount(Math.abs(b.amount), b.currency_code)}
-                        </strong>
-                      </div>
-                    ))
-                  )}
-                  {selectedSummaryLoading && (
-                    <div className="settings-row__sub">Считаем проценты и график...</div>
-                  )}
-                  {selectedSummaryError && (
-                    <div className="settings-row__sub" style={{ color: 'var(--tag-out-fg)' }}>{selectedSummaryError}</div>
-                  )}
-                  {selectedCredit.account.credit_kind === 'credit_card' && selectedCredit.account.credit_limit != null && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span className="settings-row__sub">Использовано</span>
-                      <span>
-                        {formatAmount(getCreditDebt(selectedCredit), user.base_currency_code)}
-                        {' из '}
-                        {formatAmount(selectedCredit.account.credit_limit, user.base_currency_code)}
-                      </span>
-                    </div>
-                  )}
-                  {selectedCredit.account.interest_rate != null && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span className="settings-row__sub">Ставка</span>
-                      <span>{selectedCredit.account.interest_rate}% годовых</span>
-                    </div>
-                  )}
-                  {selectedCredit.account.payment_day != null && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span className="settings-row__sub">Дата платежа</span>
-                      <span>{selectedCredit.account.payment_day}-е число каждого месяца</span>
-                    </div>
-                  )}
-                  {(selectedCredit.account.credit_started_at || selectedCredit.account.credit_ends_at) && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span className="settings-row__sub">Срок</span>
-                      <span>
-                        {selectedCredit.account.credit_started_at
-                          ? new Date(selectedCredit.account.credit_started_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '—'}
-                        {selectedCredit.account.credit_ends_at
-                          ? ` — ${new Date(selectedCredit.account.credit_ends_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}`
-                          : null}
-                      </span>
-                    </div>
-                  )}
-                  {isTermCredit(selectedCredit.account.credit_kind) && !selectedSummaryLoading && !selectedSummaryError && missingTermConfigFields.length > 0 && (
-                    <div className="credit-config-hint">
-                      <span className="settings-row__sub">
-                        Чтобы появился график платежей, заполни {missingTermConfigFields.join(', ')}.
-                      </span>
-                    </div>
-                  )}
-                  <div className="credit-detail-actions">
-                    <button
-                      className="btn btn--secondary"
-                      type="button"
-                      onClick={() => {
-                        setEditingCredit((prev) => !prev);
-                        setEditError(null);
-                      }}
-                    >
-                      {editingCredit ? 'Скрыть условия' : 'Изменить условия'}
-                    </button>
-                    {isTermCredit(selectedCredit.account.credit_kind) && (
-                      <button
-                        className="btn btn--secondary"
-                        type="button"
-                        onClick={() => void openSchedule()}
-                        disabled={scheduleLoading || !!selectedSummaryError || !selectedSummary?.schedule_available}
-                      >
-                        {scheduleLoading ? 'Загружаем график...' : 'График платежей'}
-                      </button>
                     )}
                   </div>
-                  {editingCredit && editDraft && (
-                    <div className="credit-edit-panel">
-                      <div className="section__eyebrow">Параметры кредита</div>
-                      <form onSubmit={(e) => void handleSaveCredit(e)}>
-                        <div className="form-row" style={{ marginTop: 8 }}>
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Название кредита"
-                            value={editDraft.name}
-                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
-                            disabled={savingCredit}
-                            style={{ flex: '1 1 260px' }}
-                          />
-                        </div>
-                        <div className="form-row" style={{ marginTop: 8 }}>
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Кредитный лимит"
-                            value={editDraft.creditLimit}
-                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, creditLimit: e.target.value } : prev))}
-                            disabled={savingCredit}
-                            style={{ width: 180 }}
-                          />
-                          <input
-                            className="input"
-                            type="text"
-                            placeholder="Банк"
-                            value={editDraft.providerName}
-                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, providerName: e.target.value } : prev))}
-                            disabled={savingCredit}
-                            style={{ flex: '1 1 220px' }}
-                          />
-                        </div>
-                        <div className="form-row" style={{ marginTop: 8 }}>
-                          <input
-                            className="input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Ставка, % годовых"
-                            value={editDraft.interestRate}
-                            onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, interestRate: e.target.value } : prev))}
-                            disabled={savingCredit}
-                            style={{ width: 180 }}
-                          />
-                          {isTermCredit(selectedCredit.account.credit_kind) && (
-                            <input
-                              className="input"
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="День платежа"
-                              value={editDraft.paymentDay}
-                              onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, paymentDay: e.target.value.replace(/\D/g, '') } : prev))}
-                              disabled={savingCredit}
-                              style={{ width: 160 }}
-                            />
-                          )}
-                        </div>
-                        {isTermCredit(selectedCredit.account.credit_kind) && (
-                          <div className="form-row" style={{ marginTop: 8 }}>
-                            <input
-                              className="input"
-                              type="date"
-                              value={editDraft.creditStartedAt}
-                              onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, creditStartedAt: e.target.value } : prev))}
-                              disabled={savingCredit}
-                              style={{ flex: '1 1 180px' }}
-                            />
-                            <input
-                              className="input"
-                              type="date"
-                              value={editDraft.creditEndsAt}
-                              onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, creditEndsAt: e.target.value } : prev))}
-                              disabled={savingCredit}
-                              style={{ flex: '1 1 180px' }}
-                            />
-                          </div>
-                        )}
-                        {editError && (
-                          <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{editError}</p>
-                        )}
-                        <div className="credit-edit-panel__actions">
-                          <button
-                            className="btn btn--secondary"
-                            type="button"
-                            disabled={savingCredit}
-                            onClick={() => {
-                              setEditingCredit(false);
-                              setEditDraft(buildCreditEditDraft(selectedCredit.account));
-                              setEditError(null);
-                            }}
-                          >
-                            Отмена
-                          </button>
-                          <button className="btn btn--primary" type="submit" disabled={savingCredit}>
-                            {savingCredit ? 'Сохраняем...' : 'Сохранить условия'}
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  )}
+                  <span className="credits-dnext__amount">{formatNumericAmount(selectedSummary.next_payment_total, 0)} {currencySymbol(ccy)}</span>
                 </div>
-
-                <hr style={{ opacity: 0.15, marginBottom: 16 }} />
-
-                {/* Transfer from credit */}
-                <div className="section__header" style={{ marginBottom: 8 }}>
-                  <div className="section__eyebrow">Перевод с кредита</div>
-                </div>
-                <p className="settings-row__sub" style={{ marginBottom: 8 }}>
-                  Деньги попадут в свободный остаток выбранного личного или семейного счёта.
-                </p>
-                <form onSubmit={(e) => void handleCreditTransfer(e, selectedCredit.account.id)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Сумма перевода"
-                      value={selectedCreditTransferDraft?.amount ?? ''}
-                      onChange={(e) => setCreditTransferDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: {
-                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
-                          amount: sanitizeDecimalInput(e.target.value),
-                        },
-                      }))}
-                      disabled={submittingCreditTransferId === selectedCredit.account.id}
-                      style={{ width: 160 }}
-                    />
-                    <select
-                      className="input"
-                      value={selectedCreditTransferDraft?.currencyCode ?? user.base_currency_code}
-                      onChange={(e) => setCreditTransferDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: {
-                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
-                          currencyCode: e.target.value,
-                          amount: '',
-                        },
-                      }))}
-                      disabled={submittingCreditTransferId === selectedCredit.account.id}
-                    >
-                      {selectedCreditTransferCurrencyCodes.map((code) => (
-                        <option key={code} value={code}>{code}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    <select
-                      className="input"
-                      value={selectedCreditTransferDraft?.toAccountId ?? ''}
-                      onChange={(e) => setCreditTransferDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: {
-                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
-                          toAccountId: e.target.value,
-                        },
-                      }))}
-                      disabled={submittingCreditTransferId === selectedCredit.account.id}
-                      style={{ flex: '1 1 220px' }}
-                    >
-                      <option value="">Выберите счёт зачисления</option>
-                      {cashAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.owner_type === 'family' ? 'Семейный' : 'Личный'} · {acc.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    <input
-                      className="input"
-                      type="text"
-                      placeholder="Комментарий"
-                      value={selectedCreditTransferDraft?.comment ?? ''}
-                      onChange={(e) => setCreditTransferDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: {
-                          ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)),
-                          comment: e.target.value,
-                        },
-                      }))}
-                      disabled={submittingCreditTransferId === selectedCredit.account.id}
-                      style={{ flex: '1 1 220px' }}
-                    />
-                    <button
-                      className="btn btn--primary"
-                      type="submit"
-                      disabled={
-                        submittingCreditTransferId === selectedCredit.account.id
-                        || !selectedCreditTransferDraft?.amount.trim()
-                        || !selectedCreditTransferDraft?.toAccountId
-                        || selectedCreditAvailableLimit <= 0
-                      }
-                    >
-                      {submittingCreditTransferId === selectedCredit.account.id ? 'Переводим...' : 'Перевести'}
-                    </button>
-                  </div>
-                  <p className="settings-row__sub" style={{ marginTop: 8 }}>
-                    Доступный лимит: {formatAmount(selectedCreditAvailableLimit, selectedCreditTransferDraft?.currencyCode ?? user.base_currency_code)}
-                  </p>
-                  {creditTransferError && (
-                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{creditTransferError}</p>
-                  )}
-                </form>
-
-                <hr style={{ opacity: 0.15, margin: '16px 0' }} />
-
-                {/* Repay form */}
-                <div className="section__header" style={{ marginBottom: 8 }}>
-                  <div className="section__eyebrow">Погашение</div>
-                </div>
-                {isTermCredit(selectedCredit.account.credit_kind) && (
-                  <p className="settings-row__sub" style={{ marginBottom: 8 }}>
-                    Платёж сначала покроет начисленные проценты, остаток уменьшит основной долг.
-                  </p>
-                )}
-                <form onSubmit={(e) => void handleRepay(e, selectedCredit.account.id)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Сумма погашения"
-                      value={repayDrafts[selectedCredit.account.id]?.amount ?? ''}
-                      onChange={(e) => setRepayDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], amount: sanitizeDecimalInput(e.target.value) },
-                      }))}
-                      disabled={submittingRepayId === selectedCredit.account.id}
-                      style={{ width: 160 }}
-                    />
-                    <select
-                      className="input"
-                      value={repayDrafts[selectedCredit.account.id]?.currencyCode ?? user.base_currency_code}
-                      onChange={(e) => setRepayDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], currencyCode: e.target.value },
-                      }))}
-                      disabled={submittingRepayId === selectedCredit.account.id}
-                    >
-                      {currencies.map((c) => (
-                        <option key={c.code} value={c.code}>{c.code}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    <select
-                      className="input"
-                      value={repayDrafts[selectedCredit.account.id]?.fromAccountId ?? ''}
-                      onChange={(e) => setRepayDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], fromAccountId: e.target.value },
-                      }))}
-                      disabled={submittingRepayId === selectedCredit.account.id}
-                      style={{ flex: '1 1 220px' }}
-                    >
-                      <option value="">Выберите счёт для списания</option>
-                      {cashAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    {isTermCredit(selectedCredit.account.credit_kind) && (
-                      <input
-                        className="input"
-                        type="date"
-                        value={repayDrafts[selectedCredit.account.id]?.paymentAt ?? todayIso()}
-                        max={todayIso()}
-                        onChange={(e) => setRepayDrafts((prev) => ({
-                          ...prev,
-                          [selectedCredit.account.id]: {
-                            ...prev[selectedCredit.account.id],
-                            paymentAt: e.target.value,
-                          },
-                        }))}
-                        disabled={submittingRepayId === selectedCredit.account.id}
-                        style={{ width: 180 }}
-                      />
-                    )}
-                  </div>
-                  <div className="form-row" style={{ marginTop: 8 }}>
-                    <input
-                      className="input"
-                      type="text"
-                      placeholder="Комментарий"
-                      value={repayDrafts[selectedCredit.account.id]?.comment ?? ''}
-                      onChange={(e) => setRepayDrafts((prev) => ({
-                        ...prev,
-                        [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], comment: e.target.value },
-                      }))}
-                      disabled={submittingRepayId === selectedCredit.account.id}
-                      style={{ flex: '1 1 220px' }}
-                    />
-                    <button
-                      className="btn btn--primary"
-                      type="submit"
-                      disabled={submittingRepayId === selectedCredit.account.id}
-                    >
-                      {submittingRepayId === selectedCredit.account.id ? 'Погашаем...' : 'Погасить'}
-                    </button>
-                  </div>
-                  {repayError && (
-                    <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>{repayError}</p>
-                  )}
-                </form>
-              </div>
-            </div>
-            <div className="modal-actions">
-              {archiveError && (
-                <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', margin: '0 0 8px' }}>{archiveError}</p>
               )}
-              <div className="action-pill">
-                <button className="action-pill__cancel" type="button" onClick={handleCloseDetail}>
-                  Закрыть
+
+              {/* dutil - credit cards */}
+              {isCard && creditLimit > 0 && (
+                <div className="credits-util">
+                  <div className="credits-util__head">
+                    <span className="credits-util__title">Лимит карты</span>
+                    <span className="credits-util__pct">{usedPct}%</span>
+                  </div>
+                  <div className="credits-util__bar">
+                    <div className={`credits-util__fill credits-util__fill--${utilLvl}`} style={{ width: `${Math.max(2, usedPct)}%` }} />
+                  </div>
+                  <span className="credits-util__legend">
+                    Использовано <strong>{formatAmount(debtNow, ccy)}</strong> · доступно <strong>{formatAmount(creditLimit - debtNow, ccy)}</strong> из <strong>{formatAmount(creditLimit, ccy)}</strong>
+                  </span>
+                </div>
+              )}
+
+              {/* dcond */}
+              <div className="credits-dcond">
+                <div className="credits-dcond__head">
+                  <span className="sec-tag">Условия</span>
+                  <button className="credits-textbtn" type="button" onClick={() => { setEditingCredit((v) => !v); setEditError(null); }}>
+                    <Pencil size={14} strokeWidth={2} /> {editingCredit ? 'Скрыть' : 'Изменить'}
+                  </button>
+                </div>
+                {!editingCredit ? (
+                  <>
+                    {selectedCredit.account.interest_rate != null && (
+                      <div className="credits-dcond__row"><span className="credits-dcond__row-label">Ставка</span><span className="credits-dcond__row-value">{selectedCredit.account.interest_rate}% годовых</span></div>
+                    )}
+                    {selectedCredit.account.payment_day != null && (
+                      <div className="credits-dcond__row"><span className="credits-dcond__row-label">День платежа</span><span className="credits-dcond__row-value">{selectedCredit.account.payment_day}-е число</span></div>
+                    )}
+                    {(selectedCredit.account.credit_started_at || selectedCredit.account.credit_ends_at) && (
+                      <div className="credits-dcond__row">
+                        <span className="credits-dcond__row-label">Срок</span>
+                        <span className="credits-dcond__row-value">
+                          {selectedCredit.account.credit_started_at ? new Date(selectedCredit.account.credit_started_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          {selectedCredit.account.credit_ends_at ? ` — ${new Date(selectedCredit.account.credit_ends_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                        </span>
+                      </div>
+                    )}
+                    {isCard && creditLimit > 0 && (
+                      <div className="credits-dcond__row"><span className="credits-dcond__row-label">Лимит</span><span className="credits-dcond__row-value">{formatAmount(creditLimit, ccy)}</span></div>
+                    )}
+                    {selectedCredit.account.provider_name && (
+                      <div className="credits-dcond__row"><span className="credits-dcond__row-label">Банк</span><span className="credits-dcond__row-value">{selectedCredit.account.provider_name}</span></div>
+                    )}
+                    {isTerm && selectedSummary && selectedSummary.payments_count > 0 && (
+                      <>
+                        <div className="credits-dcond__row"><span className="credits-dcond__row-label">Погашено долга</span><span className="credits-dcond__row-value">{formatAmount(selectedSummary.paid_principal_total, ccy)}</span></div>
+                        <div className="credits-dcond__row"><span className="credits-dcond__row-label">Уплачено процентов</span><span className="credits-dcond__row-value">{formatAmount(selectedSummary.paid_interest_total, ccy)}</span></div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  editDraft && (
+                    <form className="apf-body" onSubmit={(e) => void handleSaveCredit(e)}>
+                      <div className="apf-field">
+                        <label className="apf-label">Название</label>
+                        <input className="apf-input" type="text" placeholder="Название кредита" value={editDraft.name} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, name: e.target.value } : prev)} disabled={savingCredit} />
+                      </div>
+                      <div className="apf-row">
+                        <div className="apf-field" style={{ flex: 1 }}>
+                          <label className="apf-label">{isCard ? 'Кредитный лимит' : 'Сумма кредита'}</label>
+                          <input className="apf-input" type="text" inputMode="decimal" placeholder="0" value={editDraft.creditLimit} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, creditLimit: e.target.value } : prev)} disabled={savingCredit} />
+                        </div>
+                        <div className="apf-field" style={{ flex: 1 }}>
+                          <label className="apf-label">Банк</label>
+                          <input className="apf-input" type="text" placeholder="Банк" value={editDraft.providerName} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, providerName: e.target.value } : prev)} disabled={savingCredit} />
+                        </div>
+                      </div>
+                      <div className="apf-field">
+                        <label className="apf-label">Цвет бейджа</label>
+                        <div className="badge-color-picker">
+                          <button type="button" className={`badge-color-picker__swatch badge-color-picker__swatch--none${!editDraft.badgeColor ? ' badge-color-picker__swatch--active' : ''}`} onClick={() => setEditDraft((prev) => prev ? { ...prev, badgeColor: '' } : prev)} disabled={savingCredit} />
+                          {BADGE_COLORS.map((c) => (
+                            <button key={c.key} type="button" className={`badge-color-picker__swatch badge-color-picker__swatch--${c.key}${editDraft.badgeColor === c.key ? ' badge-color-picker__swatch--active' : ''}`} title={c.label} onClick={() => setEditDraft((prev) => prev ? { ...prev, badgeColor: c.key } : prev)} disabled={savingCredit} />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="apf-row">
+                        <div className="apf-field" style={{ flex: 1 }}>
+                          <label className="apf-label">Ставка, %</label>
+                          <input className="apf-input" type="text" inputMode="decimal" placeholder="12.4" value={editDraft.interestRate} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, interestRate: e.target.value } : prev)} disabled={savingCredit} />
+                        </div>
+                        {isTerm && (
+                          <div className="apf-field" style={{ flex: 1 }}>
+                            <label className="apf-label">День платежа</label>
+                            <input className="apf-input" type="text" inputMode="numeric" placeholder="15" value={editDraft.paymentDay} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, paymentDay: e.target.value.replace(/\D/g, '') } : prev)} disabled={savingCredit} />
+                          </div>
+                        )}
+                      </div>
+                      {isTerm && (
+                        <div className="apf-row">
+                          <div className="apf-field" style={{ flex: 1 }}>
+                            <label className="apf-label">Дата начала</label>
+                            <input className="apf-input" type="date" value={editDraft.creditStartedAt} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, creditStartedAt: e.target.value } : prev)} disabled={savingCredit} />
+                          </div>
+                          <div className="apf-field" style={{ flex: 1 }}>
+                            <label className="apf-label">Дата окончания</label>
+                            <input className="apf-input" type="date" value={editDraft.creditEndsAt} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, creditEndsAt: e.target.value } : prev)} disabled={savingCredit} />
+                          </div>
+                        </div>
+                      )}
+                      {editError && <div className="apf-error">{editError}</div>}
+                      <div className="apf-actions">
+                        <button className="apf-cancel" type="button" disabled={savingCredit} onClick={() => { setEditingCredit(false); setEditDraft(buildCreditEditDraft(selectedCredit.account)); setEditError(null); }}>Отмена</button>
+                        <button className="apf-submit" type="submit" disabled={savingCredit}>{savingCredit ? 'Сохраняем...' : 'Сохранить'}</button>
+                      </div>
+                    </form>
+                  )
+                )}
+              </div>
+
+              {/* hint */}
+              {isTerm && !selectedSummaryLoading && missingTermConfigFields.length > 0 && (
+                <div className="credits-hint">Заполни {missingTermConfigFields.join(', ')} — появится график платежей.</div>
+              )}
+              {selectedSummaryLoading && <div className="credits-hint">Считаем проценты и график...</div>}
+              {selectedSummaryError && <div className="credits-hint">{selectedSummaryError}</div>}
+
+              {/* actions */}
+              <div className="credits-sheet-actions">
+                <button className="btn btn--primary" type="button" onClick={() => setRepaySheetOpen(true)}>
+                  <ArrowDownLeft size={16} /> Погасить
                 </button>
-                {getCreditDebt(selectedCredit) === 0 && (
-                  <button
-                    className="action-pill__cancel"
-                    type="button"
-                    disabled={archiving}
-                    onClick={() => void handleArchive(selectedCredit.account.id)}
-                  >
-                    {archiving ? 'Архивируем...' : 'В архив'}
+                {isCard && selectedCreditAvailableLimit > 0 && (
+                  <button className="btn btn--ghost" type="button" onClick={() => setTransferSheetOpen(true)}>
+                    <ArrowRight size={16} /> Перевод с кредита
+                  </button>
+                )}
+                {isTerm && (
+                  <button className="btn btn--ghost" type="button" onClick={() => void openSchedule()} disabled={scheduleLoading || !!selectedSummaryError || !selectedSummary?.schedule_available}>
+                    <CalendarDays size={16} /> {scheduleLoading ? 'Загружаем...' : 'График платежей'}
                   </button>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* ── Schedule modal ── */}
-      {scheduleOpen && selectedCredit && (
-        <div className="modal-backdrop" onClick={() => setScheduleOpen(false)}>
-          <div className="modal-card credit-schedule-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <div className="section__eyebrow">График платежей</div>
-                <div className="section__title">{selectedCredit.account.name}</div>
-              </div>
+              {archiveError && <p style={{ color: 'var(--neg)', fontSize: '0.85rem' }}>{archiveError}</p>}
+              {getCreditDebt(selectedCredit) === 0 && (
+                <button className="credits-archive-btn" type="button" onClick={() => void handleArchive(selectedCredit.account.id)} disabled={archiving}>
+                  <Trash2 size={15} strokeWidth={2} /> {archiving ? 'Архивируем...' : 'Перенести в архив'}
+                </button>
+              )}
             </div>
-            <div className="modal-body">
-              {scheduleYears.length > 0 && (
-                <div className="credit-schedule-years">
-                  {scheduleYears.map((year) => (
-                    <button
-                      key={year}
-                      className={`credit-schedule-years__pill${selectedScheduleYear === year ? ' credit-schedule-years__pill--active' : ''}`}
-                      type="button"
-                      onClick={() => setSelectedScheduleYear(year)}
-                    >
-                      {year}
-                    </button>
-                  ))}
+          </BottomSheet>
+
+          {/* Repay sheet */}
+          <BottomSheet open={repaySheetOpen} title={selectedCredit.account.name} tag="Погашение" onClose={() => setRepaySheetOpen(false)}>
+            <form className="apf-body" onSubmit={(e) => void handleRepay(e, selectedCredit.account.id)}>
+              {isTerm && <p className="apf-balance">Платёж сначала покроет начисленные проценты, остаток уменьшит основной долг.</p>}
+              <div className="apf-row">
+                <div className="apf-field" style={{ flex: 2 }}>
+                  <label className="apf-label">Сумма</label>
+                  <input className="apf-input" type="text" inputMode="decimal" placeholder="0" value={repayDrafts[selectedCredit.account.id]?.amount ?? ''} onChange={(e) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], amount: sanitizeDecimalInput(e.target.value) } }))} disabled={submittingRepayId === selectedCredit.account.id} />
+                </div>
+                <div className="apf-field" style={{ flex: 1 }}>
+                  <label className="apf-label">Валюта</label>
+                  <ApfSelect value={repayDrafts[selectedCredit.account.id]?.currencyCode ?? user.base_currency_code} options={currencies.map((c) => ({ value: c.code, label: c.code }))} onChange={(v) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], currencyCode: v } }))} disabled={submittingRepayId === selectedCredit.account.id} />
+                </div>
+              </div>
+              <div className="apf-field">
+                <label className="apf-label">Со счёта</label>
+                <ApfSelect value={repayDrafts[selectedCredit.account.id]?.fromAccountId ?? ''} options={[{ value: '', label: 'Выберите счёт' }, ...cashAccounts.map((a) => ({ value: String(a.id), label: a.name }))]} onChange={(v) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], fromAccountId: v } }))} disabled={submittingRepayId === selectedCredit.account.id} />
+              </div>
+              {isTerm && (
+                <div className="apf-field">
+                  <label className="apf-label">Дата платежа</label>
+                  <input className="apf-input" type="date" value={repayDrafts[selectedCredit.account.id]?.paymentAt ?? todayIso()} max={todayIso()} onChange={(e) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], paymentAt: e.target.value } }))} disabled={submittingRepayId === selectedCredit.account.id} />
                 </div>
               )}
+              <div className="apf-field">
+                <label className="apf-label">Комментарий</label>
+                <input className="apf-input" type="text" placeholder="Например, плановый платёж" value={repayDrafts[selectedCredit.account.id]?.comment ?? ''} onChange={(e) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], comment: e.target.value } }))} disabled={submittingRepayId === selectedCredit.account.id} />
+              </div>
+              {repayError && <div className="apf-error">{repayError}</div>}
+              <div className="apf-actions">
+                <button className="apf-cancel" type="button" onClick={() => setRepaySheetOpen(false)} disabled={submittingRepayId === selectedCredit.account.id}>Отмена</button>
+                <button className="apf-submit" type="submit" disabled={submittingRepayId === selectedCredit.account.id}>{submittingRepayId === selectedCredit.account.id ? 'Погашаем...' : 'Погасить'}</button>
+              </div>
+            </form>
+          </BottomSheet>
 
-              {scheduleLoading ? (
-                <p className="settings-row__sub">Собираем график платежей...</p>
-              ) : scheduleError ? (
-                <p className="settings-row__sub" style={{ color: 'var(--tag-out-fg)' }}>{scheduleError}</p>
-              ) : visibleScheduleItems.length === 0 ? (
-                <p className="settings-row__sub">График пока недоступен. Проверь срок, ставку и дату платежа.</p>
-              ) : (
-                <div className="credit-schedule-list">
-                  {visibleScheduleItems.map((item) => (
-                    <div className="credit-schedule-item" key={item.scheduled_date}>
-                      <div className="credit-schedule-item__head">
-                        <div className="credit-schedule-item__head-main">
-                          <strong>
-                            {new Date(item.scheduled_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
-                            {' — '}
-                            {formatAmount(item.total_payment, selectedSummary?.currency_code ?? user.base_currency_code)}
-                          </strong>
-                          <span className={`tag ${item.status === 'paid' ? 'tag--in' : 'tag--neutral'}`}>
-                            {item.status === 'paid' ? 'Оплачено' : 'План'}
-                          </span>
+          {/* Transfer sheet */}
+          <BottomSheet open={transferSheetOpen} title={selectedCredit.account.name} tag="Перевод с кредита" onClose={() => setTransferSheetOpen(false)}>
+            <form className="apf-body" onSubmit={(e) => void handleCreditTransfer(e, selectedCredit.account.id)}>
+              <p className="apf-balance">Деньги попадут в свободный остаток выбранного личного или семейного счёта.</p>
+              <div className="apf-row">
+                <div className="apf-field" style={{ flex: 2 }}>
+                  <label className="apf-label">Сумма</label>
+                  <input className="apf-input" type="text" inputMode="decimal" placeholder="0" value={selectedCreditTransferDraft?.amount ?? ''} onChange={(e) => setCreditTransferDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)), amount: sanitizeDecimalInput(e.target.value) } }))} disabled={submittingCreditTransferId === selectedCredit.account.id} />
+                </div>
+                <div className="apf-field" style={{ flex: 1 }}>
+                  <label className="apf-label">Валюта</label>
+                  <ApfSelect value={selectedCreditTransferDraft?.currencyCode ?? user.base_currency_code} options={selectedCreditTransferCurrencyCodes.map((c) => ({ value: c, label: c }))} onChange={(v) => setCreditTransferDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)), currencyCode: v, amount: '' } }))} disabled={submittingCreditTransferId === selectedCredit.account.id} />
+                </div>
+              </div>
+              <div className="apf-field">
+                <label className="apf-label">На счёт</label>
+                <ApfSelect value={selectedCreditTransferDraft?.toAccountId ?? ''} options={[{ value: '', label: 'Выберите счёт' }, ...cashAccounts.map((a) => ({ value: String(a.id), label: `${a.owner_type === 'family' ? 'Семейный' : 'Личный'} · ${a.name}` }))]} onChange={(v) => setCreditTransferDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)), toAccountId: v } }))} disabled={submittingCreditTransferId === selectedCredit.account.id} />
+              </div>
+              <div className="apf-field">
+                <label className="apf-label">Комментарий</label>
+                <input className="apf-input" type="text" placeholder="Перевод с карты" value={selectedCreditTransferDraft?.comment ?? ''} onChange={(e) => setCreditTransferDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...(selectedCreditTransferDraft ?? buildCreditTransferDraft(selectedCredit, cashAccounts, user.base_currency_code)), comment: e.target.value } }))} disabled={submittingCreditTransferId === selectedCredit.account.id} />
+              </div>
+              <p className="apf-balance">Доступный лимит: {formatAmount(selectedCreditAvailableLimit, selectedCreditTransferDraft?.currencyCode ?? user.base_currency_code)}</p>
+              {creditTransferError && <div className="apf-error">{creditTransferError}</div>}
+              <div className="apf-actions">
+                <button className="apf-cancel" type="button" onClick={() => setTransferSheetOpen(false)} disabled={submittingCreditTransferId === selectedCredit.account.id}>Отмена</button>
+                <button className="apf-submit" type="submit" disabled={submittingCreditTransferId === selectedCredit.account.id || !selectedCreditTransferDraft?.amount.trim() || !selectedCreditTransferDraft?.toAccountId || selectedCreditAvailableLimit <= 0}>{submittingCreditTransferId === selectedCredit.account.id ? 'Переводим...' : 'Перевести'}</button>
+              </div>
+            </form>
+          </BottomSheet>
+        </>
+        );
+      })()}
+
+      {/* ── Schedule sheet ── */}
+      {scheduleOpen && selectedCredit && (() => {
+        const ccy = selectedSummary?.currency_code ?? user.base_currency_code;
+        const nextItemDate = scheduleItems.find((i) => i.status !== 'paid')?.scheduled_date ?? null;
+        return (
+          <BottomSheet
+            open={scheduleOpen}
+            gray
+            tag="График платежей"
+            title={selectedCredit.account.name}
+            onClose={() => setScheduleOpen(false)}
+          >
+            {scheduleYears.length > 0 && (
+              <div className="sch-years">
+                {scheduleYears.map((year) => (
+                  <button
+                    key={year}
+                    className={`sch-years__pill${selectedScheduleYear === year ? ' sch-years__pill--on' : ''}`}
+                    type="button"
+                    onClick={() => setSelectedScheduleYear(year)}
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {scheduleLoading ? (
+              <div className="credits-hint">Собираем график платежей...</div>
+            ) : scheduleError ? (
+              <div className="credits-hint">{scheduleError}</div>
+            ) : visibleScheduleItems.length === 0 ? (
+              <div className="credits-hint">График пока недоступен. Проверь срок, ставку и дату платежа.</div>
+            ) : (
+              <div className="sch-list">
+                {visibleScheduleItems.map((item) => {
+                  const isPaid = item.status === 'paid';
+                  const isNext = item.scheduled_date === nextItemDate;
+                  const total = item.total_payment;
+                  const principalPct = total > 0 ? Math.round((item.principal_component / total) * 100) : 50;
+                  const interestPct = 100 - principalPct;
+                  const mod = isPaid ? ' sch-item--paid' : isNext ? ' sch-item--next' : '';
+                  return (
+                    <div className={`sch-item${mod}`} key={item.scheduled_date}>
+                      <div className="sch-item__head">
+                        <div className="sch-item__date">
+                          {new Date(item.scheduled_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          <span>Остаток {formatAmount(item.principal_after, ccy)}</span>
                         </div>
+                        <span className="sch-item__total">{formatAmount(item.total_payment, ccy)}</span>
                       </div>
-                      <div className="credit-schedule-item__sub">
-                        {item.status === 'paid' ? 'Остаток после платежа ' : 'Остаток '}
-                        {formatAmount(item.principal_after, selectedSummary?.currency_code ?? user.base_currency_code)}
+                      <div className="sch-item__bar">
+                        <div className="sch-item__bar-seg sch-item__bar-seg--principal" style={{ width: `${principalPct}%` }} />
+                        <div className="sch-item__bar-seg sch-item__bar-seg--interest" style={{ width: `${interestPct}%` }} />
                       </div>
-                      <div className="credit-schedule-item__row">
-                        <span>Основной долг</span>
-                        <strong>{formatAmount(item.principal_component, selectedSummary?.currency_code ?? user.base_currency_code)}</strong>
-                      </div>
-                      <div className="credit-schedule-item__row">
-                        <span>Проценты</span>
-                        <strong>{formatAmount(item.interest_component, selectedSummary?.currency_code ?? user.base_currency_code)}</strong>
+                      <div className="sch-item__breakdown">
+                        <span>Тело <strong>{formatAmount(item.principal_component, ccy)}</strong></span>
+                        <span>Проценты <strong>{formatAmount(item.interest_component, ccy)}</strong></span>
+                        <span className={`sch-item__status${isPaid ? ' sch-item__status--paid' : isNext ? ' sch-item__status--next' : ' sch-item__status--plan'}`}>
+                          {isPaid ? 'Оплачено' : isNext ? 'Следующий' : 'План'}
+                        </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="modal-actions">
-              <div className="action-pill">
-                <button className="action-pill__cancel" type="button" onClick={() => setScheduleOpen(false)}>
-                  Закрыть
-                </button>
+                  );
+                })}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+            )}
+          </BottomSheet>
+        );
+      })()}
 
       {/* ── New credit sheet ── */}
       {showNewForm && (
@@ -1705,6 +1521,16 @@ export default function Credits({ user }: { user: UserContext }) {
                   onChange={(e) => setNewProvider(e.target.value)}
                   disabled={submittingNew}
                 />
+              </div>
+
+              <div className="apf-field">
+                <label className="apf-label">Цвет бейджа</label>
+                <div className="badge-color-picker">
+                  <button type="button" className={`badge-color-picker__swatch badge-color-picker__swatch--none${!newBadgeColor ? ' badge-color-picker__swatch--active' : ''}`} onClick={() => setNewBadgeColor('')} disabled={submittingNew} />
+                  {BADGE_COLORS.map((c) => (
+                    <button key={c.key} type="button" className={`badge-color-picker__swatch badge-color-picker__swatch--${c.key}${newBadgeColor === c.key ? ' badge-color-picker__swatch--active' : ''}`} title={c.label} onClick={() => setNewBadgeColor(c.key)} disabled={submittingNew} />
+                  ))}
+                </div>
               </div>
 
               <div className="apf-row">

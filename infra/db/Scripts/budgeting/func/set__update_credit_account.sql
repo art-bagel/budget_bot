@@ -8,7 +8,8 @@ CREATE FUNCTION budgeting.set__update_credit_account(
     _payment_day smallint DEFAULT NULL,
     _credit_started_at date DEFAULT NULL,
     _credit_ends_at date DEFAULT NULL,
-    _provider_name text DEFAULT NULL
+    _provider_name text DEFAULT NULL,
+    _badge_color text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -109,7 +110,8 @@ BEGIN
         payment_day = _payment_day,
         credit_started_at = _credit_started_at,
         credit_ends_at = _credit_ends_at,
-        provider_name = NULLIF(btrim(_provider_name), '')
+        provider_name = NULLIF(btrim(_provider_name), ''),
+        badge_color = NULLIF(btrim(COALESCE(_badge_color, '')), '')
     WHERE id = _credit_account_id;
 
     RETURN (
@@ -132,6 +134,7 @@ BEGIN
             'credit_limit',         ba.credit_limit,
             'provider_name',        ba.provider_name,
             'provider_account_ref', ba.provider_account_ref,
+            'badge_color',          ba.badge_color,
             'is_primary',           ba.is_primary,
             'is_active',            ba.is_active,
             'created_at',           ba.created_at

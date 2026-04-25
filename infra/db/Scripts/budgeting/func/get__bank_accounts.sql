@@ -43,6 +43,7 @@ BEGIN
                 'credit_limit', ba.credit_limit,
                 'provider_name', ba.provider_name,
                 'provider_account_ref', ba.provider_account_ref,
+                'badge_color', ba.badge_color,
                 'is_primary', ba.is_primary,
                 'is_active', ba.is_active,
                 'created_at', ba.created_at

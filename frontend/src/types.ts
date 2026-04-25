@@ -285,6 +285,7 @@ export interface BankAccount {
   credit_limit?: number | null;
   provider_name?: string | null;
   provider_account_ref?: string | null;
+  badge_color?: string | null;
   is_primary: boolean;
   is_active: boolean;
   created_at: string;
@@ -311,6 +312,7 @@ export interface CreateCreditAccountRequest {
   credit_started_at?: string;
   credit_ends_at?: string;
   provider_name?: string;
+  badge_color?: string;
 }
 
 export interface UpdateCreditAccountRequest {
@@ -321,6 +323,7 @@ export interface UpdateCreditAccountRequest {
   credit_started_at?: string | null;
   credit_ends_at?: string | null;
   provider_name?: string | null;
+  badge_color?: string | null;
 }
 
 export interface CreditRepaymentRequest {

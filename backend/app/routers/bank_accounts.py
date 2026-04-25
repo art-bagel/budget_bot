@@ -29,6 +29,7 @@ class BankAccountItem(BaseModel):
     credit_limit: Optional[float] = None
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
+    badge_color: Optional[str] = None
     is_primary: bool
     is_active: bool
     created_at: str
@@ -69,6 +70,7 @@ class CreateCreditAccountRequest(BaseModel):
     credit_started_at: Optional[date] = None
     credit_ends_at: Optional[date] = None
     provider_name: Optional[str] = None
+    badge_color: Optional[str] = None
 
     @field_validator('name')
     @classmethod
@@ -107,6 +109,7 @@ class UpdateCreditAccountRequest(BaseModel):
     credit_started_at: Optional[date] = None
     credit_ends_at: Optional[date] = None
     provider_name: Optional[str] = None
+    badge_color: Optional[str] = None
 
     @field_validator('name')
     @classmethod
@@ -409,6 +412,7 @@ async def create_credit_account(
         credit_started_at=body.credit_started_at,
         credit_ends_at=body.credit_ends_at,
         provider_name=body.provider_name,
+        badge_color=body.badge_color,
     )
     return BankAccountItem(**result)
 
@@ -452,6 +456,7 @@ async def update_credit_account(
         credit_started_at=body.credit_started_at,
         credit_ends_at=body.credit_ends_at,
         provider_name=body.provider_name,
+        badge_color=body.badge_color,
     )
     return BankAccountItem(**result)
 

@@ -11,9 +11,10 @@ interface Props {
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  gray?: boolean;
 }
 
-export default function BottomSheet({ open, title, tag, icon, iconColor, onClose, children, actions }: Props) {
+export default function BottomSheet({ open, title, tag, icon, iconColor, onClose, children, actions, gray }: Props) {
   const [visible, setVisible] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -54,7 +55,7 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
   return (
     <div className="sheet-root" data-open={open ? '' : undefined}>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div ref={sheetRef} className="sheet" data-visible={visible ? '' : undefined}>
+      <div ref={sheetRef} className={`sheet${gray ? ' sheet--gray' : ''}`} data-visible={visible ? '' : undefined}>
         <div
           className="sheet__handle"
           onTouchStart={handleDragTouchStart}

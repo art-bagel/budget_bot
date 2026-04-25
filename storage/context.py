@@ -104,6 +104,7 @@ class Context(DataBase):
         credit_ends_at=None,
         provider_name: Optional[str] = None,
         provider_account_ref: Optional[str] = None,
+        badge_color: Optional[str] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_CREDIT_ACCOUNT),
@@ -120,6 +121,7 @@ class Context(DataBase):
             credit_ends_at,
             provider_name,
             provider_account_ref,
+            badge_color,
         )
 
     async def set__archive_credit_account(self, user_id: int, bank_account_id: int) -> dict:
@@ -147,6 +149,7 @@ class Context(DataBase):
         credit_started_at=None,
         credit_ends_at=None,
         provider_name: Optional[str] = None,
+        badge_color: Optional[str] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_SET__UPDATE_CREDIT_ACCOUNT),
@@ -159,6 +162,7 @@ class Context(DataBase):
             credit_started_at,
             credit_ends_at,
             provider_name,
+            badge_color,
         )
 
     async def put__repay_credit_account(

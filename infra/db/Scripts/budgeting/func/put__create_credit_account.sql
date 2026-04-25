@@ -11,6 +11,23 @@ DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
     date,
     date,
     text,
+    text,
+    text
+);
+
+DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
+    bigint,
+    text,
+    text,
+    char(3),
+    numeric,
+    bigint,
+    text,
+    numeric,
+    smallint,
+    date,
+    date,
+    text,
     text
 );
 
@@ -27,7 +44,8 @@ CREATE FUNCTION budgeting.put__create_credit_account(
     _credit_started_at    date DEFAULT NULL,
     _credit_ends_at       date DEFAULT NULL,
     _provider_name        text DEFAULT NULL,
-    _provider_account_ref text DEFAULT NULL
+    _provider_account_ref text DEFAULT NULL,
+    _badge_color          text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -91,7 +109,7 @@ BEGIN
         owner_type, owner_user_id, owner_family_id,
         name, account_kind, credit_kind, interest_rate, payment_day,
         credit_started_at, credit_ends_at, credit_limit,
-        provider_name, provider_account_ref,
+        provider_name, provider_account_ref, badge_color,
         is_primary, is_active
     )
     VALUES (
@@ -100,6 +118,7 @@ BEGIN
         _credit_started_at, _credit_ends_at, _credit_limit,
         NULLIF(btrim(_provider_name), ''),
         NULLIF(btrim(_provider_account_ref), ''),
+        NULLIF(btrim(COALESCE(_badge_color, '')), ''),
         false, true
     )
     RETURNING id INTO _account_id;
@@ -137,6 +156,7 @@ BEGIN
             'credit_limit',         ba.credit_limit,
             'provider_name',        ba.provider_name,
             'provider_account_ref', ba.provider_account_ref,
+            'badge_color',          ba.badge_color,
             'is_primary',           ba.is_primary,
             'is_active',            ba.is_active,
             'created_at',           ba.created_at
