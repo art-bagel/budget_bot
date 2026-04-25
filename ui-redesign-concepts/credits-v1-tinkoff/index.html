@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark" data-hero="ink">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0A0A0B" />
+  <title>Кредиты · Бюджет</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <svg class="sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chev-down" viewBox="0 0 16 16"><path d="m3 6 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v4M8 5v.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M11.5 2.5 13.5 4.5 5 13H3v-2zM10 4l2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5 2v3M11 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-arrow-down-r" viewBox="0 0 16 16"><path d="m4 4 8 8M12 5v7H5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-up-r" viewBox="0 0 16 16"><path d="m4 12 8-8M5 4h7v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-out" viewBox="0 0 16 16"><path d="M3 8h9M9 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-percent" viewBox="0 0 16 16"><circle cx="4.5" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="11.5" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M13 3 3 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-cart" viewBox="0 0 16 16"><path d="M2 3h1.4l1.4 6.6c.05.2.23.34.43.34h5.7c.2 0 .38-.13.43-.32L13 5H4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="13" r="1" fill="currentColor"/><circle cx="11" cy="13" r="1" fill="currentColor"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M4.5 4.5l.7 8.5a1 1 0 0 0 1 .9h3.6a1 1 0 0 0 1-.9l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-house" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1v-8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-banknote" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 9h.01M18 15h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-card" viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10.5h17M7 15h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-list" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-chart-card" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 11V8M8 11V5M11 11v-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app">
+
+    <!-- Top bar -->
+    <header class="bar">
+      <div class="bar__left">
+        <button class="icon-btn icon-btn--sm" type="button" aria-label="Назад">
+          <svg><use href="#i-back"/></svg>
+        </button>
+        <div class="bar__meta">
+          <span class="bar__hello">Мини-приложение</span>
+          <h1 class="bar__title">Кредиты</h1>
+        </div>
+      </div>
+      <div class="bar__right">
+        <button class="icon-btn icon-btn--sm" id="themeToggle" type="button" aria-label="Переключить тему">
+          <svg class="tg__sun"><use href="#i-sun"/></svg>
+          <svg class="tg__moon"><use href="#i-moon"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- HERO -->
+      <article class="hero" id="hero">
+        <div class="hero__head">
+          <span class="hero__eyebrow">Общий долг</span>
+          <div class="segtog" role="tablist" aria-label="Режим расчёта долга">
+            <button class="segtog__opt segtog__opt--on" data-mode="now" role="tab" aria-selected="true" type="button">Остаток</button>
+            <button class="segtog__opt" data-mode="withint" role="tab" aria-selected="false" type="button">С процентами</button>
+          </div>
+        </div>
+
+        <div class="hero__amount">
+          <span class="hero__value" id="heroValue">3 179 500</span>
+          <span class="hero__sym">₽</span>
+        </div>
+
+        <div class="hero__delta-row">
+          <span class="hero__delta" id="heroDeltaText">Если бы вы погасили всё прямо сейчас</span>
+        </div>
+
+        <dl class="hero__rows">
+          <div class="hero__row" data-tab="mortgage" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--ink"></span>Ипотека</dt>
+            <dd><span data-hero-val="mortgage">2 450 000 ₽</span> <svg class="hero__row-chev"><use href="#i-chev"/></svg></dd>
+          </div>
+          <div class="hero__row" data-tab="loan" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--mint"></span>Кредиты</dt>
+            <dd><span data-hero-val="loan">605 000 ₽</span> <svg class="hero__row-chev"><use href="#i-chev"/></svg></dd>
+          </div>
+          <div class="hero__row" data-tab="card" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--coral"></span>Карты</dt>
+            <dd><span data-hero-val="card">124 500 ₽</span> <svg class="hero__row-chev"><use href="#i-chev"/></svg></dd>
+          </div>
+        </dl>
+
+        <div class="hero__progress">
+          <div class="hero__progress-meta">
+            <span class="hero__progress-label">Погашено тела</span>
+            <span class="hero__progress-value">1 445 000 ₽ из 4 500 000 ₽ · <strong>32%</strong></span>
+          </div>
+          <div class="hero__progress-bar">
+            <div class="hero__progress-fill" style="width: 32%"></div>
+          </div>
+          <div class="hero__progress-note">только срочные кредиты — карты возобновляемые</div>
+        </div>
+
+        <div class="hero__potnote" id="heroPotNote" hidden>
+          <svg><use href="#i-info"/></svg>
+          <span>+19 600 ₽ начислено процентов на сегодня по всем срочным кредитам</span>
+        </div>
+      </article>
+
+      <!-- TYPE FILTER TABS -->
+      <nav class="tabs" role="tablist" aria-label="Тип кредита">
+        <button class="tabs__item tabs__item--on" data-tab="all" role="tab" aria-selected="true" type="button">Все</button>
+        <button class="tabs__item" data-tab="mortgage" role="tab" aria-selected="false" type="button">Ипотека</button>
+        <button class="tabs__item" data-tab="loan" role="tab" aria-selected="false" type="button">Кредиты</button>
+        <button class="tabs__item" data-tab="card" role="tab" aria-selected="false" type="button">Карты</button>
+      </nav>
+
+      <!-- VIEW SWITCHER: Кредиты | Операции | Аналитика -->
+      <div class="viewtog" role="tablist" aria-label="Раздел кредитов">
+        <button class="viewtog__opt viewtog__opt--on" data-view="credits" role="tab" aria-selected="true" type="button">Кредиты</button>
+        <button class="viewtog__opt" data-view="ops" role="tab" aria-selected="false" type="button">Операции</button>
+        <button class="viewtog__opt" data-view="analytics" role="tab" aria-selected="false" type="button">Аналитика</button>
+      </div>
+
+      <!-- =========================================================
+           PANE: Кредиты
+           ========================================================= -->
+      <div class="view-pane view-pane--on" data-pane="credits">
+        <section class="sec" id="creditsSection">
+          <div class="sec__head sec__head--row">
+            <div>
+              <h2 class="sec__title">Кредиты</h2>
+              <span class="sec__sub" id="creditsSub">5 активных</span>
+            </div>
+            <button class="add-pill" id="newCreditBtn" type="button" aria-label="Новый кредитный счёт">
+              <svg><use href="#i-plus"/></svg>
+              Новый
+            </button>
+          </div>
+          <div class="credit-groups" id="creditGroups"></div>
+        </section>
+      </div><!-- /.view-pane[credits] -->
+
+      <!-- =========================================================
+           PANE: Операции
+           ========================================================= -->
+      <div class="view-pane" data-pane="ops">
+        <section class="card-sec" id="opsSec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--ops"><svg><use href="#i-list"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Операции</h3>
+                <span class="card-sec__sub" id="opsSub">Кредитные счета · 30 дней</span>
+              </div>
+            </div>
+            <button class="card-sec__filter" type="button">
+              Фильтр <svg><use href="#i-chev-down"/></svg>
+            </button>
+          </header>
+          <div class="ops" id="opsList"></div>
+          <a class="card-sec__link" href="#" id="opsShowAll">
+            Все операции <svg><use href="#i-chev"/></svg>
+          </a>
+        </section>
+      </div><!-- /.view-pane[ops] -->
+
+      <!-- =========================================================
+           PANE: Аналитика
+           ========================================================= -->
+      <div class="view-pane" data-pane="analytics">
+        <section class="card-sec" id="analSec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--anal"><svg><use href="#i-chart-card"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Аналитика</h3>
+                <span class="card-sec__sub" id="analSub">Долговой портфель · 2026</span>
+              </div>
+            </div>
+          </header>
+          <div class="analytics" id="analyticsBlock"></div>
+          <a class="card-sec__link" href="#" id="analShowAll">
+            Подробная аналитика <svg><use href="#i-chev"/></svg>
+          </a>
+        </section>
+      </div><!-- /.view-pane[analytics] -->
+
+      <p class="updated">Обновлено сегодня в 14:32</p>
+    </main>
+  </div>
+
+  <!-- Sheet backdrop -->
+  <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+
+  <!-- Detail sheet -->
+  <aside class="sheet" id="detailSheet" hidden role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="sheet__handle" aria-hidden="true"></div>
+    <header class="sheet__head">
+      <div class="sheet__head-meta">
+        <span class="sheet__eyebrow" id="detailEyebrow">Кредит</span>
+        <h2 class="sheet__title" id="detailTitle">—</h2>
+        <span class="sheet__sub" id="detailBank">—</span>
+      </div>
+      <button class="icon-btn icon-btn--sm sheet__close" data-sheet-close="detailSheet" type="button" aria-label="Закрыть">
+        <svg><use href="#i-close"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <div class="dstats" id="detailStats"></div>
+      <div class="dnext" id="detailNext" hidden></div>
+      <div class="dutil" id="detailUtil" hidden></div>
+      <div class="dcond">
+        <div class="dcond__head">
+          <span class="sec-tag">Условия</span>
+          <button class="textbtn" id="detailEditToggle" type="button">
+            <svg><use href="#i-pencil"/></svg> Изменить
+          </button>
+        </div>
+        <dl class="dcond__list" id="detailCondList"></dl>
+      </div>
+      <div class="hint" id="detailHint" hidden></div>
+      <div class="dactions">
+        <button class="btn btn--primary" id="actRepay" type="button">
+          <svg><use href="#i-arrow-down-r"/></svg> Погасить
+        </button>
+        <button class="btn btn--ghost" id="actTransfer" type="button" hidden>
+          <svg><use href="#i-arrow-out"/></svg> Перевод с кредита
+        </button>
+        <button class="btn btn--ghost" id="actSchedule" type="button" hidden>
+          <svg><use href="#i-calendar"/></svg> График платежей
+        </button>
+      </div>
+      <button class="textbtn textbtn--danger" id="actArchive" type="button" hidden>
+        <svg><use href="#i-trash"/></svg> Перенести в архив
+      </button>
+    </div>
+  </aside>
+
+  <!-- Schedule sheet (full-screen) -->
+  <aside class="sheet sheet--full" id="scheduleSheet" hidden role="dialog" aria-modal="true" aria-labelledby="scheduleTitle">
+    <header class="sheet__head sheet__head--full">
+      <button class="icon-btn icon-btn--sm sheet__close" data-sheet-close="scheduleSheet" type="button" aria-label="Назад">
+        <svg><use href="#i-back"/></svg>
+      </button>
+      <div class="sheet__head-meta sheet__head-meta--centered">
+        <span class="sheet__eyebrow">График платежей</span>
+        <h2 class="sheet__title" id="scheduleTitle">—</h2>
+      </div>
+      <span class="sheet__head-spacer"></span>
+    </header>
+    <div class="sheet__body sheet__body--full">
+      <div class="schedule-years" id="scheduleYears"></div>
+      <div class="schedule-list" id="scheduleList"></div>
+    </div>
+  </aside>
+
+  <!-- Repay sheet -->
+  <aside class="sheet" id="repaySheet" hidden role="dialog" aria-modal="true" aria-labelledby="repayTitle">
+    <div class="sheet__handle" aria-hidden="true"></div>
+    <header class="sheet__head">
+      <div class="sheet__head-meta">
+        <span class="sheet__eyebrow">Погашение</span>
+        <h2 class="sheet__title" id="repayTitle">—</h2>
+      </div>
+      <button class="icon-btn icon-btn--sm sheet__close" data-sheet-close="repaySheet" type="button" aria-label="Закрыть">
+        <svg><use href="#i-close"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <p class="sheet__hint" id="repayHint">Платёж сначала покроет начисленные проценты, остаток уменьшит основной долг.</p>
+      <form class="form" id="repayForm">
+        <label class="field">
+          <span class="field__label">Сумма</span>
+          <div class="field__row">
+            <input class="input input--lg" type="text" inputmode="decimal" placeholder="0" id="repayAmount" />
+            <select class="input input--ccy" id="repayCurrency">
+              <option value="RUB" selected>₽</option>
+              <option value="USD">$</option>
+              <option value="EUR">€</option>
+            </select>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field__label">Со счёта</span>
+          <select class="input" id="repayFromAccount"></select>
+        </label>
+        <label class="field" id="repayDateField">
+          <span class="field__label">Дата платежа</span>
+          <input class="input" type="date" id="repayDate" />
+        </label>
+        <label class="field">
+          <span class="field__label">Комментарий <span class="field__opt">необязательно</span></span>
+          <input class="input" type="text" id="repayComment" placeholder="Например, плановый платёж" />
+        </label>
+      </form>
+    </div>
+    <footer class="sheet__foot">
+      <button class="btn btn--primary btn--block" id="repaySubmit" type="button">Погасить</button>
+    </footer>
+  </aside>
+
+  <!-- Transfer-from-credit sheet -->
+  <aside class="sheet" id="transferSheet" hidden role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+    <div class="sheet__handle" aria-hidden="true"></div>
+    <header class="sheet__head">
+      <div class="sheet__head-meta">
+        <span class="sheet__eyebrow">Перевод с кредита</span>
+        <h2 class="sheet__title" id="transferTitle">—</h2>
+      </div>
+      <button class="icon-btn icon-btn--sm sheet__close" data-sheet-close="transferSheet" type="button" aria-label="Закрыть">
+        <svg><use href="#i-close"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <p class="sheet__hint">Деньги попадут в свободный остаток выбранного личного или семейного счёта.</p>
+      <form class="form" id="transferForm">
+        <label class="field">
+          <span class="field__label">Сумма</span>
+          <div class="field__row">
+            <input class="input input--lg" type="text" inputmode="decimal" placeholder="0" id="transferAmount" />
+            <span class="input input--readonly" id="transferCurrency">₽</span>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field__label">На счёт</span>
+          <select class="input" id="transferToAccount"></select>
+        </label>
+        <label class="field">
+          <span class="field__label">Комментарий <span class="field__opt">необязательно</span></span>
+          <input class="input" type="text" id="transferComment" placeholder="Перевод с карты" />
+        </label>
+        <p class="sheet__hint sheet__hint--small" id="transferLimitHint">—</p>
+      </form>
+    </div>
+    <footer class="sheet__foot">
+      <button class="btn btn--primary btn--block" id="transferSubmit" type="button">Перевести</button>
+    </footer>
+  </aside>
+
+  <!-- New credit sheet -->
+  <aside class="sheet" id="newCreditSheet" hidden role="dialog" aria-modal="true" aria-labelledby="newTitle">
+    <div class="sheet__handle" aria-hidden="true"></div>
+    <header class="sheet__head">
+      <div class="sheet__head-meta">
+        <span class="sheet__eyebrow">Создать</span>
+        <h2 class="sheet__title" id="newTitle">Новый кредит</h2>
+      </div>
+      <button class="icon-btn icon-btn--sm sheet__close" data-sheet-close="newCreditSheet" type="button" aria-label="Закрыть">
+        <svg><use href="#i-close"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body">
+      <form class="form" id="newCreditForm">
+        <div class="field">
+          <span class="field__label">Тип</span>
+          <div class="seg" id="newKindSeg">
+            <button class="seg__opt seg__opt--on" data-kind="mortgage" type="button">Ипотека</button>
+            <button class="seg__opt" data-kind="loan" type="button">Кредит</button>
+            <button class="seg__opt" data-kind="card" type="button">Карта</button>
+          </div>
+        </div>
+        <label class="field">
+          <span class="field__label">Название</span>
+          <input class="input" type="text" id="newName" placeholder="Например, Ипотека Сбербанк" />
+        </label>
+        <label class="field">
+          <span class="field__label">Банк <span class="field__opt">необязательно</span></span>
+          <input class="input" type="text" id="newBank" placeholder="Сбербанк" />
+        </label>
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label" id="newLimitLabel">Сумма кредита</span>
+            <input class="input" type="text" inputmode="decimal" id="newLimit" placeholder="0" />
+          </label>
+          <label class="field">
+            <span class="field__label">Валюта</span>
+            <select class="input" id="newCurrency">
+              <option value="RUB" selected>₽</option>
+              <option value="USD">$</option>
+              <option value="EUR">€</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label">Ставка, %</span>
+            <input class="input" type="text" inputmode="decimal" id="newRate" placeholder="12,4" />
+          </label>
+          <label class="field">
+            <span class="field__label">День платежа</span>
+            <input class="input" type="text" inputmode="numeric" id="newDay" placeholder="15" maxlength="2" />
+          </label>
+        </div>
+        <div class="field-grid" id="newDates">
+          <label class="field">
+            <span class="field__label">Дата начала</span>
+            <input class="input" type="date" id="newStart" />
+          </label>
+          <label class="field">
+            <span class="field__label">Дата окончания</span>
+            <input class="input" type="date" id="newEnd" />
+          </label>
+        </div>
+        <label class="field" id="newTargetField">
+          <span class="field__label">Зачислить на счёт</span>
+          <select class="input" id="newTargetAccount"></select>
+        </label>
+      </form>
+    </div>
+    <footer class="sheet__foot">
+      <button class="btn btn--primary btn--block" id="newSubmit" type="button">Создать</button>
+    </footer>
+  </aside>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

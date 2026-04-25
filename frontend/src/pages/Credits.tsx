@@ -136,7 +136,6 @@ function getMissingTermConfigFields(
   return missing;
 }
 
-// Balances are negative for credit accounts (debt = negative balance)
 function accountDebt(balances: { historical_cost_in_base: number }[]): number {
   return Math.max(0, -balances.reduce((s, b) => s + b.historical_cost_in_base, 0));
 }
@@ -157,12 +156,20 @@ function availableCreditLimit(credit: CreditWithBalances, currencyCode: string):
   return Math.max(0, creditLimit + balance);
 }
 
+type ViewTab = 'credits' | 'ops' | 'analytics';
+type FilterTab = 'all' | 'mortgage' | 'loan' | 'credit_card';
+
 export default function Credits({ user }: { user: UserContext }) {
   const [credits, setCredits] = useState<CreditWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // View state
+  const [viewTab, setViewTab] = useState<ViewTab>('credits');
+  const [filterTab, setFilterTab] = useState<FilterTab>('all');
+  const [segtogMode, setSegtogMode] = useState<'now' | 'withint'>('now');
 
   // Selected credit for detail panel
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -194,7 +201,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const [newName, setNewName] = useState('');
   const [newKind, setNewKind] = useState<CreditKind>('loan');
   const [newCurrency, setNewCurrency] = useState(user.base_currency_code);
-  const [newOwnerType, setNewOwnerType] = useState<'user' | 'family'>('user');
+  const [newOwnerType] = useState<'user' | 'family'>('user');
   const [newInterestRate, setNewInterestRate] = useState('');
   const [newPaymentDay, setNewPaymentDay] = useState('');
   const [newStartedAt, setNewStartedAt] = useState('');
@@ -205,7 +212,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const [submittingNew, setSubmittingNew] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
 
-  const modalRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -550,6 +557,12 @@ export default function Credits({ user }: { user: UserContext }) {
   const hasTerm = (kind: CreditKind) => kind === 'loan' || kind === 'mortgage';
 
   const getCreditDebt = ({ balances }: CreditWithBalances) => accountDebt(balances);
+
+  const filteredCredits = useMemo(() => {
+    if (filterTab === 'all') return credits;
+    return credits.filter(({ account }) => account.credit_kind === filterTab);
+  }, [credits, filterTab]);
+
   const scheduleYears = useMemo(
     () => Array.from(new Set(scheduleItems.map((item) => new Date(item.scheduled_date).getFullYear()))),
     [scheduleItems],
@@ -582,6 +595,13 @@ export default function Credits({ user }: { user: UserContext }) {
     ? availableCreditLimit(selectedCredit, selectedCreditTransferDraft.currencyCode)
     : 0;
 
+  // Calculate overall payoff progress for term credits
+  const termCredits = credits.filter(({ account }) => isTermCredit(account.credit_kind));
+  const totalTermLimit = termCredits.reduce((s, { account }) => s + (account.credit_limit ?? 0), 0);
+  const totalTermDebt = termCredits.reduce((s, { balances }) => s + accountDebt(balances), 0);
+  const paidPrincipal = Math.max(0, totalTermLimit - totalTermDebt);
+  const progressPct = totalTermLimit > 0 ? Math.round((paidPrincipal / totalTermLimit) * 100) : 0;
+
   if (loading) {
     return (
       <div className="status-screen">
@@ -593,33 +613,98 @@ export default function Credits({ user }: { user: UserContext }) {
 
   return (
     <>
-      <h1 className="page-title">Кредиты</h1>
+      {/* ── Hero ── */}
+      <article className="hero hero--ink">
+        <div className="hero__head">
+          <span className="hero__eyebrow">Общий долг</span>
+          <div className="credits-segtog" role="tablist">
+            <button
+              className={`credits-segtog__opt${segtogMode === 'now' ? ' credits-segtog__opt--on' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={segtogMode === 'now'}
+              onClick={() => setSegtogMode('now')}
+            >
+              Остаток
+            </button>
+            <button
+              className={`credits-segtog__opt${segtogMode === 'withint' ? ' credits-segtog__opt--on' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={segtogMode === 'withint'}
+              onClick={() => setSegtogMode('withint')}
+            >
+              С процентами
+            </button>
+          </div>
+        </div>
 
-      {/* Hero card */}
-      <article className="hero-card">
-        <span className="hero-card__label">Общий долг</span>
-        <strong className="hero-card__value">
-          {formatAmount(totalDebt, user.base_currency_code)}
-        </strong>
+        <div className="hero__amount">
+          <span className="hero__value">{formatAmount(totalDebt, user.base_currency_code)}</span>
+        </div>
+
         {credits.length > 0 && (
-          <div className="hero-card__breakdown">
+          <div className="hero__delta-row">
+            <span className="hero__delta">
+              {segtogMode === 'now' ? 'Текущий остаток по всем кредитам' : 'С учётом начисленных процентов'}
+            </span>
+          </div>
+        )}
+
+        {credits.length > 0 && (
+          <dl className="hero__rows">
             {hasMortgage && (
-              <div className="hero-card__breakdown-row">
-                <span>Ипотека</span>
-                <strong>{formatAmount(mortgageDebt, user.base_currency_code)}</strong>
+              <div
+                className="hero__row"
+                role="button"
+                tabIndex={0}
+                onClick={() => setFilterTab(filterTab === 'mortgage' ? 'all' : 'mortgage')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterTab(filterTab === 'mortgage' ? 'all' : 'mortgage'); } }}
+              >
+                <dt><span className="hero__mark hero__mark--ink" />Ипотека</dt>
+                <dd>{formatAmount(mortgageDebt, user.base_currency_code)}</dd>
               </div>
             )}
             {hasLoans && (
-              <div className="hero-card__breakdown-row">
-                <span>Кредиты</span>
-                <strong>{formatAmount(loanDebt, user.base_currency_code)}</strong>
+              <div
+                className="hero__row"
+                role="button"
+                tabIndex={0}
+                onClick={() => setFilterTab(filterTab === 'loan' ? 'all' : 'loan')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterTab(filterTab === 'loan' ? 'all' : 'loan'); } }}
+              >
+                <dt><span className="hero__mark hero__mark--mint" />Кредиты</dt>
+                <dd>{formatAmount(loanDebt, user.base_currency_code)}</dd>
               </div>
             )}
             {hasCards && (
-              <div className="hero-card__breakdown-row">
-                <span>Кредитные карты</span>
-                <strong>{formatAmount(cardDebt, user.base_currency_code)}</strong>
+              <div
+                className="hero__row"
+                role="button"
+                tabIndex={0}
+                onClick={() => setFilterTab(filterTab === 'credit_card' ? 'all' : 'credit_card')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterTab(filterTab === 'credit_card' ? 'all' : 'credit_card'); } }}
+              >
+                <dt><span className="hero__mark hero__mark--coral" />Карты</dt>
+                <dd>{formatAmount(cardDebt, user.base_currency_code)}</dd>
               </div>
+            )}
+          </dl>
+        )}
+
+        {termCredits.length > 0 && totalTermLimit > 0 && (
+          <div className="hero__progress">
+            <div className="hero__progress-meta">
+              <span className="hero__progress-label">Погашено тела</span>
+              <span className="hero__progress-value">
+                {formatAmount(paidPrincipal, user.base_currency_code)} из {formatAmount(totalTermLimit, user.base_currency_code)} · <strong>{progressPct}%</strong>
+              </span>
+            </div>
+            <div className="hero__progress-bar">
+              <div className="hero__progress-fill" style={{ width: `${progressPct}%` }} />
+            </div>
+            {hasCards && (
+              <div className="hero__progress-note">только срочные кредиты — карты возобновляемые</div>
             )}
           </div>
         )}
@@ -627,89 +712,237 @@ export default function Credits({ user }: { user: UserContext }) {
 
       {error && <p style={{ color: 'var(--tag-out-fg)', marginBottom: 12 }}>{error}</p>}
 
-      {/* Credit list */}
-      <section className="dashboard-section">
-        <div className="section__header">
-          <div className="section__eyebrow">Счета</div>
-          <button
-            className="btn btn--icon btn--primary"
-            type="button"
-            onClick={() => setShowNewForm(true)}
-          >
-            +
-          </button>
-        </div>
+      {/* ── Type filter tabs ── */}
+      <nav className="tabs" role="tablist" aria-label="Тип кредита">
+        {(
+          [
+            { key: 'all', label: 'Все' },
+            hasMortgage && { key: 'mortgage', label: 'Ипотека' },
+            hasLoans && { key: 'loan', label: 'Кредиты' },
+            hasCards && { key: 'card', label: 'Карты' },
+          ] as Array<{ key: string; label: string } | false>
+        )
+          .filter(Boolean)
+          .map((item) => {
+            if (!item) return null;
+            const tabKey = item.key === 'card' ? 'credit_card' : item.key as FilterTab;
+            const isOn = filterTab === tabKey || (item.key === 'all' && filterTab === 'all');
+            return (
+              <button
+                key={item.key}
+                className={`tabs__item${isOn ? ' tabs__item--on' : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={isOn}
+                onClick={() => setFilterTab(tabKey)}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+      </nav>
 
-        {credits.length === 0 ? (
-          <p className="list-row__sub">Кредитных счетов пока нет.</p>
-        ) : (
-          <div className="dashboard-budget-sections">
-            {(['mortgage', 'loan', 'credit_card'] as CreditKind[])
-              .filter((kind) => credits.some(({ account }) => account.credit_kind === kind))
-              .map((kind) => (
-                <div className="dashboard-budget-section" key={kind}>
-                  <div className="portfolio-position-section-title">{creditKindLabel(kind)}</div>
-                  <div className="portfolio-position-grid">
-                    {credits
-                      .filter(({ account }) => account.credit_kind === kind)
-                      .map((item) => {
-                        const debt = getCreditDebt(item);
-                        return (
-                          <button
-                            key={item.account.id}
-                            className="portfolio-position-card"
-                            type="button"
-                            onClick={() => handleOpenDetail(item.account.id)}
-                          >
-                            <div className="portfolio-position-card__head">
-                              <div className="portfolio-position-card__left">
-                                {item.account.provider_name && (
-                                  <span className="portfolio-position-card__ticker">
-                                    {item.account.provider_name}
-                                  </span>
-                                )}
-                                <div className="portfolio-position-card__title">{item.account.name}</div>
-                              </div>
-                              <div className="portfolio-position-card__right">
-                                <div className="portfolio-position-card__amount portfolio-position-card__pnl--neg">
-                                  −{formatAmount(debt, user.base_currency_code)}
+      {/* ── View switcher ── */}
+      <div className="viewtog" role="tablist" aria-label="Раздел">
+        {(
+          [
+            { key: 'credits', label: 'Кредиты' },
+            { key: 'ops', label: 'Операции' },
+            { key: 'analytics', label: 'Аналитика' },
+          ] as Array<{ key: ViewTab; label: string }>
+        ).map(({ key, label }) => (
+          <button
+            key={key}
+            className={`viewtog__opt${viewTab === key ? ' viewtog__opt--on' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={viewTab === key}
+            onClick={() => setViewTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Pane: Кредиты ── */}
+      <div className={`view-pane${viewTab === 'credits' ? ' view-pane--on' : ''}`}>
+        <section className="sec">
+          <div className="sec__head sec__head--row">
+            <div>
+              <h2 className="sec__title">Кредиты</h2>
+              <span className="sec__sub">
+                {filteredCredits.length === 0
+                  ? 'Нет активных кредитов'
+                  : `${filteredCredits.length} активных`}
+              </span>
+            </div>
+            <button
+              className="add-pill"
+              type="button"
+              onClick={() => setShowNewForm(true)}
+              aria-label="Новый кредитный счёт"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Новый
+            </button>
+          </div>
+
+          {filteredCredits.length === 0 ? (
+            <div className="credits-empty">
+              <strong>Нет кредитов</strong>
+              {filterTab !== 'all' ? 'Нет кредитов в этой категории' : 'Добавьте первый кредитный счёт'}
+            </div>
+          ) : (
+            <div className="credit-groups">
+              {(['mortgage', 'loan', 'credit_card'] as CreditKind[])
+                .filter((kind) => filteredCredits.some(({ account }) => account.credit_kind === kind))
+                .map((kind) => {
+                  const kindItems = filteredCredits.filter(({ account }) => account.credit_kind === kind);
+                  return (
+                    <div className="credit-group" key={kind}>
+                      <div className="credit-group__head">
+                        <span className="credit-group__title">{creditKindLabel(kind)}</span>
+                        <span className="credit-group__count">{kindItems.length}</span>
+                      </div>
+                      <div className="credit-list">
+                        {kindItems.map((item) => {
+                          const debt = getCreditDebt(item);
+                          const limit = item.account.credit_limit ?? 0;
+                          const utilPct = kind === 'credit_card' && limit > 0
+                            ? Math.min(100, Math.round((debt / limit) * 100))
+                            : 0;
+                          const termPct = isTermCredit(kind) && limit > 0
+                            ? Math.min(100, Math.round(((limit - debt) / limit) * 100))
+                            : 0;
+
+                          return (
+                            <button
+                              key={item.account.id}
+                              className={`tile${kind === 'credit_card' ? ' tile--card' : ''}`}
+                              type="button"
+                              onClick={() => handleOpenDetail(item.account.id)}
+                            >
+                              <div className="tile__head">
+                                <div className="tile__head-left">
+                                  {item.account.provider_name && (
+                                    <span className="tile__bank">{item.account.provider_name}</span>
+                                  )}
+                                  <span className="tile__name">{item.account.name}</span>
+                                </div>
+                                <div className="tile__amount">
+                                  <span className="tile__debt">−{formatAmount(debt, user.base_currency_code)}</span>
+                                  <span className="tile__debt-label">долг</span>
                                 </div>
                               </div>
-                            </div>
-                            <div className="portfolio-position-card__sub-row">
-                              <span>
-                                {item.account.interest_rate != null
-                                  ? `${item.account.interest_rate}% годовых`
-                                  : null}
-                                {item.account.interest_rate != null && (item.account.credit_ends_at || item.account.payment_day != null)
-                                  ? ' · '
-                                  : null}
-                                {item.account.payment_day != null
-                                  ? `платёж ${item.account.payment_day}-го`
-                                  : null}
-                                {item.account.payment_day != null && item.account.credit_ends_at
-                                  ? ' · '
-                                  : null}
-                                {item.account.credit_ends_at
-                                  ? `до ${new Date(item.account.credit_ends_at).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })}`
-                                  : null}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              ))}
-          </div>
-        )}
-      </section>
 
-      {/* Detail modal */}
+                              {(item.account.interest_rate != null || item.account.payment_day != null || item.account.credit_ends_at) && (
+                                <div className="tile__meta">
+                                  {item.account.interest_rate != null && (
+                                    <span>{item.account.interest_rate}% годовых</span>
+                                  )}
+                                  {item.account.interest_rate != null && item.account.payment_day != null && (
+                                    <span className="tile__meta-sep" />
+                                  )}
+                                  {item.account.payment_day != null && (
+                                    <span>платёж {item.account.payment_day}-го</span>
+                                  )}
+                                  {item.account.payment_day != null && item.account.credit_ends_at && (
+                                    <span className="tile__meta-sep" />
+                                  )}
+                                  {item.account.credit_ends_at && (
+                                    <span>до {new Date(item.account.credit_ends_at).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })}</span>
+                                  )}
+                                </div>
+                              )}
+
+                              {isTermCredit(kind) && limit > 0 && (
+                                <div className="tile__progress">
+                                  <div className="tile__progress-meta">
+                                    <span className="tile__progress-text">Погашено</span>
+                                    <span className="tile__progress-pct">{termPct}%</span>
+                                  </div>
+                                  <div className="tile__progress-bar">
+                                    <div className="tile__progress-fill" style={{ width: `${termPct}%` }} />
+                                  </div>
+                                </div>
+                              )}
+
+                              {kind === 'credit_card' && limit > 0 && (
+                                <div className="tile__util">
+                                  <div className="tile__util-meta">
+                                    <span className="tile__util-text">
+                                      Использовано <strong>{formatAmount(debt, user.base_currency_code)}</strong> из {formatAmount(limit, user.base_currency_code)}
+                                    </span>
+                                    <span className="tile__util-text"><strong>{utilPct}%</strong></span>
+                                  </div>
+                                  <div className="tile__util-bar">
+                                    <div
+                                      className={`tile__util-fill${utilPct < 50 ? ' tile__util-fill--low' : utilPct < 80 ? ' tile__util-fill--mid' : ' tile__util-fill--high'}`}
+                                      style={{ width: `${utilPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* ── Pane: Операции ── */}
+      <div className={`view-pane${viewTab === 'ops' ? ' view-pane--on' : ''}`}>
+        <section className="card-sec">
+          <header className="card-sec__head">
+            <div className="card-sec__title-row">
+              <span className="card-sec__ico card-sec__ico--ops">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </span>
+              <div className="card-sec__title-meta">
+                <h3 className="card-sec__title">Операции</h3>
+                <span className="card-sec__sub">Кредитные счета · 30 дней</span>
+              </div>
+            </div>
+          </header>
+          <div className="card-sec__empty">История операций будет доступна в следующей версии</div>
+        </section>
+      </div>
+
+      {/* ── Pane: Аналитика ── */}
+      <div className={`view-pane${viewTab === 'analytics' ? ' view-pane--on' : ''}`}>
+        <section className="card-sec">
+          <header className="card-sec__head">
+            <div className="card-sec__title-row">
+              <span className="card-sec__ico card-sec__ico--anal">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M5 11V8M8 11V5M11 11v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </span>
+              <div className="card-sec__title-meta">
+                <h3 className="card-sec__title">Аналитика</h3>
+                <span className="card-sec__sub">Долговой портфель · {new Date().getFullYear()}</span>
+              </div>
+            </div>
+          </header>
+          <div className="card-sec__empty">Аналитика долгов будет доступна в следующей версии</div>
+        </section>
+      </div>
+
+      {/* ── Detail sheet ── */}
       {selectedCredit && (
         <div className="modal-backdrop" onClick={handleCloseDetail}>
           <div
-            ref={modalRef}
+            ref={sheetRef}
             className="modal-card"
             onClick={(e) => e.stopPropagation()}
           >
@@ -717,12 +950,15 @@ export default function Credits({ user }: { user: UserContext }) {
               <div>
                 <div className="section__eyebrow">{creditKindLabel(selectedCredit.account.credit_kind)}</div>
                 <div className="section__title">{selectedCredit.account.name}</div>
+                {selectedCredit.account.provider_name && (
+                  <div className="settings-row__sub">{selectedCredit.account.provider_name}</div>
+                )}
               </div>
             </div>
             <div className="modal-body">
               <div className="portfolio-position-detail">
 
-                {/* Debt info */}
+                {/* Debt info stats */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                   {isTermCredit(selectedCredit.account.credit_kind) && selectedSummary ? (
                     <>
@@ -795,12 +1031,6 @@ export default function Credits({ user }: { user: UserContext }) {
                         {' из '}
                         {formatAmount(selectedCredit.account.credit_limit, user.base_currency_code)}
                       </span>
-                    </div>
-                  )}
-                  {selectedCredit.account.provider_name && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span className="settings-row__sub">Банк</span>
-                      <span>{selectedCredit.account.provider_name}</span>
                     </div>
                   )}
                   {selectedCredit.account.interest_rate != null && (
@@ -1193,6 +1423,7 @@ export default function Credits({ user }: { user: UserContext }) {
         </div>
       )}
 
+      {/* ── Schedule modal ── */}
       {scheduleOpen && selectedCredit && (
         <div className="modal-backdrop" onClick={() => setScheduleOpen(false)}>
           <div className="modal-card credit-schedule-modal" onClick={(e) => e.stopPropagation()}>
@@ -1268,7 +1499,7 @@ export default function Credits({ user }: { user: UserContext }) {
         </div>
       )}
 
-      {/* New credit modal */}
+      {/* ── New credit modal ── */}
       {showNewForm && (
         <div className="modal-backdrop" onClick={() => !submittingNew && setShowNewForm(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
