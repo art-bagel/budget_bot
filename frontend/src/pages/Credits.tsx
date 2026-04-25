@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, House, Landmark, CreditCard, Pencil, Trash2, ArrowDownLeft, ArrowRight, CalendarDays } from 'lucide-react';
 import BottomSheet from '../components/BottomSheet';
+import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 function ApfSelect<T extends string>({
   value,
@@ -85,6 +86,12 @@ const CREDIT_KIND_OPTIONS: { value: CreditKind; label: string }[] = [
   { value: 'loan', label: 'Кредит' },
   { value: 'credit_card', label: 'Кредитная карта' },
 ];
+
+function creditKindIconColor(kind: CreditKind | null | undefined): { code: string; color: string } {
+  if (kind === 'mortgage') return { code: 'home', color: 'b' };
+  if (kind === 'credit_card') return { code: 'wallet', color: 'p' };
+  return { code: 'landmark', color: 'o' };
+}
 
 function creditKindLabel(kind: CreditKind | null | undefined): string {
   return CREDIT_KIND_OPTIONS.find((o) => o.value === kind)?.label ?? '—';
@@ -1121,6 +1128,8 @@ export default function Credits({ user }: { user: UserContext }) {
             gray
             title={selectedCredit.account.name}
             tag={creditKindLabel(selectedCredit.account.credit_kind)}
+            icon={<CategorySvgIcon code={creditKindIconColor(selectedCredit.account.credit_kind).code} />}
+            iconColor={creditKindIconColor(selectedCredit.account.credit_kind).color}
             onClose={handleCloseDetail}
           >
             <div className="credits-detail-body">
@@ -1314,7 +1323,7 @@ export default function Credits({ user }: { user: UserContext }) {
           </BottomSheet>
 
           {/* Repay sheet */}
-          <BottomSheet open={repaySheetOpen} title={selectedCredit.account.name} tag="Погашение" onClose={() => setRepaySheetOpen(false)}>
+          <BottomSheet open={repaySheetOpen} title={selectedCredit.account.name} tag="Погашение" icon={<CategorySvgIcon code="coins" />} iconColor="g" onClose={() => setRepaySheetOpen(false)}>
             <form className="apf-body" onSubmit={(e) => void handleRepay(e, selectedCredit.account.id)}>
               {isTerm && <p className="apf-balance">Платёж сначала покроет начисленные проценты, остаток уменьшит основной долг.</p>}
               <div className="apf-row">
@@ -1350,7 +1359,7 @@ export default function Credits({ user }: { user: UserContext }) {
           </BottomSheet>
 
           {/* Transfer sheet */}
-          <BottomSheet open={transferSheetOpen} title={selectedCredit.account.name} tag="Перевод с кредита" onClose={() => setTransferSheetOpen(false)}>
+          <BottomSheet open={transferSheetOpen} title={selectedCredit.account.name} tag="Перевод с кредита" icon={<CategorySvgIcon code="banknote" />} iconColor="b" onClose={() => setTransferSheetOpen(false)}>
             <form className="apf-body" onSubmit={(e) => void handleCreditTransfer(e, selectedCredit.account.id)}>
               <p className="apf-balance">Деньги попадут в свободный остаток выбранного личного или семейного счёта.</p>
               <div className="apf-row">
@@ -1393,6 +1402,8 @@ export default function Credits({ user }: { user: UserContext }) {
             gray
             tag="График платежей"
             title={selectedCredit.account.name}
+            icon={<CategorySvgIcon code="chart" />}
+            iconColor="v"
             onClose={() => setScheduleOpen(false)}
           >
             {scheduleYears.length > 0 && (
@@ -1460,6 +1471,8 @@ export default function Credits({ user }: { user: UserContext }) {
           open={showNewForm}
           tag="Создать"
           title={newKindStep === 'pick' ? 'Новый кредитный счёт' : creditKindTitle(newKind)}
+          icon={<CategorySvgIcon code={newKindStep === 'pick' ? 'briefcase' : creditKindIconColor(newKind).code} />}
+          iconColor={newKindStep === 'pick' ? 'r' : creditKindIconColor(newKind).color}
           onClose={closeNewCreditSheet}
         >
           {newKindStep === 'pick' ? (

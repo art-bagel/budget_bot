@@ -1,5 +1,6 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { TrendingUp, Landmark, Coins, Package, Info } from 'lucide-react';
+import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 import {
   cancelPortfolioIncome,
@@ -255,6 +256,13 @@ function formatDateLabel(value: string): string {
     month: 'short',
     year: 'numeric',
   }).format(new Date(value));
+}
+
+function assetTypeIconColor(code: string): { icon: string; color: string } {
+  if (code === 'security') return { icon: 'chart', color: 'b' };
+  if (code === 'deposit')  return { icon: 'landmark', color: 'g' };
+  if (code === 'crypto')   return { icon: 'coins', color: 'o' };
+  return { icon: 'package', color: 'p' };
 }
 
 function assetTypeLabel(assetTypeCode: string): string {
@@ -3404,10 +3412,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
               !account.investment_asset_type || account.investment_asset_type === addSheetTypeCode,
             )
           : accounts;
+        const addSheetIconColor = addSheetTypeCode ? assetTypeIconColor(addSheetTypeCode) : { icon: 'briefcase', color: 'r' };
         return (
           <BottomSheet
             open={addSheetOpen}
+            tag="Портфель"
             title={sheetTitle}
+            icon={<CategorySvgIcon code={addSheetIconColor.icon} />}
+            iconColor={addSheetIconColor.color}
             onClose={() => { setAddSheetOpen(false); setAddSheetTypeCode(null); }}
           >
             {addSheetTypeCode === null ? (
@@ -3456,10 +3468,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
               !account.investment_asset_type || account.investment_asset_type === heroTypeSheetCode,
             )
           : [];
+        const heroIconColor = heroTypeSheetCode ? assetTypeIconColor(heroTypeSheetCode) : { icon: 'chart', color: 'b' };
         return (
           <BottomSheet
             open={heroTypeSheetCode !== null}
+            tag="Портфель"
             title={sheetTab?.label ?? ''}
+            icon={<CategorySvgIcon code={heroIconColor.icon} />}
+            iconColor={heroIconColor.color}
             onClose={() => setHeroTypeSheetCode(null)}
           >
             <div className="pf-sheet-accounts">
@@ -3572,10 +3588,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
           setNewAccountOwnerType('user');
           setCreateAccountError(null);
         };
+        const newAccIconColor = newAccountStep === 'pick' ? { icon: 'briefcase', color: 'r' } : assetTypeIconColor(newAccountAssetType);
         return (
           <BottomSheet
             open={showNewAccountModal}
+            tag="Создать"
             title={newAccountStep === 'pick' ? 'Новый инвестиционный счёт' : `Новый счёт · ${selectedTile?.label ?? ''}`}
+            icon={<CategorySvgIcon code={newAccIconColor.icon} />}
+            iconColor={newAccIconColor.color}
             onClose={resetAndClose}
           >
             {newAccountStep === 'pick' ? (
