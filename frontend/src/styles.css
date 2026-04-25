@@ -8379,6 +8379,38 @@ select.dlg-row__ghost option {
 .tile__util-text { font-size: 11.5px; color: var(--text-2); font-weight: 500; }
 .tile__util-text strong { color: var(--text); font-weight: 700; }
 
+.tile__next {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  background: var(--bg, #EEF0F3);
+  border-radius: var(--r-sm, 8px);
+}
+.tile__next-ico {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.tile__next-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.tile__next-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  flex: 1;
+}
+.tile__next-amount {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
 /* Credits empty state */
 .credits-empty {
   text-align: center;

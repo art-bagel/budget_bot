@@ -87,6 +87,13 @@ const CREDIT_KIND_OPTIONS: { value: CreditKind; label: string }[] = [
   { value: 'credit_card', label: 'Кредитная карта' },
 ];
 
+function nextPaymentDateFromDay(day: number): string {
+  const now = new Date();
+  const candidate = new Date(now.getFullYear(), now.getMonth(), day);
+  if (candidate <= now) candidate.setMonth(candidate.getMonth() + 1);
+  return candidate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+}
+
 function creditKindIconColor(kind: CreditKind | null | undefined): { code: string; color: string } {
   if (kind === 'mortgage') return { code: 'home', color: 'b' };
   if (kind === 'credit_card') return { code: 'wallet', color: 'p' };
@@ -269,6 +276,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const [segtogMode, setSegtogMode] = useState<'now' | 'withint'>('now');
   const [totalAccruedInterest, setTotalAccruedInterest] = useState<number>(0);
   const [interestLoading, setInterestLoading] = useState(false);
+  const [summariesByAccountId, setSummariesByAccountId] = useState<Record<number, CreditAccountSummary>>({});
 
   // Selected credit for detail panel
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -390,6 +398,9 @@ export default function Credits({ user }: { user: UserContext }) {
           0,
         );
         setTotalAccruedInterest(total);
+        const byId: Record<number, CreditAccountSummary> = {};
+        termIds.forEach((id, i) => { if (summaries[i]) byId[id] = summaries[i]!; });
+        setSummariesByAccountId(byId);
       })
       .finally(() => { if (!cancelled) setInterestLoading(false); });
     return () => { cancelled = true; };
@@ -1000,7 +1011,7 @@ export default function Credits({ user }: { user: UserContext }) {
                                 </div>
                                 <div className="tile__amount">
                                   <span className="tile__debt">−{formatAmount(debt, user.base_currency_code)}</span>
-                                  <span className="tile__debt-label">долг</span>
+                                  <span className="tile__debt-label">{kind === 'credit_card' ? 'использовано' : 'остаток долга'}</span>
                                 </div>
                               </div>
 
@@ -1052,6 +1063,29 @@ export default function Credits({ user }: { user: UserContext }) {
                                   </div>
                                 </div>
                               )}
+
+                              {isTermCredit(kind) && (() => {
+                                const summary = summariesByAccountId[item.account.id];
+                                const nextDate = summary?.next_payment_date
+                                  ? new Date(summary.next_payment_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+                                  : item.account.payment_day != null
+                                    ? nextPaymentDateFromDay(item.account.payment_day)
+                                    : null;
+                                const nextAmount = summary?.next_payment_total;
+                                if (!nextDate) return null;
+                                return (
+                                  <div className="tile__next">
+                                    <svg className="tile__next-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                                      <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+                                    </svg>
+                                    <span className="tile__next-label">Следующий платёж</span>
+                                    <span className="tile__next-date">{nextDate}</span>
+                                    {nextAmount != null && (
+                                      <span className="tile__next-amount">{formatAmount(nextAmount, user.base_currency_code)}</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </button>
                           );
                         })}
