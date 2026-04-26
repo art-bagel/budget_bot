@@ -20,7 +20,22 @@ export function usePullToRefresh(
     const el = ref.current;
     if (!el) return;
 
-    const stateRef = { current: null as { startX: number; startY: number; blocked: boolean } | null };
+    const stateRef = {
+      current: null as {
+        startX: number;
+        startY: number;
+        blocked: boolean;
+        startedAtTop: boolean;
+      } | null,
+    };
+
+    const getScrollTop = () => {
+      if (el.scrollHeight > el.clientHeight) {
+        return el.scrollTop;
+      }
+
+      return window.scrollY || document.documentElement.scrollTop || 0;
+    };
 
     const findNestedScrollable = (target: EventTarget | null): HTMLElement | null => {
       if (!(target instanceof HTMLElement)) {
@@ -51,21 +66,25 @@ export function usePullToRefresh(
         return;
       }
 
-      // Only activate when scrolled to the very top
-      if (window.scrollY > 0) {
+      const startedAtTop = getScrollTop() <= 1;
+
+      // Only activate when the gesture starts from the top edge
+      if (!startedAtTop) {
         stateRef.current = null;
         return;
       }
+
       stateRef.current = {
         startX: e.touches[0].clientX,
         startY: e.touches[0].clientY,
         blocked: false,
+        startedAtTop,
       };
     };
 
     const onMove = (e: TouchEvent) => {
       const s = stateRef.current;
-      if (!s || s.blocked) return;
+      if (!s || s.blocked || !s.startedAtTop) return;
       const dx = e.touches[0].clientX - s.startX;
       const dy = e.touches[0].clientY - s.startY;
       // Block if horizontal movement dominates

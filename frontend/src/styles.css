@@ -297,12 +297,10 @@ input { font: inherit; color: inherit; }
   max-width: 440px;
   margin: 0 auto;
   min-height: 100vh;
-  height: var(--visual-viewport-height, 100svh);
   display: flex;
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg);
-  overflow: hidden;
 }
 
 /* sidebar — desktop only */
@@ -366,17 +364,11 @@ input { font: inherit; color: inherit; }
 .main {
   flex: 1;
   min-width: 0;
-  min-height: 0;
   padding: 4px 16px 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-  touch-action: pan-y;
 }
 
 /* page wrapper — flex column so inner sections get proper gaps */
@@ -4483,18 +4475,12 @@ select.dlg-row__ghost option {
 /* ── Desktop breakpoint ──────────────────────────── */
 
 @media (min-width: 768px) {
-  .app {
-    height: auto;
-    overflow: visible;
-  }
-
   .sidebar { display: flex; }
   .bottom-nav { display: none; }
 
   .main {
     padding: 32px 40px;
     max-width: 1040px;
-    overflow: visible;
   }
 
   .metrics {
