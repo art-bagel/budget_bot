@@ -37,6 +37,7 @@ import {
   IconArrowRightLeft,
   IconChevronRight,
   IconPlus,
+  IconRefreshCw,
 } from '../components/Icons';
 import { categoryDisplayName, parseCategoryIcon } from '../utils/categoryIcon';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
@@ -81,6 +82,17 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       return () => document.body.classList.remove('modal-open');
     }
   }, [accountSheet]);
+
+  useEffect(() => {
+    const scrollingElement = document.scrollingElement;
+
+    if (scrollingElement) {
+      scrollingElement.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [viewTab]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
@@ -649,7 +661,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           <span className="qa__label">Пополнить</span>
         </button>
         <button className="qa" type="button" onClick={() => setShowExchange(true)}>
-          <span className="qa__ico qa__ico--alt"><IconArrowRightLeft /></span>
+          <span className="qa__ico qa__ico--alt"><IconRefreshCw /></span>
           <span className="qa__label">Обмен</span>
         </button>
         <button className="qa" type="button" onClick={() => setShowAccountTransfer(true)}>

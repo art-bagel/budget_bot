@@ -901,7 +901,13 @@ export default function Operations({
             <h2 className="section__title">История и аналитика</h2>
           </div>
         )}
-        <div className={[embedded ? '' : 'panel', !embedded && viewMode === 'analytics' ? 'panel--analytics' : ''].filter(Boolean).join(' ')}>
+        <div
+          className={[
+            'panel',
+            embedded ? 'panel--embedded-pane' : '',
+            viewMode === 'analytics' ? 'panel--analytics' : '',
+          ].filter(Boolean).join(' ')}
+        >
           {showModeSwitch && <div className="operations-mode-switch">
             {nonAnalyticsModes.map((mode) => (
               <button

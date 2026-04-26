@@ -297,10 +297,12 @@ input { font: inherit; color: inherit; }
   max-width: 440px;
   margin: 0 auto;
   min-height: 100vh;
+  height: var(--visual-viewport-height, 100svh);
   display: flex;
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg);
+  overflow: hidden;
 }
 
 /* sidebar — desktop only */
@@ -364,11 +366,17 @@ input { font: inherit; color: inherit; }
 .main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: 4px 16px 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 /* page wrapper — flex column so inner sections get proper gaps */
@@ -986,7 +994,7 @@ input { font: inherit; color: inherit; }
 
 .quickrow {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   margin: 6px 0;
   animation: in-slide .45s cubic-bezier(.25, 1, .4, 1) .1s both;
@@ -1620,10 +1628,14 @@ input { font: inherit; color: inherit; }
   padding: 20px;
 }
 
+.panel--embedded-pane {
+  padding: 16px;
+  border-color: transparent;
+  box-shadow: var(--sh-1);
+}
+
 .panel--analytics {
-  background:
-    radial-gradient(circle at top, rgba(61, 189, 168, 0.07), transparent 38%),
-    var(--bg-surface);
+  background: var(--bg-surface);
 }
 
 .operations-note,
@@ -4471,12 +4483,18 @@ select.dlg-row__ghost option {
 /* ── Desktop breakpoint ──────────────────────────── */
 
 @media (min-width: 768px) {
+  .app {
+    height: auto;
+    overflow: visible;
+  }
+
   .sidebar { display: flex; }
   .bottom-nav { display: none; }
 
   .main {
     padding: 32px 40px;
     max-width: 1040px;
+    overflow: visible;
   }
 
   .metrics {
@@ -8084,7 +8102,14 @@ select.dlg-row__ghost option {
 }
 
 /* View panes */
-.view-pane { display: none; flex-direction: column; gap: 16px; }
+.view-pane {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
 .view-pane--on { display: flex; }
 
 /* Inline switcher (used inside sheets, 2 options) */
@@ -8097,6 +8122,12 @@ select.dlg-row__ghost option {
 .viewtog--inline .viewtog__opt {
   padding: 9px 6px;
   font-size: 13px;
+}
+
+.viewtog--inline-soft .viewtog__opt--on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--sh-1);
 }
 
 /* Card sections (Операции / Аналитика panes) */

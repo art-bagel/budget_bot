@@ -71,6 +71,17 @@ export function IconArrowRightLeft() {
   return <svg viewBox="0 0 24 24" {...s}><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>;
 }
 
+export function IconRefreshCw() {
+  return (
+    <svg viewBox="0 0 24 24" {...s}>
+      <path d="M21 3v6h-6" />
+      <path d="M3 21v-6h6" />
+      <path d="M20 9a8 8 0 0 0-13.66-3.66L3 8" />
+      <path d="M4 15a8 8 0 0 0 13.66 3.66L21 16" />
+    </svg>
+  );
+}
+
 
 export function IconTag() {
   return (

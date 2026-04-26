@@ -201,7 +201,7 @@ export default function ExchangeSheet({
       }
     >
       {hasFamily && (
-        <div className="viewtog viewtog--inline" role="tablist" aria-label="Счёт">
+        <div className="viewtog viewtog--inline viewtog--inline-soft" role="tablist" aria-label="Счёт">
           <button
             type="button"
             role="tab"
