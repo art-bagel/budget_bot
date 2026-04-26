@@ -105,90 +105,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
 
   const activeSourceId = draggedCategoryId;
 
-  /* ── swipe tracking (hero only) ─────────────────── */
-
-  const heroSwipeRef = useRef<{
-    startX: number;
-    startY: number;
-    decided: boolean;
-    isHorizontal: boolean;
-    actionTriggered: boolean;
-    element: HTMLElement | null;
-  } | null>(null);
-
-  const handleHeroSwipeStart = (e: React.TouchEvent) => {
-    heroSwipeRef.current = {
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-      decided: false,
-      isHorizontal: false,
-      actionTriggered: false,
-      element: e.currentTarget as HTMLElement,
-    };
-  };
-
-  const handleHeroSwipeMove = (e: React.TouchEvent) => {
-    const s = heroSwipeRef.current;
-    if (!s) return;
-    if (s.actionTriggered) return;
-
-    const dx = e.touches[0].clientX - s.startX;
-    const dy = e.touches[0].clientY - s.startY;
-
-    if (!s.decided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
-      s.decided = true;
-      s.isHorizontal = Math.abs(dx) > Math.abs(dy);
-    }
-
-    if (s.isHorizontal && s.element) {
-      const offset = Math.max(-96, Math.min(0, dx));
-      s.element.style.transform = `translateX(${offset}px)`;
-      s.element.style.transition = 'none';
-
-      const actionThreshold = getSwipeActionThreshold(s.element);
-
-      if (dx <= -actionThreshold) {
-        s.actionTriggered = true;
-        suppressClickUntilRef.current = Date.now() + 300;
-        resetSwipeElement(s.element);
-        hapticRigid();
-        setShowAccountTransfer(true);
-      }
-    }
-  };
-
-  const handleHeroSwipeEnd = (e: React.TouchEvent) => {
-    const s = heroSwipeRef.current;
-    heroSwipeRef.current = null;
-    if (!s) return;
-
-    resetSwipeElement(s.element);
-
-    if (s.actionTriggered) {
-      return;
-    }
-
-    if (!s || !s.decided || !s.isHorizontal) return;
-    const dx = e.changedTouches[0].clientX - s.startX;
-    if (dx < -50) {
-      suppressClickUntilRef.current = Date.now() + 300;
-      hapticRigid();
-      setShowAccountTransfer(true);
-    }
-  };
-
-  const resetSwipeElement = (element: HTMLElement | null) => {
-    if (!element) return;
-    element.style.transition = 'transform 0.2s ease';
-    element.style.transform = '';
-    window.setTimeout(() => { element.style.transition = ''; }, 200);
-  };
-
-  const getSwipeActionThreshold = (element: HTMLElement | null) => {
-    const width = element?.offsetWidth ?? 0;
-    return Math.max(48, Math.min(80, width * 0.2));
-  };
-
   const [showFreeBudgetSheet, setShowFreeBudgetSheet] = useState(false);
 
   /* ── data loading ───────────────────────────────── */
@@ -559,12 +475,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   return (
     <>
       {/* Hero — yellow capital card */}
-      <article
-        className="hero"
-        onTouchStart={hasFamily ? handleHeroSwipeStart : undefined}
-        onTouchMove={hasFamily ? handleHeroSwipeMove : undefined}
-        onTouchEnd={hasFamily ? handleHeroSwipeEnd : undefined}
-      >
+      <article className="hero">
         <div className="hero__head">
           <span className="hero__eyebrow">Чистый капитал</span>
           <button

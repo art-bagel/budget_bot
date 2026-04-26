@@ -273,15 +273,25 @@
 /* ── Reset ───────────────────────────────────────── */
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+html {
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overflow-y: auto;
+}
 body {
   margin: 0;
+  min-height: 100%;
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-size: 15px;
   line-height: 1.42;
   transition: background-color .25s ease, color .25s ease;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 ul, ol, dl, dd, dt { margin: 0; padding: 0; list-style: none; }
@@ -301,6 +311,7 @@ input { font: inherit; color: inherit; }
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg);
+  touch-action: pan-y;
 }
 
 /* sidebar — desktop only */
@@ -369,6 +380,7 @@ input { font: inherit; color: inherit; }
   flex-direction: column;
   gap: 16px;
   width: 100%;
+  touch-action: pan-y;
 }
 
 /* page wrapper — flex column so inner sections get proper gaps */
@@ -376,7 +388,7 @@ input { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   width: 100%;
 }

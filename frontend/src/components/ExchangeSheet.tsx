@@ -47,7 +47,7 @@ export default function ExchangeSheet({
   onClose,
   onSuccess,
 }: Props) {
-  useModalOpen();
+  useModalOpen(open);
 
   const [account, setAccount] = useState<AccountKind>(initialAccount);
   const [currencies, setCurrencies] = useState<Currency[]>([]);

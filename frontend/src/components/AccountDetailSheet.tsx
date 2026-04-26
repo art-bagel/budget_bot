@@ -56,7 +56,7 @@ export default function AccountDetailSheet({
   ownerKind,
   onClose,
 }: Props) {
-  useModalOpen();
+  useModalOpen(open);
 
   const sortedBalances = useMemo(() => {
     const positive = balances.filter((b) => b.historical_cost_in_base > 0);

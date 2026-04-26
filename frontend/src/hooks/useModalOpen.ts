@@ -5,8 +5,12 @@ import { useEffect } from 'react';
  * This is more reliable than CSS :has(.modal-backdrop) in Telegram WebApp
  * for fixing keyboard white-corner artefacts.
  */
-export function useModalOpen(): void {
+export function useModalOpen(enabled = true): void {
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     let frameId = 0;
     let timeoutId = 0;
 
@@ -70,5 +74,5 @@ export function useModalOpen(): void {
       window.visualViewport?.removeEventListener('resize', scheduleScroll);
       window.visualViewport?.removeEventListener('scroll', scheduleScroll);
     };
-  }, []);
+  }, [enabled]);
 }

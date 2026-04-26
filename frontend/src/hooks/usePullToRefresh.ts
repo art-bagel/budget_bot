@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 
 const MIN_DISTANCE = 80; // px — minimum downward travel
 const MAX_ANGLE = 0.5;   // tan(angle) — keeps gesture mostly vertical
+const TOP_EDGE_ZONE = 120; // px — gesture must start near the top edge
 
 export function usePullToRefresh(
   ref: RefObject<HTMLElement | null>,
@@ -26,6 +27,7 @@ export function usePullToRefresh(
         startY: number;
         blocked: boolean;
         startedAtTop: boolean;
+        startedNearTopEdge: boolean;
       } | null,
     };
 
@@ -67,9 +69,10 @@ export function usePullToRefresh(
       }
 
       const startedAtTop = getScrollTop() <= 1;
+      const startedNearTopEdge = e.touches[0].clientY <= TOP_EDGE_ZONE;
 
       // Only activate when the gesture starts from the top edge
-      if (!startedAtTop) {
+      if (!startedAtTop || !startedNearTopEdge) {
         stateRef.current = null;
         return;
       }
@@ -79,12 +82,13 @@ export function usePullToRefresh(
         startY: e.touches[0].clientY,
         blocked: false,
         startedAtTop,
+        startedNearTopEdge,
       };
     };
 
     const onMove = (e: TouchEvent) => {
       const s = stateRef.current;
-      if (!s || s.blocked || !s.startedAtTop) return;
+      if (!s || s.blocked || !s.startedAtTop || !s.startedNearTopEdge) return;
       const dx = e.touches[0].clientX - s.startX;
       const dy = e.touches[0].clientY - s.startY;
       // Block if horizontal movement dominates
