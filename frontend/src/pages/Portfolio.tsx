@@ -81,6 +81,7 @@ type PartialCloseDraft = {
   returnCurrencyCode: string;
   returnBaseAmount: string;
   principalReduction: string;
+  principalEditedManually: boolean;
   closedQuantity: string;
   closedAt: string;
   comment: string;
@@ -365,6 +366,7 @@ function createInitialPartialCloseDraft(position: PortfolioPosition): PartialClo
     returnCurrencyCode: position.currency_code,
     returnBaseAmount: '',
     principalReduction: '',
+    principalEditedManually: false,
     closedQuantity: '',
     closedAt: todayIso(),
     comment: '',
@@ -1137,13 +1139,26 @@ export default function Portfolio({ user }: { user: UserContext }) {
     positionId: number,
     patch: Partial<PartialCloseDraft>,
   ) => {
-    setPartialCloseDrafts((prev) => ({
-      ...prev,
-      [positionId]: {
-        ...(prev[positionId] ?? createInitialPartialCloseDraft(getDraftPositionFallback(positionId))),
+    setPartialCloseDrafts((prev) => {
+      const currentDraft = prev[positionId] ?? createInitialPartialCloseDraft(getDraftPositionFallback(positionId));
+      const nextDraft: PartialCloseDraft = {
+        ...currentDraft,
         ...patch,
-      },
-    }));
+      };
+
+      if (patch.principalReduction !== undefined) {
+        nextDraft.principalEditedManually = true;
+      }
+
+      if (patch.returnAmount !== undefined && !currentDraft.principalEditedManually && patch.principalReduction === undefined) {
+        nextDraft.principalReduction = patch.returnAmount;
+      }
+
+      return {
+        ...prev,
+        [positionId]: nextDraft,
+      };
+    });
   };
 
   const handleFeeDraftChange = (
