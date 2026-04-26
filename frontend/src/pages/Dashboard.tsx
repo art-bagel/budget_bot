@@ -25,6 +25,7 @@ import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
+import AccountDetailSheet from '../components/AccountDetailSheet';
 import AccountTransferDialog from '../components/AccountTransferDialog';
 import BottomSheet from '../components/BottomSheet';
 import CategoryActionSheet from '../components/CategoryActionSheet';
@@ -71,17 +72,18 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   };
 
   const [showBankDetail, setShowBankDetail] = useState(false);
+  const [accountSheet, setAccountSheet] = useState<'personal' | 'family' | null>(null);
   const [showBankHub, setShowBankHub] = useState(false);
   const [bankHubMode, setBankHubMode] = useState<DashboardBankHubMode>('history');
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
   const [showAccountTransfer, setShowAccountTransfer] = useState(false);
 
   useEffect(() => {
-    if (showBankDetail || showBankHub) {
+    if (showBankDetail || showBankHub || accountSheet) {
       document.body.classList.add('modal-open');
       return () => document.body.classList.remove('modal-open');
     }
-  }, [showBankDetail, showBankHub]);
+  }, [showBankDetail, showBankHub, accountSheet]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
@@ -581,8 +583,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
             className="hero__row"
             role="button"
             tabIndex={0}
-            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setAccountSheet('personal'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAccountSheet('personal'); }}
           >
             <dt><span className="hero__mark hero__mark--ink" />&nbsp;Личный счёт</dt>
             <dd>
@@ -598,8 +600,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
               className="hero__row"
               role="button"
               tabIndex={0}
-              onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+              onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setAccountSheet('family'); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAccountSheet('family'); }}
             >
               <dt><span className="hero__mark hero__mark--coral" />&nbsp;Семейный счёт</dt>
               <dd>
@@ -1097,6 +1099,23 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           familyBalances={overview.family_bank_balances}
           onClose={() => setShowAccountTransfer(false)}
           onSuccess={() => { setShowAccountTransfer(false); void loadOverview(); }}
+        />
+      )}
+
+      {accountSheet && (
+        <AccountDetailSheet
+          open
+          ownerKind={accountSheet}
+          bankAccountId={
+            accountSheet === 'family'
+              ? (overview.family_bank_account_id ?? user.bank_account_id)
+              : user.bank_account_id
+          }
+          accountTitle={accountSheet === 'family' ? 'Семейный счёт' : 'Личный счёт'}
+          baseCurrencyCode={overview.base_currency_code}
+          balances={accountSheet === 'family' ? overview.family_bank_balances : overview.bank_balances}
+          onClose={() => setAccountSheet(null)}
+          onSuccess={() => { void loadOverview(); }}
         />
       )}
 

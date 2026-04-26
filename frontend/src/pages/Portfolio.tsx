@@ -135,6 +135,7 @@ type PortfolioAnalyticsBucket = {
   label: string;
   estimatedValue: number;
   investedPrincipal: number;
+  nkdValue: number;
   currentResult: number;
   positionsCount: number;
   share: number;
@@ -146,6 +147,7 @@ type PortfolioAnalyticsAccountItem = {
   ownerLabel: string | null;
   estimatedValue: number;
   investedPrincipal: number;
+  nkdValue: number;
   cashValue: number;
   resultValue: number;
   positionsCount: number;
@@ -753,6 +755,25 @@ export default function Portfolio({ user }: { user: UserContext }) {
     };
   };
 
+  const isUnpricedTinkoffPosition = (position: PortfolioPosition): boolean => (
+    tinkoffLivePrices.get(position.id)?.source === 'tinkoff_unpriced'
+  );
+
+  const getPositionVisibleInvestedPrincipal = (position: PortfolioPosition): number => {
+    if (position.asset_type_code === 'security' && isUnpricedTinkoffPosition(position)) {
+      return 0;
+    }
+    return getPositionInvestedPrincipal(position);
+  };
+
+  const getPositionNkdValue = (position: PortfolioPosition): number => {
+    const tinkoffPrice = tinkoffLivePrices.get(position.id);
+    if (!tinkoffPrice || tinkoffPrice.clean_current_value === undefined || tinkoffPrice.clean_current_value === null) {
+      return 0;
+    }
+    return tinkoffPrice.current_value - tinkoffPrice.clean_current_value;
+  };
+
   const getResolvedPositionEstimatedValue = (position: PortfolioPosition) => (
     getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency
   );
@@ -965,10 +986,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
   const accountOpenPrincipalById = useMemo(
     () => openPositions.reduce<Record<number, number>>((acc, position) => {
-      acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + getPositionInvestedPrincipal(position);
+      acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + getPositionVisibleInvestedPrincipal(position);
       return acc;
     }, {}),
-    [openPositions],
+    [openPositions, tinkoffLivePrices],
   );
 
   const accountCurrentResultById = useMemo(
@@ -1607,13 +1628,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const activeScopeDisplayMetrics = useMemo(() => {
     const scopedOpenPositions = activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions;
     const scopedGroups = activeAssetTypeCode === 'all' ? filteredOpenPositionGroups : visibleOpenPositionGroups;
+    const nkdValue = scopedOpenPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
+    const investedPrincipal = scopedOpenPositions.reduce((sum, position) => sum + (
+      activeAssetTypeCode === 'security'
+        ? getPositionVisibleInvestedPrincipal(position)
+        : getPositionInvestedPrincipal(position)
+    ), 0);
     return {
       estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0),
-      investedPrincipal: scopedOpenPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
+      investedPrincipal,
       cashValue: activeAssetTypeCode === 'all'
         ? totalInvestmentCashInBase
         : scopedGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
       resultValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
+      nkdValue,
       resultLabel: 'Доход',
     };
   }, [
@@ -1630,6 +1658,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const activeScopeBaseValue = activeScopeDisplayMetrics.investedPrincipal;
   const activeScopeResultValue = activeScopeDisplayMetrics.resultValue;
   const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
+  const activeScopeNkdValue = activeScopeDisplayMetrics.nkdValue;
   const activeScopeBasisLabel = 'Вложено';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
     ? Landmark
@@ -1648,13 +1677,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
     const buckets = SECURITY_KIND_OPTIONS.map((option) => {
       const sectionPositions = visibleOpenPositions.filter((position) => getSecurityKindCode(position) === option.value);
       const estimatedValue = sectionPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
-      const investedPrincipal = sectionPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
+      const investedPrincipal = sectionPositions.reduce((sum, position) => sum + getPositionVisibleInvestedPrincipal(position), 0);
+      const nkdValue = sectionPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
       const currentResult = sectionPositions.reduce((sum, position) => sum + (getResolvedPositionCurrentResult(position) ?? 0), 0);
       return {
         key: option.value,
         label: option.label,
         estimatedValue,
         investedPrincipal,
+        nkdValue,
         currentResult,
         positionsCount: sectionPositions.length,
         share: totalEstimated > 0 ? estimatedValue / totalEstimated : 0,
@@ -1667,7 +1698,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const portfolioAnalyticsAccounts = useMemo<PortfolioAnalyticsAccountItem[]>(
     () => visibleOpenPositionGroups.map((group) => {
       const estimatedValue = group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
-      const investedPrincipal = group.positions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
+      const investedPrincipal = group.positions.reduce((sum, position) => sum + (
+        activeAssetTypeCode === 'security'
+          ? getPositionVisibleInvestedPrincipal(position)
+          : getPositionInvestedPrincipal(position)
+      ), 0);
+      const nkdValue = group.positions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
       const resultValue = activeAssetTypeCode === 'security'
         ? group.positions.reduce((sum, position) => sum + (getResolvedPositionCurrentResult(position) ?? 0), 0)
         : group.positions.reduce((sum, position) => sum + getPositionRealizedResult(position), 0);
@@ -1677,6 +1713,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         ownerLabel: group.ownerType === 'family' ? 'Семейный счет' : 'Личный счет',
         estimatedValue,
         investedPrincipal,
+        nkdValue,
         cashValue: summaryByAccountId[group.accountId]?.cash_balance_in_base ?? 0,
         resultValue,
         positionsCount: group.positions.length,
@@ -2080,7 +2117,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeResultValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
-                  {activeScopeBaseValue > 0 && (
+                  {activeAssetTypeCode === 'security' && activeScopeNkdValue > 0 ? (
+                    <div className="pf-tsum__cell-note">
+                      НКД +{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeNkdValue)}
+                      <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                    </div>
+                  ) : activeScopeBaseValue > 0 && (
                     <div className="pf-tsum__cell-note">
                       {activeScopeResultValue >= 0 ? '+' : ''}
                       {activeScopeResultPct.toFixed(1)}%
@@ -2563,12 +2605,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 {portfolioAnalyticsBuckets.map((bucket) => (
                   <div key={bucket.key} className="portfolio-analytics-row">
                     <div className="portfolio-analytics-row__top">
-                      <div>
-                        <div className="portfolio-analytics-row__title">{bucket.label}</div>
-                        <div className="portfolio-analytics-row__meta">
+                        <div>
+                          <div className="portfolio-analytics-row__title">{bucket.label}</div>
+                          <div className="portfolio-analytics-row__meta">
                           {bucket.positionsCount} поз. · Вложено {formatAmount(bucket.investedPrincipal, user.base_currency_code)}
+                          {bucket.nkdValue > 0 ? ` · НКД ${formatAmount(bucket.nkdValue, user.base_currency_code)}` : ''}
+                          </div>
                         </div>
-                      </div>
                       <div className="portfolio-analytics-row__side">
                         <strong>{formatAmount(bucket.estimatedValue, user.base_currency_code)}</strong>
                         <span className={bucket.currentResult >= 0 ? 'portfolio-analytics-row__result portfolio-analytics-row__result--pos' : 'portfolio-analytics-row__result portfolio-analytics-row__result--neg'}>
@@ -2611,6 +2654,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   </div>
                   <div className="portfolio-analytics-row__meta portfolio-analytics-row__meta--inline">
                     Вложено {formatAmount(account.investedPrincipal, user.base_currency_code)}
+                    {activeAssetTypeCode === 'security' && account.nkdValue > 0 ? ` · НКД ${formatAmount(account.nkdValue, user.base_currency_code)}` : ''}
                   </div>
                 </div>
               ))}
@@ -3546,7 +3590,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 const isSecuritySheet = heroTypeSheetCode === 'security';
                 const cashValueInBase = Number(summary?.cash_balance_in_base ?? 0);
                 const estimatedValue = accountOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0);
-                const investedPrincipal = accountOpenPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
+                const investedPrincipal = accountOpenPositions.reduce((sum, position) => sum + (
+                  isSecuritySheet ? getPositionVisibleInvestedPrincipal(position) : getPositionInvestedPrincipal(position)
+                ), 0);
+                const nkdValue = accountOpenPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
                 const netContributed = Number(summary?.net_contributed_in_base ?? 0);
                 const displayIncome = accountOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0);
                 const currentAccountValue = estimatedValue + cashValueInBase;
@@ -3604,6 +3651,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         <div className="pf-sheet-account__row">
                           <span>Вложено</span>
                           <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investedPrincipal)} {currencySymbol(user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                      {isSecuritySheet && nkdValue > 0 && (
+                        <div className="pf-sheet-account__row">
+                          <span>НКД</span>
+                          <strong>+{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(nkdValue)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
                       {netContributed !== 0 && (
