@@ -87,6 +87,30 @@ BEGIN
           ON sa.id = pp.investment_account_id
         GROUP BY pp.investment_account_id
     ),
+    position_flow_by_account AS (
+        SELECT
+            pp.investment_account_id,
+            COALESCE(sum(
+                CASE
+                    WHEN pe.event_type IN ('partial_close', 'close')
+                        THEN COALESCE((pe.metadata ->> 'principal_amount_in_base')::numeric, 0)
+                    ELSE 0
+                END
+            ), 0) AS returned_principal_in_base,
+            COALESCE(sum(
+                CASE
+                    WHEN pe.event_type = 'income' AND COALESCE(pe.metadata ->> 'destination', 'account') = 'position'
+                        THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
+                    ELSE 0
+                END
+            ), 0) AS reinvested_income_in_base
+        FROM portfolio_events pe
+        JOIN portfolio_positions pp
+          ON pp.id = pe.position_id
+        JOIN scoped_accounts sa
+          ON sa.id = pp.investment_account_id
+        GROUP BY pp.investment_account_id
+    ),
     contribution_entries AS (
         SELECT
             sa.id AS bank_account_id,
@@ -129,36 +153,42 @@ BEGIN
                 )
               )
     ),
-    contributions_by_account AS (
+    contribution_amounts AS (
         SELECT
             ce.bank_account_id,
-            COALESCE(sum(
-                CASE
-                    WHEN ce.currency_code = budgeting.get__owner_base_currency(ce.owner_type, ce.owner_user_id, ce.owner_family_id)
-                        THEN round(ce.amount, 2)
-                    WHEN ce.amount > 0
-                        THEN COALESCE((
-                            SELECT sum(fl.cost_base_initial)
-                            FROM fx_lots fl
-                            WHERE fl.opened_by_operation_id = ce.operation_id
-                              AND fl.bank_account_id = ce.bank_account_id
-                              AND fl.currency_code = ce.currency_code
-                        ), round(ce.amount, 2))
-                    WHEN ce.amount < 0
-                        THEN -COALESCE((
-                            SELECT sum(lc.cost_base)
-                            FROM lot_consumptions lc
-                            JOIN fx_lots fl
-                              ON fl.id = lc.lot_id
-                            WHERE lc.operation_id = ce.operation_id
-                              AND fl.bank_account_id = ce.bank_account_id
-                              AND fl.currency_code = ce.currency_code
-                        ), round(abs(ce.amount), 2))
-                    ELSE 0
-                END
-            ), 0) AS net_contributed_in_base
+            CASE
+                WHEN ce.currency_code = budgeting.get__owner_base_currency(ce.owner_type, ce.owner_user_id, ce.owner_family_id)
+                    THEN round(ce.amount, 2)
+                WHEN ce.amount > 0
+                    THEN COALESCE((
+                        SELECT sum(fl.cost_base_initial)
+                        FROM fx_lots fl
+                        WHERE fl.opened_by_operation_id = ce.operation_id
+                          AND fl.bank_account_id = ce.bank_account_id
+                          AND fl.currency_code = ce.currency_code
+                    ), round(ce.amount, 2))
+                WHEN ce.amount < 0
+                    THEN -COALESCE((
+                        SELECT sum(lc.cost_base)
+                        FROM lot_consumptions lc
+                        JOIN fx_lots fl
+                          ON fl.id = lc.lot_id
+                        WHERE lc.operation_id = ce.operation_id
+                          AND fl.bank_account_id = ce.bank_account_id
+                          AND fl.currency_code = ce.currency_code
+                    ), round(abs(ce.amount), 2))
+                ELSE 0
+            END AS amount_in_base
         FROM contribution_entries ce
-        GROUP BY ce.bank_account_id
+    ),
+    contributions_by_account AS (
+        SELECT
+            ca.bank_account_id,
+            COALESCE(sum(ca.amount_in_base), 0) AS net_contributed_in_base,
+            COALESCE(sum(CASE WHEN ca.amount_in_base > 0 THEN ca.amount_in_base ELSE 0 END), 0) AS gross_contributed_in_base,
+            COALESCE(sum(CASE WHEN ca.amount_in_base < 0 THEN abs(ca.amount_in_base) ELSE 0 END), 0) AS gross_withdrawn_in_base
+        FROM contribution_amounts ca
+        GROUP BY ca.bank_account_id
     )
     SELECT COALESCE(
         jsonb_agg(
@@ -170,7 +200,17 @@ BEGIN
                 'cash_balance_in_base', COALESCE(ca.cash_balance_in_base, 0),
                 'invested_principal_in_base', COALESCE(pa.invested_principal_in_base, 0),
                 'realized_income_in_base', COALESCE(ia.realized_income_in_base, 0),
+                'position_contributed_in_base',
+                  GREATEST(
+                    0,
+                    COALESCE(pa.invested_principal_in_base, 0)
+                    + COALESCE(pfa.returned_principal_in_base, 0)
+                    - COALESCE(pfa.reinvested_income_in_base, 0)
+                  ),
+                'position_returned_in_base', COALESCE(pfa.returned_principal_in_base, 0),
                 'net_contributed_in_base', COALESCE(coa.net_contributed_in_base, 0),
+                'gross_contributed_in_base', COALESCE(coa.gross_contributed_in_base, 0),
+                'gross_withdrawn_in_base', COALESCE(coa.gross_withdrawn_in_base, 0),
                 'open_positions_count', COALESCE(pa.open_positions_count, 0)
             )
             ORDER BY sa.id
@@ -185,6 +225,8 @@ BEGIN
       ON pa.investment_account_id = sa.id
     LEFT JOIN income_by_account ia
       ON ia.investment_account_id = sa.id
+    LEFT JOIN position_flow_by_account pfa
+      ON pfa.investment_account_id = sa.id
     LEFT JOIN contributions_by_account coa
       ON coa.bank_account_id = sa.id;
 

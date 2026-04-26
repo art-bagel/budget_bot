@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { TrendingUp, Landmark, Coins, Package, Info, Trash2 } from 'lucide-react';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
@@ -470,7 +470,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [showAccountsModal, setShowAccountsModal] = useState(false);
   const [heroTypeSheetCode, setHeroTypeSheetCode] = useState<string | null>(null);
   const [valueMode, setValueMode] = useState<'now' | 'potential'>('now');
-  const [heroPnlMode, setHeroPnlMode] = useState<'external' | 'cost'>('cost');
   const [showIncomePopup, setShowIncomePopup] = useState(false);
   const [portfolioView, setPortfolioView] = useState<'positions' | 'ops' | 'analytics'>('positions');
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
@@ -678,76 +677,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [positions],
   );
 
-  const assetTabs = useMemo<PortfolioAssetTab[]>(() => {
-    const accountTypeCodes = Array.from(new Set(accounts.map(({ account }) => getInvestmentAccountAssetType(account))));
-    const knownCodes = DEFAULT_PORTFOLIO_ASSET_TYPE_CODES.filter((code) => accountTypeCodes.includes(code));
-    const extraCodes = accountTypeCodes
-      .filter((code) => !knownCodes.includes(code as (typeof DEFAULT_PORTFOLIO_ASSET_TYPE_CODES)[number]))
-      .sort((left, right) => assetTypeLabel(left).localeCompare(assetTypeLabel(right), 'ru'));
-
-    const typeTabs = [...knownCodes, ...extraCodes].map((code) => ({
-      code,
-      label: assetTypeLabel(code),
-      openCount: openPositions.filter((position) => position.asset_type_code === code).length,
-      closedCount: closedPositions.filter((position) => position.asset_type_code === code).length,
-      principalInBase: openPositions
-        .filter((position) => position.asset_type_code === code)
-        .reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
-      incomeInBase: positions
-        .filter((position) => position.asset_type_code === code)
-        .reduce((sum, position) => sum + getPositionRealizedResult(position), 0),
-      totalInBase: 0,
-    })).map((tab) => ({
-      ...tab,
-      totalInBase: tab.principalInBase + tab.incomeInBase,
-    }));
-    const allTab: PortfolioAssetTab = {
-      code: 'all',
-      label: 'Все',
-      openCount: openPositions.length,
-      closedCount: closedPositions.length,
-      principalInBase: typeTabs.reduce((s, t) => s + t.principalInBase, 0),
-      incomeInBase: typeTabs.reduce((s, t) => s + t.incomeInBase, 0),
-      totalInBase: typeTabs.reduce((s, t) => s + t.totalInBase, 0),
-    };
-    return [allTab, ...typeTabs];
-  }, [accounts, closedPositions, openPositions, positions]);
-
-  useEffect(() => {
-    if (activeAssetTypeCode === 'all') return;
-    if (!assetTabs.some((tab) => tab.code === activeAssetTypeCode)) {
-      setActiveAssetTypeCode('all');
-    }
-  }, [activeAssetTypeCode, assetTabs]);
-
-  const activeAssetTab = useMemo(
-    () => assetTabs.find((tab) => tab.code === activeAssetTypeCode) ?? assetTabs[0] ?? null,
-    [activeAssetTypeCode, assetTabs],
-  );
-
-  const filteredOpenPositions = useMemo(
-    () => activeAssetTypeCode === 'all'
-      ? openPositions
-      : openPositions.filter((position) => position.asset_type_code === activeAssetTypeCode),
-    [activeAssetTypeCode, openPositions],
-  );
-
-  const filteredClosedPositions = useMemo(
-    () => activeAssetTypeCode === 'all'
-      ? closedPositions
-      : closedPositions.filter((position) => position.asset_type_code === activeAssetTypeCode),
-    [activeAssetTypeCode, closedPositions],
-  );
-
-  const filteredAccounts = useMemo(
-    () => activeAssetTypeCode === 'all'
-      ? accounts
-      : accounts.filter(
-          ({ account }) => !account.investment_asset_type || account.investment_asset_type === activeAssetTypeCode,
-        ),
-    [accounts, activeAssetTypeCode],
-  );
-
   const getPositionMetadataNumber = (position: PortfolioPosition, key: string): number | null => {
     const value = position.metadata?.[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -833,6 +762,31 @@ export default function Portfolio({ user }: { user: UserContext }) {
     return quote.performanceCurrentValue - getPositionEntryAmount(position);
   };
 
+  const getAccountCashValue = (accountId: number): number => Number(summaryByAccountId[accountId]?.cash_balance_in_base ?? 0);
+
+  const getPositionScopedValue = (position: PortfolioPosition): number => {
+    let value = getResolvedPositionEstimatedValue(position);
+    if (valueMode === 'potential' && position.asset_type_code === 'deposit') {
+      value += typeof position.metadata?.accrued_interest === 'number' ? position.metadata.accrued_interest : 0;
+    }
+    return value;
+  };
+
+  const getPositionUnrealizedDelta = (position: PortfolioPosition): number => {
+    if (position.asset_type_code === 'security') {
+      return getResolvedPositionCurrentResult(position) ?? 0;
+    }
+    return getPositionScopedValue(position) - getPositionInvestedPrincipal(position);
+  };
+
+  const getPositionDisplayResult = (position: PortfolioPosition): number => {
+    const unrealizedDelta = getPositionUnrealizedDelta(position);
+    if (position.asset_type_code === 'security') {
+      return unrealizedDelta;
+    }
+    return getPositionRealizedResult(position) + unrealizedDelta;
+  };
+
   const summaryByAccountId = useMemo(
     () => summaryItems.reduce<Record<number, PortfolioSummaryItem>>((acc, item) => {
       acc[item.investment_account_id] = item;
@@ -856,9 +810,79 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [summaryItems],
   );
 
-  const totalNetContributedInBase = useMemo(
-    () => summaryItems.reduce((sum, item) => sum + Number(item.net_contributed_in_base ?? 0), 0),
-    [summaryItems],
+  const assetTabs = useMemo<PortfolioAssetTab[]>(() => {
+    const accountTypeCodes = Array.from(new Set(accounts.map(({ account }) => getInvestmentAccountAssetType(account))));
+    const knownCodes = DEFAULT_PORTFOLIO_ASSET_TYPE_CODES.filter((code) => accountTypeCodes.includes(code));
+    const extraCodes = accountTypeCodes
+      .filter((code) => !knownCodes.includes(code as (typeof DEFAULT_PORTFOLIO_ASSET_TYPE_CODES)[number]))
+      .sort((left, right) => assetTypeLabel(left).localeCompare(assetTypeLabel(right), 'ru'));
+
+    const typeTabs = [...knownCodes, ...extraCodes].map((code) => {
+      const openTypePositions = openPositions.filter((position) => position.asset_type_code === code);
+      const currentOpenValueInBase = openTypePositions.reduce(
+        (sum, position) => sum + getPositionScopedValue(position),
+        0,
+      );
+      const cashBalanceInBase = accounts
+        .filter(({ account }) => getInvestmentAccountAssetType(account) === code)
+        .reduce((sum, { account }) => sum + (summaryByAccountId[account.id]?.cash_balance_in_base ?? 0), 0);
+
+      return {
+        code,
+        label: assetTypeLabel(code),
+        openCount: openTypePositions.length,
+        closedCount: closedPositions.filter((position) => position.asset_type_code === code).length,
+        principalInBase: openTypePositions
+          .reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
+        incomeInBase: openTypePositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
+        totalInBase: currentOpenValueInBase + cashBalanceInBase,
+      };
+    });
+    const allTab: PortfolioAssetTab = {
+      code: 'all',
+      label: 'Все',
+      openCount: openPositions.length,
+      closedCount: closedPositions.length,
+      principalInBase: typeTabs.reduce((s, t) => s + t.principalInBase, 0),
+      incomeInBase: typeTabs.reduce((s, t) => s + t.incomeInBase, 0),
+      totalInBase: typeTabs.reduce((s, t) => s + t.totalInBase, 0),
+    };
+    return [allTab, ...typeTabs];
+  }, [accounts, closedPositions, openPositions, positions, summaryByAccountId, moexPrices, tinkoffLivePrices]);
+
+  useEffect(() => {
+    if (activeAssetTypeCode === 'all') return;
+    if (!assetTabs.some((tab) => tab.code === activeAssetTypeCode)) {
+      setActiveAssetTypeCode('all');
+    }
+  }, [activeAssetTypeCode, assetTabs]);
+
+  const activeAssetTab = useMemo(
+    () => assetTabs.find((tab) => tab.code === activeAssetTypeCode) ?? assetTabs[0] ?? null,
+    [activeAssetTypeCode, assetTabs],
+  );
+
+  const filteredOpenPositions = useMemo(
+    () => activeAssetTypeCode === 'all'
+      ? openPositions
+      : openPositions.filter((position) => position.asset_type_code === activeAssetTypeCode),
+    [activeAssetTypeCode, openPositions],
+  );
+
+  const filteredClosedPositions = useMemo(
+    () => activeAssetTypeCode === 'all'
+      ? closedPositions
+      : closedPositions.filter((position) => position.asset_type_code === activeAssetTypeCode),
+    [activeAssetTypeCode, closedPositions],
+  );
+
+  const filteredAccounts = useMemo(
+    () => activeAssetTypeCode === 'all'
+      ? accounts
+      : accounts.filter(
+          ({ account }) => !account.investment_asset_type || account.investment_asset_type === activeAssetTypeCode,
+        ),
+    [accounts, activeAssetTypeCode],
   );
 
   // For each open position: MOEX-priced shares at market value, everything else at cost (amount_in_currency)
@@ -904,14 +928,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
     [openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase],
   );
 
+  const totalPortfolioDisplayResult = useMemo(
+    () => openPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
+    [moexPrices, openPositions, tinkoffLivePrices, valueMode],
+  );
+
   const heroDisplayedPortfolioValue = valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue;
-  const heroExternalPnl = heroDisplayedPortfolioValue - totalNetContributedInBase;
-  const heroCostBasisPnl = totalUnrealizedPnl;
-  const heroPnlValue = heroPnlMode === 'external' ? heroExternalPnl : heroCostBasisPnl;
-  const heroPnlBase = heroPnlMode === 'external' ? totalNetContributedInBase : totalInvestedPrincipalInBase;
+  const heroPnlValue = totalPortfolioDisplayResult;
+  const heroPnlBase = totalInvestedPrincipalInBase;
   const heroPnlPercent = heroPnlBase > 0 ? (heroPnlValue / heroPnlBase) * 100 : 0;
-  const canToggleHeroPnl = totalNetContributedInBase > 0 && hasPricedPositions && totalInvestedPrincipalInBase > 0;
-  const shouldShowHeroPnl = heroPnlBase > 0 && (heroPnlMode === 'external' || hasPricedPositions);
+  const shouldShowHeroPnl = heroPnlBase > 0;
 
   const depositAccruedItems = useMemo(
     () => openPositions
@@ -1490,10 +1516,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
   const accountTabs = useMemo<PositionAccountTab[]>(() => {
     const getGroupEstimatedValue = (group: PositionAccountGroup): number => {
-      if (activeAssetTypeCode === 'security') {
-        return getConnectedSecurityMetrics(group.accountId).estimatedValue;
-      }
-      return group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+      const positionsValue = activeAssetTypeCode === 'security'
+        ? getConnectedSecurityMetrics(group.accountId).estimatedValue
+        : group.positions.reduce((sum, position) => sum + getPositionScopedValue(position), 0);
+      return positionsValue + getAccountCashValue(group.accountId);
     };
 
     const scopedTabs = filteredOpenPositionGroups.map((group) => ({
@@ -1576,95 +1602,32 @@ export default function Portfolio({ user }: { user: UserContext }) {
   );
 
   const activeScopeDisplayMetrics = useMemo(() => {
-    if (activeAssetTypeCode === 'all') {
-      return {
-        estimatedValue: totalPositionsValue,
-        investedPrincipal: totalInvestedPrincipalInBase,
-        cashValue: totalInvestmentCashInBase,
-        resultValue: hasPricedPositions ? totalUnrealizedPnl : totalRealizedIncomeInBase,
-        resultLabel: 'Доход',
-      };
-    }
-    if (activeAssetTypeCode === 'security') {
-      let estimatedValue = 0;
-      let investedPrincipal = 0;
-      let currentResult = 0;
-
-      for (const group of visibleOpenPositionGroups) {
-        const metrics = getConnectedSecurityMetrics(group.accountId);
-        estimatedValue += metrics.estimatedValue;
-        investedPrincipal += metrics.investedPrincipal;
-        currentResult += metrics.currentResult;
-      }
-
-      return {
-        estimatedValue,
-        investedPrincipal,
-        cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
-        resultValue: currentResult,
-        resultLabel: 'Доход',
-      };
-    }
-
+    const scopedOpenPositions = activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions;
+    const scopedGroups = activeAssetTypeCode === 'all' ? filteredOpenPositionGroups : visibleOpenPositionGroups;
     return {
-      estimatedValue: visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0),
-      investedPrincipal: visibleOpenPositions.reduce((sum, position) => sum + Number(position.metadata?.amount_in_base ?? 0), 0),
-      cashValue: visibleOpenPositionGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
-      resultValue: visibleAssetPositions.reduce((sum, position) => sum + getPositionRealizedResult(position), 0),
+      estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0),
+      investedPrincipal: scopedOpenPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
+      cashValue: activeAssetTypeCode === 'all'
+        ? totalInvestmentCashInBase
+        : scopedGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
+      resultValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
       resultLabel: 'Доход',
     };
   }, [
     activeAssetTypeCode,
-    accountEstimatedValueById,
-    accountOpenPrincipalById,
-    hasPricedPositions,
+    filteredOpenPositionGroups,
     moexPrices,
-    summaryByAccountId,
     tinkoffLivePrices,
-    totalInvestedPrincipalInBase,
     totalInvestmentCashInBase,
-    totalPositionsValue,
-    totalRealizedIncomeInBase,
-    totalUnrealizedPnl,
-    visibleAssetPositions,
     visibleOpenPositionGroups,
     visibleOpenPositions,
+    openPositions,
   ]);
-
-  const activeScopeContributedInBase = useMemo(() => {
-    if (activeAssetTypeCode === 'all') {
-      return totalNetContributedInBase;
-    }
-
-    return visibleOpenPositionGroups.reduce(
-      (sum, group) => sum + Number(summaryByAccountId[group.accountId]?.net_contributed_in_base ?? 0),
-      0,
-    );
-  }, [activeAssetTypeCode, summaryByAccountId, totalNetContributedInBase, visibleOpenPositionGroups]);
-
-  const activeScopeCurrentValue = activeAssetTypeCode === 'all'
-    ? heroDisplayedPortfolioValue
-    : activeScopeDisplayMetrics.estimatedValue;
-  const activeScopeBaseValue = heroPnlMode === 'external'
-    ? activeScopeContributedInBase
-    : activeScopeDisplayMetrics.investedPrincipal;
-  const activeScopeResultValue = heroPnlMode === 'external'
-    ? activeScopeCurrentValue - activeScopeContributedInBase
-    : activeScopeDisplayMetrics.resultValue;
+  const activeScopeCurrentValue = activeScopeDisplayMetrics.estimatedValue + activeScopeDisplayMetrics.cashValue;
+  const activeScopeBaseValue = activeScopeDisplayMetrics.investedPrincipal;
+  const activeScopeResultValue = activeScopeDisplayMetrics.resultValue;
   const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
-  const activeScopeBasisLabel = heroPnlMode === 'external' ? 'Внесено' : 'Вложено';
-  const canToggleActiveScopeBasis = activeScopeContributedInBase > 0 && activeScopeDisplayMetrics.investedPrincipal > 0;
-  const togglePortfolioPnlMode = () => {
-    if (canToggleActiveScopeBasis) {
-      setHeroPnlMode((mode) => mode === 'external' ? 'cost' : 'external');
-    }
-  };
-  const handlePortfolioPnlKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      togglePortfolioPnlMode();
-    }
-  };
+  const activeScopeBasisLabel = 'Вложено';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
     ? Landmark
     : activeAssetTypeCode === 'crypto'
@@ -1937,17 +1900,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
 
         {shouldShowHeroPnl && (
-          <button
-            className={`pf-hero__pnl${heroPnlValue >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}
-            type="button"
-            onClick={() => {
-              if (canToggleHeroPnl) {
-                setHeroPnlMode((mode) => mode === 'external' ? 'cost' : 'external');
-              }
-            }}
-            aria-pressed={heroPnlMode === 'cost'}
-            title={canToggleHeroPnl ? 'Переключить расчет дохода' : undefined}
-          >
+          <div className={`pf-hero__pnl${heroPnlValue >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}>
             <span className="pf-hero__pnl-arrow" aria-hidden="true">
               {heroPnlValue >= 0 ? '↗' : '↘'}
             </span>
@@ -1961,10 +1914,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
               {heroPnlValue >= 0 ? '+' : '−'}
               {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(Math.abs(heroPnlPercent))}%
             </span>
-            <span className="pf-hero__pnl-period">
-              {heroPnlMode === 'external' ? 'к внесенным' : 'к вложенному'}
-            </span>
-          </button>
+            <span className="pf-hero__pnl-period">к вложенному</span>
+          </div>
         )}
 
         {assetTabs.filter((t) => t.code !== 'all').map((tab) => (
@@ -2075,15 +2026,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       {portfolioView === 'positions' && (
         <div className="pf-view">
           {activeAssetTypeCode !== 'all' && filteredOpenPositions.length > 0 && (
-            <div
-              className="pf-tsum pf-tsum--button"
-              role="button"
-              tabIndex={0}
-              onClick={togglePortfolioPnlMode}
-              onKeyDown={handlePortfolioPnlKeyDown}
-              aria-pressed={heroPnlMode === 'external'}
-              title={canToggleActiveScopeBasis ? 'Переключить расчет дохода' : undefined}
-            >
+            <div className="pf-tsum">
               <div className="pf-tsum__head">
                 <div className={`pf-tsum__icon pf-tsum__icon--${activeAssetTypeCode}`} aria-hidden="true">
                   <ActiveAssetIcon size={22} strokeWidth={2.4} />
@@ -2098,10 +2041,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 </div>
               </div>
               <div className="pf-tsum__now">
-                <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
+                  <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
                 <div className="pf-tsum__now-row">
                   <div className="pf-tsum__now-value">
-                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.estimatedValue)}
+                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                   {activeScopeBaseValue > 0 && (() => {
@@ -2165,13 +2108,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
             };
             return (
               <div
-                className="pf-alloc pf-alloc--button"
-                role="button"
-                tabIndex={0}
-                onClick={togglePortfolioPnlMode}
-                onKeyDown={handlePortfolioPnlKeyDown}
-                aria-pressed={heroPnlMode === 'external'}
-                title={canToggleActiveScopeBasis ? 'Переключить расчет дохода' : undefined}
+                className="pf-alloc"
               >
                 <div className="pf-alloc__head">
                   <span className="pf-alloc__tag">Распределение</span>
@@ -2245,9 +2182,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
           ) : (
             visibleOpenPositionGroups.map((group) => {
               const sections = getOpenPositionSections(group.positions);
-              const groupValue = activeAssetTypeCode === 'security'
+              const positionsValue = activeAssetTypeCode === 'security'
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
-                : group.positions.reduce((s, p) => s + getResolvedPositionEstimatedValue(p), 0);
+                : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
+              const groupValue = positionsValue + getAccountCashValue(group.accountId);
               return (
                 <div key={`${group.ownerType}-${group.accountId}`} className="pf-grp">
                   <div className="pf-grp__head">
@@ -3595,11 +3533,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
             <div className="pf-sheet-accounts">
               {sheetAccounts.map(({ account, balances }) => {
                 const summary = summaryByAccountId[account.id];
-                const liveMetrics = getConnectedSecurityMetrics(account.id);
                 const conn = heroTypeSheetCode === 'security'
                   ? tinkoffConnections.find((c) => c.linked_account_id === account.id)
                   : null;
-                const isSecurities = heroTypeSheetCode === 'security';
+                const accountOpenPositions = openPositions.filter((position) => (
+                  position.investment_account_id === account.id
+                  && (!heroTypeSheetCode || position.asset_type_code === heroTypeSheetCode)
+                ));
+                const isSecuritySheet = heroTypeSheetCode === 'security';
+                const cashValueInBase = Number(summary?.cash_balance_in_base ?? 0);
+                const estimatedValue = accountOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0);
+                const investedPrincipal = accountOpenPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0);
+                const netContributed = Number(summary?.net_contributed_in_base ?? 0);
+                const displayIncome = accountOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0);
+                const currentAccountValue = estimatedValue + cashValueInBase;
+                const realizedIncome = isSecuritySheet
+                  ? currentAccountValue - netContributed - displayIncome
+                  : Number(summary?.realized_income_in_base ?? 0);
                 return (
                   <div key={account.id} className="pf-sheet-account">
                     <div className="pf-sheet-account__head">
@@ -3635,28 +3585,40 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(b.amount)} {currencySymbol(b.currency_code)}</strong>
                         </div>
                       ))}
-                      {isSecurities && liveMetrics.estimatedValue > 0 && (
+                      {isSecuritySheet && currentAccountValue > 0 && (
+                        <div className="pf-sheet-account__row">
+                          <span>Сейчас на счёте</span>
+                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(currentAccountValue)} {currencySymbol(user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                      {estimatedValue > 0 && (
                         <div className="pf-sheet-account__row">
                           <span>Оценочная стоимость</span>
-                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(liveMetrics.estimatedValue)} {currencySymbol(user.base_currency_code)}</strong>
+                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(estimatedValue)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {isSecurities && liveMetrics.investedPrincipal > 0 && (
+                      {investedPrincipal > 0 && (
                         <div className="pf-sheet-account__row">
                           <span>Вложено</span>
-                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(liveMetrics.investedPrincipal)} {currencySymbol(user.base_currency_code)}</strong>
+                          <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investedPrincipal)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {isSecurities && liveMetrics.currentResult !== 0 && (
-                        <div className={`pf-sheet-account__row${liveMetrics.currentResult >= 0 ? ' pf-sheet-account__row--pos' : ' pf-sheet-account__row--neg'}`}>
-                          <span>Доход</span>
-                          <strong>{liveMetrics.currentResult >= 0 ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(liveMetrics.currentResult)} {currencySymbol(user.base_currency_code)}</strong>
+                      {netContributed !== 0 && (
+                        <div className="pf-sheet-account__row">
+                          <span>Внесено</span>
+                          <strong>{netContributed >= 0 ? '' : '−'}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.abs(netContributed))} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {!isSecurities && summary && summary.realized_income_in_base !== 0 && (
-                        <div className={`pf-sheet-account__row${summary.realized_income_in_base >= 0 ? ' pf-sheet-account__row--pos' : ' pf-sheet-account__row--neg'}`}>
-                          <span>Доход</span>
-                          <strong>{summary.realized_income_in_base >= 0 ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(summary.realized_income_in_base)} {currencySymbol(user.base_currency_code)}</strong>
+                      {displayIncome !== 0 && (
+                        <div className={`pf-sheet-account__row${displayIncome >= 0 ? ' pf-sheet-account__row--pos' : ' pf-sheet-account__row--neg'}`}>
+                          <span>{isSecuritySheet ? 'Доход по открытым' : 'Доход'}</span>
+                          <strong>{displayIncome >= 0 ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(displayIncome)} {currencySymbol(user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                      {realizedIncome !== 0 && (
+                        <div className={`pf-sheet-account__row${realizedIncome >= 0 ? ' pf-sheet-account__row--pos' : ' pf-sheet-account__row--neg'}`}>
+                          <span>{isSecuritySheet ? 'Получено доходом' : 'Получено доходом'}</span>
+                          <strong>{realizedIncome >= 0 ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(realizedIncome)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
                     </div>
