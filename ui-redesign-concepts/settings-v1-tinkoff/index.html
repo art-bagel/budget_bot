@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#EEF0F3" />
+  <title>Настройки · Бюджет</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <svg class="sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 21h6M12 17v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chev-down" viewBox="0 0 16 16"><path d="m3 6 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v4M8 5v.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M11.5 2.5 13.5 4.5 5 13H3v-2zM10 4l2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M4.5 4.5l.7 8.5a1 1 0 0 0 1 .9h3.6a1 1 0 0 0 1-.9l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-paint" viewBox="0 0 24 24"><path d="M19 7.5a4 4 0 0 1-4 4H9.5a2 2 0 0 0-2 2V17a2 2 0 1 1-4 0v-1a8 8 0 0 1 8-8h3.5A4 4 0 0 1 19 4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5 20a7 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+      <symbol id="i-family" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 19a5 5 0 0 1 10 0M11 19a5 5 0 0 1 10 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-trend" viewBox="0 0 24 24"><path d="M4 16l5-5 4 4 7-8M14 7h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 4v4M15 4v4M7 8h10v3a5 5 0 0 1-10 0z M12 16v4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12m0 0-4-4m4 4 4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.66-5.66L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.66 5.66L4 16M4 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 8 7 9 4-1 7-4.5 7-9V6z M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9.5 9.5a2.5 2.5 0 1 1 4.5 1.5c-1 1-2.5 1-2.5 2.5M12 16.5v.01" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 9 12 4l9 5M5 10v8M9 10v8M15 10v8M19 10v8M3 19h18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 3 19h18z M12 10v4 M12 17v.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8 3.5 3.5L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-link-out" viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7 9M11 9.5V13H3V5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m3 7 9 7 9-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="14" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m11 11 8-8M16 6l3 3M14 8l3 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+      <symbol id="i-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="currentColor"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app">
+
+    <!-- Top bar -->
+    <header class="bar">
+      <div class="bar__left">
+        <button class="icon-btn icon-btn--sm" type="button" aria-label="Назад">
+          <svg><use href="#i-back"/></svg>
+        </button>
+        <div class="bar__meta">
+          <span class="bar__hello">Мини-приложение</span>
+          <h1 class="bar__title">Настройки</h1>
+        </div>
+      </div>
+      <div class="bar__right">
+        <button class="icon-btn icon-btn--sm" id="themeToggle" type="button" aria-label="Переключить тему">
+          <svg class="tg__sun"><use href="#i-sun"/></svg>
+          <svg class="tg__moon"><use href="#i-moon"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- IDENTITY CARD — ink, with avatar + meta -->
+      <article class="ident">
+        <div class="ident__glow" aria-hidden="true"></div>
+        <div class="ident__row">
+          <div class="ident__avatar">
+            <span class="ident__monogram">К</span>
+            <span class="ident__pulse" aria-hidden="true"></span>
+          </div>
+          <div class="ident__meta">
+            <span class="ident__eyebrow">Аккаунт <em>·</em> Telegram</span>
+            <h2 class="ident__name">Александр Костенко</h2>
+            <span class="ident__handle">@shyrakostenko</span>
+          </div>
+        </div>
+        <div class="ident__chips">
+          <span class="ichip ichip--owner">
+            <svg><use href="#i-shield"/></svg>
+            Владелец семьи
+          </span>
+          <span class="ichip">
+            <svg><use href="#i-coin"/></svg>
+            Базовая ₽
+          </span>
+          <span class="ichip">
+            <svg><use href="#i-family"/></svg>
+            4 в семье
+          </span>
+        </div>
+      </article>
+
+      <!-- TABS · scrollable -->
+      <nav class="tabs" role="tablist" aria-label="Раздел настроек" id="tabs">
+        <button class="tabs__item tabs__item--on" data-tab="appearance" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="tabs__item" data-tab="account" role="tab" aria-selected="false" type="button">Аккаунт</button>
+        <button class="tabs__item" data-tab="family" role="tab" aria-selected="false" type="button">Семья</button>
+        <button class="tabs__item" data-tab="invest" role="tab" aria-selected="false" type="button">Инвестиции</button>
+        <button class="tabs__item" data-tab="integrations" role="tab" aria-selected="false" type="button">Интеграции</button>
+        <button class="tabs__item" data-tab="data" role="tab" aria-selected="false" type="button">Данные</button>
+        <span class="tabs__ind" aria-hidden="true"></span>
+      </nav>
+
+      <!-- =========================================================
+           PANE: Оформление
+           ========================================================= -->
+      <div class="view-pane view-pane--on" data-pane="appearance">
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--paint"><svg><use href="#i-paint"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Тема интерфейса</h3>
+                <span class="card-sec__sub">Светлая, тёмная или как в системе</span>
+              </div>
+            </div>
+          </header>
+
+          <div class="theme-grid" id="themeGrid" role="radiogroup" aria-label="Тема">
+            <button class="theme-card" data-theme="system" role="radio" aria-checked="false" type="button">
+              <span class="theme-card__preview theme-card__preview--system">
+                <span class="tcp-half tcp-half--light">
+                  <span class="tcp-bar"></span>
+                  <span class="tcp-chip"></span>
+                </span>
+                <span class="tcp-half tcp-half--dark">
+                  <span class="tcp-bar"></span>
+                  <span class="tcp-chip"></span>
+                </span>
+              </span>
+              <span class="theme-card__lab">
+                <svg class="theme-card__ico"><use href="#i-monitor"/></svg>
+                Системная
+              </span>
+              <span class="theme-card__check"><svg><use href="#i-check"/></svg></span>
+            </button>
+
+            <button class="theme-card theme-card--on" data-theme="light" role="radio" aria-checked="true" type="button">
+              <span class="theme-card__preview theme-card__preview--light">
+                <span class="tcp-bar"></span>
+                <span class="tcp-card">
+                  <span class="tcp-card__bar"></span>
+                  <span class="tcp-card__bar tcp-card__bar--sm"></span>
+                </span>
+                <span class="tcp-chip"></span>
+              </span>
+              <span class="theme-card__lab">
+                <svg class="theme-card__ico"><use href="#i-sun"/></svg>
+                Светлая
+              </span>
+              <span class="theme-card__check"><svg><use href="#i-check"/></svg></span>
+            </button>
+
+            <button class="theme-card" data-theme="dark" role="radio" aria-checked="false" type="button">
+              <span class="theme-card__preview theme-card__preview--dark">
+                <span class="tcp-bar"></span>
+                <span class="tcp-card">
+                  <span class="tcp-card__bar"></span>
+                  <span class="tcp-card__bar tcp-card__bar--sm"></span>
+                </span>
+                <span class="tcp-chip"></span>
+              </span>
+              <span class="theme-card__lab">
+                <svg class="theme-card__ico"><use href="#i-moon"/></svg>
+                Тёмная
+              </span>
+              <span class="theme-card__check"><svg><use href="#i-check"/></svg></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--toggle"><svg><use href="#i-info"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Поведение</h3>
+                <span class="card-sec__sub">Жесты, подсказки, плотность</span>
+              </div>
+            </div>
+          </header>
+
+          <ul class="rows">
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Подсказки жестов</div>
+                <div class="row__sub">Показывать подсказки по свайпам в категориях</div>
+              </div>
+              <button class="sw sw--on" role="switch" aria-checked="true" type="button" data-sw="hints">
+                <span class="sw__thumb"></span>
+              </button>
+            </li>
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Компактный список</div>
+                <div class="row__sub">Меньше отступов в операциях и категориях</div>
+              </div>
+              <button class="sw" role="switch" aria-checked="false" type="button" data-sw="dense">
+                <span class="sw__thumb"></span>
+              </button>
+            </li>
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Тактильный отклик</div>
+                <div class="row__sub">Лёгкая вибрация при свайпах и переключателях</div>
+              </div>
+              <button class="sw sw--on" role="switch" aria-checked="true" type="button" data-sw="haptics">
+                <span class="sw__thumb"></span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </div><!-- /appearance -->
+
+
+      <!-- =========================================================
+           PANE: Аккаунт
+           ========================================================= -->
+      <div class="view-pane" data-pane="account">
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--user"><svg><use href="#i-user"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Контуры и валюты</h3>
+                <span class="card-sec__sub">Личный · Семейный</span>
+              </div>
+            </div>
+          </header>
+
+          <ul class="rows">
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Личная базовая валюта</div>
+                <div class="row__sub">Все личные категории ведутся в этой валюте</div>
+              </div>
+              <span class="pill">RUB</span>
+            </li>
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Семья</div>
+                <div class="row__sub">Семейный бюджет подключён</div>
+              </div>
+              <span class="tag tag--neutral">Костенко</span>
+            </li>
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Семейная базовая валюта</div>
+                <div class="row__sub">Все семейные категории ведутся в этой валюте</div>
+              </div>
+              <span class="pill">RUB</span>
+            </li>
+            <li class="row row--nav" tabindex="0" role="button">
+              <div class="row__main">
+                <div class="row__title">Банковский счёт</div>
+                <div class="row__sub">Основной счёт для операций</div>
+              </div>
+              <div class="row__right">
+                <span class="tag tag--neutral">Main #42</span>
+                <svg class="row__chev"><use href="#i-chev"/></svg>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <h2 class="danger-title">
+          <span class="danger-title__bullet"></span>
+          Опасная зона
+        </h2>
+        <section class="danger-card">
+          <div class="danger-card__head">
+            <span class="danger-card__ico"><svg><use href="#i-warn"/></svg></span>
+            <div class="danger-card__meta">
+              <div class="danger-card__title">Удалить аккаунт</div>
+              <div class="danger-card__sub">Полностью очистить все данные пользователя: банк, операции, категории, группы и историю обменов.</div>
+            </div>
+          </div>
+          <div class="danger-card__action">
+            <button class="btn btn--danger" type="button" id="deleteAccountBtn">Удалить аккаунт</button>
+          </div>
+        </section>
+
+      </div><!-- /account -->
+
+
+      <!-- =========================================================
+           PANE: Семья
+           ========================================================= -->
+      <div class="view-pane" data-pane="family">
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--family"><svg><use href="#i-family"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Семья «Костенко»</h3>
+                <span class="card-sec__sub">4 участника · базовая ₽</span>
+              </div>
+            </div>
+            <button class="add-pill" type="button" id="inviteBtn" aria-label="Пригласить">
+              <svg><use href="#i-plus"/></svg>
+              Пригласить
+            </button>
+          </header>
+
+          <ul class="members">
+            <li class="member">
+              <span class="member__avatar member__avatar--y">А</span>
+              <div class="member__meta">
+                <div class="member__name">Александр <span class="member__you">— это вы</span></div>
+                <div class="member__sub">@shyrakostenko · с апреля 2025</div>
+              </div>
+              <span class="rolebadge rolebadge--owner">
+                <svg><use href="#i-shield"/></svg>
+                Владелец
+              </span>
+            </li>
+            <li class="member">
+              <span class="member__avatar member__avatar--g">Е</span>
+              <div class="member__meta">
+                <div class="member__name">Елена</div>
+                <div class="member__sub">@elena_k · участник</div>
+              </div>
+              <span class="rolebadge">Участник</span>
+            </li>
+            <li class="member">
+              <span class="member__avatar member__avatar--c">М</span>
+              <div class="member__meta">
+                <div class="member__name">Михаил</div>
+                <div class="member__sub">@mkost · участник</div>
+              </div>
+              <span class="rolebadge">Участник</span>
+            </li>
+            <li class="member member--pending">
+              <span class="member__avatar member__avatar--gh">?</span>
+              <div class="member__meta">
+                <div class="member__name">Приглашение отправлено</div>
+                <div class="member__sub">@anya_k · ожидает подтверждения</div>
+              </div>
+              <span class="rolebadge rolebadge--pending">
+                <svg><use href="#i-mail"/></svg>
+                Pending
+              </span>
+            </li>
+          </ul>
+
+          <a class="card-sec__link" href="#" tabindex="0">
+            История семьи <svg><use href="#i-chev"/></svg>
+          </a>
+        </section>
+
+        <h2 class="danger-title">
+          <span class="danger-title__bullet"></span>
+          Опасная зона
+        </h2>
+        <section class="danger-card">
+          <div class="danger-card__head">
+            <span class="danger-card__ico"><svg><use href="#i-warn"/></svg></span>
+            <div class="danger-card__meta">
+              <div class="danger-card__title">Распустить семью</div>
+              <div class="danger-card__sub">Все семейные счета, категории и история операций будут удалены безвозвратно. Личные данные участников не пострадают.</div>
+            </div>
+          </div>
+          <div class="danger-card__action">
+            <button class="btn btn--danger" type="button">Распустить</button>
+          </div>
+        </section>
+      </div><!-- /family -->
+
+
+      <!-- =========================================================
+           PANE: Инвестиции
+           ========================================================= -->
+      <div class="view-pane" data-pane="invest">
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--trend"><svg><use href="#i-trend"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Инвестиционные счета</h3>
+                <span class="card-sec__sub">Отдельные счета и переводы cash ↔ investment</span>
+              </div>
+            </div>
+            <button class="add-pill" type="button" id="newInvestBtn" aria-label="Новый счёт">
+              <svg><use href="#i-plus"/></svg>
+              Новый
+            </button>
+          </header>
+
+          <!-- Inline create form (hidden by default, toggled by add-pill) -->
+          <form class="invest-form" id="investForm" hidden>
+            <label class="field">
+              <span class="field__lab">Название счёта</span>
+              <input class="input" type="text" placeholder="например, Тинькофф Брокер" id="invName" />
+            </label>
+            <div class="field-grid">
+              <label class="field">
+                <span class="field__lab">Контур</span>
+                <select class="input" id="invOwner">
+                  <option value="user">Личный</option>
+                  <option value="family">Семейный</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="field__lab">Тип актива</span>
+                <select class="input" id="invType">
+                  <option value="security">Ценные бумаги</option>
+                  <option value="deposit">Депозиты</option>
+                  <option value="crypto">Криптовалюта</option>
+                  <option value="other">Разное</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span class="field__lab">Провайдер <em class="field__opt">необязательно</em></span>
+              <input class="input" type="text" placeholder="Тинькофф · Альфа · Bybit…" id="invProvider" />
+            </label>
+            <div class="invest-form__foot">
+              <button class="btn btn--ghost" type="button" id="cancelInvest">Отмена</button>
+              <button class="btn btn--primary" type="submit">Создать счёт</button>
+            </div>
+          </form>
+
+          <ul class="invest-list">
+            <li class="invest-tile" data-asset="security">
+              <span class="invest-tile__chip invest-tile__chip--y">ТИ</span>
+              <div class="invest-tile__meta">
+                <div class="invest-tile__name">Тинькофф Брокер</div>
+                <div class="invest-tile__sub">
+                  <span class="dot dot--g"></span>Личный
+                  <em>·</em>
+                  Ценные бумаги
+                </div>
+              </div>
+              <div class="invest-tile__right">
+                <span class="tag tag--neutral">#11</span>
+                <button class="icon-btn icon-btn--xs icon-btn--ghost" type="button" aria-label="Удалить">
+                  <svg><use href="#i-trash"/></svg>
+                </button>
+              </div>
+            </li>
+            <li class="invest-tile" data-asset="deposit">
+              <span class="invest-tile__chip invest-tile__chip--r">АБ</span>
+              <div class="invest-tile__meta">
+                <div class="invest-tile__name">Альфа · Накопительный</div>
+                <div class="invest-tile__sub">
+                  <span class="dot dot--g"></span>Личный
+                  <em>·</em>
+                  Депозит
+                  <em>·</em>
+                  Альфа-Банк
+                </div>
+              </div>
+              <div class="invest-tile__right">
+                <span class="tag tag--neutral">#12</span>
+                <button class="icon-btn icon-btn--xs icon-btn--ghost" type="button" aria-label="Удалить">
+                  <svg><use href="#i-trash"/></svg>
+                </button>
+              </div>
+            </li>
+            <li class="invest-tile" data-asset="crypto">
+              <span class="invest-tile__chip invest-tile__chip--p">BY</span>
+              <div class="invest-tile__meta">
+                <div class="invest-tile__name">Семейный · Bybit</div>
+                <div class="invest-tile__sub">
+                  <span class="dot dot--y"></span>Семейный
+                  <em>·</em>
+                  Криптовалюта
+                </div>
+              </div>
+              <div class="invest-tile__right">
+                <span class="tag tag--neutral">#13</span>
+                <button class="icon-btn icon-btn--xs icon-btn--ghost" type="button" aria-label="Удалить">
+                  <svg><use href="#i-trash"/></svg>
+                </button>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+      </div><!-- /invest -->
+
+
+      <!-- =========================================================
+           PANE: Интеграции
+           ========================================================= -->
+      <div class="view-pane" data-pane="integrations">
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--plug"><svg><use href="#i-plug"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Подключения</h3>
+                <span class="card-sec__sub">Подтягивать операции из внешних источников</span>
+              </div>
+            </div>
+          </header>
+
+          <article class="prov">
+            <header class="prov__head">
+              <span class="prov__brand prov__brand--ti">Т</span>
+              <div class="prov__meta">
+                <div class="prov__name">Тинькофф Инвестиции</div>
+                <div class="prov__sub"><span class="dot dot--g"></span>Подключено · последний синк сегодня в 09:14</div>
+              </div>
+              <button class="btn btn--ghost btn--sm" type="button">
+                <svg class="btn__ico"><use href="#i-refresh"/></svg>
+                Синк
+              </button>
+            </header>
+            <ul class="prov__conn">
+              <li class="prov__conn-item">
+                <div class="prov__conn-meta">
+                  <div class="prov__conn-name">Брокерский · 2110</div>
+                  <div class="prov__conn-sub">Тинькофф 2010382110 · 247 операций</div>
+                </div>
+                <button class="icon-btn icon-btn--xs icon-btn--ghost" type="button" aria-label="Отключить">
+                  <svg><use href="#i-trash"/></svg>
+                </button>
+              </li>
+            </ul>
+            <button class="prov__add" type="button">
+              <svg><use href="#i-plus"/></svg>
+              Добавить ещё счёт
+            </button>
+          </article>
+
+          <article class="prov prov--soon">
+            <header class="prov__head">
+              <span class="prov__brand prov__brand--sber">С</span>
+              <div class="prov__meta">
+                <div class="prov__name">Сбер · СБП</div>
+                <div class="prov__sub">Импорт выписки PDF · скоро</div>
+              </div>
+              <span class="soon-badge">Скоро</span>
+            </header>
+          </article>
+
+          <article class="prov prov--soon">
+            <header class="prov__head">
+              <span class="prov__brand prov__brand--gu">Г</span>
+              <div class="prov__meta">
+                <div class="prov__name">Госуслуги</div>
+                <div class="prov__sub">Налоговые уведомления · скоро</div>
+              </div>
+              <span class="soon-badge">Скоро</span>
+            </header>
+          </article>
+        </section>
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--key"><svg><use href="#i-key"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">API-токены</h3>
+                <span class="card-sec__sub">Только при ручном подключении</span>
+              </div>
+            </div>
+            <button class="add-pill add-pill--sm" type="button">
+              <svg><use href="#i-plus"/></svg>
+              Токен
+            </button>
+          </header>
+          <p class="card-sec__hint">Токены хранятся зашифрованными. Удалив токен, вы прекращаете доступ ко всем подключениям этого провайдера.</p>
+        </section>
+
+      </div><!-- /integrations -->
+
+
+      <!-- =========================================================
+           PANE: Данные
+           ========================================================= -->
+      <div class="view-pane" data-pane="data">
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--db"><svg><use href="#i-database"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Экспорт</h3>
+                <span class="card-sec__sub">Скачать копию своих данных</span>
+              </div>
+            </div>
+          </header>
+
+          <ul class="rows">
+            <li class="row row--nav" tabindex="0" role="button">
+              <div class="row__main">
+                <div class="row__title">Операции · CSV</div>
+                <div class="row__sub">Все операции за весь период · ~ 2,4 МБ</div>
+              </div>
+              <div class="row__right">
+                <button class="btn btn--ghost btn--sm" type="button">
+                  <svg class="btn__ico"><use href="#i-download"/></svg>
+                  Скачать
+                </button>
+              </div>
+            </li>
+            <li class="row row--nav" tabindex="0" role="button">
+              <div class="row__main">
+                <div class="row__title">Категории и группы · JSON</div>
+                <div class="row__sub">Структура бюджета — для бэкапа или импорта</div>
+              </div>
+              <div class="row__right">
+                <button class="btn btn--ghost btn--sm" type="button">
+                  <svg class="btn__ico"><use href="#i-download"/></svg>
+                  Скачать
+                </button>
+              </div>
+            </li>
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">История курсов</div>
+                <div class="row__sub">Источник · ЦБ РФ + CryptoCompare</div>
+              </div>
+              <span class="tag tag--neutral">CBR · CC</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card-sec">
+          <header class="card-sec__head">
+            <div class="card-sec__title-row">
+              <span class="card-sec__ico card-sec__ico--db"><svg><use href="#i-refresh"/></svg></span>
+              <div class="card-sec__title-meta">
+                <h3 class="card-sec__title">Кэш и пересчёт</h3>
+                <span class="card-sec__sub">Если что-то выглядит несвежим</span>
+              </div>
+            </div>
+          </header>
+
+          <ul class="rows">
+            <li class="row">
+              <div class="row__main">
+                <div class="row__title">Размер локального кэша</div>
+                <div class="row__sub">Иконки, графики, последние выписки</div>
+              </div>
+              <span class="tag tag--neutral">312 КБ</span>
+            </li>
+            <li class="row row--nav" tabindex="0" role="button">
+              <div class="row__main">
+                <div class="row__title">Пересчитать остатки</div>
+                <div class="row__sub">По всем счетам с учётом курсов</div>
+              </div>
+              <div class="row__right">
+                <button class="btn btn--ghost btn--sm" type="button">
+                  <svg class="btn__ico"><use href="#i-refresh"/></svg>
+                  Запустить
+                </button>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <p class="updated">Версия 0.42 · сборка 2026.04.26</p>
+
+      </div><!-- /data -->
+
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden>
+    <svg class="toast__ico"><use href="#i-check"/></svg>
+    <span class="toast__msg" id="toastMsg">Сохранено</span>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

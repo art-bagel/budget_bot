@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react';
-import { TrendingUp, Landmark, Coins, Package, Info } from 'lucide-react';
+import { TrendingUp, Landmark, Coins, Package, Info, Trash2 } from 'lucide-react';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 import {
@@ -2708,155 +2708,191 @@ export default function Portfolio({ user }: { user: UserContext }) {
         </div>
       )}
 
-      {selectedPosition && (
-        <div className="modal-backdrop" onClick={() => setSelectedPositionId(null)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <div className="section__header">
-                <div>
-                  <div className="section__eyebrow">
-                    {selectedPosition.investment_account_owner_type === 'family' ? 'Семейный счет' : 'Личный счет'} · {selectedPosition.investment_account_name}
-                  </div>
-                  <h2 className="section__title">{selectedPosition.title}</h2>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-body">
-              <div className="portfolio-position-detail">
-                {(() => {
-                  const detailTicker = typeof selectedPosition.metadata?.ticker === 'string' ? selectedPosition.metadata.ticker : null;
-                  const detailMoexPrice = detailTicker ? moexPrices.get(detailTicker) : null;
-                  const detailQuote = getResolvedPositionQuote(selectedPosition);
-                  const detailCurrentPrice = detailQuote.currentPrice;
-                  const detailCurrentTotal = detailQuote.currentTotalValue;
-                  const detailEntryAmount = getPositionEntryAmount(selectedPosition);
-                  const detailPnl = getResolvedPositionCurrentResult(selectedPosition);
-                  const detailPnlPct = detailPnl !== null && detailEntryAmount > 0
-                    ? (detailPnl / detailEntryAmount) * 100
-                    : null;
-                  return (
-                    <>
-                      {detailTicker && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                          <span className="portfolio-position-card__ticker" style={{ fontSize: '0.8rem', padding: '2px 8px' }}>
-                            {detailTicker}
-                          </span>
-                          <span className="pill">{selectedPosition.currency_code}</span>
-                          {detailQuote.source === 'moex' && detailMoexPrice?.last === null && detailMoexPrice?.prevClose !== null && (
-                            <span className="portfolio-position-card__price-hint">цена закрытия</span>
-                          )}
-                        </div>
-                      )}
-                      <div className="portfolio-position-detail__summary">
-                        {!detailTicker && <span className="pill">{selectedPosition.currency_code}</span>}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                            <span className="settings-row__sub">Вложено</span>
-                            <strong className="portfolio-position-detail__amount">
-                              {formatAmount(detailEntryAmount, selectedPosition.currency_code)}
-                            </strong>
-                          </div>
-                          {detailCurrentTotal !== null && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-                              <span className="settings-row__sub">Текущая стоимость</span>
-                              <strong className="portfolio-position-detail__amount">
-                                {formatAmount(detailCurrentTotal, selectedPosition.currency_code)}
-                              </strong>
-                            </div>
-                          )}
-                          {detailPnl !== null && detailPnlPct !== null && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-                              <span className="settings-row__sub">Нереализованный P&L</span>
-                              <span className={`portfolio-position-card__pnl${detailPnl >= 0 ? ' portfolio-position-card__pnl--pos' : ' portfolio-position-card__pnl--neg'}`}>
-                                {detailPnl >= 0 ? '+' : ''}{formatAmount(detailPnl, selectedPosition.currency_code)}
-                                {' '}({detailPnlPct >= 0 ? '+' : ''}{detailPnlPct.toFixed(1)}%)
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-                <div className="portfolio-position-detail__meta">
-                  <span>Дата входа: {formatDateLabel(selectedPosition.opened_at)}</span>
-                  {selectedPosition.asset_type_code === 'deposit' && selectedPosition.metadata?.deposit_kind ? (
-                    <>
-                      {typeof selectedPosition.metadata.interest_rate === 'number' && (
-                        <span>Ставка: {selectedPosition.metadata.interest_rate}% годовых</span>
-                      )}
-                      {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.end_date && (
-                        <span>Срок до: {formatDateLabel(String(selectedPosition.metadata.end_date))}</span>
-                      )}
-                      {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.interest_payout && (
-                        <span>Выплата: {
-                          selectedPosition.metadata.interest_payout === 'at_end' ? 'в конце срока'
-                            : selectedPosition.metadata.interest_payout === 'monthly_to_account' ? 'ежемесячно на счёт'
-                              : selectedPosition.metadata.interest_payout === 'capitalize'
-                                ? `капитализация ${selectedPosition.metadata.capitalization_period === 'daily' ? 'ежедневно' : 'ежемесячно'}`
-                                : String(selectedPosition.metadata.interest_payout)
-                        }</span>
-                      )}
-                      {selectedPosition.metadata.deposit_kind === 'savings_account' && selectedPosition.metadata.capitalization_period && (
-                        <span>Капитализация: {selectedPosition.metadata.capitalization_period === 'daily' ? 'ежедневно' : 'ежемесячно'}</span>
-                      )}
-                      {typeof selectedPosition.metadata.accrued_interest === 'number' && selectedPosition.metadata.accrued_interest > 0 && (
-                        <span style={{ color: 'var(--tag-in-fg)' }}>
-                          Начислено на сегодня: +{formatAmount(selectedPosition.metadata.accrued_interest as number, selectedPosition.currency_code)}
-                        </span>
-                      )}
-                      {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.end_date && (() => {
-                        const projected = calculateProjectedInterest({
-                          depositKind: 'term_deposit',
-                          principal: selectedPosition.amount_in_currency,
-                          annualRate: Number(selectedPosition.metadata.interest_rate),
-                          startDate: selectedPosition.opened_at,
-                          endDate: String(selectedPosition.metadata.end_date),
-                          interestPayout: selectedPosition.metadata.interest_payout as 'at_end' | 'monthly_to_account' | 'capitalize' | undefined,
-                          capitalizationPeriod: selectedPosition.metadata.capitalization_period as 'daily' | 'monthly' | undefined,
-                        });
-                        return projected > 0 ? (
-                          <span>
-                            Доход за весь срок: +{formatAmount(projected, selectedPosition.currency_code)}
-                          </span>
-                        ) : null;
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      {selectedPosition.quantity ? <span>Количество: {selectedPosition.quantity} шт.</span> : null}
-                      {getPositionInvestedPrincipal(selectedPosition) > 0
-                        ? <span>Себестоимость: {formatAmount(getPositionInvestedPrincipal(selectedPosition), user.base_currency_code)}</span>
-                        : null}
-                      {(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0) > 0
-                        ? (
-                          <span>
-                            НКД при покупке: {formatAmount(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0, user.base_currency_code)}
-                          </span>
-                        )
-                        : null}
-                      {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0
-                        ? <span>Комиссии: {formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
-                        : null}
-                      {getPositionRealizedResult(selectedPosition) !== 0
-                        ? <span>Реализованный результат: {formatAmount(getPositionRealizedResult(selectedPosition), user.base_currency_code)}</span>
-                        : null}
-                    </>
+      {(() => {
+        const posIconColor = selectedPosition ? assetTypeIconColor(selectedPosition.asset_type_code) : { icon: 'chart', color: 'b' };
+        return (
+      <BottomSheet
+        open={!!selectedPosition}
+        gray
+        tag={selectedPosition ? `${selectedPosition.investment_account_owner_type === 'family' ? 'Семейный' : 'Личный'} · ${selectedPosition.investment_account_name}` : ''}
+        title={selectedPosition?.title ?? ''}
+        icon={selectedPosition ? <CategorySvgIcon code={posIconColor.icon} /> : undefined}
+        iconColor={posIconColor.color}
+        onClose={() => setSelectedPositionId(null)}
+      >
+        {selectedPosition && (
+          <div className="pf-detail-body">
+            {(() => {
+              const detailTicker = typeof selectedPosition.metadata?.ticker === 'string' ? selectedPosition.metadata.ticker : null;
+              const detailMoexPrice = detailTicker ? moexPrices.get(detailTicker) : null;
+              const detailQuote = getResolvedPositionQuote(selectedPosition);
+              const detailCurrentTotal = detailQuote.currentTotalValue;
+              const detailEntryAmount = getPositionEntryAmount(selectedPosition);
+              const detailPnl = getResolvedPositionCurrentResult(selectedPosition);
+              const detailPnlPct = detailPnl !== null && detailEntryAmount > 0
+                ? (detailPnl / detailEntryAmount) * 100
+                : null;
+              const isClosingHint = detailQuote.source === 'moex' && detailMoexPrice?.last === null && detailMoexPrice?.prevClose !== null;
+              const ccy = selectedPosition.currency_code;
+              const pnlSign = detailPnl !== null && detailPnl >= 0 ? 'pos' : 'neg';
+              return (
+                <>
+                  {(detailTicker || isClosingHint) && (
+                    <div className="pf-detail-meta-row">
+                      {detailTicker && <span className="pf-detail-ticker">{detailTicker}</span>}
+                      <span className="pf-detail-pill">{ccy}</span>
+                      {isClosingHint && <span className="pf-detail-hint-pill">цена закрытия</span>}
+                    </div>
                   )}
+                  <div className="pf-dstats">
+                    <div className="pf-dstats__cell">
+                      <span className="pf-dstats__label">Вложено</span>
+                      <span className="pf-dstats__value">{formatNumericAmount(detailEntryAmount, 0)}</span>
+                      <span className="pf-dstats__sub">{ccy}</span>
+                    </div>
+                    <div className="pf-dstats__cell">
+                      <span className="pf-dstats__label">Стоимость</span>
+                      <span className="pf-dstats__value">
+                        {detailCurrentTotal !== null ? formatNumericAmount(detailCurrentTotal, 0) : '—'}
+                      </span>
+                      <span className="pf-dstats__sub">{detailCurrentTotal !== null ? 'текущая' : 'нет данных'}</span>
+                    </div>
+                    <div className="pf-dstats__cell">
+                      <span className="pf-dstats__label">P&L</span>
+                      <span className={`pf-dstats__value pf-dstats__value--${pnlSign}`}>
+                        {detailPnl !== null ? `${detailPnl >= 0 ? '+' : ''}${formatNumericAmount(detailPnl, 0)}` : '—'}
+                      </span>
+                      <span className="pf-dstats__sub">
+                        {detailPnlPct !== null ? `${detailPnlPct >= 0 ? '+' : ''}${detailPnlPct.toFixed(1)}%` : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            {(() => {
+              const isDeposit = selectedPosition.asset_type_code === 'deposit' && !!selectedPosition.metadata?.deposit_kind;
+              const accrued = typeof selectedPosition.metadata?.accrued_interest === 'number' ? Number(selectedPosition.metadata.accrued_interest) : 0;
+              if (!isDeposit || accrued <= 0) return null;
+              return (
+                <div className="pf-dnext">
+                  <div className="pf-dnext__left">
+                    <span className="pf-dnext__label">Накоплено сегодня</span>
+                    <span className="pf-dnext__date">проценты к получению</span>
+                  </div>
+                  <span className="pf-dnext__amount">+{formatNumericAmount(accrued, 0)} {currencySymbol(selectedPosition.currency_code)}</span>
                 </div>
-                {selectedPosition.comment ? (
-                  <p className="list-row__sub" style={{ marginTop: 10 }}>
-                    {selectedPosition.comment}
-                  </p>
-                ) : null}
+              );
+            })()}
+
+            <div className="pf-dcond">
+              <div className="pf-dcond__head">
+                <span className="sec-tag">Параметры</span>
               </div>
+              <div className="pf-dcond__row">
+                <span className="pf-dcond__row-label">Дата входа</span>
+                <span className="pf-dcond__row-value">{formatDateLabel(selectedPosition.opened_at)}</span>
+              </div>
+              {selectedPosition.asset_type_code === 'deposit' && selectedPosition.metadata?.deposit_kind ? (
+                <>
+                  {typeof selectedPosition.metadata.interest_rate === 'number' && (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Ставка</span>
+                      <span className="pf-dcond__row-value">{selectedPosition.metadata.interest_rate}% годовых</span>
+                    </div>
+                  )}
+                  {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.end_date && (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Срок до</span>
+                      <span className="pf-dcond__row-value">{formatDateLabel(String(selectedPosition.metadata.end_date))}</span>
+                    </div>
+                  )}
+                  {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.interest_payout && (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Выплата</span>
+                      <span className="pf-dcond__row-value">{
+                        selectedPosition.metadata.interest_payout === 'at_end' ? 'в конце срока'
+                          : selectedPosition.metadata.interest_payout === 'monthly_to_account' ? 'ежемесячно на счёт'
+                            : selectedPosition.metadata.interest_payout === 'capitalize'
+                              ? `капитализация ${selectedPosition.metadata.capitalization_period === 'daily' ? 'ежедневно' : 'ежемесячно'}`
+                              : String(selectedPosition.metadata.interest_payout)
+                      }</span>
+                    </div>
+                  )}
+                  {selectedPosition.metadata.deposit_kind === 'savings_account' && selectedPosition.metadata.capitalization_period && (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Капитализация</span>
+                      <span className="pf-dcond__row-value">{selectedPosition.metadata.capitalization_period === 'daily' ? 'ежедневно' : 'ежемесячно'}</span>
+                    </div>
+                  )}
+                  {selectedPosition.metadata.deposit_kind === 'term_deposit' && selectedPosition.metadata.end_date && (() => {
+                    const projected = calculateProjectedInterest({
+                      depositKind: 'term_deposit',
+                      principal: selectedPosition.amount_in_currency,
+                      annualRate: Number(selectedPosition.metadata.interest_rate),
+                      startDate: selectedPosition.opened_at,
+                      endDate: String(selectedPosition.metadata.end_date),
+                      interestPayout: selectedPosition.metadata.interest_payout as 'at_end' | 'monthly_to_account' | 'capitalize' | undefined,
+                      capitalizationPeriod: selectedPosition.metadata.capitalization_period as 'daily' | 'monthly' | undefined,
+                    });
+                    return projected > 0 ? (
+                      <div className="pf-dcond__row">
+                        <span className="pf-dcond__row-label">Доход за срок</span>
+                        <span className="pf-dcond__row-value pf-dcond__row-value--pos">+{formatAmount(projected, selectedPosition.currency_code)}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                </>
+              ) : (
+                <>
+                  {selectedPosition.quantity ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Количество</span>
+                      <span className="pf-dcond__row-value">{selectedPosition.quantity} шт.</span>
+                    </div>
+                  ) : null}
+                  {getPositionInvestedPrincipal(selectedPosition) > 0 ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Себестоимость</span>
+                      <span className="pf-dcond__row-value">{formatAmount(getPositionInvestedPrincipal(selectedPosition), user.base_currency_code)}</span>
+                    </div>
+                  ) : null}
+                  {(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0) > 0 ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">НКД при покупке</span>
+                      <span className="pf-dcond__row-value">{formatAmount(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0, user.base_currency_code)}</span>
+                    </div>
+                  ) : null}
+                  {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0 ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Комиссии</span>
+                      <span className="pf-dcond__row-value">{formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
+                    </div>
+                  ) : null}
+                  {getPositionRealizedResult(selectedPosition) !== 0 ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Реализованный результат</span>
+                      <span className={`pf-dcond__row-value pf-dcond__row-value--${getPositionRealizedResult(selectedPosition) >= 0 ? 'pos' : 'neg'}`}>
+                        {getPositionRealizedResult(selectedPosition) >= 0 ? '+' : ''}{formatAmount(getPositionRealizedResult(selectedPosition), user.base_currency_code)}
+                      </span>
+                    </div>
+                  ) : null}
+                </>
+              )}
+              {selectedPosition.comment ? (
+                <div className="pf-dcond__row pf-dcond__row--comment">
+                  <span className="pf-dcond__row-label">Комментарий</span>
+                  <span className="pf-dcond__row-value pf-dcond__row-value--text">{selectedPosition.comment}</span>
+                </div>
+              ) : null}
+            </div>
 
               {(() => {
                 const isDepositPosition = selectedPosition.asset_type_code === 'deposit' && !!selectedPosition.metadata?.deposit_kind;
                 const isTermDeposit = selectedPosition.metadata?.deposit_kind === 'term_deposit';
                 return (
-                  <div className="form-row">
+                  <div className="pf-sheet-actions">
                     <button
                       className="btn btn--primary"
                       type="button"
@@ -2866,7 +2902,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     </button>
                     {!isDepositPosition && canRecordPositionIncome(selectedPosition) && (
                       <button
-                        className="btn"
+                        className="btn btn--ghost"
                         type="button"
                         onClick={() => handleOpenIncomeForm(selectedPosition)}
                       >
@@ -2875,7 +2911,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     )}
                     {!(isDepositPosition && isTermDeposit) && (
                       <button
-                        className="btn"
+                        className="btn btn--ghost"
                         type="button"
                         onClick={() => handleOpenPartialCloseForm(selectedPosition)}
                       >
@@ -2884,7 +2920,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     )}
                     {!(isDepositPosition && isTermDeposit) && (
                       <button
-                        className="btn"
+                        className="btn btn--ghost"
                         type="button"
                         onClick={() => handleOpenTopUpForm(selectedPosition)}
                       >
@@ -2893,7 +2929,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     )}
                     {isDepositPosition && (
                       <button
-                        className="btn"
+                        className="btn btn--ghost"
                         type="button"
                         onClick={() => {
                           setRateChangeDrafts((prev) => ({
@@ -2910,448 +2946,506 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     )}
                     {!isDepositPosition && (
                       <button
-                        className="btn"
+                        className="btn btn--ghost"
                         type="button"
                         onClick={() => handleOpenFeeForm(selectedPosition)}
                       >
                         Комиссия
                       </button>
                     )}
-                    <button
-                      className="btn"
-                      type="button"
-                      disabled={deletingPositionId === selectedPosition.id}
-                      onClick={() => void handleDeletePosition(selectedPosition)}
-                    >
-                      {deletingPositionId === selectedPosition.id ? 'Удаляем...' : 'Удалить'}
-                    </button>
                   </div>
                 );
               })()}
 
               {closeDrafts[selectedPosition.id] && (
-                <form onSubmit={(event) => void handleClosePosition(selectedPosition.id, event)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Сумма выхода"
-                      value={closeDrafts[selectedPosition.id].amount}
-                      onChange={(event) => handleCloseDraftChange(selectedPosition.id, { amount: event.target.value })}
-                      disabled={submittingCloseId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    <select
-                      className="input"
-                      value={closeDrafts[selectedPosition.id].currencyCode}
-                      onChange={(event) => handleCloseDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
-                      disabled={submittingCloseId === selectedPosition.id}
-                    >
-                      {currencies.map((currency) => (
-                        <option key={currency.code} value={currency.code}>
-                          {currency.code}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="input"
-                      type="date"
-                      value={closeDrafts[selectedPosition.id].closedAt}
-                      onChange={(event) => handleCloseDraftChange(selectedPosition.id, { closedAt: event.target.value })}
-                      disabled={submittingCloseId === selectedPosition.id}
-                    />
-                  </div>
-                  {closeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
-                    <div className="form-row">
+                <form className="pf-pos-form" onSubmit={(event) => void handleClosePosition(selectedPosition.id, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 2 }}>
+                      <label className="apf-label">Сумма выхода</label>
                       <input
-                        className="input"
+                        className="apf-input"
                         type="text"
                         inputMode="decimal"
-                        placeholder={`Историческая стоимость в ${user.base_currency_code}`}
+                        placeholder="0"
+                        value={closeDrafts[selectedPosition.id].amount}
+                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { amount: event.target.value })}
+                        disabled={submittingCloseId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Валюта</label>
+                      <select
+                        className="apf-input"
+                        value={closeDrafts[selectedPosition.id].currencyCode}
+                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
+                        disabled={submittingCloseId === selectedPosition.id}
+                      >
+                        {currencies.map((currency) => (
+                          <option key={currency.code} value={currency.code}>
+                            {currency.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={closeDrafts[selectedPosition.id].closedAt}
+                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { closedAt: event.target.value })}
+                        disabled={submittingCloseId === selectedPosition.id}
+                      />
+                    </div>
+                  </div>
+                  {closeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
+                    <div className="apf-field">
+                      <label className="apf-label">Историческая стоимость в {user.base_currency_code}</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
                         value={closeDrafts[selectedPosition.id].baseAmount}
                         onChange={(event) => handleCloseDraftChange(selectedPosition.id, { baseAmount: event.target.value })}
                         disabled={submittingCloseId === selectedPosition.id}
-                        style={{ width: 260 }}
                       />
                     </div>
                   )}
-                  <div className="form-row">
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
                     <input
-                      className="input"
+                      className="apf-input"
                       type="text"
-                      placeholder="Комментарий к закрытию"
+                      placeholder="Необязательно"
                       value={closeDrafts[selectedPosition.id].comment}
                       onChange={(event) => handleCloseDraftChange(selectedPosition.id, { comment: event.target.value })}
                       disabled={submittingCloseId === selectedPosition.id}
-                      style={{ flex: '1 1 280px' }}
                     />
-                    <button className="btn btn--primary" type="submit" disabled={submittingCloseId === selectedPosition.id}>
-                      {submittingCloseId === selectedPosition.id ? 'Закрываем...' : 'Подтвердить закрытие'}
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingCloseId === selectedPosition.id}>
+                      {submittingCloseId === selectedPosition.id ? 'Закрываем…' : 'Подтвердить закрытие'}
                     </button>
                   </div>
                 </form>
               )}
 
               {partialCloseDrafts[selectedPosition.id] && (
-                <form onSubmit={(event) => void handlePartialClosePosition(selectedPosition, event)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Сумма возврата"
-                      value={partialCloseDrafts[selectedPosition.id].returnAmount}
-                      onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnAmount: event.target.value })}
-                      disabled={submittingPartialCloseId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    <select
-                      className="input"
-                      value={partialCloseDrafts[selectedPosition.id].returnCurrencyCode}
-                      onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnCurrencyCode: event.target.value })}
-                      disabled={submittingPartialCloseId === selectedPosition.id}
-                    >
-                      {currencies.map((currency) => (
-                        <option key={currency.code} value={currency.code}>
-                          {currency.code}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Списать principal"
-                      value={partialCloseDrafts[selectedPosition.id].principalReduction}
-                      onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { principalReduction: event.target.value })}
-                      disabled={submittingPartialCloseId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    {selectedPosition.quantity !== null && selectedPosition.quantity !== undefined && (
+                <form className="pf-pos-form" onSubmit={(event) => void handlePartialClosePosition(selectedPosition, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 2 }}>
+                      <label className="apf-label">Сумма возврата</label>
                       <input
-                        className="input"
+                        className="apf-input"
                         type="text"
                         inputMode="decimal"
-                        placeholder="Списать количество"
-                        value={partialCloseDrafts[selectedPosition.id].closedQuantity}
-                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { closedQuantity: event.target.value })}
+                        placeholder="0"
+                        value={partialCloseDrafts[selectedPosition.id].returnAmount}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnAmount: event.target.value })}
                         disabled={submittingPartialCloseId === selectedPosition.id}
-                        style={{ width: 180 }}
                       />
-                    )}
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Валюта</label>
+                      <select
+                        className="apf-input"
+                        value={partialCloseDrafts[selectedPosition.id].returnCurrencyCode}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnCurrencyCode: event.target.value })}
+                        disabled={submittingPartialCloseId === selectedPosition.id}
+                      >
+                        {currencies.map((currency) => (
+                          <option key={currency.code} value={currency.code}>
+                            {currency.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="date"
-                      value={partialCloseDrafts[selectedPosition.id].closedAt}
-                      onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { closedAt: event.target.value })}
-                      disabled={submittingPartialCloseId === selectedPosition.id}
-                    />
-                    {partialCloseDrafts[selectedPosition.id].returnCurrencyCode !== user.base_currency_code && (
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Списать principal</label>
                       <input
-                        className="input"
+                        className="apf-input"
                         type="text"
                         inputMode="decimal"
-                        placeholder={`Историческая стоимость возврата в ${user.base_currency_code}`}
+                        placeholder="0"
+                        value={partialCloseDrafts[selectedPosition.id].principalReduction}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { principalReduction: event.target.value })}
+                        disabled={submittingPartialCloseId === selectedPosition.id}
+                      />
+                    </div>
+                    {selectedPosition.quantity !== null && selectedPosition.quantity !== undefined && (
+                      <div className="apf-field" style={{ flex: 1 }}>
+                        <label className="apf-label">Списать количество</label>
+                        <input
+                          className="apf-input"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={partialCloseDrafts[selectedPosition.id].closedQuantity}
+                          onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { closedQuantity: event.target.value })}
+                          disabled={submittingPartialCloseId === selectedPosition.id}
+                        />
+                      </div>
+                    )}
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={partialCloseDrafts[selectedPosition.id].closedAt}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { closedAt: event.target.value })}
+                        disabled={submittingPartialCloseId === selectedPosition.id}
+                      />
+                    </div>
+                  </div>
+                  {partialCloseDrafts[selectedPosition.id].returnCurrencyCode !== user.base_currency_code && (
+                    <div className="apf-field">
+                      <label className="apf-label">Историческая стоимость возврата в {user.base_currency_code}</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
                         value={partialCloseDrafts[selectedPosition.id].returnBaseAmount}
                         onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnBaseAmount: event.target.value })}
                         disabled={submittingPartialCloseId === selectedPosition.id}
-                        style={{ flex: '1 1 260px' }}
                       />
-                    )}
-                  </div>
-                  <div className="form-row">
+                    </div>
+                  )}
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
                     <input
-                      className="input"
+                      className="apf-input"
                       type="text"
-                      placeholder="Комментарий к частичному закрытию"
+                      placeholder="Необязательно"
                       value={partialCloseDrafts[selectedPosition.id].comment}
                       onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { comment: event.target.value })}
                       disabled={submittingPartialCloseId === selectedPosition.id}
-                      style={{ flex: '1 1 280px' }}
                     />
-                    <button className="btn btn--primary" type="submit" disabled={submittingPartialCloseId === selectedPosition.id}>
-                      {submittingPartialCloseId === selectedPosition.id ? 'Проводим...' : 'Подтвердить частичное закрытие'}
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingPartialCloseId === selectedPosition.id}>
+                      {submittingPartialCloseId === selectedPosition.id ? 'Проводим…' : 'Подтвердить частичное закрытие'}
                     </button>
                   </div>
                 </form>
               )}
 
               {incomeDrafts[selectedPosition.id] && (
-                <form onSubmit={(event) => void handleRecordIncome(selectedPosition, event)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder={selectedPosition.asset_type_code === 'deposit' ? 'Сумма процентов' : selectedPosition.asset_type_code === 'security' ? 'Сумма дивидендов' : 'Сумма дохода'}
-                      value={incomeDrafts[selectedPosition.id].amount}
-                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: event.target.value })}
-                      disabled={submittingIncomeId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    <select
-                      className="input"
-                      value={incomeDrafts[selectedPosition.id].currencyCode}
-                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
-                      disabled={submittingIncomeId === selectedPosition.id}
-                    >
-                      {currencies.map((currency) => (
-                        <option key={currency.code} value={currency.code}>
-                          {currency.code}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="input"
-                      value={incomeDrafts[selectedPosition.id].incomeKind}
-                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { incomeKind: event.target.value })}
-                      disabled={submittingIncomeId === selectedPosition.id}
-                    >
-                      {selectedPosition.asset_type_code === 'deposit' ? (
-                        <>
-                          <option value="interest">Проценты</option>
-                          <option value="other">Другой доход</option>
-                        </>
-                      ) : selectedPosition.asset_type_code === 'security' ? (
-                        <>
-                          <option value="dividend">Дивиденды</option>
-                          <option value="coupon">Купон</option>
-                          <option value="other">Другой доход</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="other">Другой доход</option>
-                          <option value="interest">Проценты</option>
-                        </>
-                      )}
-                    </select>
-                    <select
-                      className="input"
-                      value={incomeDrafts[selectedPosition.id].destination}
-                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
-                      disabled={submittingIncomeId === selectedPosition.id}
-                    >
-                      <option value="account">На счёт</option>
-                      <option value="position">Оставить в активе</option>
-                    </select>
-                    <input
-                      className="input"
-                      type="date"
-                      value={incomeDrafts[selectedPosition.id].receivedAt}
-                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { receivedAt: event.target.value })}
-                      disabled={submittingIncomeId === selectedPosition.id}
-                    />
-                  </div>
-                  <div className="form-row">
-                    {incomeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
+                <form className="pf-pos-form" onSubmit={(event) => void handleRecordIncome(selectedPosition, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 2 }}>
+                      <label className="apf-label">
+                        {selectedPosition.asset_type_code === 'deposit' ? 'Сумма процентов' : selectedPosition.asset_type_code === 'security' ? 'Сумма дивидендов' : 'Сумма дохода'}
+                      </label>
                       <input
-                        className="input"
+                        className="apf-input"
                         type="text"
                         inputMode="decimal"
-                        placeholder={`Историческая стоимость в ${user.base_currency_code}`}
+                        placeholder="0"
+                        value={incomeDrafts[selectedPosition.id].amount}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: event.target.value })}
+                        disabled={submittingIncomeId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Валюта</label>
+                      <select
+                        className="apf-input"
+                        value={incomeDrafts[selectedPosition.id].currencyCode}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
+                        disabled={submittingIncomeId === selectedPosition.id}
+                      >
+                        {currencies.map((currency) => (
+                          <option key={currency.code} value={currency.code}>
+                            {currency.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Тип дохода</label>
+                      <select
+                        className="apf-input"
+                        value={incomeDrafts[selectedPosition.id].incomeKind}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { incomeKind: event.target.value })}
+                        disabled={submittingIncomeId === selectedPosition.id}
+                      >
+                        {selectedPosition.asset_type_code === 'deposit' ? (
+                          <>
+                            <option value="interest">Проценты</option>
+                            <option value="other">Другой доход</option>
+                          </>
+                        ) : selectedPosition.asset_type_code === 'security' ? (
+                          <>
+                            <option value="dividend">Дивиденды</option>
+                            <option value="coupon">Купон</option>
+                            <option value="other">Другой доход</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="other">Другой доход</option>
+                            <option value="interest">Проценты</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Назначение</label>
+                      <select
+                        className="apf-input"
+                        value={incomeDrafts[selectedPosition.id].destination}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
+                        disabled={submittingIncomeId === selectedPosition.id}
+                      >
+                        <option value="account">На счёт</option>
+                        <option value="position">Оставить в активе</option>
+                      </select>
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={incomeDrafts[selectedPosition.id].receivedAt}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { receivedAt: event.target.value })}
+                        disabled={submittingIncomeId === selectedPosition.id}
+                      />
+                    </div>
+                  </div>
+                  {incomeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
+                    <div className="apf-field">
+                      <label className="apf-label">Историческая стоимость в {user.base_currency_code}</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
                         value={incomeDrafts[selectedPosition.id].baseAmount}
                         onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { baseAmount: event.target.value })}
                         disabled={submittingIncomeId === selectedPosition.id}
-                        style={{ flex: '1 1 260px' }}
                       />
-                    )}
+                    </div>
+                  )}
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
                     <input
-                      className="input"
+                      className="apf-input"
                       type="text"
-                      placeholder="Комментарий к доходу"
+                      placeholder="Необязательно"
                       value={incomeDrafts[selectedPosition.id].comment}
                       onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { comment: event.target.value })}
                       disabled={submittingIncomeId === selectedPosition.id}
-                      style={{ flex: '1 1 280px' }}
                     />
-                    <button className="btn btn--primary" type="submit" disabled={submittingIncomeId === selectedPosition.id}>
-                      {submittingIncomeId === selectedPosition.id ? 'Начисляем...' : 'Подтвердить доход'}
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingIncomeId === selectedPosition.id}>
+                      {submittingIncomeId === selectedPosition.id ? 'Начисляем…' : 'Подтвердить доход'}
                     </button>
                   </div>
                 </form>
               )}
 
               {topUpDrafts[selectedPosition.id] && (
-                <form onSubmit={(event) => void handleTopUpPosition(selectedPosition, event)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Сумма пополнения"
-                      value={topUpDrafts[selectedPosition.id].amount}
-                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { amount: event.target.value })}
-                      disabled={submittingTopUpId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Количество, если есть"
-                      value={topUpDrafts[selectedPosition.id].quantity}
-                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { quantity: event.target.value })}
-                      disabled={submittingTopUpId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    <select
-                      className="input"
-                      value={topUpDrafts[selectedPosition.id].currencyCode}
-                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
-                      disabled={submittingTopUpId === selectedPosition.id}
-                    >
-                      <option value={selectedPosition.currency_code}>{selectedPosition.currency_code}</option>
-                    </select>
-                    <input
-                      className="input"
-                      type="date"
-                      value={topUpDrafts[selectedPosition.id].toppedUpAt}
-                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { toppedUpAt: event.target.value })}
-                      disabled={submittingTopUpId === selectedPosition.id}
-                    />
+                <form className="pf-pos-form" onSubmit={(event) => void handleTopUpPosition(selectedPosition, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 2 }}>
+                      <label className="apf-label">Сумма пополнения</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={topUpDrafts[selectedPosition.id].amount}
+                        onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { amount: event.target.value })}
+                        disabled={submittingTopUpId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Количество</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="—"
+                        value={topUpDrafts[selectedPosition.id].quantity}
+                        onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { quantity: event.target.value })}
+                        disabled={submittingTopUpId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={topUpDrafts[selectedPosition.id].toppedUpAt}
+                        onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { toppedUpAt: event.target.value })}
+                        disabled={submittingTopUpId === selectedPosition.id}
+                      />
+                    </div>
                   </div>
-                  <div className="form-row">
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
                     <input
-                      className="input"
+                      className="apf-input"
                       type="text"
-                      placeholder="Комментарий к пополнению"
+                      placeholder="Необязательно"
                       value={topUpDrafts[selectedPosition.id].comment}
                       onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { comment: event.target.value })}
                       disabled={submittingTopUpId === selectedPosition.id}
-                      style={{ flex: '1 1 280px' }}
                     />
-                    <button className="btn btn--primary" type="submit" disabled={submittingTopUpId === selectedPosition.id}>
-                      {submittingTopUpId === selectedPosition.id ? 'Пополняем...' : 'Подтвердить пополнение'}
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingTopUpId === selectedPosition.id}>
+                      {submittingTopUpId === selectedPosition.id ? 'Пополняем…' : 'Подтвердить пополнение'}
                     </button>
                   </div>
                 </form>
               )}
 
               {feeDrafts[selectedPosition.id] && (
-                <form onSubmit={(event) => void handleRecordFee(selectedPosition, event)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Сумма комиссии"
-                      value={feeDrafts[selectedPosition.id].amount}
-                      onChange={(event) => handleFeeDraftChange(selectedPosition.id, { amount: event.target.value })}
-                      disabled={submittingFeeId === selectedPosition.id}
-                      style={{ width: 180 }}
-                    />
-                    <select
-                      className="input"
-                      value={feeDrafts[selectedPosition.id].currencyCode}
-                      onChange={(event) => handleFeeDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
-                      disabled={submittingFeeId === selectedPosition.id}
-                    >
-                      {currencies.map((currency) => (
-                        <option key={currency.code} value={currency.code}>
-                          {currency.code}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="input"
-                      type="date"
-                      value={feeDrafts[selectedPosition.id].chargedAt}
-                      onChange={(event) => handleFeeDraftChange(selectedPosition.id, { chargedAt: event.target.value })}
-                      disabled={submittingFeeId === selectedPosition.id}
-                    />
-                    <span className="list-row__sub">
-                      Доступно: {formatAmount(getAccountBalanceForCurrency(selectedPosition.investment_account_id, feeDrafts[selectedPosition.id].currencyCode), feeDrafts[selectedPosition.id].currencyCode)}
-                    </span>
+                <form className="pf-pos-form" onSubmit={(event) => void handleRecordFee(selectedPosition, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 2 }}>
+                      <label className="apf-label">Сумма комиссии</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={feeDrafts[selectedPosition.id].amount}
+                        onChange={(event) => handleFeeDraftChange(selectedPosition.id, { amount: event.target.value })}
+                        disabled={submittingFeeId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Валюта</label>
+                      <select
+                        className="apf-input"
+                        value={feeDrafts[selectedPosition.id].currencyCode}
+                        onChange={(event) => handleFeeDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
+                        disabled={submittingFeeId === selectedPosition.id}
+                      >
+                        {currencies.map((currency) => (
+                          <option key={currency.code} value={currency.code}>
+                            {currency.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={feeDrafts[selectedPosition.id].chargedAt}
+                        onChange={(event) => handleFeeDraftChange(selectedPosition.id, { chargedAt: event.target.value })}
+                        disabled={submittingFeeId === selectedPosition.id}
+                      />
+                    </div>
                   </div>
-                  <div className="form-row">
+                  <div className="apf-balance">
+                    Доступно: {formatAmount(getAccountBalanceForCurrency(selectedPosition.investment_account_id, feeDrafts[selectedPosition.id].currencyCode), feeDrafts[selectedPosition.id].currencyCode)}
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
                     <input
-                      className="input"
+                      className="apf-input"
                       type="text"
-                      placeholder="Комментарий к комиссии"
+                      placeholder="Необязательно"
                       value={feeDrafts[selectedPosition.id].comment}
                       onChange={(event) => handleFeeDraftChange(selectedPosition.id, { comment: event.target.value })}
                       disabled={submittingFeeId === selectedPosition.id}
-                      style={{ flex: '1 1 280px' }}
                     />
-                    <button className="btn btn--primary" type="submit" disabled={submittingFeeId === selectedPosition.id}>
-                      {submittingFeeId === selectedPosition.id ? 'Списываем...' : 'Подтвердить комиссию'}
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingFeeId === selectedPosition.id}>
+                      {submittingFeeId === selectedPosition.id ? 'Списываем…' : 'Подтвердить комиссию'}
                     </button>
                   </div>
                 </form>
               )}
 
               {rateChangeDrafts[selectedPosition.id] && (
-                <form onSubmit={(event) => void handleChangeRate(selectedPosition, event)}>
-                  <div className="form-row">
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Новая ставка, % годовых"
-                      value={rateChangeDrafts[selectedPosition.id].newRate}
-                      onChange={(event) => setRateChangeDrafts((prev) => ({
-                        ...prev,
-                        [selectedPosition.id]: { ...prev[selectedPosition.id], newRate: event.target.value },
-                      }))}
-                      disabled={submittingRateChangeId === selectedPosition.id}
-                      style={{ width: 200 }}
-                    />
-                    <input
-                      className="input"
-                      type="date"
-                      value={rateChangeDrafts[selectedPosition.id].effectiveDate}
-                      onChange={(event) => setRateChangeDrafts((prev) => ({
-                        ...prev,
-                        [selectedPosition.id]: { ...prev[selectedPosition.id], effectiveDate: event.target.value },
-                      }))}
-                      disabled={submittingRateChangeId === selectedPosition.id}
-                    />
-                    <button className="btn btn--primary" type="submit" disabled={submittingRateChangeId === selectedPosition.id}>
-                      {submittingRateChangeId === selectedPosition.id ? 'Сохраняем...' : 'Изменить ставку'}
+                <form className="pf-pos-form" onSubmit={(event) => void handleChangeRate(selectedPosition, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Новая ставка, % годовых</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.0"
+                        value={rateChangeDrafts[selectedPosition.id].newRate}
+                        onChange={(event) => setRateChangeDrafts((prev) => ({
+                          ...prev,
+                          [selectedPosition.id]: { ...prev[selectedPosition.id], newRate: event.target.value },
+                        }))}
+                        disabled={submittingRateChangeId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата вступления</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={rateChangeDrafts[selectedPosition.id].effectiveDate}
+                        onChange={(event) => setRateChangeDrafts((prev) => ({
+                          ...prev,
+                          [selectedPosition.id]: { ...prev[selectedPosition.id], effectiveDate: event.target.value },
+                        }))}
+                        disabled={submittingRateChangeId === selectedPosition.id}
+                      />
+                    </div>
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingRateChangeId === selectedPosition.id}>
+                      {submittingRateChangeId === selectedPosition.id ? 'Сохраняем…' : 'Изменить ставку'}
                     </button>
                   </div>
                 </form>
               )}
 
-              {closeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{closeError}</p>}
-              {incomeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{incomeError}</p>}
-              {topUpError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{topUpError}</p>}
-              {partialCloseError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{partialCloseError}</p>}
-              {feeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{feeError}</p>}
-              {rateChangeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{rateChangeError}</p>}
-              {deleteError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{deleteError}</p>}
-              {cancelIncomeError && <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 12 }}>{cancelIncomeError}</p>}
+              {closeError && <p className="pf-detail-error">{closeError}</p>}
+              {incomeError && <p className="pf-detail-error">{incomeError}</p>}
+              {topUpError && <p className="pf-detail-error">{topUpError}</p>}
+              {partialCloseError && <p className="pf-detail-error">{partialCloseError}</p>}
+              {feeError && <p className="pf-detail-error">{feeError}</p>}
+              {rateChangeError && <p className="pf-detail-error">{rateChangeError}</p>}
+              {deleteError && <p className="pf-detail-error">{deleteError}</p>}
+              {cancelIncomeError && <p className="pf-detail-error">{cancelIncomeError}</p>}
 
-              <div style={{ marginTop: 12 }}>
-                <div className="section__eyebrow" style={{ marginBottom: 8 }}>События</div>
-                {eventsError && (
-                  <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem' }}>
-                    {eventsError}
-                  </p>
-                )}
+              <div className="pf-events">
+                <div className="pf-events__head">
+                  <span className="sec-tag">События</span>
+                </div>
+                {eventsError && <p className="pf-detail-error">{eventsError}</p>}
                 {eventsLoadingId === selectedPosition.id ? (
-                  <p className="list-row__sub">Загружаем события...</p>
+                  <p className="pf-events__empty">Загружаем события...</p>
+                ) : selectedPositionEvents.length === 0 ? (
+                  <p className="pf-events__empty">Событий пока нет</p>
                 ) : (
-                  <ul className="bank-detail-list">
+                  <ul className="pf-events__list">
                     {selectedPositionEvents.map((item) => (
-                      <li className="bank-detail-row" key={item.id}>
-                        <div className="bank-detail-row__main">
-                          <span className="pill">{getEventLabel(item)}</span>
-                          <strong className="bank-detail-row__amount">
+                      <li className="pf-events__item" key={item.id}>
+                        <div className="pf-events__row-main">
+                          <span className="pf-events__tag">{getEventLabel(item)}</span>
+                          <strong className="pf-events__amount">
                             {item.amount !== null && item.amount !== undefined && item.currency_code
                               ? formatAmount(item.amount, item.currency_code)
                               : 'Без суммы'}
                           </strong>
                         </div>
-                        <div className="bank-detail-row__sub">
-                        {formatDateLabel(item.event_at)}
-                        {typeof item.metadata?.destination === 'string'
-                          ? ` · ${item.metadata.destination === 'position' ? 'В актив' : 'На счёт'}`
-                          : ''}
-                        {item.quantity ? ` · Количество: ${item.quantity}` : ''}
+                        <div className="pf-events__sub">
+                          {formatDateLabel(item.event_at)}
+                          {typeof item.metadata?.destination === 'string'
+                            ? ` · ${item.metadata.destination === 'position' ? 'В актив' : 'На счёт'}`
+                            : ''}
+                          {item.quantity ? ` · Количество: ${item.quantity}` : ''}
                           {item.event_type === 'partial_close' && typeof item.metadata?.principal_amount_in_currency === 'number'
                             ? ` · Principal: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}`
                             : ''}
@@ -3363,12 +3457,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           {item.comment ? ` · ${item.comment}` : ''}
                         </div>
                         {item.event_type === 'income' && (
-                          <div className="form-row" style={{ paddingTop: 8 }}>
+                          <div className="pf-events__actions">
                             {selectedPositionCancelledIncomeIds.has(item.id) ? (
-                              <span className="tag tag--neutral">Уже отменен</span>
+                              <span className="tag tag--neutral">Уже отменён</span>
                             ) : (
                               <button
-                                className="btn"
+                                className="credits-textbtn credits-textbtn--danger"
                                 type="button"
                                 disabled={cancellingIncomeEventId === item.id}
                                 onClick={() => void handleCancelIncome(selectedPosition.id, item.id)}
@@ -3383,18 +3477,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   </ul>
                 )}
               </div>
-            </div>
 
-            <div className="modal-actions">
-              <div className="action-pill">
-                <button className="action-pill__cancel" type="button" onClick={() => setSelectedPositionId(null)}>
-                  Закрыть
-                </button>
-              </div>
-            </div>
+              <button
+                className="pf-archive-btn"
+                type="button"
+                disabled={deletingPositionId === selectedPosition.id}
+                onClick={() => void handleDeletePosition(selectedPosition)}
+              >
+                <Trash2 size={15} strokeWidth={2} /> {deletingPositionId === selectedPosition.id ? 'Удаляем...' : 'Удалить позицию'}
+              </button>
           </div>
-        </div>
-      )}
+        )}
+      </BottomSheet>
+        );
+      })()}
 
       {/* ── Add position sheet ── */}
       {(() => {
