@@ -1045,49 +1045,48 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }
   };
 
+  const clearPositionDrafts = (positionId: number) => {
+    const omit = <T extends object>(rec: Record<number, T>) => {
+      const next = { ...rec };
+      delete next[positionId];
+      return next;
+    };
+    setCloseDrafts(omit);
+    setIncomeDrafts(omit);
+    setTopUpDrafts(omit);
+    setPartialCloseDrafts(omit);
+    setFeeDrafts(omit);
+    setRateChangeDrafts(omit);
+  };
+
   const handleOpenCloseForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
     setCloseError(null);
-    setCloseDrafts((prev) => (
-      prev[position.id]
-        ? prev
-        : { ...prev, [position.id]: createInitialCloseDraft(position) }
-    ));
+    setCloseDrafts((prev) => ({ ...prev, [position.id]: createInitialCloseDraft(position) }));
   };
 
   const handleOpenIncomeForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
     setIncomeError(null);
-    setIncomeDrafts((prev) => (
-      prev[position.id]
-        ? prev
-        : { ...prev, [position.id]: createInitialIncomeDraft(position) }
-    ));
+    setIncomeDrafts((prev) => ({ ...prev, [position.id]: createInitialIncomeDraft(position) }));
   };
 
   const handleOpenTopUpForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
     setTopUpError(null);
-    setTopUpDrafts((prev) => (
-      prev[position.id]
-        ? prev
-        : { ...prev, [position.id]: createInitialTopUpDraft(position) }
-    ));
+    setTopUpDrafts((prev) => ({ ...prev, [position.id]: createInitialTopUpDraft(position) }));
   };
 
   const handleOpenPartialCloseForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
     setPartialCloseError(null);
-    setPartialCloseDrafts((prev) => (
-      prev[position.id]
-        ? prev
-        : { ...prev, [position.id]: createInitialPartialCloseDraft(position) }
-    ));
+    setPartialCloseDrafts((prev) => ({ ...prev, [position.id]: createInitialPartialCloseDraft(position) }));
   };
 
   const handleOpenFeeForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
     setFeeError(null);
-    setFeeDrafts((prev) => (
-      prev[position.id]
-        ? prev
-        : { ...prev, [position.id]: createInitialFeeDraft(position) }
-    ));
+    setFeeDrafts((prev) => ({ ...prev, [position.id]: createInitialFeeDraft(position) }));
   };
 
   const handleCloseDraftChange = (
@@ -2735,7 +2734,10 @@ export default function Portfolio({ user }: { user: UserContext }) {
         title={selectedPosition?.title ?? ''}
         icon={selectedPosition ? (posLogoUrl ? <img src={posLogoUrl} alt="" /> : <CategorySvgIcon code={posIconColor.icon} />) : undefined}
         iconColor={posLogoUrl ? undefined : posIconColor.color}
-        onClose={() => setSelectedPositionId(null)}
+        onClose={() => {
+          if (selectedPosition) clearPositionDrafts(selectedPosition.id);
+          setSelectedPositionId(null);
+        }}
       >
         {selectedPosition && (
           <div className="pf-detail-body">
@@ -2949,6 +2951,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         className="btn btn--ghost"
                         type="button"
                         onClick={() => {
+                          clearPositionDrafts(selectedPosition.id);
                           setRateChangeDrafts((prev) => ({
                             ...prev,
                             [selectedPosition.id]: {
@@ -3267,19 +3270,19 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
               {topUpDrafts[selectedPosition.id] && (
                 <form className="pf-pos-form" onSubmit={(event) => void handleTopUpPosition(selectedPosition, event)}>
+                  <div className="apf-field">
+                    <label className="apf-label">Сумма пополнения</label>
+                    <input
+                      className="apf-input"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={topUpDrafts[selectedPosition.id].amount}
+                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { amount: event.target.value })}
+                      disabled={submittingTopUpId === selectedPosition.id}
+                    />
+                  </div>
                   <div className="apf-row">
-                    <div className="apf-field" style={{ flex: 2 }}>
-                      <label className="apf-label">Сумма пополнения</label>
-                      <input
-                        className="apf-input"
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0"
-                        value={topUpDrafts[selectedPosition.id].amount}
-                        onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { amount: event.target.value })}
-                        disabled={submittingTopUpId === selectedPosition.id}
-                      />
-                    </div>
                     <div className="apf-field" style={{ flex: 1 }}>
                       <label className="apf-label">Количество</label>
                       <input
@@ -3352,16 +3355,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         ))}
                       </select>
                     </div>
-                    <div className="apf-field" style={{ flex: 1 }}>
-                      <label className="apf-label">Дата</label>
-                      <input
-                        className="apf-input"
-                        type="date"
-                        value={feeDrafts[selectedPosition.id].chargedAt}
-                        onChange={(event) => handleFeeDraftChange(selectedPosition.id, { chargedAt: event.target.value })}
-                        disabled={submittingFeeId === selectedPosition.id}
-                      />
-                    </div>
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Дата</label>
+                    <input
+                      className="apf-input"
+                      type="date"
+                      value={feeDrafts[selectedPosition.id].chargedAt}
+                      onChange={(event) => handleFeeDraftChange(selectedPosition.id, { chargedAt: event.target.value })}
+                      disabled={submittingFeeId === selectedPosition.id}
+                    />
                   </div>
                   <div className="apf-balance">
                     Доступно: {formatAmount(getAccountBalanceForCurrency(selectedPosition.investment_account_id, feeDrafts[selectedPosition.id].currencyCode), feeDrafts[selectedPosition.id].currencyCode)}
