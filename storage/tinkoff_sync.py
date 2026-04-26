@@ -657,6 +657,12 @@ async def _build_live_price_payload(
     if quantity <= 0 or quoted_price < 0:
         return None
 
+    # T-Bank sometimes keeps legacy/replaced instruments in portfolio payloads
+    # with a zero quote. Treat that as "price unavailable" instead of forcing
+    # the UI to show a full loss equal to the entry amount.
+    if quoted_price == 0:
+        return None
+
     meta = matched_row['metadata']
     per_unit_price = quoted_price
     clean_per_unit_price = quoted_price
@@ -1479,6 +1485,22 @@ class TinkoffSync:
                 quoted_price = _api_number_to_decimal(
                     portfolio_position.get('currentPrice') or portfolio_position.get('current_price'),
                 )
+
+                if quoted_price == 0:
+                    # If GetPortfolio already knows about the position but gives a zero
+                    # quote, prefer no live valuation over reviving a stale last price
+                    # from a replaced/delisted instrument.
+                    result.append({
+                        'position_id': matched_row['position_id'],
+                        'price': 0.0,
+                        'clean_price': 0.0,
+                        'currency_code': matched_row['currency_code'],
+                        'current_value': 0.0,
+                        'clean_current_value': None,
+                        'source': 'tinkoff_unpriced',
+                    })
+                    used_position_ids.add(matched_row['position_id'])
+                    continue
 
                 live_price = await _build_live_price_payload(
                     client,

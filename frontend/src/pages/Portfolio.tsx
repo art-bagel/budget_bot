@@ -724,10 +724,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const getResolvedPositionQuote = (position: PortfolioPosition) => {
     const tinkoffPrice = tinkoffLivePrices.get(position.id) ?? null;
     if (tinkoffPrice) {
+      const isUnpricedTinkoffPosition = tinkoffPrice.source === 'tinkoff_unpriced';
       return {
-        currentPrice: tinkoffPrice.clean_price ?? tinkoffPrice.price,
+        currentPrice: isUnpricedTinkoffPosition ? null : (tinkoffPrice.clean_price ?? tinkoffPrice.price),
         currentTotalValue: tinkoffPrice.current_value,
-        performanceCurrentValue: tinkoffPrice.clean_current_value ?? tinkoffPrice.current_value,
+        performanceCurrentValue: isUnpricedTinkoffPosition
+          ? null
+          : (tinkoffPrice.clean_current_value ?? tinkoffPrice.current_value),
         isPreviousClose: false,
         source: 'tinkoff' as const,
       };
