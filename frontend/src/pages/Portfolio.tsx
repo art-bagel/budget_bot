@@ -2710,14 +2710,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
       {(() => {
         const posIconColor = selectedPosition ? assetTypeIconColor(selectedPosition.asset_type_code) : { icon: 'chart', color: 'b' };
+        const posLogoName = selectedPosition ? getPositionMetadataText(selectedPosition, 'logo_name') : null;
+        const posLogoUrl = posLogoName ? getTinkoffInstrumentLogoUrl(posLogoName) : null;
         return (
       <BottomSheet
         open={!!selectedPosition}
         gray
         tag={selectedPosition ? `${selectedPosition.investment_account_owner_type === 'family' ? 'Семейный' : 'Личный'} · ${selectedPosition.investment_account_name}` : ''}
         title={selectedPosition?.title ?? ''}
-        icon={selectedPosition ? <CategorySvgIcon code={posIconColor.icon} /> : undefined}
-        iconColor={posIconColor.color}
+        icon={selectedPosition ? (posLogoUrl ? <img src={posLogoUrl} alt="" /> : <CategorySvgIcon code={posIconColor.icon} />) : undefined}
+        iconColor={posLogoUrl ? undefined : posIconColor.color}
         onClose={() => setSelectedPositionId(null)}
       >
         {selectedPosition && (
@@ -3166,56 +3168,54 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       </select>
                     </div>
                   </div>
-                  <div className="apf-row">
-                    <div className="apf-field" style={{ flex: 1 }}>
-                      <label className="apf-label">Тип дохода</label>
-                      <select
-                        className="apf-input"
-                        value={incomeDrafts[selectedPosition.id].incomeKind}
-                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { incomeKind: event.target.value })}
-                        disabled={submittingIncomeId === selectedPosition.id}
-                      >
-                        {selectedPosition.asset_type_code === 'deposit' ? (
-                          <>
-                            <option value="interest">Проценты</option>
-                            <option value="other">Другой доход</option>
-                          </>
-                        ) : selectedPosition.asset_type_code === 'security' ? (
-                          <>
-                            <option value="dividend">Дивиденды</option>
-                            <option value="coupon">Купон</option>
-                            <option value="other">Другой доход</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="other">Другой доход</option>
-                            <option value="interest">Проценты</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                    <div className="apf-field" style={{ flex: 1 }}>
-                      <label className="apf-label">Назначение</label>
-                      <select
-                        className="apf-input"
-                        value={incomeDrafts[selectedPosition.id].destination}
-                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
-                        disabled={submittingIncomeId === selectedPosition.id}
-                      >
-                        <option value="account">На счёт</option>
-                        <option value="position">Оставить в активе</option>
-                      </select>
-                    </div>
-                    <div className="apf-field" style={{ flex: 1 }}>
-                      <label className="apf-label">Дата</label>
-                      <input
-                        className="apf-input"
-                        type="date"
-                        value={incomeDrafts[selectedPosition.id].receivedAt}
-                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { receivedAt: event.target.value })}
-                        disabled={submittingIncomeId === selectedPosition.id}
-                      />
-                    </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Тип дохода</label>
+                    <select
+                      className="apf-input"
+                      value={incomeDrafts[selectedPosition.id].incomeKind}
+                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { incomeKind: event.target.value })}
+                      disabled={submittingIncomeId === selectedPosition.id}
+                    >
+                      {selectedPosition.asset_type_code === 'deposit' ? (
+                        <>
+                          <option value="interest">Проценты</option>
+                          <option value="other">Другой доход</option>
+                        </>
+                      ) : selectedPosition.asset_type_code === 'security' ? (
+                        <>
+                          <option value="dividend">Дивиденды</option>
+                          <option value="coupon">Купон</option>
+                          <option value="other">Другой доход</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="other">Другой доход</option>
+                          <option value="interest">Проценты</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Назначение</label>
+                    <select
+                      className="apf-input"
+                      value={incomeDrafts[selectedPosition.id].destination}
+                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
+                      disabled={submittingIncomeId === selectedPosition.id}
+                    >
+                      <option value="account">На счёт</option>
+                      <option value="position">Оставить в активе</option>
+                    </select>
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Дата</label>
+                    <input
+                      className="apf-input"
+                      type="date"
+                      value={incomeDrafts[selectedPosition.id].receivedAt}
+                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { receivedAt: event.target.value })}
+                      disabled={submittingIncomeId === selectedPosition.id}
+                    />
                   </div>
                   {incomeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
                     <div className="apf-field">
