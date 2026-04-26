@@ -13,6 +13,7 @@ export function usePageSwipe(
   ref: RefObject<HTMLElement | null>,
   currentPage: Page,
   onNavigate: (page: Page) => void,
+  enabled = true,
 ) {
   const stateRef = useRef<{
     startX: number;
@@ -28,6 +29,10 @@ export function usePageSwipe(
   onNavigateRef.current = onNavigate;
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const el = ref.current;
     if (!el) return;
 
@@ -93,5 +98,5 @@ export function usePageSwipe(
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);
     };
-  }, [ref]); // listeners mounted once — currentPage and onNavigate read via refs
+  }, [enabled, ref]); // listeners mounted once — currentPage and onNavigate read via refs
 }

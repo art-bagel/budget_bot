@@ -49,8 +49,9 @@ const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
 export default function Layout({ page, onNavigate, onRefresh, badges, children }: Props) {
   const mainRef = useRef<HTMLElement>(null);
   const { resolved, setTheme } = useTheme();
-  usePageSwipe(mainRef, page, onNavigate);
-  usePullToRefresh(mainRef, onRefresh);
+  const enableTelegramTouchShell = Boolean(getTelegramWebApp());
+  usePageSwipe(mainRef, page, onNavigate, enableTelegramTouchShell);
+  usePullToRefresh(mainRef, onRefresh, enableTelegramTouchShell);
 
   const toggleTheme = () => setTheme(resolved === 'dark' ? 'light' : 'dark');
 

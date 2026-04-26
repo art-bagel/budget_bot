@@ -8087,6 +8087,18 @@ select.dlg-row__ghost option {
 .view-pane { display: none; flex-direction: column; gap: 16px; }
 .view-pane--on { display: flex; }
 
+/* Inline switcher (used inside sheets, 2 options) */
+.viewtog--inline {
+  grid-template-columns: repeat(2, 1fr);
+  background: var(--surface-inset);
+  box-shadow: none;
+  margin-bottom: 14px;
+}
+.viewtog--inline .viewtog__opt {
+  padding: 9px 6px;
+  font-size: 13px;
+}
+
 /* Card sections (Операции / Аналитика panes) */
 .card-sec {
   background: var(--surface);

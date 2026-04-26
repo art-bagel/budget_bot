@@ -27,17 +27,15 @@ import TransferDialog from '../components/TransferDialog';
 import type { TransferSource, TransferTarget } from '../components/TransferDialog';
 import AccountDetailSheet from '../components/AccountDetailSheet';
 import AccountTransferDialog from '../components/AccountTransferDialog';
-import BottomSheet from '../components/BottomSheet';
 import CategoryActionSheet from '../components/CategoryActionSheet';
+import ExchangeSheet from '../components/ExchangeSheet';
 import FreeBudgetActionSheet from '../components/FreeBudgetActionSheet';
 import CreateCategoryDialog from '../components/CreateCategoryDialog';
 import IncomeDialog from '../components/IncomeDialog';
 import Operations from './Operations';
 import {
   IconArrowRightLeft,
-  IconChartPie,
   IconChevronRight,
-  IconClock,
   IconPlus,
 } from '../components/Icons';
 import { categoryDisplayName, parseCategoryIcon } from '../utils/categoryIcon';
@@ -45,7 +43,7 @@ import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
 
-type DashboardBankHubMode = 'history' | 'analytics';
+type DashboardViewTab = 'budget' | 'operations' | 'analytics';
 
 export default function Dashboard({ user, onNavigate }: { user: UserContext; onNavigate?: (page: 'exchange' | 'portfolio' | 'credits') => void }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
@@ -72,17 +70,17 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   };
 
   const [accountSheet, setAccountSheet] = useState<'personal' | 'family' | null>(null);
-  const [showBankHub, setShowBankHub] = useState(false);
-  const [bankHubMode, setBankHubMode] = useState<DashboardBankHubMode>('history');
+  const [showExchange, setShowExchange] = useState(false);
+  const [viewTab, setViewTab] = useState<DashboardViewTab>('budget');
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
   const [showAccountTransfer, setShowAccountTransfer] = useState(false);
 
   useEffect(() => {
-    if (showBankHub || accountSheet) {
+    if (accountSheet) {
       document.body.classList.add('modal-open');
       return () => document.body.classList.remove('modal-open');
     }
-  }, [showBankHub, accountSheet]);
+  }, [accountSheet]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
@@ -354,11 +352,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     setSelectedCategory(null);
     setCreateDialogKind(null);
     await loadOverview();
-  };
-
-  const openBankHub = (mode: DashboardBankHubMode) => {
-    setBankHubMode(mode);
-    setShowBankHub(true);
   };
 
   /* ── render ─────────────────────────────────────── */
@@ -655,13 +648,9 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           <span className="qa__ico"><IconPlus /></span>
           <span className="qa__label">Пополнить</span>
         </button>
-        <button className="qa" type="button" onClick={() => openBankHub('history')}>
-          <span className="qa__ico qa__ico--alt"><IconClock /></span>
-          <span className="qa__label">Операции</span>
-        </button>
-        <button className="qa" type="button" onClick={() => openBankHub('analytics')}>
-          <span className="qa__ico qa__ico--alt"><IconChartPie /></span>
-          <span className="qa__label">Аналитика</span>
+        <button className="qa" type="button" onClick={() => setShowExchange(true)}>
+          <span className="qa__ico qa__ico--alt"><IconArrowRightLeft /></span>
+          <span className="qa__label">Обмен</span>
         </button>
         <button className="qa" type="button" onClick={() => setShowAccountTransfer(true)}>
           <span className="qa__ico qa__ico--alt"><IconArrowRightLeft /></span>
@@ -669,8 +658,30 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         </button>
       </div>
 
+      {/* View switcher */}
+      <div className="viewtog" role="tablist" aria-label="Раздел">
+        {(
+          [
+            { key: 'budget', label: 'Бюджет' },
+            { key: 'operations', label: 'Операции' },
+            { key: 'analytics', label: 'Аналитика' },
+          ] as Array<{ key: DashboardViewTab; label: string }>
+        ).map(({ key, label }) => (
+          <button
+            key={key}
+            className={`viewtog__opt${viewTab === key ? ' viewtog__opt--on' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={viewTab === key}
+            onClick={() => setViewTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Budget section */}
-      <section className="sec">
+      <section className={`sec view-pane${viewTab === 'budget' ? ' view-pane--on' : ''}`}>
         <div className="sec__head">
           <h2 className="sec__title">Бюджет</h2>
           <span className="sec__sub">Как распределены деньги</span>
@@ -1029,6 +1040,32 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         )}
       </section>
 
+      {/* Operations pane */}
+      <div className={`view-pane${viewTab === 'operations' ? ' view-pane--on' : ''}`}>
+        {viewTab === 'operations' && (
+          <Operations
+            user={user}
+            embedded
+            initialViewMode="history"
+            allowedModes={['history']}
+            historyScope="banking"
+          />
+        )}
+      </div>
+
+      {/* Analytics pane */}
+      <div className={`view-pane${viewTab === 'analytics' ? ' view-pane--on' : ''}`}>
+        {viewTab === 'analytics' && (
+          <Operations
+            user={user}
+            embedded
+            initialViewMode="analytics"
+            allowedModes={['analytics']}
+            historyScope="banking"
+          />
+        )}
+      </div>
+
       {transferTarget && (
         <TransferDialog
           sources={getSourcesFor(transferTarget)}
@@ -1105,35 +1142,24 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
         <AccountDetailSheet
           open
           ownerKind={accountSheet}
-          bankAccountId={
-            accountSheet === 'family'
-              ? (overview.family_bank_account_id ?? user.bank_account_id)
-              : user.bank_account_id
-          }
           accountTitle={accountSheet === 'family' ? 'Семейный счёт' : 'Личный счёт'}
           baseCurrencyCode={overview.base_currency_code}
           balances={accountSheet === 'family' ? overview.family_bank_balances : overview.bank_balances}
           onClose={() => setAccountSheet(null)}
-          onSuccess={() => { void loadOverview(); }}
         />
       )}
 
-      <BottomSheet
-        open={showBankHub}
-        tag="Банк"
-        title={bankHubMode === 'analytics' ? 'Аналитика' : 'Операции'}
-        icon={bankHubMode === 'analytics' ? <IconChartPie /> : <IconClock />}
-        iconColor={bankHubMode === 'analytics' ? 'b' : 'o'}
-        onClose={() => setShowBankHub(false)}
-      >
-        <Operations
-          user={user}
-          embedded
-          initialViewMode={bankHubMode === 'analytics' ? 'analytics' : 'history'}
-          allowedModes={['history', 'analytics']}
-          historyScope="banking"
-        />
-      </BottomSheet>
+      <ExchangeSheet
+        open={showExchange}
+        hasFamily={hasFamily}
+        personalAccountId={user.bank_account_id}
+        familyAccountId={overview.family_bank_account_id}
+        baseCurrencyCode={overview.base_currency_code}
+        personalBalances={overview.bank_balances}
+        familyBalances={overview.family_bank_balances}
+        onClose={() => setShowExchange(false)}
+        onSuccess={() => { setShowExchange(false); void loadOverview(); }}
+      />
     </>
   );
 }

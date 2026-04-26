@@ -7,11 +7,16 @@ const MAX_ANGLE = 0.5;   // tan(angle) — keeps gesture mostly vertical
 export function usePullToRefresh(
   ref: RefObject<HTMLElement | null>,
   onRefresh: () => void,
+  enabled = true,
 ) {
   const onRefreshRef = useRef(onRefresh);
   useEffect(() => { onRefreshRef.current = onRefresh; });
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const el = ref.current;
     if (!el) return;
 
@@ -93,5 +98,5 @@ export function usePullToRefresh(
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);
     };
-  }, [ref]);
+  }, [enabled, ref]);
 }
