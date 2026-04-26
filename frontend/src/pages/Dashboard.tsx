@@ -47,7 +47,7 @@ import { hapticRigid } from '../telegram';
 
 type DashboardBankHubMode = 'history' | 'analytics';
 
-export default function Dashboard({ user, onNavigate }: { user: UserContext; onNavigate?: (page: 'exchange') => void }) {
+export default function Dashboard({ user, onNavigate }: { user: UserContext; onNavigate?: (page: 'exchange' | 'portfolio' | 'credits') => void }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
@@ -71,7 +71,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     });
   };
 
-  const [showBankDetail, setShowBankDetail] = useState(false);
   const [accountSheet, setAccountSheet] = useState<'personal' | 'family' | null>(null);
   const [showBankHub, setShowBankHub] = useState(false);
   const [bankHubMode, setBankHubMode] = useState<DashboardBankHubMode>('history');
@@ -79,11 +78,11 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   const [showAccountTransfer, setShowAccountTransfer] = useState(false);
 
   useEffect(() => {
-    if (showBankDetail || showBankHub || accountSheet) {
+    if (showBankHub || accountSheet) {
       document.body.classList.add('modal-open');
       return () => document.body.classList.remove('modal-open');
     }
-  }, [showBankDetail, showBankHub, accountSheet]);
+  }, [showBankHub, accountSheet]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null);
   const [draggedOwnerType, setDraggedOwnerType] = useState<'user' | 'family' | null>(null);
   const [dropTargetCategoryId, setDropTargetCategoryId] = useState<number | null>(null);
@@ -617,8 +616,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
             className="hero__row"
             role="button"
             tabIndex={0}
-            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('portfolio'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate?.('portfolio'); }}
           >
             <dt><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</dt>
             <dd>
@@ -633,8 +632,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
             className={`hero__row${totalCreditDebtInBase > 0 ? ' hero__row--neg' : ''}`}
             role="button"
             tabIndex={0}
-            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setShowBankDetail(true); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowBankDetail(true); }}
+            onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('credits'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate?.('credits'); }}
           >
             <dt><span className={`hero__mark${totalCreditDebtInBase > 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</dt>
             <dd>
@@ -1118,66 +1117,6 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
           onSuccess={() => { void loadOverview(); }}
         />
       )}
-
-      <BottomSheet
-        open={showBankDetail}
-        tag="Банк"
-        title="По валютам"
-        onClose={() => setShowBankDetail(false)}
-      >
-        <div className="dashboard-budget-sections">
-          <div className="dashboard-budget-section">
-            <div className="dashboard-budget-section__header">
-              <div className="section__eyebrow">Личный счёт</div>
-            </div>
-            {overview.bank_balances.length === 0 ? (
-              <p className="list-row__sub">На личном счёте пока нет валютных остатков.</p>
-            ) : (
-              <ul className="bank-detail-list">
-                {overview.bank_balances.map((balance) => (
-                  <li className="bank-detail-row" key={'personal-' + balance.currency_code}>
-                    <div className="bank-detail-row__main">
-                      <span className="pill">{balance.currency_code}</span>
-                      <strong className="bank-detail-row__amount">
-                        {formatAmount(balance.amount, balance.currency_code)}
-                      </strong>
-                    </div>
-                    <div className="bank-detail-row__sub">
-                      Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {hasFamily && (
-            <div className="dashboard-budget-section">
-              <div className="dashboard-budget-section__header">
-                <div className="section__eyebrow">Семейный счёт</div>
-              </div>
-              {overview.family_bank_balances.length === 0 ? (
-                <p className="list-row__sub">На семейном счёте пока нет валютных остатков.</p>
-              ) : (
-                <ul className="bank-detail-list">
-                  {overview.family_bank_balances.map((balance) => (
-                    <li className="bank-detail-row" key={'family-' + balance.currency_code}>
-                      <div className="bank-detail-row__main">
-                        <span className="pill">{balance.currency_code}</span>
-                        <strong className="bank-detail-row__amount">
-                          {formatAmount(balance.amount, balance.currency_code)}
-                        </strong>
-                      </div>
-                      <div className="bank-detail-row__sub">
-                        Себестоимость: {formatAmount(balance.historical_cost_in_base, overview.base_currency_code)}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      </BottomSheet>
 
       <BottomSheet
         open={showBankHub}
