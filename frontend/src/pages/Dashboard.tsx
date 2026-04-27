@@ -285,12 +285,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   /* ── render ─────────────────────────────────────── */
 
   if (loading) {
-    return (
-      <div className="status-screen">
-        <h1>Загрузка...</h1>
-        <p>Собираем реальные остатки банка и бюджетов.</p>
-      </div>
-    );
+    return null;
   }
 
   if (error || !overview) {

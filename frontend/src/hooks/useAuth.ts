@@ -17,10 +17,17 @@ export function useAuth() {
       return;
     }
 
+    const MIN_SPLASH_MS = 2000;
+    const start = Date.now();
+
     register(DEFAULT_BASE_CURRENCY)
       .then(setUser)
       .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        const elapsed = Date.now() - start;
+        const remaining = MIN_SPLASH_MS - elapsed;
+        setTimeout(() => setLoading(false), Math.max(0, remaining));
+      });
   }, []);
 
   return { user, loading, error };
