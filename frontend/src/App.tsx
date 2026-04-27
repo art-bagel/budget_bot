@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import SplashScreen from './components/SplashScreen';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -40,12 +41,7 @@ export default function App() {
   }, [user]);
 
   if (loading) {
-    return (
-      <div className="status-screen">
-        <h1>Подключение...</h1>
-        <p>Регистрируем контекст пользователя</p>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (error || !user) {
