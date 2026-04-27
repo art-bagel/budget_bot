@@ -101,3 +101,98 @@ export function IconChartPie() {
     </svg>
   );
 }
+
+export function IconShield() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M12 3 5 6v6c0 4.5 3 8 7 9 4-1 7-4.5 7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>;
+}
+
+export function IconCoin() {
+  return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="8"/><path d="M9.5 9.5a2.5 2.5 0 1 1 4.5 1.5c-1 1-2.5 1-2.5 2.5M12 16.5v.01"/></svg>;
+}
+
+export function IconFamily() {
+  return <svg viewBox="0 0 24 24" {...s}><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 19a5 5 0 0 1 10 0M11 19a5 5 0 0 1 10 0"/></svg>;
+}
+
+export function IconUser() {
+  return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="9" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>;
+}
+
+export function IconPaint() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M19 7.5a4 4 0 0 1-4 4H9.5a2 2 0 0 0-2 2V17a2 2 0 1 1-4 0v-1a8 8 0 0 1 8-8h3.5A4 4 0 0 1 19 4z"/></svg>;
+}
+
+export function IconInfo() {
+  return <svg viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/></svg>;
+}
+
+export function IconTrendUp() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M4 16l5-5 4 4 7-8M14 7h6v6"/></svg>;
+}
+
+export function IconPlug() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M9 4v4M15 4v4M7 8h10v3a5 5 0 0 1-10 0z M12 16v4"/></svg>;
+}
+
+export function IconKey() {
+  return <svg viewBox="0 0 24 24" {...s}><circle cx="8" cy="14" r="4"/><path d="m11 11 8-8M16 6l3 3M14 8l3 3"/></svg>;
+}
+
+export function IconDatabase() {
+  return <svg viewBox="0 0 24 24" {...s}><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>;
+}
+
+export function IconDownload() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M12 4v12m0 0-4-4m4 4 4-4M5 20h14"/></svg>;
+}
+
+export function IconWarn() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M12 4 3 19h18z M12 10v4 M12 17v.01"/></svg>;
+}
+
+export function IconCheck() {
+  return <svg viewBox="0 0 24 24" {...s} strokeWidth={2.4}><path d="m4 12 5 5 11-11"/></svg>;
+}
+
+export function IconMail() {
+  return <svg viewBox="0 0 24 24" {...s}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></svg>;
+}
+
+export function IconTrash() {
+  return <svg viewBox="0 0 24 24" {...s}><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>;
+}
+
+export function IconThemeLight() {
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
+      <circle cx="12" cy="12" r="4.2" />
+      <g stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none">
+        <path d="M12 2.5v2.4" />
+        <path d="M12 19.1v2.4" />
+        <path d="M2.5 12h2.4" />
+        <path d="M19.1 12h2.4" />
+        <path d="m5.2 5.2 1.7 1.7" />
+        <path d="m17.1 17.1 1.7 1.7" />
+        <path d="m18.8 5.2-1.7 1.7" />
+        <path d="m6.9 17.1-1.7 1.7" />
+      </g>
+    </svg>
+  );
+}
+
+export function IconThemeDark() {
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
+      <path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a.6.6 0 0 1 .77.74A6.8 6.8 0 0 0 19.76 13.43a.6.6 0 0 1 .74.77z" />
+    </svg>
+  );
+}
+
+export function IconThemeAuto() {
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" />
+    </svg>
+  );
+}

@@ -3,14 +3,11 @@ import type { ReactNode } from 'react';
 import {
   IconCredit,
   IconDashboard,
-  IconMoon,
   IconPortfolio,
   IconSettings,
-  IconSun,
 } from './Icons';
 import { usePageSwipe } from '../hooks/usePageSwipe';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
-import { useTheme } from '../hooks/useTheme';
 import { getTelegramWebApp } from '../telegram';
 
 export type Page = 'dashboard' | 'exchange' | 'portfolio' | 'credits' | 'settings';
@@ -31,12 +28,15 @@ function getGreeting(): string {
   return 'Добрый вечер';
 }
 
-function getUserInitials(): string {
+function getTelegramAvatarData(): { initials: string; photoUrl: string | null } {
   const tgUser = getTelegramWebApp()?.initDataUnsafe?.user;
-  if (!tgUser) return 'БТ';
+  if (!tgUser) return { initials: 'БТ', photoUrl: null };
   const f = tgUser.first_name?.[0] ?? '';
   const l = tgUser.last_name?.[0] ?? '';
-  return (f + l).toUpperCase() || 'БТ';
+  return {
+    initials: (f + l).toUpperCase() || 'БТ',
+    photoUrl: tgUser.photo_url ?? null,
+  };
 }
 
 const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
@@ -48,39 +48,27 @@ const NAV_ITEMS: { id: Page; label: string; icon: () => ReactNode }[] = [
 
 export default function Layout({ page, onNavigate, onRefresh, badges, children }: Props) {
   const mainRef = useRef<HTMLElement>(null);
-  const { resolved, setTheme } = useTheme();
   const enableTelegramTouchShell = Boolean(getTelegramWebApp());
   usePageSwipe(mainRef, page, onNavigate, enableTelegramTouchShell);
   usePullToRefresh(mainRef, onRefresh, enableTelegramTouchShell);
 
-  const toggleTheme = () => setTheme(resolved === 'dark' ? 'light' : 'dark');
+  const avatar = getTelegramAvatarData();
 
   return (
     <div className="app">
       {/* Top header bar */}
       <header className="bar">
         <div className="bar__left">
-          <div className="ava">{getUserInitials()}</div>
+          <div className="ava">
+            {avatar.photoUrl
+              ? <img src={avatar.photoUrl} alt="" />
+              : avatar.initials
+            }
+          </div>
           <div className="bar__meta">
             <span className="bar__hello">{getGreeting()}</span>
             <h1 className="bar__title">Бюджет</h1>
           </div>
-        </div>
-        <div className="bar__right">
-          <button
-            className="icon-btn icon-btn--sm"
-            type="button"
-            id="themeToggle"
-            aria-label="Переключить тему"
-            onClick={toggleTheme}
-          >
-            <span className={`tg__sun${resolved === 'dark' ? ' tg__sun--hidden' : ''}`}>
-              <IconSun />
-            </span>
-            <span className={`tg__moon${resolved !== 'dark' ? ' tg__moon--hidden' : ''}`}>
-              <IconMoon />
-            </span>
-          </button>
         </div>
       </header>
 
