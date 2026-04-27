@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import SplashScreen from '../components/SplashScreen';
 import { ChevronDown, House, Landmark, CreditCard, Pencil, Trash2, ArrowDownLeft, ArrowRight, CalendarDays } from 'lucide-react';
 import BottomSheet from '../components/BottomSheet';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
@@ -774,7 +775,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const progressPct = totalTermLimit > 0 ? Math.round((paidPrincipal / totalTermLimit) * 100) : 0;
 
   if (loading) {
-    return null;
+    return <SplashScreen />;
   }
 
   return (

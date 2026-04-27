@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import SplashScreen from '../components/SplashScreen';
 
 import {
   exchangeCurrency,
@@ -112,7 +113,7 @@ export default function Exchange({ user }: { user: UserContext }) {
   };
 
   if (loading) {
-    return null;
+    return <SplashScreen />;
   }
 
   return (

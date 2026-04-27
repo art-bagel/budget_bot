@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import SplashScreen from '../components/SplashScreen';
 
 import {
   fetchBankAccounts,
@@ -285,7 +286,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   /* ── render ─────────────────────────────────────── */
 
   if (loading) {
-    return null;
+    return <SplashScreen />;
   }
 
   if (error || !overview) {

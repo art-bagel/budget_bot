@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import SplashScreen from '../components/SplashScreen';
 import { TrendingUp, Landmark, Coins, Package, Info, Trash2 } from 'lucide-react';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
@@ -1898,7 +1899,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   };
 
   if (loading) {
-    return null;
+    return <SplashScreen />;
   }
 
   return (
