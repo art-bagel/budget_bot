@@ -123,6 +123,7 @@ export function initTelegramWebApp(): void {
   webApp.ready();
   webApp.expand();
   webApp.enableClosingConfirmation?.();
+  webApp.disableVerticalSwipes?.();
 
   document.addEventListener('touchmove', (e) => {
     if (e.touches.length > 1) {

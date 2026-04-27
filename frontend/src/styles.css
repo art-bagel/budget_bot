@@ -483,7 +483,7 @@ input { font: inherit; color: inherit; }
 /* ── Header bar ──────────────────────────────────── */
 
 .bar {
-  padding: calc(var(--tg-app-top-offset, var(--tg-safe-area-inset-top, env(safe-area-inset-top, 0px))) + 14px) 16px 8px;
+  padding: calc(var(--tg-app-top-offset, var(--tg-safe-area-inset-top, env(safe-area-inset-top, 0px))) + 6px) 16px 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
