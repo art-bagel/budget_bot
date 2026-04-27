@@ -28,14 +28,15 @@ function getGreeting(): string {
   return 'Добрый вечер';
 }
 
-function getTelegramAvatarData(): { initials: string; photoUrl: string | null } {
+function getTelegramAvatarData(): { initials: string; photoUrl: string | null; firstName: string } {
   const tgUser = getTelegramWebApp()?.initDataUnsafe?.user;
-  if (!tgUser) return { initials: 'БТ', photoUrl: null };
+  if (!tgUser) return { initials: 'БТ', photoUrl: null, firstName: 'Бюджет' };
   const f = tgUser.first_name?.[0] ?? '';
   const l = tgUser.last_name?.[0] ?? '';
   return {
     initials: (f + l).toUpperCase() || 'БТ',
     photoUrl: tgUser.photo_url ?? null,
+    firstName: tgUser.first_name || tgUser.username || 'Бюджет',
   };
 }
 
@@ -67,7 +68,7 @@ export default function Layout({ page, onNavigate, onRefresh, badges, children }
           </div>
           <div className="bar__meta">
             <span className="bar__hello">{getGreeting()}</span>
-            <h1 className="bar__title">Бюджет</h1>
+            <h1 className="bar__title">{avatar.firstName}</h1>
           </div>
         </div>
       </header>
