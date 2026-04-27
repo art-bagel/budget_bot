@@ -774,12 +774,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const progressPct = totalTermLimit > 0 ? Math.round((paidPrincipal / totalTermLimit) * 100) : 0;
 
   if (loading) {
-    return (
-      <div className="status-screen">
-        <h1>Загрузка...</h1>
-        <p>Загружаем кредитные счета</p>
-      </div>
-    );
+    return null;
   }
 
   return (

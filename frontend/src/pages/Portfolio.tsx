@@ -1898,12 +1898,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   };
 
   if (loading) {
-    return (
-      <div className="status-screen">
-        <h1>Загрузка...</h1>
-        <p>Собираем инвестиционные счета и позиции</p>
-      </div>
-    );
+    return null;
   }
 
   return (

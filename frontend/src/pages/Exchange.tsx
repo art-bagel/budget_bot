@@ -112,11 +112,7 @@ export default function Exchange({ user }: { user: UserContext }) {
   };
 
   if (loading) {
-    return (
-      <div className="status-screen">
-        <h1>Загрузка...</h1>
-      </div>
-    );
+    return null;
   }
 
   return (
