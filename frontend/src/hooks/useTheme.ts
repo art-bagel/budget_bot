@@ -61,8 +61,14 @@ export function useTheme() {
 
   const setTheme = useCallback((t: Theme) => {
     setThemeRaw(t);
+    localStorage.setItem(getStorageKey(), t);
     void updateUserSettings({ theme: t });
   }, []);
 
-  return { theme, resolved, setTheme };
+  const syncFromServer = useCallback((t: Theme) => {
+    setThemeRaw(t);
+    localStorage.setItem(getStorageKey(), t);
+  }, []);
+
+  return { theme, resolved, setTheme, syncFromServer };
 }

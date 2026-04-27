@@ -6,6 +6,7 @@ export interface UserContext {
   fx_result_category_id: number;
   base_currency_code: string;
   hints_enabled: boolean;
+  theme: string;
 }
 
 export interface Category {

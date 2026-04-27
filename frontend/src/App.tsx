@@ -9,6 +9,8 @@ import Exchange from './pages/Exchange';
 import Portfolio from './pages/Portfolio';
 import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
+import { useTheme } from './hooks/useTheme';
+import type { Theme } from './hooks/useTheme';
 import { bindTelegramBackButton } from './telegram';
 
 const PAGE_IDS: Page[] = ['dashboard', 'exchange', 'portfolio', 'credits', 'settings'];
@@ -21,6 +23,7 @@ export default function App() {
   });
   const [familyBadge, setFamilyBadge] = useState(0);
   const { user, loading, error } = useAuth();
+  const { syncFromServer } = useTheme();
 
   const handleNavigate = (p: Page) => {
     setVisited(prev => new Set(prev).add(p));
@@ -37,6 +40,7 @@ export default function App() {
   useEffect(() => {
     if (user) {
       localStorage.setItem('budget_hints_enabled', String(user.hints_enabled));
+      syncFromServer(user.theme as Theme);
     }
   }, [user]);
 

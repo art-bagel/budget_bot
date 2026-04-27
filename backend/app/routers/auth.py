@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app.storage import context
@@ -20,6 +20,7 @@ class RegisterResponse(BaseModel):
     fx_result_category_id: int
     base_currency_code: str
     hints_enabled: bool
+    theme: str = Field(default='system')
 
 
 class DeleteAccountResponse(BaseModel):
