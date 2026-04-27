@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getTelegramColorScheme, getTelegramWebApp, subscribeTelegramThemeChanged } from '../telegram';
+import { getTelegramColorScheme, getTelegramUserId, getTelegramWebApp, subscribeTelegramThemeChanged } from '../telegram';
 import { updateUserSettings } from '../api';
 
 export type Theme = 'light' | 'dark' | 'system';
 
-const STORAGE_KEY = 'budgeting-theme';
+function getStorageKey(): string {
+  const uid = getTelegramUserId();
+  return uid ? `budgeting-theme-${uid}` : 'budgeting-theme';
+}
 
 function getSystemTheme(): 'light' | 'dark' {
   const telegramColorScheme = getTelegramColorScheme();
@@ -18,7 +21,7 @@ function getSystemTheme(): 'light' | 'dark' {
 
 export function useTheme() {
   const [theme, setThemeRaw] = useState<Theme>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(getStorageKey());
     return (stored as Theme) || 'system';
   });
 
@@ -31,7 +34,7 @@ export function useTheme() {
     } else {
       root.setAttribute('data-theme', theme);
     }
-    localStorage.setItem(STORAGE_KEY, theme);
+    localStorage.setItem(getStorageKey(), theme);
 
     const webApp = getTelegramWebApp();
     const backgroundColor = getComputedStyle(root).getPropertyValue('--bg').trim();
