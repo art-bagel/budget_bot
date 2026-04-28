@@ -1,0 +1,132 @@
+# Crypto Banking + Investments MVP
+
+Рабочий план для текущего релиза криптовалюты в бюджетном боте.
+
+## Цель
+
+Сделать криптовалюту частью существующего банковского и инвестиционного контуров:
+
+- банковская крипта используется для платежей, обменов и переводов между счетами;
+- инвестиционная крипта используется для доходности, оценки капитала, DeFi и P&L;
+- `currencies` остается fiat-only;
+- крипта хранится отдельно как `crypto_assets` с сетью, контрактом и точностью.
+
+## Что уже реализовано в MVP
+
+### База данных
+
+- добавлены `crypto_assets`;
+- добавлены банковские crypto-балансы: `current_crypto_balances`;
+- добавлены FIFO-lots: `crypto_lots` и `crypto_lot_consumptions`;
+- добавлены банковские crypto-entry: `crypto_bank_entries`;
+- добавлены DeFi protocol positions: `crypto_protocol_positions`;
+- обновлен `get__bank_snapshot`, чтобы возвращать fiat и crypto вместе;
+- обновлен `get__operations_history`, чтобы история видела crypto bank entries;
+- обновлен `put__reverse_operation`, чтобы откатывать crypto операции;
+- обновлен `rebuild_current_balances`, чтобы пересобирать crypto-балансы.
+
+### SQL-функции
+
+- покупка crypto за fiat;
+- продажа crypto в fiat;
+- расход crypto в бюджетную категорию;
+- перевод banking crypto в investment crypto;
+- вывод investment crypto в banking crypto;
+- создание и обновление DeFi protocol positions;
+- чтение crypto-assets.
+
+### API
+
+- добавлен `/crypto/assets`;
+- добавлен `/crypto/transfer-to-investment`;
+- добавлен `/crypto/transfer-from-investment`;
+- добавлены endpoints для protocol positions;
+- `/operations/expense` умеет принимать `crypto_asset_id`;
+- `/operations/exchange` умеет fiat <-> crypto.
+
+### UI
+
+- расход из категории показывает fiat и crypto в одном кастомном выборе валюты;
+- в выборе расхода доступны только активы с положительным остатком;
+- для не базовой валюты и crypto под суммой показывается строка `Доступно`;
+- обмен валют стартует с базовой валюты в поле `Отдаете`;
+- обмен поддерживает пары fiat <-> crypto;
+- детали банковского счета показывают fiat и crypto секциями;
+- общий перевод между счетами умеет переводить crypto с cash-счета на crypto investment-счет;
+- портфель имеет crypto-направление и учитывает crypto positions / DeFi в сводке.
+
+## Учетные правила
+
+### Покупка crypto
+
+Пример: купили `100 TON` за `20 000 RUB`.
+
+- fiat balance уменьшается на `20 000 RUB`;
+- banking crypto balance увеличивается на `100 TON`;
+- создается lot `100 TON / 20 000 RUB`.
+
+### Расход crypto
+
+Пример: потратили `10 TON`.
+
+- crypto balance уменьшается на `10 TON`;
+- бюджетная категория уменьшается в базовой валюте по FIFO-себестоимости;
+- операция в истории остается обычным `expense`.
+
+### Banking crypto -> Investment crypto
+
+- crypto lots списываются FIFO;
+- cost basis переносится в portfolio position;
+- текущая рыночная оценка хранится отдельно в metadata;
+- разница между cost basis и current value отображается как investment P&L.
+
+### Investment crypto -> Banking crypto
+
+- пользователь указывает оценку вывода в базовой валюте;
+- инвестиционная позиция фиксирует realized result;
+- банковская crypto получает новый lot с указанной оценкой как cost basis.
+
+### Повторный ввод после падения рынка
+
+Если `150 TON` были выведены в банк с оценкой `45 000 RUB`, а потом снова переведены в инвестиции с текущей оценкой `30 000 RUB`:
+
+- в инвестиции переносится банковская себестоимость `45 000 RUB`;
+- `30 000 RUB` хранится как текущая оценка;
+- `-15 000 RUB` показывается как нереализованный инвестиционный результат;
+- банковский бюджет не получает расход/доход от переоценки.
+
+## Обязательный ручной smoke-test
+
+Перед коммитом или деплоем проверить:
+
+1. Купить `100 TON` за `20 000 RUB`.
+2. Убедиться, что на cash-счете появился `100 TON` и создан lot.
+3. Потратить `10 TON` из категории.
+4. Проверить, что категория уменьшилась на FIFO-себестоимость.
+5. Перевести `90 TON` на crypto investment-счет.
+6. Проверить, что создана crypto position с перенесенным cost basis.
+7. Обновить текущую оценку позиции и проверить unrealized P&L.
+8. Вывести `150 TON` из инвестиций в банк с оценкой `45 000 RUB`.
+9. Проверить realized result и новый banking lot.
+10. Снова перевести `150 TON` в инвестиции с market value `30 000 RUB`.
+11. Проверить cost basis `45 000 RUB` и unrealized result `-15 000 RUB`.
+12. Проверить, что обычные fiat-расходы, fiat-обмены и портфельные бумаги не сломались.
+
+## Перед деплоем
+
+1. Прогнать `npm run build`.
+2. Прогнать `python3 -m compileall backend storage`.
+3. Применить миграцию `infra/db/Scripts/budgeting/migrations/027_crypto_banking.sql`.
+4. Применить новые table scripts и function scripts.
+5. Перезапустить API и web.
+6. Сделать короткий smoke-test на целевой базе маленькой суммой.
+
+## После MVP
+
+- добавить ручную форму обновления valuation для crypto positions;
+- добавить редактирование и закрытие DeFi protocol positions в UI;
+- добавить отображение сети рядом с одинаковыми тикерами, например `USDT · TON` и `USDT · Ethereum`;
+- добавить нормальные локальные crypto icons или хранить icon URL в `crypto_assets.metadata`;
+- добавить live prices отдельным релизом;
+- добавить on-chain/import слой отдельным релизом.
+

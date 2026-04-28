@@ -6500,13 +6500,31 @@ select.dlg-row__ghost option {
 .atx__item[disabled] .atx__item-badge { background: transparent; border-color: transparent; }
 
 .atx__item--cur { padding-left: 28px; }
+.atx__asset-mark,
 .atx__cur-sym {
   width: 28px; height: 28px; border-radius: 8px;
   background: var(--surface); border: 1px solid var(--line);
   display: grid; place-items: center;
   font-size: 13px; font-weight: 800; color: var(--text-2); flex-shrink: 0;
+  overflow: hidden;
 }
+.atx__asset-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.atx__asset-mark--img {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+.atx__asset-mark--crypto-text {
+  font-size: 11px;
+  letter-spacing: -.02em;
+}
+.atx__item--selected .atx__asset-mark,
 .atx__item--selected .atx__cur-sym { background: var(--yellow); border-color: var(--yellow-deep); color: var(--text); }
+.atx__item--selected .atx__asset-mark--img { background: var(--surface-2); border-color: var(--yellow-deep); }
 .atx__item--cur .atx__item-name { font-size: 13.5px; }
 .atx__item--cur .atx__item-sub  { font-size: 11px; }
 
