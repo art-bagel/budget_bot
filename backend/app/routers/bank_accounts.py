@@ -36,10 +36,16 @@ class BankAccountItem(BaseModel):
 
 
 class BankAccountBalanceItem(BaseModel):
+    asset_type: str = 'fiat'
+    crypto_asset_id: Optional[int] = None
     currency_code: str
+    symbol: Optional[str] = None
     amount: float
     historical_cost_in_base: float
     base_currency_code: str
+    network_code: Optional[str] = None
+    contract_address: Optional[str] = None
+    decimals: Optional[int] = None
 
 
 class CreateBankAccountRequest(BaseModel):

@@ -110,6 +110,14 @@ BEGIN
                             WHERE be_filter.operation_id = o.id
                               AND ba_filter.account_kind <> 'investment'
                         )
+                        OR EXISTS (
+                            SELECT 1
+                            FROM crypto_bank_entries cbe_filter
+                            JOIN bank_accounts cba_filter
+                              ON cba_filter.id = cbe_filter.bank_account_id
+                            WHERE cbe_filter.operation_id = o.id
+                              AND cba_filter.account_kind <> 'investment'
+                        )
                     )
                 )
                 OR (
@@ -128,26 +136,64 @@ BEGIN
         ORDER BY o.operated_on DESC, o.created_at DESC, o.id DESC
         LIMIT _limit OFFSET _offset
     ),
-    bank_agg AS (
+    fiat_bank_entries AS (
         SELECT
             be.operation_id,
-            jsonb_agg(
-                jsonb_build_object(
-                    'bank_account_id', be.bank_account_id,
-                    'bank_account_name', ba.name,
-                    'bank_account_owner_type', ba.owner_type,
-                    'bank_account_kind', ba.account_kind,
-                    'currency_code', be.currency_code,
-                    'amount', be.amount
-                )
-                ORDER BY be.id
-            ) AS bank_entries
+            be.id AS sort_id,
+            jsonb_build_object(
+                'asset_type', 'fiat',
+                'bank_account_id', be.bank_account_id,
+                'bank_account_name', ba.name,
+                'bank_account_owner_type', ba.owner_type,
+                'bank_account_kind', ba.account_kind,
+                'currency_code', be.currency_code,
+                'crypto_asset_id', NULL,
+                'network_code', NULL,
+                'amount', be.amount
+            ) AS entry
         FROM bank_entries be
         JOIN bank_accounts ba
           ON ba.id = be.bank_account_id
         JOIN selected_operations so
           ON so.id = be.operation_id
-        GROUP BY be.operation_id
+    ),
+    crypto_bank_entries_rows AS (
+        SELECT
+            cbe.operation_id,
+            cbe.id AS sort_id,
+            jsonb_build_object(
+                'asset_type', 'crypto',
+                'bank_account_id', cbe.bank_account_id,
+                'bank_account_name', ba.name,
+                'bank_account_owner_type', ba.owner_type,
+                'bank_account_kind', ba.account_kind,
+                'currency_code', ca.symbol,
+                'crypto_asset_id', ca.id,
+                'network_code', ca.network_code,
+                'amount', cbe.amount
+            ) AS entry
+        FROM crypto_bank_entries cbe
+        JOIN bank_accounts ba
+          ON ba.id = cbe.bank_account_id
+        JOIN crypto_assets ca
+          ON ca.id = cbe.crypto_asset_id
+        JOIN selected_operations so
+          ON so.id = cbe.operation_id
+    ),
+    bank_entry_rows AS (
+        SELECT * FROM fiat_bank_entries
+        UNION ALL
+        SELECT * FROM crypto_bank_entries_rows
+    ),
+    bank_agg AS (
+        SELECT
+            operation_id,
+            jsonb_agg(
+                entry
+                ORDER BY sort_id
+            ) AS bank_entries
+        FROM bank_entry_rows
+        GROUP BY operation_id
     ),
     budget_agg AS (
         SELECT

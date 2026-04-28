@@ -70,6 +70,33 @@ export default function AccountDetailSheet({
 
   const noBalances = sortedBalances.length === 0;
   const tagIconColor = ownerKind === 'family' ? 'o' : 'ink';
+  const fiatBalances = sortedBalances.filter((item) => item.asset_type !== 'crypto');
+  const cryptoBalances = sortedBalances.filter((item) => item.asset_type === 'crypto');
+  const renderRows = (items: DashboardBankBalance[], offset = 0) => items.map((b, i) => {
+    const colorIndex = (offset + i) % 6;
+    const pct = totalInBase > 0
+      ? Math.round((b.historical_cost_in_base / totalInBase) * 100)
+      : 0;
+    const isBase = b.asset_type !== 'crypto' && b.currency_code === baseCurrencyCode;
+    const label = b.asset_type === 'crypto'
+      ? `${b.symbol ?? b.currency_code}${b.network_code ? ` · ${b.network_code}` : ''}`
+      : currencyName(b.currency_code);
+    return (
+      <li className="comp__row" key={`${b.asset_type ?? 'fiat'}:${b.crypto_asset_id ?? b.currency_code}`}>
+        <span className={`comp__dot comp__dot--c${colorIndex}`} />
+        <span className="comp__name">{label}</span>
+        <span className="comp__native">
+          {formatNumericAmount(b.amount)} {b.symbol ?? currencySymbol(b.currency_code)}
+          {!isBase && (
+            <span className="comp__conv">
+              ≈ {formatBase(b.historical_cost_in_base)} {currencySymbol(baseCurrencyCode)}
+            </span>
+          )}
+        </span>
+        <span className="comp__pct">{pct}%</span>
+      </li>
+    );
+  });
 
   return (
     <BottomSheet
@@ -107,34 +134,25 @@ export default function AccountDetailSheet({
           <div className="comp__bar" role="img" aria-label="Состав валют">
             {sortedBalances.map((b, i) => (
               <span
-                key={b.currency_code}
+                key={`${b.asset_type ?? 'fiat'}:${b.crypto_asset_id ?? b.currency_code}`}
                 className={`comp__seg comp__seg--c${i % 6}`}
                 style={{ flex: Math.max(b.historical_cost_in_base, 1) }}
               />
             ))}
           </div>
           <ul className="comp__list">
-            {sortedBalances.map((b, i) => {
-              const pct = totalInBase > 0
-                ? Math.round((b.historical_cost_in_base / totalInBase) * 100)
-                : 0;
-              const isBase = b.currency_code === baseCurrencyCode;
-              return (
-                <li className="comp__row" key={b.currency_code}>
-                  <span className={`comp__dot comp__dot--c${i % 6}`} />
-                  <span className="comp__name">{currencyName(b.currency_code)}</span>
-                  <span className="comp__native">
-                    {formatNumericAmount(b.amount)} {currencySymbol(b.currency_code)}
-                    {!isBase && (
-                      <span className="comp__conv">
-                        ≈ {formatBase(b.historical_cost_in_base)} {currencySymbol(baseCurrencyCode)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="comp__pct">{pct}%</span>
-                </li>
-              );
-            })}
+            {fiatBalances.length > 0 && (
+              <li className="comp__row" style={{ opacity: 0.65 }}>
+                <span className="comp__name">Фиат</span>
+              </li>
+            )}
+            {renderRows(fiatBalances)}
+            {cryptoBalances.length > 0 && (
+              <li className="comp__row" style={{ opacity: 0.65 }}>
+                <span className="comp__name">Крипта</span>
+              </li>
+            )}
+            {renderRows(cryptoBalances, fiatBalances.length)}
           </ul>
         </div>
       )}

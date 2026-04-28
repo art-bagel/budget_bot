@@ -23,6 +23,7 @@ import {
   recordPortfolioIncome,
   topUpPortfolioPosition,
   fetchPortfolioAnalytics,
+  fetchCryptoProtocolPositions,
 } from '../api';
 import BottomSheet from '../components/BottomSheet';
 import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
@@ -38,6 +39,7 @@ import type {
   TinkoffLivePrice,
   UserContext,
   PortfolioAnalyticsData,
+  CryptoProtocolPosition,
 } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
@@ -477,6 +479,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [portfolioView, setPortfolioView] = useState<'positions' | 'ops' | 'analytics'>('positions');
   const [activeAccountTabKey, setActiveAccountTabKey] = useState('all');
   const [analyticsData, setAnalyticsData] = useState<PortfolioAnalyticsData | null>(null);
+  const [cryptoProtocolPositions, setCryptoProtocolPositions] = useState<CryptoProtocolPosition[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsPeriodType, setAnalyticsPeriodType] = useState<'month' | 'quarter' | 'year'>('year');
   const [analyticsPeriodOffset, setAnalyticsPeriodOffset] = useState(0);
@@ -525,6 +528,17 @@ export default function Portfolio({ user }: { user: UserContext }) {
   useEffect(() => {
     void loadPortfolio();
   }, [user.user_id]);
+
+  useEffect(() => {
+    const hasCryptoAccounts = accounts.some(({ account }) => account.investment_asset_type === 'crypto');
+    if (!hasCryptoAccounts) {
+      setCryptoProtocolPositions([]);
+      return;
+    }
+    void fetchCryptoProtocolPositions()
+      .then(setCryptoProtocolPositions)
+      .catch(() => setCryptoProtocolPositions([]));
+  }, [accounts]);
 
   // Fetch MOEX prices for open positions that have a ticker in metadata
   useEffect(() => {
@@ -776,7 +790,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
   };
 
   const getResolvedPositionEstimatedValue = (position: PortfolioPosition) => (
-    getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency
+    position.asset_type_code === 'crypto'
+      ? (getPositionMetadataNumber(position, 'current_value_in_base') ?? getPositionMetadataNumber(position, 'amount_in_base') ?? position.amount_in_currency)
+      : (getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency)
   );
 
   const getResolvedPositionCurrentResult = (position: PortfolioPosition): number | null => {
@@ -1617,6 +1633,23 @@ export default function Portfolio({ user }: { user: UserContext }) {
       : typeFiltered.filter((position) => getPositionAccountKey(position) === activeAccountTabKey);
   }, [activeAccountTabKey, activeAssetTypeCode, positions]);
 
+  const visibleCryptoProtocolPositions = useMemo(() => {
+    if (activeAssetTypeCode !== 'crypto') return [];
+    return activeAccountTabKey === 'all'
+      ? cryptoProtocolPositions
+      : cryptoProtocolPositions.filter((position) => {
+          const account = accounts.find(({ account }) => account.id === position.investment_account_id)?.account;
+          return account ? `${account.owner_type}:${account.id}` === activeAccountTabKey : false;
+        });
+  }, [accounts, activeAccountTabKey, activeAssetTypeCode, cryptoProtocolPositions]);
+
+  const cryptoProtocolValueInBase = useMemo(
+    () => visibleCryptoProtocolPositions
+      .filter((position) => position.status === 'open')
+      .reduce((sum, position) => sum + position.current_value_in_base, 0),
+    [visibleCryptoProtocolPositions],
+  );
+
   const visibleOpenPositionGroups = useMemo(
     () => (
       activeAccountTabKey === 'all'
@@ -1636,7 +1669,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
         : getPositionInvestedPrincipal(position)
     ), 0);
     return {
-      estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0),
+      estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0)
+        + (activeAssetTypeCode === 'crypto' ? cryptoProtocolValueInBase : 0),
       investedPrincipal,
       cashValue: activeAssetTypeCode === 'all'
         ? totalInvestmentCashInBase
@@ -1647,6 +1681,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     };
   }, [
     activeAssetTypeCode,
+    cryptoProtocolValueInBase,
     filteredOpenPositionGroups,
     moexPrices,
     tinkoffLivePrices,
@@ -2589,8 +2624,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
             </p>
           )}
 
-          {portfolioAnalyticsBuckets.length > 0 && (
-            <section className="portfolio-analytics-section">
+	          {portfolioAnalyticsBuckets.length > 0 && (
+	            <section className="portfolio-analytics-section">
               <div className="portfolio-analytics-section__head">
                 <div>
                   <div className="section__eyebrow">Активы</div>
@@ -2621,10 +2656,49 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   </div>
                 ))}
               </div>
+	            </section>
+	          )}
+
+          {activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0 && (
+            <section className="portfolio-analytics-section">
+              <div className="portfolio-analytics-section__head">
+                <div>
+                  <div className="section__eyebrow">Протоколы</div>
+                  <h3 className="section__title">Размещено в DeFi</h3>
+                </div>
+              </div>
+              <div className="portfolio-analytics-stack">
+                {visibleCryptoProtocolPositions.map((position) => {
+                  const result = position.current_value_in_base + position.rewards_claimed_in_base - position.cost_basis_in_base;
+                  return (
+                    <div key={position.id} className="portfolio-analytics-row">
+                      <div className="portfolio-analytics-row__top">
+                        <div>
+                          <div className="portfolio-analytics-row__title">{position.protocol_name}</div>
+                          <div className="portfolio-analytics-row__meta">
+                            {position.asset_symbol} · {position.position_type} · {position.status === 'open' ? 'Открыта' : 'Закрыта'}
+                          </div>
+                        </div>
+                        <div className="portfolio-analytics-row__side">
+                          <strong>{formatAmount(position.current_value_in_base, user.base_currency_code)}</strong>
+                          <span className={result >= 0 ? 'portfolio-analytics-row__result portfolio-analytics-row__result--pos' : 'portfolio-analytics-row__result portfolio-analytics-row__result--neg'}>
+                            {formatAmount(result, user.base_currency_code)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="portfolio-analytics-row__meta portfolio-analytics-row__meta--inline">
+                        Вложено {formatAmount(position.cost_basis_in_base, user.base_currency_code)}
+                        {position.current_quantity ? ` · Сейчас ${formatNumericAmount(position.current_quantity)} ${position.asset_symbol}` : ''}
+                        {position.rewards_unclaimed_in_base > 0 ? ` · Награды ${formatAmount(position.rewards_unclaimed_in_base, user.base_currency_code)}` : ''}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           )}
 
-          <section className="portfolio-analytics-section">
+	          <section className="portfolio-analytics-section">
             <div className="portfolio-analytics-section__head">
               <div>
                 <div className="section__eyebrow">Счета</div>

@@ -11,7 +11,7 @@ from starlette.responses import PlainTextResponse
 logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
-from backend.app.routers import auth, bank_accounts, categories, currencies, dashboard, families, groups, income_sources, operations, portfolio, user_settings, scheduled_expenses, tinkoff
+from backend.app.routers import auth, bank_accounts, categories, crypto, currencies, dashboard, families, groups, income_sources, operations, portfolio, user_settings, scheduled_expenses, tinkoff
 from backend.app import storage as app_storage
 from backend.app.scheduler import scheduler_loop
 
@@ -48,6 +48,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(bank_accounts.router)
 app.include_router(categories.router)
+app.include_router(crypto.router)
 app.include_router(currencies.router)
 app.include_router(dashboard.router)
 app.include_router(families.router)

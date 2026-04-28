@@ -12,10 +12,16 @@ router = APIRouter(prefix='/api/v1/dashboard', tags=['dashboard'])
 
 
 class BankBalanceItem(BaseModel):
+    asset_type: str = 'fiat'
+    crypto_asset_id: int | None = None
     currency_code: str
+    symbol: str | None = None
     amount: float
     historical_cost_in_base: float
     base_currency_code: str
+    network_code: str | None = None
+    contract_address: str | None = None
+    decimals: int | None = None
 
 
 class BudgetBalanceItem(BaseModel):

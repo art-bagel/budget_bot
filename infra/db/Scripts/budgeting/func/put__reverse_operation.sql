@@ -13,14 +13,18 @@ DECLARE
     _current_balance numeric;
     _current_budget numeric;
     _created_lot record;
+    _created_crypto_lot record;
     _bank_entry record;
+    _crypto_entry record;
     _budget_entry record;
     _consumption record;
+    _crypto_consumption record;
     _owner_type text;
     _owner_user_id bigint;
     _owner_family_id bigint;
     _base_currency_code char(3);
     _bank_cost_delta numeric(20, 2);
+    _crypto_cost_delta numeric(20, 2);
     _bank_account_kind text;
     _bank_credit_limit numeric(20, 2);
     _credit_payment_id bigint;
@@ -91,6 +95,19 @@ BEGIN
         END IF;
     END LOOP;
 
+    FOR _created_crypto_lot IN
+        SELECT id, amount_initial, amount_remaining, cost_base_initial, cost_base_remaining
+        FROM crypto_lots
+        WHERE opened_by_operation_id = _operation_id
+    LOOP
+        IF _created_crypto_lot.amount_remaining <> _created_crypto_lot.amount_initial
+           OR _created_crypto_lot.cost_base_remaining <> _created_crypto_lot.cost_base_initial THEN
+            RAISE EXCEPTION 'Cannot reverse operation % because created crypto lot % was already used',
+                _operation_id,
+                _created_crypto_lot.id;
+        END IF;
+    END LOOP;
+
     -- Check bank balances: reversal negates original entries.
     -- If original amount > 0 (was receiving money), reversal will subtract → check balance.
     FOR _bank_entry IN
@@ -126,6 +143,28 @@ BEGIN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient bank balance in currency %',
                     _operation_id,
                     _bank_entry.currency_code;
+            END IF;
+        END IF;
+    END LOOP;
+
+    -- Check crypto balances: if original amount > 0, reversal subtracts it.
+    FOR _crypto_entry IN
+        SELECT bank_account_id, crypto_asset_id, amount
+        FROM crypto_bank_entries
+        WHERE operation_id = _operation_id
+    LOOP
+        IF _crypto_entry.amount > 0 THEN
+            SELECT COALESCE((
+                SELECT amount
+                FROM current_crypto_balances
+                WHERE bank_account_id = _crypto_entry.bank_account_id
+                  AND crypto_asset_id = _crypto_entry.crypto_asset_id
+            ), 0)
+            INTO _current_balance;
+
+            IF _current_balance < _crypto_entry.amount THEN
+                RAISE EXCEPTION 'Cannot reverse operation %, insufficient crypto balance',
+                    _operation_id;
             END IF;
         END IF;
     END LOOP;
@@ -184,6 +223,11 @@ BEGIN
     FROM budget_entries
     WHERE operation_id = _operation_id;
 
+    INSERT INTO crypto_bank_entries (operation_id, bank_account_id, crypto_asset_id, amount)
+    SELECT _reversal_operation_id, bank_account_id, crypto_asset_id, -amount
+    FROM crypto_bank_entries
+    WHERE operation_id = _operation_id;
+
     -- Restore lots that were consumed by the original operation.
     FOR _consumption IN
         SELECT lot_id, amount, cost_base
@@ -199,9 +243,28 @@ BEGIN
         VALUES (_reversal_operation_id, _consumption.lot_id, -_consumption.amount, -_consumption.cost_base);
     END LOOP;
 
+    FOR _crypto_consumption IN
+        SELECT lot_id, amount, cost_base
+        FROM crypto_lot_consumptions
+        WHERE operation_id = _operation_id
+    LOOP
+        UPDATE crypto_lots
+        SET amount_remaining = amount_remaining + _crypto_consumption.amount,
+            cost_base_remaining = cost_base_remaining + _crypto_consumption.cost_base
+        WHERE id = _crypto_consumption.lot_id;
+
+        INSERT INTO crypto_lot_consumptions (operation_id, lot_id, amount, cost_base)
+        VALUES (_reversal_operation_id, _crypto_consumption.lot_id, -_crypto_consumption.amount, -_crypto_consumption.cost_base);
+    END LOOP;
+
     -- Zero out lots that were opened by the original operation.
     UPDATE fx_lots
     SET amount_remaining    = 0,
+        cost_base_remaining = 0
+    WHERE opened_by_operation_id = _operation_id;
+
+    UPDATE crypto_lots
+    SET amount_remaining = 0,
         cost_base_remaining = 0
     WHERE opened_by_operation_id = _operation_id;
 
@@ -240,6 +303,34 @@ BEGIN
             _bank_entry.currency_code,
             -_bank_entry.amount,
             _bank_cost_delta
+        );
+    END LOOP;
+
+    FOR _crypto_entry IN
+        SELECT bank_account_id, crypto_asset_id, amount
+        FROM crypto_bank_entries
+        WHERE operation_id = _operation_id
+    LOOP
+        IF _crypto_entry.amount > 0 THEN
+            SELECT -COALESCE(sum(cl.cost_base_initial), 0)
+            INTO _crypto_cost_delta
+            FROM crypto_lots cl
+            WHERE cl.opened_by_operation_id = _operation_id
+              AND cl.crypto_asset_id = _crypto_entry.crypto_asset_id;
+        ELSE
+            SELECT COALESCE(sum(clc.cost_base), 0)
+            INTO _crypto_cost_delta
+            FROM crypto_lot_consumptions clc
+            JOIN crypto_lots cl ON cl.id = clc.lot_id
+            WHERE clc.operation_id = _operation_id
+              AND cl.crypto_asset_id = _crypto_entry.crypto_asset_id;
+        END IF;
+
+        PERFORM budgeting.put__apply_current_crypto_delta(
+            _crypto_entry.bank_account_id,
+            _crypto_entry.crypto_asset_id,
+            -_crypto_entry.amount,
+            COALESCE(_crypto_cost_delta, 0)
         );
     END LOOP;
 

@@ -12,6 +12,7 @@ BEGIN
 
     IF _user_id IS NULL THEN
         TRUNCATE TABLE current_bank_balances;
+        TRUNCATE TABLE current_crypto_balances;
         TRUNCATE TABLE current_budget_balances;
     ELSE
         _family_id := budgeting.get__user_family_id(_user_id);
@@ -32,6 +33,15 @@ BEGIN
                 (c.owner_type = 'user' AND c.owner_user_id = _user_id)
                 OR
                 (c.owner_type = 'family' AND c.owner_family_id = _family_id)
+              );
+
+        DELETE FROM current_crypto_balances ccb
+        USING bank_accounts ba
+        WHERE ba.id = ccb.bank_account_id
+          AND (
+                (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
+                OR
+                (ba.owner_type = 'family' AND ba.owner_family_id = _family_id)
               );
     END IF;
 
@@ -109,5 +119,54 @@ BEGIN
      AND lc.currency_code = a.currency_code
     WHERE a.amount <> 0
        OR COALESCE(lc.historical_cost_in_base, 0) <> 0;
+
+    WITH crypto_amounts AS (
+        SELECT
+            cbe.bank_account_id,
+            cbe.crypto_asset_id,
+            sum(cbe.amount) AS amount
+        FROM crypto_bank_entries cbe
+        JOIN bank_accounts ba
+          ON ba.id = cbe.bank_account_id
+        WHERE _user_id IS NULL
+           OR (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
+           OR (ba.owner_type = 'family' AND ba.owner_family_id = _family_id)
+        GROUP BY cbe.bank_account_id, cbe.crypto_asset_id
+    ),
+    crypto_lot_costs AS (
+        SELECT
+            cl.bank_account_id,
+            cl.crypto_asset_id,
+            sum(cl.cost_base_remaining) AS cost_base_remaining
+        FROM crypto_lots cl
+        JOIN bank_accounts ba
+          ON ba.id = cl.bank_account_id
+        WHERE cl.amount_remaining > 0
+          AND (
+                _user_id IS NULL
+                OR (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
+                OR (ba.owner_type = 'family' AND ba.owner_family_id = _family_id)
+              )
+        GROUP BY cl.bank_account_id, cl.crypto_asset_id
+    )
+    INSERT INTO current_crypto_balances (
+        bank_account_id,
+        crypto_asset_id,
+        amount,
+        cost_base_remaining,
+        updated_at
+    )
+    SELECT
+        ca.bank_account_id,
+        ca.crypto_asset_id,
+        ca.amount,
+        COALESCE(clc.cost_base_remaining, 0),
+        current_timestamp
+    FROM crypto_amounts ca
+    LEFT JOIN crypto_lot_costs clc
+      ON clc.bank_account_id = ca.bank_account_id
+     AND clc.crypto_asset_id = ca.crypto_asset_id
+    WHERE ca.amount <> 0
+       OR COALESCE(clc.cost_base_remaining, 0) <> 0;
 END
 $function$;

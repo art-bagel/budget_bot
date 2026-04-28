@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import BottomSheet from './BottomSheet';
 
-import { fetchBankAccounts, fetchCurrencies, recordExpense } from '../api';
+import { fetchBankAccountSnapshot, fetchBankAccounts, fetchCurrencies, recordExpense } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
-import type { BankAccount, Currency, DashboardBudgetCategory, UserContext } from '../types';
+import type { BankAccount, Currency, DashboardBankBalance, DashboardBudgetCategory, UserContext } from '../types';
 import { formatAmount } from '../utils/format';
 import { categoryDisplayName } from '../utils/categoryIcon';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -22,8 +22,10 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
   useModalOpen();
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [accountBalances, setAccountBalances] = useState<DashboardBankBalance[]>([]);
+  const [balancesByAccountId, setBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
   const [amount, setAmount] = useState('');
-  const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
+  const [assetCode, setAssetCode] = useState(`fiat:${user.base_currency_code}`);
   const [comment, setComment] = useState('');
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
@@ -52,8 +54,51 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
           : a.owner_type === 'user',
       );
       setBankAccounts(ownerAccounts);
+      void Promise.all(
+        ownerAccounts.map(async (account) => ({
+          accountId: account.id,
+          balances: await fetchBankAccountSnapshot(account.id).catch(() => [] as DashboardBankBalance[]),
+        })),
+      ).then((snapshots) => {
+        setBalancesByAccountId(
+          snapshots.reduce<Record<number, DashboardBankBalance[]>>((acc, item) => {
+            acc[item.accountId] = item.balances;
+            return acc;
+          }, {}),
+        );
+      });
     }).catch(() => {});
   }, [category.owner_type]);
+
+  useEffect(() => {
+    if (selectedAccountId === null) {
+      setAccountBalances([]);
+      return;
+    }
+    const cached = balancesByAccountId[selectedAccountId];
+    if (cached) {
+      setAccountBalances(cached);
+      return;
+    }
+    void fetchBankAccountSnapshot(selectedAccountId)
+      .then((items) => setAccountBalances(items))
+      .catch(() => setAccountBalances([]));
+  }, [balancesByAccountId, selectedAccountId]);
+
+  const cryptoBalances = accountBalances.filter((item) => item.asset_type === 'crypto' && item.crypto_asset_id && item.amount > 0);
+  useEffect(() => {
+    if (!assetCode.startsWith('crypto:')) return;
+    const assetId = Number(assetCode.slice('crypto:'.length));
+    if (!cryptoBalances.some((item) => item.crypto_asset_id === assetId)) {
+      setAssetCode(`fiat:${user.base_currency_code}`);
+    }
+  }, [assetCode, cryptoBalances, user.base_currency_code]);
+  const selectedAsset = (() => {
+    if (assetCode.startsWith('crypto:')) {
+      return { type: 'crypto' as const, id: Number(assetCode.slice('crypto:'.length)) };
+    }
+    return { type: 'fiat' as const, code: assetCode.replace(/^fiat:/, '') || user.base_currency_code };
+  })();
 
   const canSubmit = !submitting && parseFloat(amount) > 0 && selectedAccountId !== null;
 
@@ -68,7 +113,8 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
         bank_account_id: selectedAccountId,
         category_id: category.category_id,
         amount: parseFloat(amount),
-        currency_code: currencyCode,
+        currency_code: selectedAsset.type === 'fiat' ? selectedAsset.code : undefined,
+        crypto_asset_id: selectedAsset.type === 'crypto' ? selectedAsset.id : undefined,
         comment: comment.trim() || undefined,
         operated_at: expenseDate || undefined,
       });
@@ -109,6 +155,9 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
               {bankAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}{a.account_kind === 'credit' ? ' · Кредитная карта' : ''}
+                  {balancesByAccountId[a.id]?.some((b) => b.asset_type === 'crypto' && b.amount > 0)
+                    ? ` · ${balancesByAccountId[a.id].filter((b) => b.asset_type === 'crypto' && b.amount > 0).map((b) => b.symbol ?? b.currency_code).join(', ')}`
+                    : ''}
                 </option>
               ))}
               {bankAccounts.length === 0 && (
@@ -129,12 +178,23 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
             />
             <select
               className="input"
-              value={currencyCode}
-              onChange={(e) => setCurrencyCode(e.target.value)}
+              value={assetCode}
+              onChange={(e) => setAssetCode(e.target.value)}
             >
-              {currencies.map((c) => (
-                <option key={c.code} value={c.code}>{c.code}</option>
-              ))}
+              <optgroup label="Фиат">
+                {currencies.map((c) => (
+                  <option key={c.code} value={`fiat:${c.code}`}>{c.code}</option>
+                ))}
+              </optgroup>
+              {cryptoBalances.length > 0 && (
+                <optgroup label="Крипта">
+                  {cryptoBalances.map((b) => (
+                    <option key={b.crypto_asset_id} value={`crypto:${b.crypto_asset_id}`}>
+                      {b.symbol ?? b.currency_code}{b.network_code ? ` · ${b.network_code}` : ''} · доступно {b.amount}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 

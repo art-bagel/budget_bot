@@ -98,7 +98,7 @@ export default function Exchange({ user }: { user: UserContext }) {
       } as ExchangeCurrencyRequest);
 
       setLastResult({
-        effectiveRate: result.effective_rate,
+        effectiveRate: result.effective_rate ?? 0,
         realizedFxResultInBase: result.realized_fx_result_in_base,
       });
       setFromAmount('');

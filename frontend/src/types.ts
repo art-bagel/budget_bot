@@ -38,10 +38,16 @@ export interface Currency {
 }
 
 export interface DashboardBankBalance {
+  asset_type?: 'fiat' | 'crypto';
+  crypto_asset_id?: number | null;
   currency_code: string;
+  symbol?: string | null;
   amount: number;
   historical_cost_in_base: number;
   base_currency_code: string;
+  network_code?: string | null;
+  contract_address?: string | null;
+  decimals?: number | null;
 }
 
 export interface DashboardBudgetCategory {
@@ -117,7 +123,8 @@ export interface RecordExpenseRequest {
   bank_account_id: number;
   category_id: number;
   amount: number;
-  currency_code: string;
+  currency_code?: string;
+  crypto_asset_id?: number;
   comment?: string;
   operated_at?: string;
 }
@@ -130,18 +137,117 @@ export interface RecordExpenseResponse {
 
 export interface ExchangeCurrencyRequest {
   bank_account_id: number;
-  from_currency_code: string;
+  from_currency_code?: string;
   from_amount: number;
-  to_currency_code: string;
+  to_currency_code?: string;
   to_amount: number;
+  from_crypto_asset_id?: number;
+  to_crypto_asset_id?: number;
   comment?: string;
+  operated_at?: string;
 }
 
 export interface ExchangeCurrencyResponse {
   operation_id: number;
-  effective_rate: number;
+  effective_rate?: number | null;
   realized_fx_result_in_base: number;
+  cost_base?: number | null;
+  consumed_cost_base?: number | null;
   base_currency_code: string;
+}
+
+export interface CryptoAsset {
+  id: number;
+  symbol: string;
+  name: string;
+  network_code: string;
+  contract_address?: string | null;
+  decimals: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface UpsertCryptoAssetRequest {
+  symbol: string;
+  name?: string;
+  network_code?: string;
+  contract_address?: string;
+  decimals?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CryptoOperationResponse {
+  operation_id: number;
+  position_id?: number | null;
+  amount_in_base?: number | null;
+  principal_amount_in_base?: number | null;
+  realized_result_in_base?: number | null;
+  base_currency_code: string;
+}
+
+export interface TransferCryptoToInvestmentRequest {
+  bank_account_id: number;
+  investment_account_id: number;
+  crypto_asset_id: number;
+  amount: number;
+  market_value_in_base?: number;
+  position_id?: number;
+  title?: string;
+  comment?: string;
+  operated_at?: string;
+}
+
+export interface TransferCryptoFromInvestmentRequest {
+  position_id: number;
+  bank_account_id: number;
+  amount: number;
+  value_in_base: number;
+  comment?: string;
+  operated_at?: string;
+}
+
+export interface CryptoProtocolPosition {
+  id: number;
+  investment_account_id: number;
+  investment_account_name: string;
+  owner_type: 'user' | 'family';
+  crypto_asset_id?: number | null;
+  protocol_name: string;
+  position_type: 'staking' | 'lending' | 'liquidity_pool' | 'vault' | 'other';
+  status: 'open' | 'closed';
+  network_code?: string | null;
+  asset_symbol: string;
+  quantity?: number | null;
+  cost_basis_in_base: number;
+  current_quantity?: number | null;
+  current_value_in_base: number;
+  rewards_claimed_in_base: number;
+  rewards_unclaimed_in_base: number;
+  deposited_at: string;
+  withdrawn_at?: string | null;
+  comment?: string | null;
+  metadata: Record<string, unknown>;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCryptoProtocolPositionRequest {
+  investment_account_id: number;
+  protocol_name: string;
+  position_type: CryptoProtocolPosition['position_type'];
+  asset_symbol: string;
+  quantity?: number;
+  cost_basis_in_base?: number;
+  current_quantity?: number;
+  current_value_in_base?: number;
+  rewards_claimed_in_base?: number;
+  rewards_unclaimed_in_base?: number;
+  crypto_asset_id?: number;
+  network_code?: string;
+  deposited_at?: string;
+  comment?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AllocateBudgetRequest {
@@ -168,11 +274,14 @@ export interface AllocateGroupBudgetResponse {
 }
 
 export interface OperationHistoryBankEntry {
+  asset_type?: 'fiat' | 'crypto';
   bank_account_id: number;
   bank_account_name?: string | null;
   bank_account_owner_type?: string | null;
   bank_account_kind?: 'cash' | 'investment' | 'credit' | null;
   currency_code: string;
+  crypto_asset_id?: number | null;
+  network_code?: string | null;
   amount: number;
 }
 

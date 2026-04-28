@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
-import CurrencyPicker from './CurrencyPicker';
+import CurrencyPicker, { type CurrencyPickerOption } from './CurrencyPicker';
 import EmojiPicker from './EmojiPicker';
 import { parseCategoryIcon, buildCategoryName, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
@@ -18,6 +18,7 @@ import {
   createScheduledExpense,
   deleteScheduledExpense,
   fetchBankAccounts,
+  fetchBankAccountSnapshot,
   fetchCurrencies,
   recordExpense,
   allocateBudget,
@@ -32,6 +33,7 @@ import type {
   ScheduledExpense,
   BankAccount,
   Currency,
+  DashboardBankBalance,
   UserContext,
   AllocateBudgetRequest,
   AllocateGroupBudgetRequest,
@@ -147,8 +149,10 @@ export default function CategoryActionSheet({
   // ── Expense state ──────────────────────────────────────────
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [expBalancesByAccountId, setExpBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
+  const [expAccountBalances, setExpAccountBalances] = useState<DashboardBankBalance[]>([]);
   const [expAmount, setExpAmount] = useState('');
-  const [expCurrencyCode, setExpCurrencyCode] = useState(user.base_currency_code);
+  const [expAssetCode, setExpAssetCode] = useState(`fiat:${user.base_currency_code}`);
   const [expComment, setExpComment] = useState('');
   const [expDate, setExpDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expAccountId, setExpAccountId] = useState<number | null>(null);
@@ -173,10 +177,81 @@ export default function CategoryActionSheet({
         category.owner_type === 'family' ? a.owner_type === 'family' : a.owner_type === 'user',
       );
       setBankAccounts(ownerAccounts);
+      void Promise.all(
+        ownerAccounts.map(async (account) => ({
+          accountId: account.id,
+          balances: await fetchBankAccountSnapshot(account.id).catch(() => [] as DashboardBankBalance[]),
+        })),
+      ).then((snapshots) => {
+        setExpBalancesByAccountId(
+          snapshots.reduce<Record<number, DashboardBankBalance[]>>((acc, item) => {
+            acc[item.accountId] = item.balances;
+            return acc;
+          }, {}),
+        );
+      });
     }).catch(() => {});
   }, [category.owner_type]);
 
-  const canSubmitExpense = !expSubmitting && parseFloat(expAmount) > 0 && expAccountId !== null;
+  useEffect(() => {
+    if (expAccountId === null) {
+      setExpAccountBalances([]);
+      return;
+    }
+    const cached = expBalancesByAccountId[expAccountId];
+    if (cached) {
+      setExpAccountBalances(cached);
+      return;
+    }
+    void fetchBankAccountSnapshot(expAccountId)
+      .then(setExpAccountBalances)
+      .catch(() => setExpAccountBalances([]));
+  }, [expAccountId, expBalancesByAccountId]);
+
+  const expAssetOptions: CurrencyPickerOption[] = useMemo(() => {
+    const fiatBalances = expAccountBalances.filter((item) => item.asset_type !== 'crypto' && item.currency_code && item.amount > 0);
+    const cryptoBalances = expAccountBalances.filter((item) => item.asset_type === 'crypto' && item.crypto_asset_id && item.amount > 0);
+    return [
+      ...fiatBalances.map((item) => ({
+        value: `fiat:${item.currency_code}`,
+        label: item.currency_code,
+        group: 'Фиат',
+      })),
+      ...cryptoBalances.map((item) => ({
+        value: `crypto:${item.crypto_asset_id}`,
+        label: item.symbol ?? item.currency_code,
+        group: 'Крипта',
+      })),
+    ];
+  }, [expAccountBalances]);
+
+  useEffect(() => {
+    if (expAssetOptions.length === 0) return;
+    if (!expAssetOptions.some((item) => item.value === expAssetCode)) {
+      const baseOption = expAssetOptions.find((item) => item.value === `fiat:${user.base_currency_code}`);
+      setExpAssetCode(baseOption?.value ?? expAssetOptions[0].value);
+    }
+  }, [expAssetCode, expAssetOptions, user.base_currency_code]);
+
+  const selectedExpenseAsset = (() => {
+    if (expAssetCode.startsWith('crypto:')) {
+      return { type: 'crypto' as const, id: Number(expAssetCode.slice('crypto:'.length)) };
+    }
+    return { type: 'fiat' as const, code: expAssetCode.replace(/^fiat:/, '') || user.base_currency_code };
+  })();
+  const selectedExpenseBalance = expAccountBalances.find((item) => {
+    if (selectedExpenseAsset.type === 'crypto') {
+      return item.asset_type === 'crypto' && item.crypto_asset_id === selectedExpenseAsset.id;
+    }
+    return item.asset_type !== 'crypto' && item.currency_code === selectedExpenseAsset.code;
+  });
+  const showExpenseAvailability = selectedExpenseAsset.type === 'crypto' || selectedExpenseAsset.code !== user.base_currency_code;
+
+  const canSubmitExpense =
+    !expSubmitting &&
+    parseFloat(expAmount) > 0 &&
+    expAccountId !== null &&
+    expAssetOptions.some((item) => item.value === expAssetCode);
 
   const handleSubmitExpense = async () => {
     if (!canSubmitExpense || expAccountId === null) return;
@@ -187,7 +262,8 @@ export default function CategoryActionSheet({
         bank_account_id: expAccountId,
         category_id: category.category_id,
         amount: parseFloat(expAmount),
-        currency_code: expCurrencyCode,
+        currency_code: selectedExpenseAsset.type === 'fiat' ? selectedExpenseAsset.code : undefined,
+        crypto_asset_id: selectedExpenseAsset.type === 'crypto' ? selectedExpenseAsset.id : undefined,
         comment: expComment.trim() || undefined,
         operated_at: expDate || undefined,
       });
@@ -587,6 +663,9 @@ export default function CategoryActionSheet({
               {bankAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}{a.account_kind === 'credit' ? ' · Кредитная карта' : ''}
+                  {expBalancesByAccountId[a.id]?.some((b) => b.asset_type === 'crypto' && b.amount > 0)
+                    ? ` · ${expBalancesByAccountId[a.id].filter((b) => b.asset_type === 'crypto' && b.amount > 0).map((b) => b.symbol ?? b.currency_code).join(', ')}`
+                    : ''}
                 </option>
               ))}
               {bankAccounts.length === 0 && <option value="">Счёт не найден</option>}
@@ -606,11 +685,17 @@ export default function CategoryActionSheet({
               />
               <CurrencyPicker
                 currencies={currencies}
-                value={expCurrencyCode}
-                onChange={setExpCurrencyCode}
-                disabled={expSubmitting}
+                value={expAssetCode}
+                onChange={setExpAssetCode}
+                disabled={expSubmitting || expAssetOptions.length === 0}
+                options={expAssetOptions}
               />
             </div>
+            {showExpenseAvailability && selectedExpenseBalance && (
+              <span className="amt__hint">
+                Доступно: {formatNumericAmount(selectedExpenseBalance.amount)} {selectedExpenseBalance.symbol ?? selectedExpenseBalance.currency_code}
+              </span>
+            )}
           </div>
           <div className="field field--row">
             <div className="field field--col">

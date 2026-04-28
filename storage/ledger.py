@@ -14,6 +14,15 @@ class Ledger(DataBase):
     F_PUT__ALLOCATE_GROUP_BUDGET = 'put__allocate_group_budget'
     F_PUT__EXCHANGE_CURRENCY = 'put__exchange_currency'
     F_PUT__RECORD_EXPENSE = 'put__record_expense'
+    F_PUT__UPSERT_CRYPTO_ASSET = 'put__upsert_crypto_asset'
+    F_PUT__BUY_CRYPTO_ASSET = 'put__buy_crypto_asset'
+    F_PUT__SELL_CRYPTO_ASSET = 'put__sell_crypto_asset'
+    F_PUT__RECORD_CRYPTO_EXPENSE = 'put__record_crypto_expense'
+    F_PUT__TRANSFER_CRYPTO_TO_INVESTMENT = 'put__transfer_crypto_to_investment'
+    F_PUT__TRANSFER_CRYPTO_FROM_INVESTMENT = 'put__transfer_crypto_from_investment'
+    F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION = 'put__create_crypto_protocol_position'
+    F_SET__UPDATE_CRYPTO_PROTOCOL_POSITION = 'set__update_crypto_protocol_position'
+    F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION = 'set__close_crypto_protocol_position'
     F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
 
     async def put__record_fx_rate_snapshot(
@@ -220,6 +229,223 @@ class Ledger(DataBase):
             currency_code,
             comment,
             operated_at,
+        )
+
+    async def put__upsert_crypto_asset(
+        self,
+        symbol: str,
+        name: Optional[str] = None,
+        network_code: Optional[str] = None,
+        contract_address: Optional[str] = None,
+        decimals: int = 8,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__UPSERT_CRYPTO_ASSET),
+            symbol,
+            name,
+            network_code,
+            contract_address,
+            decimals,
+            metadata or {},
+        )
+
+    async def put__buy_crypto_asset(
+        self,
+        user_id: int,
+        bank_account_id: int,
+        fiat_currency_code: str,
+        fiat_amount: float,
+        crypto_asset_id: int,
+        crypto_amount: float,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__BUY_CRYPTO_ASSET),
+            user_id,
+            bank_account_id,
+            fiat_currency_code,
+            fiat_amount,
+            crypto_asset_id,
+            crypto_amount,
+            comment,
+            operated_at,
+        )
+
+    async def put__sell_crypto_asset(
+        self,
+        user_id: int,
+        bank_account_id: int,
+        crypto_asset_id: int,
+        crypto_amount: float,
+        fiat_currency_code: str,
+        fiat_amount: float,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__SELL_CRYPTO_ASSET),
+            user_id,
+            bank_account_id,
+            crypto_asset_id,
+            crypto_amount,
+            fiat_currency_code,
+            fiat_amount,
+            comment,
+            operated_at,
+        )
+
+    async def put__record_crypto_expense(
+        self,
+        user_id: int,
+        bank_account_id: int,
+        category_id: int,
+        crypto_asset_id: int,
+        amount: float,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__RECORD_CRYPTO_EXPENSE),
+            user_id,
+            bank_account_id,
+            category_id,
+            crypto_asset_id,
+            amount,
+            comment,
+            operated_at,
+        )
+
+    async def put__transfer_crypto_to_investment(
+        self,
+        user_id: int,
+        bank_account_id: int,
+        investment_account_id: int,
+        crypto_asset_id: int,
+        amount: float,
+        market_value_in_base: Optional[float] = None,
+        position_id: Optional[int] = None,
+        title: Optional[str] = None,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__TRANSFER_CRYPTO_TO_INVESTMENT),
+            user_id,
+            bank_account_id,
+            investment_account_id,
+            crypto_asset_id,
+            amount,
+            market_value_in_base,
+            position_id,
+            title,
+            comment,
+            operated_at,
+        )
+
+    async def put__transfer_crypto_from_investment(
+        self,
+        user_id: int,
+        position_id: int,
+        bank_account_id: int,
+        amount: float,
+        value_in_base: float,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__TRANSFER_CRYPTO_FROM_INVESTMENT),
+            user_id,
+            position_id,
+            bank_account_id,
+            amount,
+            value_in_base,
+            comment,
+            operated_at,
+        )
+
+    async def put__create_crypto_protocol_position(
+        self,
+        user_id: int,
+        investment_account_id: int,
+        protocol_name: str,
+        position_type: str,
+        asset_symbol: str,
+        quantity: Optional[float] = None,
+        cost_basis_in_base: Optional[float] = None,
+        current_quantity: Optional[float] = None,
+        current_value_in_base: Optional[float] = None,
+        rewards_claimed_in_base: Optional[float] = None,
+        rewards_unclaimed_in_base: Optional[float] = None,
+        crypto_asset_id: Optional[int] = None,
+        network_code: Optional[str] = None,
+        deposited_at: Optional[date] = None,
+        comment: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION),
+            user_id,
+            investment_account_id,
+            protocol_name,
+            position_type,
+            asset_symbol,
+            quantity,
+            cost_basis_in_base,
+            current_quantity,
+            current_value_in_base,
+            rewards_claimed_in_base,
+            rewards_unclaimed_in_base,
+            crypto_asset_id,
+            network_code,
+            deposited_at,
+            comment,
+            metadata or {},
+        )
+
+    async def set__update_crypto_protocol_position(
+        self,
+        user_id: int,
+        position_id: int,
+        quantity: Optional[float] = None,
+        current_quantity: Optional[float] = None,
+        current_value_in_base: Optional[float] = None,
+        rewards_claimed_in_base: Optional[float] = None,
+        rewards_unclaimed_in_base: Optional[float] = None,
+        comment: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__UPDATE_CRYPTO_PROTOCOL_POSITION),
+            user_id,
+            position_id,
+            quantity,
+            current_quantity,
+            current_value_in_base,
+            rewards_claimed_in_base,
+            rewards_unclaimed_in_base,
+            comment,
+            metadata,
+        )
+
+    async def set__close_crypto_protocol_position(
+        self,
+        user_id: int,
+        position_id: int,
+        withdrawn_at: Optional[date] = None,
+        current_quantity: Optional[float] = None,
+        current_value_in_base: Optional[float] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION),
+            user_id,
+            position_id,
+            withdrawn_at,
+            current_quantity,
+            current_value_in_base,
+            comment,
         )
 
     F_PUT__TRANSFER_BETWEEN_ACCOUNTS = 'put__transfer_between_accounts'

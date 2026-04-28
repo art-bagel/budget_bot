@@ -29,6 +29,9 @@ class Reports(DataBase):
     F_GET__PORTFOLIO_POSITIONS = 'get__portfolio_positions'
     F_GET__PORTFOLIO_EVENTS = 'get__portfolio_events'
     F_GET__PORTFOLIO_ANALYTICS = 'get__portfolio_analytics'
+    F_GET__CRYPTO_ASSETS = 'get__crypto_assets'
+    F_GET__CRYPTO_ASSET = 'get__crypto_asset'
+    F_GET__CRYPTO_PROTOCOL_POSITIONS = 'get__crypto_protocol_positions'
 
     @staticmethod
     def _repair_metadata(value: dict) -> dict:
@@ -78,6 +81,18 @@ class Reports(DataBase):
             self._fn(self.F_GET__CURRENCIES),
         )
         return result if result else []
+
+    async def get__crypto_assets(self) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__CRYPTO_ASSETS),
+        )
+        return result if result else []
+
+    async def get__crypto_asset(self, crypto_asset_id: int) -> Optional[dict]:
+        return await self.call_function(
+            self._fn(self.F_GET__CRYPTO_ASSET),
+            crypto_asset_id,
+        )
 
     async def get__bank_accounts(
         self,
@@ -388,3 +403,17 @@ class Reports(DataBase):
             date_to,
         )
         return result if result else {}
+
+    async def get__crypto_protocol_positions(
+        self,
+        user_id: int,
+        investment_account_id: Optional[int] = None,
+        status: Optional[str] = None,
+    ) -> list[dict]:
+        result = await self.call_function(
+            self._fn(self.F_GET__CRYPTO_PROTOCOL_POSITIONS),
+            user_id,
+            investment_account_id,
+            status,
+        )
+        return result if result else []

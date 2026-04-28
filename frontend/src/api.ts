@@ -64,6 +64,13 @@ import type {
   WithdrawalResolution,
   ApplyTinkoffSyncResponse,
   TinkoffLivePrice,
+  CryptoAsset,
+  UpsertCryptoAssetRequest,
+  CryptoOperationResponse,
+  TransferCryptoToInvestmentRequest,
+  TransferCryptoFromInvestmentRequest,
+  CryptoProtocolPosition,
+  CreateCryptoProtocolPositionRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -273,6 +280,55 @@ export async function deleteAccount(): Promise<{ status: string; user_id: number
 
 export async function fetchCurrencies(): Promise<Currency[]> {
   return apiFetch<Currency[]>('/currencies');
+}
+
+export async function fetchCryptoAssets(): Promise<CryptoAsset[]> {
+  return apiFetch<CryptoAsset[]>('/crypto/assets');
+}
+
+export async function upsertCryptoAsset(data: UpsertCryptoAssetRequest): Promise<CryptoAsset> {
+  return apiFetch<CryptoAsset>('/crypto/assets', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function transferCryptoToInvestment(
+  data: TransferCryptoToInvestmentRequest,
+): Promise<CryptoOperationResponse> {
+  return apiFetch<CryptoOperationResponse>('/crypto/transfer-to-investment', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function transferCryptoFromInvestment(
+  data: TransferCryptoFromInvestmentRequest,
+): Promise<CryptoOperationResponse> {
+  return apiFetch<CryptoOperationResponse>('/crypto/transfer-from-investment', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchCryptoProtocolPositions(params?: {
+  investment_account_id?: number;
+  status?: 'open' | 'closed';
+}): Promise<CryptoProtocolPosition[]> {
+  const search = new URLSearchParams();
+  if (params?.investment_account_id) search.set('investment_account_id', String(params.investment_account_id));
+  if (params?.status) search.set('status', params.status);
+  const query = search.toString();
+  return apiFetch<CryptoProtocolPosition[]>(`/crypto/protocol-positions${query ? `?${query}` : ''}`);
+}
+
+export async function createCryptoProtocolPosition(
+  data: CreateCryptoProtocolPositionRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>('/crypto/protocol-positions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function fetchCategories(): Promise<Category[]> {

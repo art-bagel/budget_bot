@@ -18,12 +18,20 @@ FILES=(
     "bank_entries.sql"
     "budget_entries.sql"
     "current_bank_balances.sql"
+    "crypto_assets.sql"
+    "current_crypto_balances.sql"
+    "crypto_lots.sql"
+    "crypto_lot_consumptions.sql"
+    "crypto_bank_entries.sql"
     "current_budget_balances.sql"
     "fx_lots.sql"
     "lot_consumptions.sql"
     "fx_rate_snapshots.sql"
     "scheduled_expenses.sql"
     "income_source_patterns.sql"
+    "portfolio_positions.sql"
+    "portfolio_events.sql"
+    "crypto_protocol_positions.sql"
 )
 
 for file_name in "${FILES[@]}"; do

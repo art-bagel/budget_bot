@@ -60,7 +60,8 @@ class RecordExpenseRequest(BaseModel):
     bank_account_id: int
     category_id: int
     amount: float
-    currency_code: str
+    currency_code: Optional[str] = None
+    crypto_asset_id: Optional[int] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
 
@@ -73,7 +74,9 @@ class RecordExpenseRequest(BaseModel):
 
     @field_validator('currency_code')
     @classmethod
-    def currency_code_must_be_valid(cls, v: str) -> str:
+    def currency_code_must_be_valid(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         v = v.strip().upper()
         if len(v) != 3 or not v.isalpha():
             raise ValueError('Код валюты должен состоять из 3 букв')
@@ -88,11 +91,14 @@ class RecordExpenseResponse(BaseModel):
 
 class ExchangeCurrencyRequest(BaseModel):
     bank_account_id: int
-    from_currency_code: str
+    from_currency_code: Optional[str] = None
     from_amount: float
-    to_currency_code: str
+    to_currency_code: Optional[str] = None
     to_amount: float
+    from_crypto_asset_id: Optional[int] = None
+    to_crypto_asset_id: Optional[int] = None
     comment: Optional[str] = None
+    operated_at: Optional[date] = None
 
     @field_validator('from_amount', 'to_amount')
     @classmethod
@@ -103,7 +109,9 @@ class ExchangeCurrencyRequest(BaseModel):
 
     @field_validator('from_currency_code', 'to_currency_code')
     @classmethod
-    def currency_code_must_be_valid(cls, v: str) -> str:
+    def currency_code_must_be_valid(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         v = v.strip().upper()
         if len(v) != 3 or not v.isalpha():
             raise ValueError('Код валюты должен состоять из 3 букв')
@@ -112,8 +120,10 @@ class ExchangeCurrencyRequest(BaseModel):
 
 class ExchangeCurrencyResponse(BaseModel):
     operation_id: int
-    effective_rate: float
-    realized_fx_result_in_base: float
+    effective_rate: Optional[float] = None
+    realized_fx_result_in_base: float = 0
+    cost_base: Optional[float] = None
+    consumed_cost_base: Optional[float] = None
     base_currency_code: str
 
 
@@ -194,11 +204,14 @@ class ReverseOperationResponse(BaseModel):
 
 
 class OperationBankEntry(BaseModel):
+    asset_type: str = 'fiat'
     bank_account_id: int
     bank_account_name: Optional[str] = None
     bank_account_owner_type: Optional[str] = None
     bank_account_kind: Optional[str] = None
     currency_code: str
+    crypto_asset_id: Optional[int] = None
+    network_code: Optional[str] = None
     amount: float
 
 
@@ -361,15 +374,28 @@ async def record_expense(
     body: RecordExpenseRequest,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> RecordExpenseResponse:
-    result = await ledger.put__record_expense(
-        user_id=user.user_id,
-        bank_account_id=body.bank_account_id,
-        category_id=body.category_id,
-        amount=body.amount,
-        currency_code=body.currency_code,
-        comment=body.comment,
-        operated_at=body.operated_at,
-    )
+    if body.crypto_asset_id is not None:
+        result = await ledger.put__record_crypto_expense(
+            user_id=user.user_id,
+            bank_account_id=body.bank_account_id,
+            category_id=body.category_id,
+            crypto_asset_id=body.crypto_asset_id,
+            amount=body.amount,
+            comment=body.comment,
+            operated_at=body.operated_at,
+        )
+    else:
+        if body.currency_code is None:
+            raise HTTPException(status_code=422, detail='currency_code is required for fiat expenses')
+        result = await ledger.put__record_expense(
+            user_id=user.user_id,
+            bank_account_id=body.bank_account_id,
+            category_id=body.category_id,
+            amount=body.amount,
+            currency_code=body.currency_code,
+            comment=body.comment,
+            operated_at=body.operated_at,
+        )
     return RecordExpenseResponse(**result)
 
 
@@ -378,15 +404,59 @@ async def exchange_currency(
     body: ExchangeCurrencyRequest,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> ExchangeCurrencyResponse:
-    result = await ledger.put__exchange_currency(
-        user_id=user.user_id,
-        bank_account_id=body.bank_account_id,
-        from_currency_code=body.from_currency_code,
-        from_amount=body.from_amount,
-        to_currency_code=body.to_currency_code,
-        to_amount=body.to_amount,
-        comment=body.comment,
-    )
+    from_is_crypto = body.from_crypto_asset_id is not None
+    to_is_crypto = body.to_crypto_asset_id is not None
+
+    if from_is_crypto and to_is_crypto:
+        raise HTTPException(status_code=422, detail='Crypto-to-crypto exchange is not supported in banking MVP')
+
+    if to_is_crypto:
+        if body.from_currency_code is None:
+            raise HTTPException(status_code=422, detail='from_currency_code is required when buying crypto')
+        result = await ledger.put__buy_crypto_asset(
+            user_id=user.user_id,
+            bank_account_id=body.bank_account_id,
+            fiat_currency_code=body.from_currency_code,
+            fiat_amount=body.from_amount,
+            crypto_asset_id=body.to_crypto_asset_id,
+            crypto_amount=body.to_amount,
+            comment=body.comment,
+            operated_at=body.operated_at,
+        )
+        result = {
+            **result,
+            'effective_rate': body.from_amount / body.to_amount,
+            'realized_fx_result_in_base': 0,
+        }
+    elif from_is_crypto:
+        if body.to_currency_code is None:
+            raise HTTPException(status_code=422, detail='to_currency_code is required when selling crypto')
+        result = await ledger.put__sell_crypto_asset(
+            user_id=user.user_id,
+            bank_account_id=body.bank_account_id,
+            crypto_asset_id=body.from_crypto_asset_id,
+            crypto_amount=body.from_amount,
+            fiat_currency_code=body.to_currency_code,
+            fiat_amount=body.to_amount,
+            comment=body.comment,
+            operated_at=body.operated_at,
+        )
+        result = {
+            **result,
+            'effective_rate': body.to_amount / body.from_amount,
+        }
+    else:
+        if body.from_currency_code is None or body.to_currency_code is None:
+            raise HTTPException(status_code=422, detail='currency codes are required for fiat exchange')
+        result = await ledger.put__exchange_currency(
+            user_id=user.user_id,
+            bank_account_id=body.bank_account_id,
+            from_currency_code=body.from_currency_code,
+            from_amount=body.from_amount,
+            to_currency_code=body.to_currency_code,
+            to_amount=body.to_amount,
+            comment=body.comment,
+        )
     return ExchangeCurrencyResponse(**result)
 
 

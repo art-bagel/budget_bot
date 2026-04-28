@@ -3848,6 +3848,15 @@ select.input option {
 
 .amt__inp::placeholder { color: var(--text-3); font-weight: 400; }
 
+.amt__hint {
+  display: block;
+  margin-top: 6px;
+  padding-left: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
 .amt__cur {
   font-size: 18px; font-weight: 600; color: var(--text-2);
   flex-shrink: 0; padding-left: 8px;
@@ -4087,6 +4096,15 @@ input[type="date"].picker-v2::-webkit-calendar-picker-indicator { opacity: 0.4; 
   overflow: hidden;
   z-index: 200;
   min-width: 80px;
+}
+
+.cur-drop__group {
+  padding: 7px 16px 3px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-3);
 }
 
 .cur-drop__item {
