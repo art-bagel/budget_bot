@@ -5,6 +5,7 @@ import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, DashboardBankBalance } from '../types';
 import { formatAmount, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
+import { getCryptoIconUrl } from '../utils/cryptoAssets';
 
 
 interface Props {
@@ -50,8 +51,6 @@ const MODE_LABEL: Partial<Record<string, string>> = {
 };
 const CUR_SYM: Record<string, string>  = { RUB: '₽', USD: '$', EUR: '€' };
 const CUR_NAME: Record<string, string> = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' };
-const CRYPTO_ICON_URLS: Record<string, string> = {};
-const CRYPTO_ICON_CDN_SYMBOLS = new Set(['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'SOL', 'TRX', 'DOGE', 'ADA', 'XRP', 'DOT', 'MATIC']);
 
 function acctIcoClass(account: BankAccount, kind: AcctKind): string {
   if (kind === 'investment') return 'sheet-ico--b';
@@ -77,14 +76,6 @@ function AcctIcon({ kind }: { kind: AcctKind }) {
 
 function curSym(code: string)  { return CUR_SYM[code]  ?? code; }
 function curName(code: string) { return CUR_NAME[code] ?? code; }
-function cryptoIconUrl(symbol?: string | null): string | null {
-  if (!symbol) return null;
-  const normalized = symbol.trim().toUpperCase();
-  if (!normalized) return null;
-  if (CRYPTO_ICON_URLS[normalized]) return CRYPTO_ICON_URLS[normalized];
-  if (!CRYPTO_ICON_CDN_SYMBOLS.has(normalized)) return null;
-  return `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/svg/color/${normalized.toLowerCase()}.svg`;
-}
 function assetKeyOfBalance(balance: DashboardBankBalance): string {
   return balance.asset_type === 'crypto' && balance.crypto_asset_id
     ? `crypto:${balance.crypto_asset_id}`
@@ -105,7 +96,7 @@ function formatAssetAmount(amount: number, item: Pick<PickerItem, 'assetType' | 
 function AssetMark({ item }: { item: Pick<PickerItem, 'assetType' | 'currency' | 'symbol'> }) {
   const code = assetCode(item);
   const [imageFailed, setImageFailed] = useState(false);
-  const src = item.assetType === 'crypto' && !imageFailed ? cryptoIconUrl(item.symbol ?? item.currency) : null;
+  const src = item.assetType === 'crypto' && !imageFailed ? getCryptoIconUrl(item.symbol ?? item.currency) : null;
 
   if (src) {
     return (
@@ -145,6 +136,7 @@ export default function AccountTransferDialog({
   const [toSel,   setToSel]   = useState<Selection | null>(null);
   const [openRole, setOpenRole] = useState<'from' | 'to' | null>(null);
   const [amount,   setAmount]  = useState('');
+  const [marketValueInBase, setMarketValueInBase] = useState('');
   const [comment,  setComment] = useState('');
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -279,6 +271,7 @@ export default function AccountTransferDialog({
     if (!fromItem || !toItem) return null;
     return MODE_LABEL[`${fromItem.kind}>${toItem.kind}`] ?? null;
   }, [fromItem, toItem]);
+  const isCryptoToInvestment = fromItem?.assetType === 'crypto' && fromItem.kind === 'cash' && toItem?.kind === 'investment';
 
   const amountValue = parseFloat(amount) || 0;
   const exceedsBalance = fromItem?.kind !== 'credit' && !!fromBalance && amountValue > fromBalance.amount;
@@ -295,12 +288,13 @@ export default function AccountTransferDialog({
     }
     setOpenRole(null);
     setAmount('');
+    setMarketValueInBase('');
     setError(null);
   };
 
   const handleSwap = () => {
     if (!canSwap || !fromSel || !toSel) return;
-    setFromSel(toSel); setToSel(fromSel); setAmount('');
+    setFromSel(toSel); setToSel(fromSel); setAmount(''); setMarketValueInBase('');
   };
 
   const handleSubmit = async () => {
@@ -313,6 +307,7 @@ export default function AccountTransferDialog({
           investment_account_id: toSel.accountId,
           crypto_asset_id: fromItem.cryptoAssetId,
           amount: amountValue,
+          market_value_in_base: marketValueInBase.trim() ? Number(marketValueInBase) : undefined,
           title: assetCode(fromItem),
           comment: comment.trim() || undefined,
         });
@@ -526,6 +521,21 @@ export default function AccountTransferDialog({
               <span className="atx__err">Недостаточно: {fromItem ? formatAssetAmount(fromBalance.amount, fromItem) : formatAmount(fromBalance.amount, baseCurrencyCode)}</span>
             )}
           </div>
+
+          {isCryptoToInvestment && (
+            <div className="field">
+              <span className="fl">Текущая оценка в {baseCurrencyCode}</span>
+              <input
+                className="inp-v2"
+                type="text"
+                inputMode="decimal"
+                placeholder="Оставь пустым, если равна себестоимости"
+                value={marketValueInBase}
+                onChange={e => setMarketValueInBase(sanitizeDecimalInput(e.target.value))}
+                disabled={submitting}
+              />
+            </div>
+          )}
 
           {/* Comment */}
           <div className="field">

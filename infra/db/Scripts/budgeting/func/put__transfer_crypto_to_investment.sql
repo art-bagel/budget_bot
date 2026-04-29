@@ -25,6 +25,7 @@ DECLARE
     _investment_account_kind text;
     _investment_asset_type text;
     _base_currency_code char(3);
+    _from_unallocated_id bigint;
     _crypto_balance numeric(30, 12);
     _remaining_to_consume numeric(30, 12);
     _consumed_cost_base numeric(20, 2) := 0;
@@ -91,6 +92,16 @@ BEGIN
     END IF;
 
     _base_currency_code := budgeting.get__owner_base_currency(_bank_owner_type, _bank_owner_user_id, _bank_owner_family_id);
+    _from_unallocated_id := budgeting.get__owner_system_category_id(
+        _bank_owner_type,
+        _bank_owner_user_id,
+        _bank_owner_family_id,
+        'Unallocated'
+    );
+
+    IF _from_unallocated_id IS NULL THEN
+        RAISE EXCEPTION 'Unallocated category missing for source account %', _bank_account_id;
+    END IF;
 
     PERFORM 1
     FROM current_crypto_balances
@@ -160,6 +171,9 @@ BEGIN
 
     INSERT INTO crypto_bank_entries (operation_id, bank_account_id, crypto_asset_id, amount)
     VALUES (_operation_id, _bank_account_id, _crypto_asset_id, -_amount);
+
+    INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+    VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_consumed_cost_base);
 
     FOR _lot_idx IN 1..array_length(_lot_ids, 1) LOOP
         UPDATE crypto_lots
@@ -303,6 +317,12 @@ BEGIN
         -_consumed_cost_base
     );
 
+    PERFORM budgeting.put__apply_current_budget_delta(
+        _from_unallocated_id,
+        _base_currency_code,
+        -_consumed_cost_base
+    );
+
     RETURN jsonb_build_object(
         'operation_id', _operation_id,
         'position_id', _target_position_id,
@@ -311,4 +331,3 @@ BEGIN
     );
 END
 $function$;
-

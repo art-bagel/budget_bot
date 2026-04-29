@@ -65,10 +65,12 @@ import type {
   ApplyTinkoffSyncResponse,
   TinkoffLivePrice,
   CryptoAsset,
+  CryptoLivePrice,
   UpsertCryptoAssetRequest,
   CryptoOperationResponse,
   TransferCryptoToInvestmentRequest,
   TransferCryptoFromInvestmentRequest,
+  UpdateCryptoValuationRequest,
   CryptoProtocolPosition,
   CreateCryptoProtocolPositionRequest,
 } from './types';
@@ -284,6 +286,19 @@ export async function fetchCurrencies(): Promise<Currency[]> {
 
 export async function fetchCryptoAssets(): Promise<CryptoAsset[]> {
   return apiFetch<CryptoAsset[]>('/crypto/assets');
+}
+
+export async function fetchCryptoLivePrices(
+  assetIds: number[],
+  vsCurrency: string,
+): Promise<CryptoLivePrice[]> {
+  const uniqueIds = Array.from(new Set(assetIds)).filter((id) => Number.isFinite(id));
+  if (uniqueIds.length === 0) return [];
+  const query = new URLSearchParams({
+    asset_ids: uniqueIds.join(','),
+    vs_currency: vsCurrency,
+  });
+  return apiFetch<CryptoLivePrice[]>(`/crypto/prices?${query.toString()}`);
 }
 
 export async function upsertCryptoAsset(data: UpsertCryptoAssetRequest): Promise<CryptoAsset> {
@@ -737,6 +752,16 @@ export async function changeDepositRate(
   data: ChangeDepositRateRequest,
 ): Promise<PortfolioPosition> {
   return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/change-rate`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCryptoValuation(
+  positionId: number,
+  data: UpdateCryptoValuationRequest,
+): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/crypto-valuation`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

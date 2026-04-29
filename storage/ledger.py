@@ -96,6 +96,7 @@ class Ledger(DataBase):
         amount: float,
         currency_code: str,
         amount_in_base: Optional[float] = None,
+        quantity: Optional[float] = None,
         income_kind: Optional[str] = None,
         received_at: Optional[str] = None,
         comment: Optional[str] = None,
@@ -113,6 +114,7 @@ class Ledger(DataBase):
             comment,
             None,
             destination,
+            quantity,
         )
 
     async def put__allocate_budget(

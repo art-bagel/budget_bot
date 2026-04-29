@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
 
@@ -9,6 +10,25 @@ from backend.app.storage import ledger, reports
 
 
 router = APIRouter(prefix='/api/v1/crypto', tags=['crypto'])
+
+COINGECKO_IDS_BY_SYMBOL = {
+    'BTC': 'bitcoin',
+    'ETH': 'ethereum',
+    'USDT': 'tether',
+    'USDC': 'usd-coin',
+    'TON': 'the-open-network',
+    'BNB': 'binancecoin',
+    'SOL': 'solana',
+    'TRX': 'tron',
+    'DOGE': 'dogecoin',
+    'ADA': 'cardano',
+    'XRP': 'ripple',
+    'DOT': 'polkadot',
+    'MATIC': 'matic-network',
+}
+SUPPORTED_PRICE_CURRENCIES = {'rub', 'usd', 'eur'}
+_PRICE_CACHE: dict[tuple[str, str], tuple[datetime, float]] = {}
+_PRICE_CACHE_TTL = timedelta(minutes=2)
 
 
 class CryptoAssetItem(BaseModel):
@@ -20,6 +40,15 @@ class CryptoAssetItem(BaseModel):
     decimals: int
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str
+
+
+class CryptoPriceItem(BaseModel):
+    crypto_asset_id: int
+    symbol: str
+    vs_currency: str
+    price: float
+    source: str
+    fetched_at: str
 
 
 class UpsertCryptoAssetRequest(BaseModel):
@@ -148,12 +177,97 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
     comment: Optional[str] = None
 
 
+def _coingecko_id_for_asset(asset: dict[str, Any]) -> str | None:
+    metadata = asset.get('metadata') or {}
+    explicit_id = metadata.get('coingecko_id') or metadata.get('coin_gecko_id')
+    if isinstance(explicit_id, str) and explicit_id.strip():
+        return explicit_id.strip().lower()
+    return COINGECKO_IDS_BY_SYMBOL.get(str(asset.get('symbol') or '').upper())
+
+
 @router.get('/assets', response_model=List[CryptoAssetItem])
 async def get_crypto_assets(
     _user: TelegramUser = Depends(get_telegram_user),
 ) -> List[CryptoAssetItem]:
     items = await reports.get__crypto_assets()
     return [CryptoAssetItem(**item) for item in items]
+
+
+@router.get('/prices', response_model=List[CryptoPriceItem])
+async def get_crypto_prices(
+    asset_ids: str = Query(..., min_length=1),
+    vs_currency: str = Query('rub', min_length=3, max_length=3),
+    _user: TelegramUser = Depends(get_telegram_user),
+) -> List[CryptoPriceItem]:
+    requested_ids = {
+        int(part)
+        for part in asset_ids.split(',')
+        if part.strip().isdigit()
+    }
+    if not requested_ids:
+        return []
+
+    normalized_vs = vs_currency.strip().lower()
+    if normalized_vs not in SUPPORTED_PRICE_CURRENCIES:
+        normalized_vs = 'rub'
+
+    assets = [
+        item for item in await reports.get__crypto_assets()
+        if int(item['id']) in requested_ids
+    ]
+    id_to_assets: dict[str, list[dict[str, Any]]] = {}
+    for asset in assets:
+        coingecko_id = _coingecko_id_for_asset(asset)
+        if coingecko_id:
+            id_to_assets.setdefault(coingecko_id, []).append(asset)
+
+    if not id_to_assets:
+        return []
+
+    now = datetime.now(timezone.utc)
+    missing_ids = [
+        coingecko_id
+        for coingecko_id in id_to_assets
+        if (coingecko_id, normalized_vs) not in _PRICE_CACHE
+        or now - _PRICE_CACHE[(coingecko_id, normalized_vs)][0] > _PRICE_CACHE_TTL
+    ]
+
+    if missing_ids:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                response = await client.get(
+                    'https://api.coingecko.com/api/v3/simple/price',
+                    params={
+                        'ids': ','.join(missing_ids),
+                        'vs_currencies': normalized_vs,
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+            for coingecko_id in missing_ids:
+                raw_price = (payload.get(coingecko_id) or {}).get(normalized_vs)
+                if isinstance(raw_price, (int, float)) and raw_price > 0:
+                    _PRICE_CACHE[(coingecko_id, normalized_vs)] = (now, float(raw_price))
+        except httpx.HTTPError:
+            pass
+
+    result: list[CryptoPriceItem] = []
+    fetched_at = now.isoformat()
+    for coingecko_id, mapped_assets in id_to_assets.items():
+        cached = _PRICE_CACHE.get((coingecko_id, normalized_vs))
+        if not cached:
+            continue
+        _, price = cached
+        for asset in mapped_assets:
+            result.append(CryptoPriceItem(
+                crypto_asset_id=int(asset['id']),
+                symbol=str(asset['symbol']),
+                vs_currency=normalized_vs.upper(),
+                price=price,
+                source='coingecko',
+                fetched_at=fetched_at,
+            ))
+    return result
 
 
 @router.post('/assets', response_model=CryptoAssetItem)
@@ -284,4 +398,3 @@ async def close_crypto_protocol_position(
         comment=body.comment,
     )
     return CryptoProtocolPositionItem(**result)
-

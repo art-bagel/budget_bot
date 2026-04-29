@@ -48,6 +48,10 @@ BEGIN
         RAISE EXCEPTION 'Unsupported asset type code: %', _asset_type_code;
     END IF;
 
+    IF _normalized_asset_type = 'crypto' THEN
+        RAISE EXCEPTION 'Crypto positions must be created by transferring existing banking crypto to investments';
+    END IF;
+
     IF _amount_in_currency IS NULL OR _amount_in_currency <= 0 THEN
         RAISE EXCEPTION 'Position amount must be positive';
     END IF;

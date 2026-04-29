@@ -167,6 +167,15 @@ export interface CryptoAsset {
   created_at: string;
 }
 
+export interface CryptoLivePrice {
+  crypto_asset_id: number;
+  symbol: string;
+  vs_currency: string;
+  price: number;
+  source: string;
+  fetched_at: string;
+}
+
 export interface UpsertCryptoAssetRequest {
   symbol: string;
   name?: string;
@@ -204,6 +213,12 @@ export interface TransferCryptoFromInvestmentRequest {
   value_in_base: number;
   comment?: string;
   operated_at?: string;
+}
+
+export interface UpdateCryptoValuationRequest {
+  current_value_in_base: number;
+  valued_at?: string;
+  comment?: string;
 }
 
 export interface CryptoProtocolPosition {
@@ -580,6 +595,7 @@ export interface RecordPortfolioIncomeRequest {
   amount: number;
   currency_code: string;
   amount_in_base?: number;
+  quantity?: number;
   income_kind?: string;
   destination?: 'account' | 'position';
   received_at?: string;

@@ -147,6 +147,7 @@ export default function PortfolioPositionDialog({
   // Deposit-specific state
   const isDeposit = defaultAssetTypeCode === 'deposit';
   const isSecurity = defaultAssetTypeCode === 'security';
+  const isCrypto = defaultAssetTypeCode === 'crypto';
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
   const [endDate, setEndDate] = useState(todayIso());
@@ -184,10 +185,14 @@ export default function PortfolioPositionDialog({
   }, [defaultAssetTypeCode]);
 
   useEffect(() => {
+    if (isCrypto) {
+      setCurrencyCode(user.base_currency_code);
+      return;
+    }
     if (!currencies.some((currency) => currency.code === currencyCode)) {
       setCurrencyCode(currencies[0]?.code ?? user.base_currency_code);
     }
-  }, [currencies, currencyCode, user.base_currency_code]);
+  }, [currencies, currencyCode, user.base_currency_code, isCrypto]);
 
   const selectedAccountBalances = useMemo(
     () => accounts.find(({ account }) => String(account.id) === investmentAccountId)?.balances ?? [],
@@ -200,6 +205,7 @@ export default function PortfolioPositionDialog({
   );
 
   const canSubmit = !submitting
+    && !isCrypto
     && !!investmentAccountId
     && !!title.trim()
     && parseFloat(amount) > 0
@@ -207,11 +213,16 @@ export default function PortfolioPositionDialog({
     && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
 
   const handleSubmit = async () => {
+    if (isCrypto) {
+      setError('Crypto-позиция создается переводом уже купленной крипты с банковского счета.');
+      return;
+    }
+
     if (!canSubmit) {
       return;
     }
 
-    if (parseFloat(amount) > selectedCurrencyBalance) {
+    if (!isCrypto && parseFloat(amount) > selectedCurrencyBalance) {
       setError('Недостаточно денег на инвестиционном счете для открытия позиции.');
       return;
     }
@@ -321,6 +332,12 @@ export default function PortfolioPositionDialog({
         </div>
       )}
 
+      {isCrypto && (
+        <div className="apf-balance">
+          Новая crypto-позиция создается переводом уже купленной крипты с банковского счета на инвестиционный.
+        </div>
+      )}
+
       {/* Ticker search */}
       {isSecurity && (
         <div className="apf-field">
@@ -357,16 +374,18 @@ export default function PortfolioPositionDialog({
         </div>
       )}
 
-      {/* Title */}
+      {!isCrypto && (
       <div className="apf-field">
         <label className="apf-label">Название</label>
         <input className="apf-input" type="text" autoFocus
           placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Актив или направление' : 'Позиция'}
           value={title} onChange={(e) => setTitle(e.target.value)} disabled={submitting} />
       </div>
+      )}
 
       {/* Amount + Currency */}
-      <div className="apf-row">
+      {!isCrypto && (
+        <div className="apf-row">
         <div className="apf-field" style={{ flex: 2 }}>
           <label className="apf-label">{isDeposit ? 'Сумма' : 'Сумма входа'}</label>
           <input className="apf-input" type="text" inputMode="decimal"
@@ -383,9 +402,10 @@ export default function PortfolioPositionDialog({
           />
         </div>
       </div>
+      )}
 
       {/* Quantity + Date (non-deposit) */}
-      {!isDeposit && (
+      {!isDeposit && !isCrypto && (
         <div className="apf-row">
           <div className="apf-field" style={{ flex: 1 }}>
             <label className="apf-label">Количество</label>
@@ -458,22 +478,30 @@ export default function PortfolioPositionDialog({
       )}
 
       {/* Balance */}
-      <div className="apf-balance">
+      {!isCrypto && (
+        <div className="apf-balance">
         Доступно: {formatAmount(selectedCurrencyBalance, currencyCode)}
-      </div>
+        </div>
+      )}
 
       {/* Comment */}
-      <div className="apf-field">
-        <label className="apf-label">Комментарий</label>
-        <input className="apf-input" type="text" placeholder="Необязательно"
-          value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
-      </div>
+      {!isCrypto && (
+        <div className="apf-field">
+          <label className="apf-label">Комментарий</label>
+          <input className="apf-input" type="text" placeholder="Необязательно"
+            value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
+        </div>
+      )}
 
       {error && <div className="apf-error">{error}</div>}
     </div>
   );
 
-  const actions = (
+  const actions = isCrypto ? (
+    <div className="apf-actions">
+      <button className="apf-submit" type="button" onClick={onClose}>Понятно</button>
+    </div>
+  ) : (
     <div className="apf-actions">
       <button className="apf-cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
       <button className="apf-submit" type="button" onClick={handleSubmit} disabled={!canSubmit}>

@@ -24,6 +24,9 @@ import {
   topUpPortfolioPosition,
   fetchPortfolioAnalytics,
   fetchCryptoProtocolPositions,
+  fetchCryptoLivePrices,
+  transferCryptoFromInvestment,
+  updateCryptoValuation,
 } from '../api';
 import BottomSheet from '../components/BottomSheet';
 import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
@@ -37,12 +40,15 @@ import type {
   PortfolioPosition,
   PortfolioSummaryItem,
   TinkoffLivePrice,
+  CryptoLivePrice,
   UserContext,
   PortfolioAnalyticsData,
   CryptoProtocolPosition,
 } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
+import { sanitizeDecimalInput } from '../utils/validation';
+import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import Operations from './Operations';
@@ -63,6 +69,7 @@ type CloseDraft = {
 
 type IncomeDraft = {
   amount: string;
+  quantity: string;
   currencyCode: string;
   baseAmount: string;
   incomeKind: string;
@@ -100,6 +107,20 @@ type FeeDraft = {
 type RateChangeDraft = {
   newRate: string;
   effectiveDate: string;
+};
+
+type CryptoWithdrawDraft = {
+  bankAccountId: string;
+  amount: string;
+  valueInBase: string;
+  withdrawnAt: string;
+  comment: string;
+};
+
+type CryptoValuationDraft = {
+  currentValueInBase: string;
+  valuedAt: string;
+  comment: string;
 };
 
 type PortfolioAssetTab = {
@@ -196,6 +217,10 @@ const INCOME_KIND_LABELS: Record<string, string> = {
   dividend: 'Дивиденды',
   interest: 'Проценты',
   coupon: 'Купоны',
+  reward: 'Награды',
+  staking: 'Стейкинг',
+  lending: 'Лендинг',
+  liquidity: 'Пулы ликвидности',
   other: 'Прочее',
 };
 
@@ -329,6 +354,10 @@ function getInvestmentAccountAssetType(account: BankAccount): string {
   return account.investment_asset_type ?? 'security';
 }
 
+function isSameAccountOwner(account: BankAccount, position: PortfolioPosition): boolean {
+  return account.owner_type === position.investment_account_owner_type;
+}
+
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
   return {
     amount: '',
@@ -342,14 +371,17 @@ function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
 function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
   return {
     amount: '',
+    quantity: '',
     currencyCode: position.currency_code,
     baseAmount: '',
     incomeKind: position.asset_type_code === 'deposit'
       ? 'interest'
       : position.asset_type_code === 'security'
         ? 'dividend'
-        : 'other',
-    destination: position.asset_type_code === 'deposit' ? 'position' : 'account',
+        : position.asset_type_code === 'crypto'
+          ? 'reward'
+          : 'other',
+    destination: position.asset_type_code === 'deposit' || position.asset_type_code === 'crypto' ? 'position' : 'account',
     receivedAt: todayIso(),
     comment: '',
   };
@@ -383,6 +415,17 @@ function createInitialFeeDraft(position: PortfolioPosition): FeeDraft {
     amount: '',
     currencyCode: position.currency_code,
     chargedAt: todayIso(),
+    comment: '',
+  };
+}
+
+function createInitialCryptoValuationDraft(position: PortfolioPosition): CryptoValuationDraft {
+  const currentValue = typeof position.metadata?.current_value_in_base === 'number'
+    ? position.metadata.current_value_in_base
+    : position.amount_in_currency;
+  return {
+    currentValueInBase: String(currentValue),
+    valuedAt: todayIso(),
     comment: '',
   };
 }
@@ -430,6 +473,7 @@ function getEventLabel(item: PortfolioEvent): string {
 
 export default function Portfolio({ user }: { user: UserContext }) {
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
@@ -465,11 +509,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [partialCloseDrafts, setPartialCloseDrafts] = useState<Record<number, PartialCloseDraft>>({});
   const [feeDrafts, setFeeDrafts] = useState<Record<number, FeeDraft>>({});
   const [rateChangeDrafts, setRateChangeDrafts] = useState<Record<number, RateChangeDraft>>({});
+  const [cryptoWithdrawDrafts, setCryptoWithdrawDrafts] = useState<Record<number, CryptoWithdrawDraft>>({});
+  const [cryptoValuationDrafts, setCryptoValuationDrafts] = useState<Record<number, CryptoValuationDraft>>({});
+  const [cryptoWithdrawError, setCryptoWithdrawError] = useState<string | null>(null);
+  const [cryptoValuationError, setCryptoValuationError] = useState<string | null>(null);
+  const [submittingCryptoWithdrawId, setSubmittingCryptoWithdrawId] = useState<number | null>(null);
+  const [submittingCryptoValuationId, setSubmittingCryptoValuationId] = useState<number | null>(null);
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
   const [accountSwipeStartX, setAccountSwipeStartX] = useState<number | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
   const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
+  const [cryptoLivePrices, setCryptoLivePrices] = useState<Map<number, CryptoLivePrice>>(new Map());
   const [tinkoffConnections, setTinkoffConnections] = useState<ExternalConnection[]>([]);
   const [syncDialogConnection, setSyncDialogConnection] = useState<ExternalConnection | null>(null);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
@@ -499,8 +550,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setError(null);
 
     try {
-      const [investmentAccounts, loadedPositions, loadedCurrencies, loadedSummary, loadedConnections] = await Promise.all([
+      const [investmentAccounts, loadedCashAccounts, loadedPositions, loadedCurrencies, loadedSummary, loadedConnections] = await Promise.all([
         fetchBankAccounts('investment'),
+        fetchBankAccounts('cash'),
         fetchPortfolioPositions(),
         fetchCurrencies(),
         fetchPortfolioSummary(),
@@ -514,6 +566,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       );
 
       setAccounts(snapshots);
+      setCashAccounts(loadedCashAccounts);
       setPositions(loadedPositions);
       setCurrencies(loadedCurrencies);
       setSummaryItems(loadedSummary);
@@ -561,6 +614,34 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setMoexPrices(new Map([...sharesMap, ...bondsMap]));
     }).catch(() => {});
   }, [positions]);
+
+  useEffect(() => {
+    const cryptoAssetIds = Array.from(new Set(
+      positions
+        .filter((position) => position.status === 'open' && position.asset_type_code === 'crypto')
+        .map((position) => {
+          const value = position.metadata?.crypto_asset_id;
+          if (typeof value === 'number') return value;
+          if (typeof value === 'string' && value.trim()) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+          }
+          return null;
+        })
+        .filter((value): value is number => value !== null),
+    ));
+
+    if (cryptoAssetIds.length === 0) {
+      setCryptoLivePrices(new Map());
+      return;
+    }
+
+    void fetchCryptoLivePrices(cryptoAssetIds, user.base_currency_code)
+      .then((items) => {
+        setCryptoLivePrices(new Map(items.map((item) => [item.crypto_asset_id, item])));
+      })
+      .catch(() => setCryptoLivePrices(new Map()));
+  }, [positions, user.base_currency_code]);
 
   const totalHistoricalInBase = useMemo(
     () => accounts.reduce(
@@ -715,6 +796,15 @@ export default function Portfolio({ user }: { user: UserContext }) {
     return normalized !== '' ? normalized : null;
   };
 
+  const getCryptoAssetId = (position: PortfolioPosition): number | null => (
+    getPositionMetadataNumber(position, 'crypto_asset_id')
+  );
+
+  const getCryptoLivePrice = (position: PortfolioPosition): CryptoLivePrice | null => {
+    const cryptoAssetId = getCryptoAssetId(position);
+    return cryptoAssetId !== null ? cryptoLivePrices.get(cryptoAssetId) ?? null : null;
+  };
+
   const getPositionEntryAmount = (position: PortfolioPosition): number => {
     if (position.metadata?.moex_market === 'bonds') {
       return getPositionMetadataNumber(position, 'clean_amount_in_base') ?? position.amount_in_currency;
@@ -791,11 +881,18 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
   const getResolvedPositionEstimatedValue = (position: PortfolioPosition) => (
     position.asset_type_code === 'crypto'
-      ? (getPositionMetadataNumber(position, 'current_value_in_base') ?? getPositionMetadataNumber(position, 'amount_in_base') ?? position.amount_in_currency)
+      ? (
+          getCryptoLivePrice(position) && position.quantity
+            ? getCryptoLivePrice(position)!.price * position.quantity
+            : (getPositionMetadataNumber(position, 'current_value_in_base') ?? getPositionMetadataNumber(position, 'amount_in_base') ?? position.amount_in_currency)
+        )
       : (getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency)
   );
 
   const getResolvedPositionCurrentResult = (position: PortfolioPosition): number | null => {
+    if (position.asset_type_code === 'crypto') {
+      return getResolvedPositionEstimatedValue(position) - getPositionInvestedPrincipal(position);
+    }
     const quote = getResolvedPositionQuote(position);
     if (quote.performanceCurrentValue === null) {
       return null;
@@ -1124,6 +1221,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setPartialCloseDrafts(omit);
     setFeeDrafts(omit);
     setRateChangeDrafts(omit);
+    setCryptoWithdrawDrafts(omit);
+    setCryptoValuationDrafts(omit);
   };
 
   const handleOpenCloseForm = (position: PortfolioPosition) => {
@@ -1154,6 +1253,29 @@ export default function Portfolio({ user }: { user: UserContext }) {
     clearPositionDrafts(position.id);
     setFeeError(null);
     setFeeDrafts((prev) => ({ ...prev, [position.id]: createInitialFeeDraft(position) }));
+  };
+
+  const handleOpenCryptoWithdrawForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
+    setCryptoWithdrawError(null);
+    const targetAccounts = cashAccounts.filter((account) => isSameAccountOwner(account, position));
+    const defaultAccount = targetAccounts.find((account) => account.id === user.bank_account_id) ?? targetAccounts[0] ?? null;
+    setCryptoWithdrawDrafts((prev) => ({
+      ...prev,
+      [position.id]: {
+        bankAccountId: defaultAccount ? String(defaultAccount.id) : '',
+        amount: '',
+        valueInBase: '',
+        withdrawnAt: todayIso(),
+        comment: '',
+      },
+    }));
+  };
+
+  const handleOpenCryptoValuationForm = (position: PortfolioPosition) => {
+    clearPositionDrafts(position.id);
+    setCryptoValuationError(null);
+    setCryptoValuationDrafts((prev) => ({ ...prev, [position.id]: createInitialCryptoValuationDraft(position) }));
   };
 
   const handleCloseDraftChange = (
@@ -1240,11 +1362,44 @@ export default function Portfolio({ user }: { user: UserContext }) {
     }));
   };
 
+  const handleCryptoWithdrawDraftChange = (
+    positionId: number,
+    patch: Partial<CryptoWithdrawDraft>,
+  ) => {
+    setCryptoWithdrawDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...(prev[positionId] ?? {
+          bankAccountId: '',
+          amount: '',
+          valueInBase: '',
+          withdrawnAt: todayIso(),
+          comment: '',
+        }),
+        ...patch,
+      },
+    }));
+  };
+
+  const handleCryptoValuationDraftChange = (
+    positionId: number,
+    patch: Partial<CryptoValuationDraft>,
+  ) => {
+    setCryptoValuationDrafts((prev) => ({
+      ...prev,
+      [positionId]: {
+        ...(prev[positionId] ?? createInitialCryptoValuationDraft(getDraftPositionFallback(positionId))),
+        ...patch,
+      },
+    }));
+  };
+
   const handleRecordIncome = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const draft = incomeDrafts[position.id];
+    const isCryptoPosition = position.asset_type_code === 'crypto';
 
-    if (!draft || !draft.amount.trim() || submittingIncomeId === position.id) {
+    if (!draft || !draft.amount.trim() || (isCryptoPosition && !draft.quantity.trim()) || submittingIncomeId === position.id) {
       return;
     }
 
@@ -1258,8 +1413,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
         amount_in_base: draft.currencyCode === user.base_currency_code || !draft.baseAmount.trim()
           ? undefined
           : Number(draft.baseAmount),
+        quantity: isCryptoPosition ? Number(draft.quantity) : undefined,
         income_kind: draft.incomeKind,
-        destination: draft.destination,
+        destination: isCryptoPosition ? 'position' : draft.destination,
         received_at: draft.receivedAt || undefined,
         comment: draft.comment.trim() || undefined,
       });
@@ -1417,6 +1573,79 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setFeeError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSubmittingFeeId(null);
+    }
+  };
+
+  const handleCryptoWithdraw = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = cryptoWithdrawDrafts[position.id];
+
+    if (!draft || !draft.amount.trim() || !draft.valueInBase.trim() || !draft.bankAccountId || submittingCryptoWithdrawId === position.id) {
+      return;
+    }
+
+    const amountValue = Number(draft.amount);
+    const valueInBase = Number(draft.valueInBase);
+    if (position.quantity !== null && position.quantity !== undefined && amountValue > position.quantity) {
+      setCryptoWithdrawError('Нельзя вывести больше, чем есть в позиции.');
+      return;
+    }
+
+    setSubmittingCryptoWithdrawId(position.id);
+    setCryptoWithdrawError(null);
+
+    try {
+      await transferCryptoFromInvestment({
+        position_id: position.id,
+        bank_account_id: Number(draft.bankAccountId),
+        amount: amountValue,
+        value_in_base: valueInBase,
+        comment: draft.comment.trim() || undefined,
+        operated_at: draft.withdrawnAt || undefined,
+      });
+      setCryptoWithdrawDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      if (selectedPositionId === position.id) {
+        await loadEventsForPosition(position.id);
+      }
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setCryptoWithdrawError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingCryptoWithdrawId(null);
+    }
+  };
+
+  const handleCryptoValuation = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const draft = cryptoValuationDrafts[position.id];
+
+    if (!draft || !draft.currentValueInBase.trim() || submittingCryptoValuationId === position.id) {
+      return;
+    }
+
+    setSubmittingCryptoValuationId(position.id);
+    setCryptoValuationError(null);
+
+    try {
+      await updateCryptoValuation(position.id, {
+        current_value_in_base: Number(draft.currentValueInBase),
+        valued_at: draft.valuedAt || undefined,
+        comment: draft.comment.trim() || undefined,
+      });
+      setCryptoValuationDrafts((prev) => {
+        const nextDrafts = { ...prev };
+        delete nextDrafts[position.id];
+        return nextDrafts;
+      });
+      await loadPortfolio();
+    } catch (reason: unknown) {
+      setCryptoValuationError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmittingCryptoValuationId(null);
     }
   };
 
@@ -2283,21 +2512,29 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       )}
                       {section.positions.map((position) => {
                         const isDeposit = position.asset_type_code === 'deposit' && !!position.metadata?.deposit_kind;
+                        const isCrypto = position.asset_type_code === 'crypto';
                         const isBond = position.metadata?.moex_market === 'bonds';
                         const posTicker = typeof position.metadata?.ticker === 'string' ? position.metadata.ticker : null;
                         const moexPrice2 = posTicker ? moexPrices.get(posTicker) : null;
                         const quote = getResolvedPositionQuote(position);
                         const entryAmount = getPositionEntryAmount(position);
-                        const logoName = getPositionMetadataText(position, 'logo_name');
-                        const logoUrl = logoName ? getTinkoffInstrumentLogoUrl(logoName) : null;
                         const unrealizedPnl = getResolvedPositionCurrentResult(position);
                         const pnlPercent = unrealizedPnl !== null && entryAmount > 0
                           ? (unrealizedPnl / entryAmount) * 100 : null;
                         const depositAccrued = isDeposit && typeof position.metadata?.accrued_interest === 'number'
                           ? position.metadata.accrued_interest as number : 0;
-                        const displayValue = isDeposit
+                        const cryptoSymbol = getPositionMetadataText(position, 'asset_symbol') ?? position.title;
+                        const cryptoNetwork = getPositionMetadataText(position, 'network_code');
+                        const logoName = getPositionMetadataText(position, 'logo_name');
+                        const logoUrl = isCrypto
+                          ? getCryptoIconUrl(cryptoSymbol, position.metadata)
+                          : logoName ? getTinkoffInstrumentLogoUrl(logoName) : null;
+                        const displayValue = isCrypto
+                          ? getResolvedPositionEstimatedValue(position)
+                          : isDeposit
                           ? (valueMode === 'potential' ? position.amount_in_currency + depositAccrued : position.amount_in_currency)
                           : (quote.currentTotalValue ?? position.amount_in_currency);
+                        const displayCurrencyCode = isCrypto ? user.base_currency_code : position.currency_code;
                         return (
                           <button
                             key={position.id}
@@ -2316,7 +2553,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                               <div className="pf-pos__copy">
                                 <div className="pf-pos__title">{position.title}</div>
                                 <div className="pf-pos__sub">
-                                  {isDeposit ? (
+                                  {isCrypto ? (
+                                    <>
+                                      {formatNumericAmount(position.quantity ?? 0, 8)} {cryptoSymbol}
+                                      {cryptoNetwork ? ` · ${cryptoNetwork}` : ''}
+                                    </>
+                                  ) : isDeposit ? (
                                     <>
                                       {String(position.metadata.interest_rate)}%
                                       {position.metadata.deposit_kind === 'term_deposit' && position.metadata.end_date
@@ -2344,7 +2586,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             <div className="pf-pos__right">
                               <div className="pf-pos__amount">
                                 {formatNumericAmount(displayValue)}
-                                <span className="pf-sym">{currencySymbol(position.currency_code)}</span>
+                                <span className="pf-sym">{currencySymbol(displayCurrencyCode)}</span>
                               </div>
                               {isDeposit && depositAccrued > 0 ? (
                                 <div className="pf-pos__pnl pf-pos__pnl--pos">
@@ -2352,7 +2594,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                                 </div>
                               ) : unrealizedPnl !== null && pnlPercent !== null ? (
                                 <div className={`pf-pos__pnl${unrealizedPnl >= 0 ? ' pf-pos__pnl--pos' : ' pf-pos__pnl--neg'}`}>
-                                  {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(0)} ₽
+                                  {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(0)} {currencySymbol(user.base_currency_code)}
                                   {' '}({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
                                 </div>
                               ) : null}
@@ -2780,7 +3022,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
       {(() => {
         const posIconColor = selectedPosition ? assetTypeIconColor(selectedPosition.asset_type_code) : { icon: 'chart', color: 'b' };
         const posLogoName = selectedPosition ? getPositionMetadataText(selectedPosition, 'logo_name') : null;
-        const posLogoUrl = posLogoName ? getTinkoffInstrumentLogoUrl(posLogoName) : null;
+        const posCryptoSymbol = selectedPosition
+          ? getPositionMetadataText(selectedPosition, 'asset_symbol') ?? selectedPosition.title
+          : null;
+        const posLogoUrl = selectedPosition?.asset_type_code === 'crypto'
+          ? getCryptoIconUrl(posCryptoSymbol, selectedPosition.metadata)
+          : posLogoName ? getTinkoffInstrumentLogoUrl(posLogoName) : null;
         return (
       <BottomSheet
         open={!!selectedPosition}
@@ -2800,7 +3047,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
               const detailTicker = typeof selectedPosition.metadata?.ticker === 'string' ? selectedPosition.metadata.ticker : null;
               const detailMoexPrice = detailTicker ? moexPrices.get(detailTicker) : null;
               const detailQuote = getResolvedPositionQuote(selectedPosition);
-              const detailCurrentTotal = detailQuote.currentTotalValue;
+              const detailCurrentTotal = selectedPosition.asset_type_code === 'crypto'
+                ? getResolvedPositionEstimatedValue(selectedPosition)
+                : detailQuote.currentTotalValue;
               const detailEntryAmount = getPositionEntryAmount(selectedPosition);
               const detailPnl = getResolvedPositionCurrentResult(selectedPosition);
               const detailPnlPct = detailPnl !== null && detailEntryAmount > 0
@@ -2809,12 +3058,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
               const isClosingHint = detailQuote.source === 'moex' && detailMoexPrice?.last === null && detailMoexPrice?.prevClose !== null;
               const ccy = selectedPosition.currency_code;
               const pnlSign = detailPnl !== null && detailPnl >= 0 ? 'pos' : 'neg';
+              const detailCryptoSymbol = getPositionMetadataText(selectedPosition, 'asset_symbol') ?? selectedPosition.title;
+              const detailCryptoNetwork = getPositionMetadataText(selectedPosition, 'network_code');
+              const detailMetaCurrency = selectedPosition.asset_type_code === 'crypto' ? user.base_currency_code : ccy;
               return (
                 <>
-                  {(detailTicker || isClosingHint) && (
+                  {(selectedPosition.asset_type_code === 'crypto' || detailTicker || isClosingHint) && (
                     <div className="pf-detail-meta-row">
-                      {detailTicker && <span className="pf-detail-ticker">{detailTicker}</span>}
-                      <span className="pf-detail-pill">{ccy}</span>
+                      {selectedPosition.asset_type_code === 'crypto' ? (
+                        <>
+                          <span className="pf-detail-ticker">{detailCryptoSymbol}</span>
+                          {detailCryptoNetwork && <span className="pf-detail-pill">{detailCryptoNetwork}</span>}
+                        </>
+                      ) : detailTicker && <span className="pf-detail-ticker">{detailTicker}</span>}
+                      <span className="pf-detail-pill">{detailMetaCurrency}</span>
                       {isClosingHint && <span className="pf-detail-hint-pill">цена закрытия</span>}
                     </div>
                   )}
@@ -2822,7 +3079,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     <div className="pf-dstats__cell">
                       <span className="pf-dstats__label">Вложено</span>
                       <span className="pf-dstats__value">{formatNumericAmount(detailEntryAmount, 0)}</span>
-                      <span className="pf-dstats__sub">{ccy}</span>
+                      <span className="pf-dstats__sub">{detailMetaCurrency}</span>
                     </div>
                     <div className="pf-dstats__cell">
                       <span className="pf-dstats__label">Стоимость</span>
@@ -2923,9 +3180,42 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   {selectedPosition.quantity ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">Количество</span>
-                      <span className="pf-dcond__row-value">{selectedPosition.quantity} шт.</span>
+                      <span className="pf-dcond__row-value">
+                        {formatNumericAmount(selectedPosition.quantity, 8)} {selectedPosition.asset_type_code === 'crypto' ? (getPositionMetadataText(selectedPosition, 'asset_symbol') ?? selectedPosition.title) : 'шт.'}
+                      </span>
                     </div>
                   ) : null}
+                  {selectedPosition.asset_type_code === 'crypto' && getPositionMetadataText(selectedPosition, 'network_code') ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Сеть</span>
+                      <span className="pf-dcond__row-value">{getPositionMetadataText(selectedPosition, 'network_code')}</span>
+                    </div>
+                  ) : null}
+                  {selectedPosition.asset_type_code === 'crypto' ? (() => {
+                    const livePrice = getCryptoLivePrice(selectedPosition);
+                    const cryptoCurrentRate = formatUnitPrice(
+                      getResolvedPositionEstimatedValue(selectedPosition),
+                      selectedPosition.quantity,
+                      user.base_currency_code,
+                    );
+                    const cryptoSymbol = getPositionMetadataText(selectedPosition, 'asset_symbol') ?? selectedPosition.title;
+                    return (
+                      <>
+                        <div className="pf-dcond__row">
+                          <span className="pf-dcond__row-label">Текущая оценка</span>
+                          <span className="pf-dcond__row-value">{formatAmount(getResolvedPositionEstimatedValue(selectedPosition), user.base_currency_code)}</span>
+                        </div>
+                        {cryptoCurrentRate ? (
+                        <div className="pf-dcond__row">
+                          <span className="pf-dcond__row-label">Текущий курс</span>
+                          <span className="pf-dcond__row-value">
+                            {cryptoCurrentRate} за {cryptoSymbol}{livePrice ? ' · онлайн' : ''}
+                          </span>
+                        </div>
+                      ) : null}
+                      </>
+                    );
+                  })() : null}
                   {getPositionInvestedPrincipal(selectedPosition) > 0 ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">Себестоимость</span>
@@ -2965,15 +3255,35 @@ export default function Portfolio({ user }: { user: UserContext }) {
               {(() => {
                 const isDepositPosition = selectedPosition.asset_type_code === 'deposit' && !!selectedPosition.metadata?.deposit_kind;
                 const isTermDeposit = selectedPosition.metadata?.deposit_kind === 'term_deposit';
+                const isCryptoPosition = selectedPosition.asset_type_code === 'crypto';
                 return (
                   <div className="pf-sheet-actions">
-                    <button
-                      className="btn btn--primary"
-                      type="button"
-                      onClick={() => handleOpenCloseForm(selectedPosition)}
-                    >
-                      Закрыть позицию
-                    </button>
+                    {isCryptoPosition ? (
+                      <>
+                        <button
+                          className="btn btn--primary"
+                          type="button"
+                          onClick={() => handleOpenCryptoWithdrawForm(selectedPosition)}
+                        >
+                          Вывести в банк
+                        </button>
+                        <button
+                          className="btn btn--ghost"
+                          type="button"
+                          onClick={() => handleOpenCryptoValuationForm(selectedPosition)}
+                        >
+                          Обновить оценку
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="btn btn--primary"
+                        type="button"
+                        onClick={() => handleOpenCloseForm(selectedPosition)}
+                      >
+                        Закрыть позицию
+                      </button>
+                    )}
                     {!isDepositPosition && canRecordPositionIncome(selectedPosition) && (
                       <button
                         className="btn btn--ghost"
@@ -2983,7 +3293,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         Начислить доход
                       </button>
                     )}
-                    {!(isDepositPosition && isTermDeposit) && (
+                    {!isCryptoPosition && !(isDepositPosition && isTermDeposit) && (
                       <button
                         className="btn btn--ghost"
                         type="button"
@@ -2992,7 +3302,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         Частично закрыть
                       </button>
                     )}
-                    {!(isDepositPosition && isTermDeposit) && (
+                    {!isCryptoPosition && !(isDepositPosition && isTermDeposit) && (
                       <button
                         className="btn btn--ghost"
                         type="button"
@@ -3019,7 +3329,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         Изменить ставку
                       </button>
                     )}
-                    {!isDepositPosition && (
+                    {!isCryptoPosition && !isDepositPosition && (
                       <button
                         className="btn btn--ghost"
                         type="button"
@@ -3210,37 +3520,66 @@ export default function Portfolio({ user }: { user: UserContext }) {
 
               {incomeDrafts[selectedPosition.id] && (
                 <form className="pf-pos-form" onSubmit={(event) => void handleRecordIncome(selectedPosition, event)}>
-                  <div className="apf-row">
-                    <div className="apf-field" style={{ flex: 2 }}>
-                      <label className="apf-label">
-                        {selectedPosition.asset_type_code === 'deposit' ? 'Сумма процентов' : selectedPosition.asset_type_code === 'security' ? 'Сумма дивидендов' : 'Сумма дохода'}
-                      </label>
-                      <input
-                        className="apf-input"
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0"
-                        value={incomeDrafts[selectedPosition.id].amount}
-                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: event.target.value })}
-                        disabled={submittingIncomeId === selectedPosition.id}
-                      />
+                  {selectedPosition.asset_type_code === 'crypto' ? (
+                    <div className="apf-row">
+                      <div className="apf-field" style={{ flex: 1 }}>
+                        <label className="apf-label">Количество дохода</label>
+                        <input
+                          className="apf-input"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={incomeDrafts[selectedPosition.id].quantity}
+                          onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { quantity: sanitizeDecimalInput(event.target.value) })}
+                          disabled={submittingIncomeId === selectedPosition.id}
+                        />
+                      </div>
+                      <div className="apf-field" style={{ flex: 1 }}>
+                        <label className="apf-label">Оценка в {user.base_currency_code}</label>
+                        <input
+                          className="apf-input"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={incomeDrafts[selectedPosition.id].amount}
+                          onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: sanitizeDecimalInput(event.target.value) })}
+                          disabled={submittingIncomeId === selectedPosition.id}
+                        />
+                      </div>
                     </div>
-                    <div className="apf-field" style={{ flex: 1 }}>
-                      <label className="apf-label">Валюта</label>
-                      <select
-                        className="apf-input"
-                        value={incomeDrafts[selectedPosition.id].currencyCode}
-                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
-                        disabled={submittingIncomeId === selectedPosition.id}
-                      >
-                        {currencies.map((currency) => (
-                          <option key={currency.code} value={currency.code}>
-                            {currency.code}
-                          </option>
-                        ))}
-                      </select>
+                  ) : (
+                    <div className="apf-row">
+                      <div className="apf-field" style={{ flex: 2 }}>
+                        <label className="apf-label">
+                          {selectedPosition.asset_type_code === 'deposit' ? 'Сумма процентов' : selectedPosition.asset_type_code === 'security' ? 'Сумма дивидендов' : 'Сумма дохода'}
+                        </label>
+                        <input
+                          className="apf-input"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={incomeDrafts[selectedPosition.id].amount}
+                          onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: event.target.value })}
+                          disabled={submittingIncomeId === selectedPosition.id}
+                        />
+                      </div>
+                      <div className="apf-field" style={{ flex: 1 }}>
+                        <label className="apf-label">Валюта</label>
+                        <select
+                          className="apf-input"
+                          value={incomeDrafts[selectedPosition.id].currencyCode}
+                          onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { currencyCode: event.target.value })}
+                          disabled={submittingIncomeId === selectedPosition.id}
+                        >
+                          {currencies.map((currency) => (
+                            <option key={currency.code} value={currency.code}>
+                              {currency.code}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="apf-field">
                     <label className="apf-label">Тип дохода</label>
                     <select
@@ -3260,6 +3599,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           <option value="coupon">Купон</option>
                           <option value="other">Другой доход</option>
                         </>
+                      ) : selectedPosition.asset_type_code === 'crypto' ? (
+                        <>
+                          <option value="reward">Награда</option>
+                          <option value="staking">Стейкинг</option>
+                          <option value="lending">Лендинг</option>
+                          <option value="liquidity">Пул ликвидности</option>
+                          <option value="other">Другой доход</option>
+                        </>
                       ) : (
                         <>
                           <option value="other">Другой доход</option>
@@ -3268,18 +3615,20 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       )}
                     </select>
                   </div>
-                  <div className="apf-field">
-                    <label className="apf-label">Назначение</label>
-                    <select
-                      className="apf-input"
-                      value={incomeDrafts[selectedPosition.id].destination}
-                      onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
-                      disabled={submittingIncomeId === selectedPosition.id}
-                    >
-                      <option value="account">На счёт</option>
-                      <option value="position">Оставить в активе</option>
-                    </select>
-                  </div>
+                  {selectedPosition.asset_type_code !== 'crypto' && (
+                    <div className="apf-field">
+                      <label className="apf-label">Назначение</label>
+                      <select
+                        className="apf-input"
+                        value={incomeDrafts[selectedPosition.id].destination}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { destination: event.target.value as 'account' | 'position' })}
+                        disabled={submittingIncomeId === selectedPosition.id}
+                      >
+                        <option value="account">На счёт</option>
+                        <option value="position">Оставить в активе</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="apf-field">
                     <label className="apf-label">Дата</label>
                     <input
@@ -3316,7 +3665,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     />
                   </div>
                   <div className="apf-actions">
-                    <button className="apf-submit" type="submit" disabled={submittingIncomeId === selectedPosition.id}>
+                    <button
+                      className="apf-submit"
+                      type="submit"
+                      disabled={submittingIncomeId === selectedPosition.id
+                        || !incomeDrafts[selectedPosition.id].amount.trim()
+                        || (selectedPosition.asset_type_code === 'crypto' && !incomeDrafts[selectedPosition.id].quantity.trim())}
+                    >
                       {submittingIncomeId === selectedPosition.id ? 'Начисляем…' : 'Подтвердить доход'}
                     </button>
                   </div>
@@ -3375,6 +3730,138 @@ export default function Portfolio({ user }: { user: UserContext }) {
                   <div className="apf-actions">
                     <button className="apf-submit" type="submit" disabled={submittingTopUpId === selectedPosition.id}>
                       {submittingTopUpId === selectedPosition.id ? 'Пополняем…' : 'Подтвердить пополнение'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {cryptoWithdrawDrafts[selectedPosition.id] && (
+                <form className="pf-pos-form" onSubmit={(event) => void handleCryptoWithdraw(selectedPosition, event)}>
+                  <div className="apf-field">
+                    <label className="apf-label">Куда вывести</label>
+                    <select
+                      className="apf-input"
+                      value={cryptoWithdrawDrafts[selectedPosition.id].bankAccountId}
+                      onChange={(event) => handleCryptoWithdrawDraftChange(selectedPosition.id, { bankAccountId: event.target.value })}
+                      disabled={submittingCryptoWithdrawId === selectedPosition.id}
+                    >
+                      <option value="">Выберите банковский счёт</option>
+                      {cashAccounts
+                        .filter((account) => isSameAccountOwner(account, selectedPosition))
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Количество</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={cryptoWithdrawDrafts[selectedPosition.id].amount}
+                        onChange={(event) => handleCryptoWithdrawDraftChange(selectedPosition.id, { amount: sanitizeDecimalInput(event.target.value) })}
+                        disabled={submittingCryptoWithdrawId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Оценка в {user.base_currency_code}</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={cryptoWithdrawDrafts[selectedPosition.id].valueInBase}
+                        onChange={(event) => handleCryptoWithdrawDraftChange(selectedPosition.id, { valueInBase: sanitizeDecimalInput(event.target.value) })}
+                        disabled={submittingCryptoWithdrawId === selectedPosition.id}
+                      />
+                    </div>
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Дата</label>
+                    <input
+                      className="apf-input"
+                      type="date"
+                      value={cryptoWithdrawDrafts[selectedPosition.id].withdrawnAt}
+                      onChange={(event) => handleCryptoWithdrawDraftChange(selectedPosition.id, { withdrawnAt: event.target.value })}
+                      disabled={submittingCryptoWithdrawId === selectedPosition.id}
+                    />
+                  </div>
+                  <div className="apf-balance">
+                    В позиции: {formatNumericAmount(selectedPosition.quantity ?? 0, 8)} {getPositionMetadataText(selectedPosition, 'asset_symbol') ?? selectedPosition.title}
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
+                    <input
+                      className="apf-input"
+                      type="text"
+                      placeholder="Необязательно"
+                      value={cryptoWithdrawDrafts[selectedPosition.id].comment}
+                      onChange={(event) => handleCryptoWithdrawDraftChange(selectedPosition.id, { comment: event.target.value })}
+                      disabled={submittingCryptoWithdrawId === selectedPosition.id}
+                    />
+                  </div>
+                  <div className="apf-actions">
+                    <button
+                      className="apf-submit"
+                      type="submit"
+                      disabled={
+                        submittingCryptoWithdrawId === selectedPosition.id
+                        || !cryptoWithdrawDrafts[selectedPosition.id].bankAccountId
+                        || !cryptoWithdrawDrafts[selectedPosition.id].amount.trim()
+                        || !cryptoWithdrawDrafts[selectedPosition.id].valueInBase.trim()
+                      }
+                    >
+                      {submittingCryptoWithdrawId === selectedPosition.id ? 'Выводим…' : 'Подтвердить вывод'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {cryptoValuationDrafts[selectedPosition.id] && (
+                <form className="pf-pos-form" onSubmit={(event) => void handleCryptoValuation(selectedPosition, event)}>
+                  <div className="apf-row">
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Текущая оценка в {user.base_currency_code}</label>
+                      <input
+                        className="apf-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={cryptoValuationDrafts[selectedPosition.id].currentValueInBase}
+                        onChange={(event) => handleCryptoValuationDraftChange(selectedPosition.id, { currentValueInBase: sanitizeDecimalInput(event.target.value) })}
+                        disabled={submittingCryptoValuationId === selectedPosition.id}
+                      />
+                    </div>
+                    <div className="apf-field" style={{ flex: 1 }}>
+                      <label className="apf-label">Дата оценки</label>
+                      <input
+                        className="apf-input"
+                        type="date"
+                        value={cryptoValuationDrafts[selectedPosition.id].valuedAt}
+                        onChange={(event) => handleCryptoValuationDraftChange(selectedPosition.id, { valuedAt: event.target.value })}
+                        disabled={submittingCryptoValuationId === selectedPosition.id}
+                      />
+                    </div>
+                  </div>
+                  <div className="apf-field">
+                    <label className="apf-label">Комментарий</label>
+                    <input
+                      className="apf-input"
+                      type="text"
+                      placeholder="Необязательно"
+                      value={cryptoValuationDrafts[selectedPosition.id].comment}
+                      onChange={(event) => handleCryptoValuationDraftChange(selectedPosition.id, { comment: event.target.value })}
+                      disabled={submittingCryptoValuationId === selectedPosition.id}
+                    />
+                  </div>
+                  <div className="apf-actions">
+                    <button className="apf-submit" type="submit" disabled={submittingCryptoValuationId === selectedPosition.id || !cryptoValuationDrafts[selectedPosition.id].currentValueInBase.trim()}>
+                      {submittingCryptoValuationId === selectedPosition.id ? 'Сохраняем…' : 'Обновить оценку'}
                     </button>
                   </div>
                 </form>
@@ -3489,6 +3976,8 @@ export default function Portfolio({ user }: { user: UserContext }) {
               {partialCloseError && <p className="pf-detail-error">{partialCloseError}</p>}
               {feeError && <p className="pf-detail-error">{feeError}</p>}
               {rateChangeError && <p className="pf-detail-error">{rateChangeError}</p>}
+              {cryptoWithdrawError && <p className="pf-detail-error">{cryptoWithdrawError}</p>}
+              {cryptoValuationError && <p className="pf-detail-error">{cryptoValuationError}</p>}
               {deleteError && <p className="pf-detail-error">{deleteError}</p>}
               {cancelIncomeError && <p className="pf-detail-error">{cancelIncomeError}</p>}
 

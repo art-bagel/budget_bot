@@ -123,6 +123,7 @@ class RecordPortfolioIncomeRequest(BaseModel):
     amount: float
     currency_code: str
     amount_in_base: float | None = None
+    quantity: float | None = None
     income_kind: str | None = None
     destination: Literal['account', 'position'] = 'account'
     received_at: date | None = None
@@ -133,6 +134,13 @@ class RecordPortfolioIncomeRequest(BaseModel):
     def amount_must_be_positive(cls, v: float) -> float:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
+        return v
+
+    @field_validator('quantity')
+    @classmethod
+    def quantity_must_be_positive(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError('Количество должно быть положительным')
         return v
 
 
@@ -182,6 +190,19 @@ class ChangeDepositRateRequest(BaseModel):
     def rate_must_be_non_negative(cls, v: float) -> float:
         if v < 0:
             raise ValueError('Ставка не может быть отрицательной')
+        return v
+
+
+class UpdateCryptoValuationRequest(BaseModel):
+    current_value_in_base: float
+    valued_at: date | None = None
+    comment: str | None = None
+
+    @field_validator('current_value_in_base')
+    @classmethod
+    def value_must_be_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('Оценка не может быть отрицательной')
         return v
 
 
@@ -422,6 +443,7 @@ async def record_portfolio_income(
         amount=body.amount,
         currency_code=body.currency_code,
         amount_in_base=body.amount_in_base,
+        quantity=body.quantity,
         income_kind=body.income_kind,
         destination=body.destination,
         received_at=body.received_at,
@@ -510,5 +532,36 @@ async def change_deposit_rate(
     )
 
     # Return updated position
+    updated = await reports.get__portfolio_position(user.user_id, position_id)
+    return PortfolioPositionItem(**updated)
+
+
+@router.post('/positions/{position_id}/crypto-valuation', response_model=PortfolioPositionItem)
+async def update_crypto_valuation(
+    position_id: int,
+    body: UpdateCryptoValuationRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> PortfolioPositionItem:
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if not position:
+        raise HTTPException(status_code=404, detail='Позиция не найдена')
+    if position.get('asset_type_code') != 'crypto':
+        raise HTTPException(status_code=400, detail='Переоценка доступна только для крипто-позиций')
+    if position.get('status') != 'open':
+        raise HTTPException(status_code=400, detail='Позиция закрыта')
+
+    valued_at = body.valued_at or date.today()
+    patch: dict[str, Any] = {
+        'current_value_in_base': body.current_value_in_base,
+        'valuation_updated_at': str(valued_at),
+    }
+    if body.comment and body.comment.strip():
+        patch['valuation_comment'] = body.comment.strip()
+
+    await context.set__merge_portfolio_position_metadata(
+        position_id=position_id,
+        metadata_patch=patch,
+    )
+
     updated = await reports.get__portfolio_position(user.user_id, position_id)
     return PortfolioPositionItem(**updated)

@@ -18,6 +18,7 @@ DECLARE
     _bank_owner_family_id bigint;
     _bank_account_kind text;
     _base_currency_code char(3);
+    _to_unallocated_id bigint;
     _crypto_asset_id bigint;
     _principal_in_base numeric(20, 2);
     _position_quantity numeric(30, 12);
@@ -89,6 +90,16 @@ BEGIN
 
     _realized_result := round(_value_in_base, 2) - _principal_in_base;
     _base_currency_code := budgeting.get__owner_base_currency(_position.owner_type, _position.owner_user_id, _position.owner_family_id);
+    _to_unallocated_id := budgeting.get__owner_system_category_id(
+        _bank_owner_type,
+        _bank_owner_user_id,
+        _bank_owner_family_id,
+        'Unallocated'
+    );
+
+    IF _to_unallocated_id IS NULL THEN
+        RAISE EXCEPTION 'Unallocated category missing for target account %', _bank_account_id;
+    END IF;
 
     INSERT INTO operations (
         actor_user_id,
@@ -112,6 +123,9 @@ BEGIN
 
     INSERT INTO crypto_bank_entries (operation_id, bank_account_id, crypto_asset_id, amount)
     VALUES (_operation_id, _bank_account_id, _crypto_asset_id, _amount);
+
+    INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+    VALUES (_operation_id, _to_unallocated_id, _base_currency_code, round(_value_in_base, 2));
 
     INSERT INTO crypto_lots (
         bank_account_id,
@@ -201,6 +215,12 @@ BEGIN
         round(_value_in_base, 2)
     );
 
+    PERFORM budgeting.put__apply_current_budget_delta(
+        _to_unallocated_id,
+        _base_currency_code,
+        round(_value_in_base, 2)
+    );
+
     RETURN jsonb_build_object(
         'operation_id', _operation_id,
         'position_id', _position_id,
@@ -211,4 +231,3 @@ BEGIN
     );
 END
 $function$;
-
