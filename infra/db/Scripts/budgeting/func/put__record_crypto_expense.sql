@@ -38,6 +38,7 @@ BEGIN
     IF _amount <= 0 THEN
         RAISE EXCEPTION 'Expense amount must be positive';
     END IF;
+    _amount := round(_amount, 12);
 
     SELECT kind, owner_type, owner_user_id, owner_family_id
     INTO _category_kind, _category_owner_type, _category_owner_user_id, _category_owner_family_id
@@ -192,4 +193,3 @@ BEGIN
     );
 END
 $function$;
-

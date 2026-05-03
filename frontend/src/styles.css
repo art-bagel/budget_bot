@@ -7738,6 +7738,11 @@ select.dlg-row__ghost option {
   min-height: calc(1.4em * 2);
 }
 
+.apf-row--compact-labels .apf-label {
+  display: block;
+  min-height: auto;
+}
+
 .apf-segtog {
   display: flex;
   background: var(--bg, #EEF0F3);

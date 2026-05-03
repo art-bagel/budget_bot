@@ -67,6 +67,7 @@ BEGIN
             COALESCE(sum(
                 CASE
                     WHEN pe.event_type = 'income' THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
+                    WHEN pp.asset_type_code = 'crypto' AND pe.event_type IN ('close', 'partial_close') THEN 0
                     WHEN pe.event_type = 'close'
                         THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
                                       (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),

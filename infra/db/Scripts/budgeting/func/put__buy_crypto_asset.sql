@@ -35,6 +35,7 @@ BEGIN
     IF _fiat_amount <= 0 OR _crypto_amount <= 0 THEN
         RAISE EXCEPTION 'Amounts must be positive';
     END IF;
+    _crypto_amount := round(_crypto_amount, 12);
 
     SELECT owner_type, owner_user_id, owner_family_id, account_kind
     INTO _owner_type, _owner_user_id, _owner_family_id, _account_kind
@@ -190,4 +191,3 @@ BEGIN
     );
 END
 $function$;
-

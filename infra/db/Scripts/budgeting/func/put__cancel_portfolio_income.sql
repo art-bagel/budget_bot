@@ -14,8 +14,10 @@ DECLARE
     _owner_family_id bigint;
     _investment_account_id bigint;
     _position_title text;
+    _asset_type_code text;
     _linked_operation_id bigint;
     _amount numeric(20, 8);
+    _quantity numeric(20, 8);
     _currency_code char(3);
     _income_destination text;
     _event_amount_in_base numeric(20, 2);
@@ -28,6 +30,7 @@ DECLARE
     _current_income_in_base numeric(20, 2);
     _current_amount_in_currency numeric(20, 8);
     _current_amount_in_base numeric(20, 2);
+    _current_quantity numeric(20, 8);
     _created_lot record;
 BEGIN
     SET search_path TO budgeting;
@@ -39,9 +42,11 @@ BEGIN
         pp.owner_family_id,
         pp.investment_account_id,
         pp.title,
+        pp.asset_type_code,
         pp.status,
         pe.linked_operation_id,
         pe.amount,
+        pe.quantity,
         pe.currency_code,
         COALESCE(pe.metadata ->> 'destination', 'account'),
         COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
@@ -52,9 +57,11 @@ BEGIN
         _owner_family_id,
         _investment_account_id,
         _position_title,
+        _asset_type_code,
         _position_status,
         _linked_operation_id,
         _amount,
+        _quantity,
         _currency_code,
         _income_destination,
         _event_amount_in_base
@@ -164,21 +171,30 @@ BEGIN
 
         SELECT
             amount_in_currency,
+            quantity,
             COALESCE((metadata ->> 'amount_in_base')::numeric, 0),
             COALESCE((metadata ->> 'income_in_base')::numeric, 0)
         INTO
             _current_amount_in_currency,
+            _current_quantity,
             _current_amount_in_base,
             _current_income_in_base
         FROM portfolio_positions
         WHERE id = _position_id
         FOR UPDATE;
 
-        IF _current_amount_in_currency < _amount THEN
+        IF _asset_type_code = 'crypto' THEN
+            IF COALESCE(_quantity, 0) <= 0 THEN
+                RAISE EXCEPTION 'Crypto income quantity is missing for event %', _event_id;
+            END IF;
+            IF COALESCE(_current_quantity, 0) < _quantity THEN
+                RAISE EXCEPTION 'Position quantity is too small to cancel crypto income';
+            END IF;
+        ELSIF _current_amount_in_currency < _amount THEN
             RAISE EXCEPTION 'Position amount is too small to cancel capitalized income';
         END IF;
 
-        IF _current_amount_in_base < _event_amount_in_base THEN
+        IF _asset_type_code <> 'crypto' AND _current_amount_in_base < _event_amount_in_base THEN
             RAISE EXCEPTION 'Position base amount is too small to cancel capitalized income';
         END IF;
     END IF;
@@ -239,22 +255,28 @@ BEGIN
         )
         WHERE id = _position_id;
     ELSE
-        _bank_cost_delta := _event_amount_in_base;
+        _bank_cost_delta := CASE WHEN _asset_type_code = 'crypto' THEN 0 ELSE _event_amount_in_base END;
 
-        UPDATE portfolio_positions
-        SET amount_in_currency = amount_in_currency - _amount,
-            metadata = jsonb_set(
-                jsonb_set(
-                    COALESCE(metadata, '{}'::jsonb),
-                    '{income_in_base}',
-                    to_jsonb(GREATEST(_current_income_in_base - _bank_cost_delta, 0)),
+        IF _asset_type_code = 'crypto' THEN
+            UPDATE portfolio_positions
+            SET quantity = GREATEST(COALESCE(quantity, 0) - _quantity, 0)
+            WHERE id = _position_id;
+        ELSE
+            UPDATE portfolio_positions
+            SET amount_in_currency = amount_in_currency - _amount,
+                metadata = jsonb_set(
+                    jsonb_set(
+                        COALESCE(metadata, '{}'::jsonb),
+                        '{income_in_base}',
+                        to_jsonb(GREATEST(_current_income_in_base - _bank_cost_delta, 0)),
+                        true
+                    ),
+                    '{amount_in_base}',
+                    to_jsonb(GREATEST(_current_amount_in_base - _bank_cost_delta, 0)),
                     true
-                ),
-                '{amount_in_base}',
-                to_jsonb(GREATEST(_current_amount_in_base - _bank_cost_delta, 0)),
-                true
-            )
-        WHERE id = _position_id;
+                )
+            WHERE id = _position_id;
+        END IF;
     END IF;
 
     INSERT INTO portfolio_events (
@@ -272,8 +294,8 @@ BEGIN
         _position_id,
         'adjustment',
         CURRENT_DATE,
-        -_amount,
-        _currency_code,
+        CASE WHEN _asset_type_code = 'crypto' THEN NULL ELSE -_amount END,
+        CASE WHEN _asset_type_code = 'crypto' THEN NULL ELSE _currency_code END,
         _operation_id,
         NULLIF(btrim(_comment), ''),
         jsonb_build_object(
@@ -281,6 +303,7 @@ BEGIN
             'cancelled_event_id', _event_id,
             'source_operation_id', _linked_operation_id,
             'amount_in_base', -_bank_cost_delta,
+            'quantity', CASE WHEN _asset_type_code = 'crypto' THEN -_quantity ELSE NULL END,
             'destination', _income_destination
         ),
         _user_id

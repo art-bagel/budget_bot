@@ -41,7 +41,7 @@ class PortfolioPositionItem(BaseModel):
 class PortfolioEventItem(BaseModel):
     id: int
     position_id: int
-    event_type: Literal['open', 'top_up', 'partial_close', 'close', 'income', 'fee', 'adjustment']
+    event_type: Literal['open', 'top_up', 'partial_close', 'close', 'income', 'fee', 'adjustment', 'transfer_in', 'transfer_out', 'swap_in', 'swap_out']
     event_at: date
     quantity: float | None = None
     amount: float | None = None
@@ -132,8 +132,8 @@ class RecordPortfolioIncomeRequest(BaseModel):
     @field_validator('amount')
     @classmethod
     def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError('Сумма должна быть положительной')
+        if v < 0:
+            raise ValueError('Сумма не может быть отрицательной')
         return v
 
     @field_validator('quantity')
@@ -190,19 +190,6 @@ class ChangeDepositRateRequest(BaseModel):
     def rate_must_be_non_negative(cls, v: float) -> float:
         if v < 0:
             raise ValueError('Ставка не может быть отрицательной')
-        return v
-
-
-class UpdateCryptoValuationRequest(BaseModel):
-    current_value_in_base: float
-    valued_at: date | None = None
-    comment: str | None = None
-
-    @field_validator('current_value_in_base')
-    @classmethod
-    def value_must_be_non_negative(cls, v: float) -> float:
-        if v < 0:
-            raise ValueError('Оценка не может быть отрицательной')
         return v
 
 
@@ -532,36 +519,5 @@ async def change_deposit_rate(
     )
 
     # Return updated position
-    updated = await reports.get__portfolio_position(user.user_id, position_id)
-    return PortfolioPositionItem(**updated)
-
-
-@router.post('/positions/{position_id}/crypto-valuation', response_model=PortfolioPositionItem)
-async def update_crypto_valuation(
-    position_id: int,
-    body: UpdateCryptoValuationRequest,
-    user: TelegramUser = Depends(get_telegram_user),
-) -> PortfolioPositionItem:
-    position = await reports.get__portfolio_position(user.user_id, position_id)
-    if not position:
-        raise HTTPException(status_code=404, detail='Позиция не найдена')
-    if position.get('asset_type_code') != 'crypto':
-        raise HTTPException(status_code=400, detail='Переоценка доступна только для крипто-позиций')
-    if position.get('status') != 'open':
-        raise HTTPException(status_code=400, detail='Позиция закрыта')
-
-    valued_at = body.valued_at or date.today()
-    patch: dict[str, Any] = {
-        'current_value_in_base': body.current_value_in_base,
-        'valuation_updated_at': str(valued_at),
-    }
-    if body.comment and body.comment.strip():
-        patch['valuation_comment'] = body.comment.strip()
-
-    await context.set__merge_portfolio_position_metadata(
-        position_id=position_id,
-        metadata_patch=patch,
-    )
-
     updated = await reports.get__portfolio_position(user.user_id, position_id)
     return PortfolioPositionItem(**updated)

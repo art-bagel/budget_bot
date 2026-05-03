@@ -70,9 +70,12 @@ import type {
   CryptoOperationResponse,
   TransferCryptoToInvestmentRequest,
   TransferCryptoFromInvestmentRequest,
-  UpdateCryptoValuationRequest,
+  TransferCryptoBetweenInvestmentAccountsRequest,
+  SwapCryptoInvestmentAssetRequest,
   CryptoProtocolPosition,
   CreateCryptoProtocolPositionRequest,
+  UpdateCryptoProtocolPositionRequest,
+  CloseCryptoProtocolPositionRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -326,6 +329,24 @@ export async function transferCryptoFromInvestment(
   });
 }
 
+export async function transferCryptoBetweenInvestmentAccounts(
+  data: TransferCryptoBetweenInvestmentAccountsRequest,
+): Promise<CryptoOperationResponse> {
+  return apiFetch<CryptoOperationResponse>('/crypto/transfer-between-investment-accounts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function swapCryptoInvestmentAsset(
+  data: SwapCryptoInvestmentAssetRequest,
+): Promise<CryptoOperationResponse> {
+  return apiFetch<CryptoOperationResponse>('/crypto/swap-investment-asset', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function fetchCryptoProtocolPositions(params?: {
   investment_account_id?: number;
   status?: 'open' | 'closed';
@@ -341,6 +362,26 @@ export async function createCryptoProtocolPosition(
   data: CreateCryptoProtocolPositionRequest,
 ): Promise<CryptoProtocolPosition> {
   return apiFetch<CryptoProtocolPosition>('/crypto/protocol-positions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCryptoProtocolPosition(
+  positionId: number,
+  data: UpdateCryptoProtocolPositionRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>(`/crypto/protocol-positions/${positionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function closeCryptoProtocolPosition(
+  positionId: number,
+  data: CloseCryptoProtocolPositionRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>(`/crypto/protocol-positions/${positionId}/close`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -752,16 +793,6 @@ export async function changeDepositRate(
   data: ChangeDepositRateRequest,
 ): Promise<PortfolioPosition> {
   return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/change-rate`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateCryptoValuation(
-  positionId: number,
-  data: UpdateCryptoValuationRequest,
-): Promise<PortfolioPosition> {
-  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/crypto-valuation`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

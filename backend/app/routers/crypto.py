@@ -75,8 +75,6 @@ class CryptoOperationResponse(BaseModel):
     realized_fx_result_in_base: Optional[float] = None
     expense_cost_in_base: Optional[float] = None
     amount_in_base: Optional[float] = None
-    principal_amount_in_base: Optional[float] = None
-    realized_result_in_base: Optional[float] = None
     position_id: Optional[int] = None
     base_currency_code: str
 
@@ -86,7 +84,6 @@ class TransferCryptoToInvestmentRequest(BaseModel):
     investment_account_id: int
     crypto_asset_id: int
     amount: float
-    market_value_in_base: Optional[float] = None
     position_id: Optional[int] = None
     title: Optional[str] = None
     comment: Optional[str] = None
@@ -109,6 +106,38 @@ class TransferCryptoFromInvestmentRequest(BaseModel):
     operated_at: Optional[date] = None
 
     @field_validator('amount', 'value_in_base')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+
+class TransferCryptoBetweenInvestmentAccountsRequest(BaseModel):
+    position_id: int
+    target_investment_account_id: int
+    amount: float
+    comment: Optional[str] = None
+    operated_at: Optional[date] = None
+
+    @field_validator('amount')
+    @classmethod
+    def amount_must_be_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
+
+
+class SwapCryptoInvestmentAssetRequest(BaseModel):
+    position_id: int
+    from_amount: float
+    to_crypto_asset_id: int
+    to_amount: float
+    target_investment_account_id: Optional[int] = None
+    comment: Optional[str] = None
+    operated_at: Optional[date] = None
+
+    @field_validator('from_amount', 'to_amount')
     @classmethod
     def amount_must_be_positive(cls, v: float) -> float:
         if v <= 0:
@@ -158,6 +187,7 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     deposited_at: Optional[date] = None
     comment: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    source_position_id: Optional[int] = None
 
 
 class UpdateCryptoProtocolPositionRequest(BaseModel):
@@ -174,7 +204,16 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
     withdrawn_at: Optional[date] = None
     current_quantity: Optional[float] = None
     current_value_in_base: Optional[float] = None
+    return_quantity: Optional[float] = None
+    return_value_in_base: Optional[float] = None
     comment: Optional[str] = None
+
+    @field_validator('return_quantity', 'return_value_in_base')
+    @classmethod
+    def positive_if_provided(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError('Сумма должна быть положительной')
+        return v
 
 
 def _coingecko_id_for_asset(asset: dict[str, Any]) -> str | None:
@@ -297,7 +336,6 @@ async def transfer_crypto_to_investment(
         investment_account_id=body.investment_account_id,
         crypto_asset_id=body.crypto_asset_id,
         amount=body.amount,
-        market_value_in_base=body.market_value_in_base,
         position_id=body.position_id,
         title=body.title,
         comment=body.comment,
@@ -317,6 +355,40 @@ async def transfer_crypto_from_investment(
         bank_account_id=body.bank_account_id,
         amount=body.amount,
         value_in_base=body.value_in_base,
+        comment=body.comment,
+        operated_at=body.operated_at,
+    )
+    return CryptoOperationResponse(**result)
+
+
+@router.post('/transfer-between-investment-accounts', response_model=CryptoOperationResponse)
+async def transfer_crypto_between_investment_accounts(
+    body: TransferCryptoBetweenInvestmentAccountsRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CryptoOperationResponse:
+    result = await ledger.put__transfer_crypto_between_investment_accounts(
+        user_id=user.user_id,
+        position_id=body.position_id,
+        target_investment_account_id=body.target_investment_account_id,
+        amount=body.amount,
+        comment=body.comment,
+        operated_at=body.operated_at,
+    )
+    return CryptoOperationResponse(**result)
+
+
+@router.post('/swap-investment-asset', response_model=CryptoOperationResponse)
+async def swap_crypto_investment_asset(
+    body: SwapCryptoInvestmentAssetRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CryptoOperationResponse:
+    result = await ledger.put__swap_crypto_investment_asset(
+        user_id=user.user_id,
+        position_id=body.position_id,
+        from_amount=body.from_amount,
+        to_crypto_asset_id=body.to_crypto_asset_id,
+        to_amount=body.to_amount,
+        target_investment_account_id=body.target_investment_account_id,
         comment=body.comment,
         operated_at=body.operated_at,
     )
@@ -359,6 +431,7 @@ async def create_crypto_protocol_position(
         deposited_at=body.deposited_at,
         comment=body.comment,
         metadata=body.metadata,
+        source_position_id=body.source_position_id,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -396,5 +469,7 @@ async def close_crypto_protocol_position(
         current_quantity=body.current_quantity,
         current_value_in_base=body.current_value_in_base,
         comment=body.comment,
+        return_quantity=body.return_quantity,
+        return_value_in_base=body.return_value_in_base,
     )
     return CryptoProtocolPositionItem(**result)

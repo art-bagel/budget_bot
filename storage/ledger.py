@@ -20,6 +20,8 @@ class Ledger(DataBase):
     F_PUT__RECORD_CRYPTO_EXPENSE = 'put__record_crypto_expense'
     F_PUT__TRANSFER_CRYPTO_TO_INVESTMENT = 'put__transfer_crypto_to_investment'
     F_PUT__TRANSFER_CRYPTO_FROM_INVESTMENT = 'put__transfer_crypto_from_investment'
+    F_PUT__TRANSFER_CRYPTO_BETWEEN_INVESTMENT_ACCOUNTS = 'put__transfer_crypto_between_investment_accounts'
+    F_PUT__SWAP_CRYPTO_INVESTMENT_ASSET = 'put__swap_crypto_investment_asset'
     F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION = 'put__create_crypto_protocol_position'
     F_SET__UPDATE_CRYPTO_PROTOCOL_POSITION = 'set__update_crypto_protocol_position'
     F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION = 'set__close_crypto_protocol_position'
@@ -326,7 +328,6 @@ class Ledger(DataBase):
         investment_account_id: int,
         crypto_asset_id: int,
         amount: float,
-        market_value_in_base: Optional[float] = None,
         position_id: Optional[int] = None,
         title: Optional[str] = None,
         comment: Optional[str] = None,
@@ -339,7 +340,6 @@ class Ledger(DataBase):
             investment_account_id,
             crypto_asset_id,
             amount,
-            market_value_in_base,
             position_id,
             title,
             comment,
@@ -367,6 +367,48 @@ class Ledger(DataBase):
             operated_at,
         )
 
+    async def put__transfer_crypto_between_investment_accounts(
+        self,
+        user_id: int,
+        position_id: int,
+        target_investment_account_id: int,
+        amount: float,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__TRANSFER_CRYPTO_BETWEEN_INVESTMENT_ACCOUNTS),
+            user_id,
+            position_id,
+            target_investment_account_id,
+            amount,
+            comment,
+            operated_at,
+        )
+
+    async def put__swap_crypto_investment_asset(
+        self,
+        user_id: int,
+        position_id: int,
+        from_amount: float,
+        to_crypto_asset_id: int,
+        to_amount: float,
+        target_investment_account_id: Optional[int] = None,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__SWAP_CRYPTO_INVESTMENT_ASSET),
+            user_id,
+            position_id,
+            from_amount,
+            to_crypto_asset_id,
+            to_amount,
+            target_investment_account_id,
+            comment,
+            operated_at,
+        )
+
     async def put__create_crypto_protocol_position(
         self,
         user_id: int,
@@ -385,6 +427,7 @@ class Ledger(DataBase):
         deposited_at: Optional[date] = None,
         comment: Optional[str] = None,
         metadata: Optional[dict] = None,
+        source_position_id: Optional[int] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION),
@@ -404,6 +447,7 @@ class Ledger(DataBase):
             deposited_at,
             comment,
             metadata or {},
+            source_position_id,
         )
 
     async def set__update_crypto_protocol_position(
@@ -439,6 +483,8 @@ class Ledger(DataBase):
         current_quantity: Optional[float] = None,
         current_value_in_base: Optional[float] = None,
         comment: Optional[str] = None,
+        return_quantity: Optional[float] = None,
+        return_value_in_base: Optional[float] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION),
@@ -448,6 +494,8 @@ class Ledger(DataBase):
             current_quantity,
             current_value_in_base,
             comment,
+            return_quantity,
+            return_value_in_base,
         )
 
     F_PUT__TRANSFER_BETWEEN_ACCOUNTS = 'put__transfer_between_accounts'

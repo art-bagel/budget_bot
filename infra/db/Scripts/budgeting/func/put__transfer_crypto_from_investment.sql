@@ -20,20 +20,18 @@ DECLARE
     _base_currency_code char(3);
     _to_unallocated_id bigint;
     _crypto_asset_id bigint;
-    _principal_in_base numeric(20, 2);
     _position_quantity numeric(30, 12);
-    _position_cost_base numeric(20, 2);
-    _realized_result numeric(20, 2);
     _operation_id bigint;
     _event_type text;
     _remaining_quantity numeric(30, 12);
-    _remaining_cost numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
     IF _amount <= 0 OR _value_in_base <= 0 THEN
         RAISE EXCEPTION 'Amounts must be positive';
     END IF;
+    _amount := round(_amount, 12);
+    _value_in_base := round(_value_in_base, 2);
 
     SELECT *
     INTO _position
@@ -81,14 +79,6 @@ BEGIN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
-    _position_cost_base := COALESCE((_position.metadata ->> 'amount_in_base')::numeric, _position.amount_in_currency, 0);
-    IF _amount = _position_quantity THEN
-        _principal_in_base := _position_cost_base;
-    ELSE
-        _principal_in_base := round(_position_cost_base * _amount / _position_quantity, 2);
-    END IF;
-
-    _realized_result := round(_value_in_base, 2) - _principal_in_base;
     _base_currency_code := budgeting.get__owner_base_currency(_position.owner_type, _position.owner_user_id, _position.owner_family_id);
     _to_unallocated_id := budgeting.get__owner_system_category_id(
         _bank_owner_type,
@@ -173,8 +163,6 @@ BEGIN
         NULLIF(btrim(_comment), ''),
         jsonb_build_object(
             'amount_in_base', round(_value_in_base, 2),
-            'principal_amount_in_base', _principal_in_base,
-            'realized_result_in_base', _realized_result,
             'crypto_asset_id', _crypto_asset_id,
             'action', 'transfer_to_banking'
         ),
@@ -188,23 +176,15 @@ BEGIN
             close_amount_in_currency = round(_value_in_base, 2),
             close_currency_code = _base_currency_code,
             metadata = metadata || jsonb_build_object(
-                'realized_result_in_base', _realized_result,
                 'close_value_in_base', round(_value_in_base, 2)
             )
         WHERE id = _position_id;
     ELSE
         _remaining_quantity := _position_quantity - _amount;
-        _remaining_cost := _position_cost_base - _principal_in_base;
 
         UPDATE portfolio_positions
         SET quantity = _remaining_quantity,
-            amount_in_currency = _remaining_cost,
-            metadata = metadata || jsonb_build_object(
-                'amount_in_base', _remaining_cost,
-                'current_value_in_base', GREATEST(0, COALESCE((metadata ->> 'current_value_in_base')::numeric, _position_cost_base) - round(_value_in_base, 2)),
-                'last_realized_result_in_base', _realized_result,
-                'valuation_updated_at', current_timestamp
-            )
+            amount_in_currency = 0
         WHERE id = _position_id;
     END IF;
 
@@ -225,8 +205,6 @@ BEGIN
         'operation_id', _operation_id,
         'position_id', _position_id,
         'amount_in_base', round(_value_in_base, 2),
-        'principal_amount_in_base', _principal_in_base,
-        'realized_result_in_base', _realized_result,
         'base_currency_code', _base_currency_code
     );
 END

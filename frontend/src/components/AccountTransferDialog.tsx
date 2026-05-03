@@ -136,7 +136,6 @@ export default function AccountTransferDialog({
   const [toSel,   setToSel]   = useState<Selection | null>(null);
   const [openRole, setOpenRole] = useState<'from' | 'to' | null>(null);
   const [amount,   setAmount]  = useState('');
-  const [marketValueInBase, setMarketValueInBase] = useState('');
   const [comment,  setComment] = useState('');
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -271,8 +270,6 @@ export default function AccountTransferDialog({
     if (!fromItem || !toItem) return null;
     return MODE_LABEL[`${fromItem.kind}>${toItem.kind}`] ?? null;
   }, [fromItem, toItem]);
-  const isCryptoToInvestment = fromItem?.assetType === 'crypto' && fromItem.kind === 'cash' && toItem?.kind === 'investment';
-
   const amountValue = parseFloat(amount) || 0;
   const exceedsBalance = fromItem?.kind !== 'credit' && !!fromBalance && amountValue > fromBalance.amount;
   const canSubmit = !submitting && !loading && !!fromSel && !!toSel && amountValue > 0 && !exceedsBalance;
@@ -288,13 +285,12 @@ export default function AccountTransferDialog({
     }
     setOpenRole(null);
     setAmount('');
-    setMarketValueInBase('');
     setError(null);
   };
 
   const handleSwap = () => {
     if (!canSwap || !fromSel || !toSel) return;
-    setFromSel(toSel); setToSel(fromSel); setAmount(''); setMarketValueInBase('');
+    setFromSel(toSel); setToSel(fromSel); setAmount('');
   };
 
   const handleSubmit = async () => {
@@ -307,7 +303,6 @@ export default function AccountTransferDialog({
           investment_account_id: toSel.accountId,
           crypto_asset_id: fromItem.cryptoAssetId,
           amount: amountValue,
-          market_value_in_base: marketValueInBase.trim() ? Number(marketValueInBase) : undefined,
           title: assetCode(fromItem),
           comment: comment.trim() || undefined,
         });
@@ -521,21 +516,6 @@ export default function AccountTransferDialog({
               <span className="atx__err">Недостаточно: {fromItem ? formatAssetAmount(fromBalance.amount, fromItem) : formatAmount(fromBalance.amount, baseCurrencyCode)}</span>
             )}
           </div>
-
-          {isCryptoToInvestment && (
-            <div className="field">
-              <span className="fl">Текущая оценка в {baseCurrencyCode}</span>
-              <input
-                className="inp-v2"
-                type="text"
-                inputMode="decimal"
-                placeholder="Оставь пустым, если равна себестоимости"
-                value={marketValueInBase}
-                onChange={e => setMarketValueInBase(sanitizeDecimalInput(e.target.value))}
-                disabled={submitting}
-              />
-            </div>
-          )}
 
           {/* Comment */}
           <div className="field">

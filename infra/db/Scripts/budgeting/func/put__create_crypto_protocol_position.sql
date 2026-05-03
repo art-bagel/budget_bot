@@ -15,7 +15,8 @@ CREATE FUNCTION budgeting.put__create_crypto_protocol_position(
     _network_code text DEFAULT NULL,
     _deposited_at date DEFAULT NULL,
     _comment text DEFAULT NULL,
-    _metadata jsonb DEFAULT '{}'::jsonb
+    _metadata jsonb DEFAULT '{}'::jsonb,
+    _source_position_id bigint DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -27,6 +28,10 @@ DECLARE
     _account_kind text;
     _investment_asset_type text;
     _position_id bigint;
+    _source_position record;
+    _remaining_quantity numeric(30, 12);
+    _asset record;
+    _asset_symbol_resolved text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -48,12 +53,125 @@ BEGIN
         RAISE EXCEPTION 'Access denied to investment account %', _investment_account_id;
     END IF;
 
-    IF NULLIF(btrim(_protocol_name), '') IS NULL OR NULLIF(btrim(_asset_symbol), '') IS NULL THEN
-        RAISE EXCEPTION 'Protocol name and asset symbol are required';
+    IF NULLIF(btrim(_protocol_name), '') IS NULL THEN
+        RAISE EXCEPTION 'Protocol name is required';
     END IF;
 
     IF _position_type NOT IN ('staking', 'lending', 'liquidity_pool', 'vault', 'other') THEN
         RAISE EXCEPTION 'Unsupported protocol position type: %', _position_type;
+    END IF;
+
+    IF _source_position_id IS NOT NULL THEN
+        SELECT *
+        INTO _source_position
+        FROM portfolio_positions
+        WHERE id = _source_position_id
+          AND status = 'open'
+        FOR UPDATE;
+
+        IF _source_position.id IS NULL THEN
+            RAISE EXCEPTION 'Unknown open crypto asset position %', _source_position_id;
+        END IF;
+
+        IF _source_position.investment_account_id <> _investment_account_id
+           OR _source_position.asset_type_code <> 'crypto' THEN
+            RAISE EXCEPTION 'Source position must be an open crypto asset on the same account';
+        END IF;
+
+        IF _quantity IS NULL OR _quantity <= 0 THEN
+            RAISE EXCEPTION 'Protocol source quantity must be positive';
+        END IF;
+
+        _quantity := round(_quantity, 12);
+
+        IF COALESCE(_source_position.quantity, 0) < _quantity THEN
+            RAISE EXCEPTION 'Сумма превышает остаток';
+        END IF;
+
+        _remaining_quantity := round(COALESCE(_source_position.quantity, 0) - _quantity, 12);
+        _crypto_asset_id := COALESCE(_crypto_asset_id, (_source_position.metadata ->> 'crypto_asset_id')::bigint);
+        _network_code := COALESCE(NULLIF(btrim(_network_code), ''), NULLIF(btrim(_source_position.metadata ->> 'network_code'), ''));
+        _asset_symbol_resolved := COALESCE(
+            NULLIF(btrim(_asset_symbol), ''),
+            NULLIF(btrim(_source_position.metadata ->> 'asset_symbol'), ''),
+            NULLIF(btrim(_source_position.title), '')
+        );
+
+        IF _crypto_asset_id IS NOT NULL THEN
+            SELECT *
+            INTO _asset
+            FROM crypto_assets
+            WHERE id = _crypto_asset_id;
+
+            IF _asset.id IS NOT NULL THEN
+                _asset_symbol_resolved := COALESCE(_asset_symbol_resolved, _asset.symbol);
+                _network_code := COALESCE(_network_code, _asset.network_code);
+            END IF;
+        END IF;
+
+        IF _crypto_asset_id IS NULL OR _asset_symbol_resolved IS NULL THEN
+            RAISE EXCEPTION 'Unable to resolve source crypto asset for protocol position';
+        END IF;
+
+        _cost_basis_in_base := 0;
+        _current_quantity := COALESCE(_current_quantity, _quantity);
+        _current_value_in_base := 0;
+        _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
+            'source_position_id', _source_position_id,
+            'source_asset_symbol', _asset_symbol_resolved,
+            'source_network_code', _network_code
+        );
+        _asset_symbol := _asset_symbol_resolved;
+
+        IF _remaining_quantity <= 0 THEN
+            UPDATE portfolio_positions
+            SET status = 'closed',
+                quantity = 0,
+                closed_at = COALESCE(_deposited_at, current_date),
+                close_amount_in_currency = 0,
+                close_currency_code = currency_code
+            WHERE id = _source_position_id;
+        ELSE
+            UPDATE portfolio_positions
+            SET quantity = _remaining_quantity,
+                amount_in_currency = 0
+            WHERE id = _source_position_id;
+        END IF;
+
+        INSERT INTO portfolio_events (
+            position_id,
+            event_type,
+            event_at,
+            quantity,
+            amount,
+            currency_code,
+            linked_operation_id,
+            comment,
+            metadata,
+            created_by_user_id
+        )
+        VALUES (
+            _source_position_id,
+            'adjustment',
+            COALESCE(_deposited_at, current_date),
+            -_quantity,
+            NULL,
+            NULL,
+            NULL,
+            COALESCE(NULLIF(btrim(_comment), ''), 'Перевод в staking'),
+            jsonb_build_object(
+                'action', 'stake_to_protocol',
+                'protocol_name', btrim(_protocol_name),
+                'position_type', _position_type,
+                'protocol_asset_symbol', _asset_symbol_resolved,
+                'protocol_quantity', _quantity
+            ),
+            _user_id
+        );
+    ELSE
+        IF NULLIF(btrim(_asset_symbol), '') IS NULL THEN
+            RAISE EXCEPTION 'Asset symbol is required';
+        END IF;
     END IF;
 
     INSERT INTO crypto_protocol_positions (
@@ -107,4 +225,3 @@ BEGIN
     );
 END
 $function$;
-

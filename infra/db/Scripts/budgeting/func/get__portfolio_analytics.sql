@@ -66,6 +66,7 @@ BEGIN
             pp.investment_account_id,
             SUM(
                 CASE
+                    WHEN pp.asset_type_code = 'crypto' THEN 0
                     WHEN pe.event_type = 'close'
                         THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
                                       (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),
@@ -117,6 +118,7 @@ BEGIN
                 THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0) ELSE 0 END) AS income_total,
             SUM(CASE WHEN pe.event_type IN ('close', 'partial_close')
                 THEN CASE
+                    WHEN pp.asset_type_code = 'crypto' THEN 0
                     WHEN pe.event_type = 'close'
                         THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
                                       (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),
@@ -153,6 +155,7 @@ BEGIN
                 THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, pe.amount, 0) ELSE 0 END) AS income_total,
             SUM(CASE WHEN pe.event_type IN ('close', 'partial_close')
                 THEN CASE
+                    WHEN pp.asset_type_code = 'crypto' THEN 0
                     WHEN pe.event_type = 'close'
                         THEN COALESCE((pe.metadata ->> 'realized_result_in_base')::numeric,
                                       (pe.metadata ->> 'amount_in_base')::numeric - COALESCE((pp.metadata ->> 'amount_in_base')::numeric, 0),

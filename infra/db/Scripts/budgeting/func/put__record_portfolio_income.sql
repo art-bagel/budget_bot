@@ -26,15 +26,12 @@ DECLARE
     _effective_amount_in_base numeric(20, 2);
     _current_income_in_base numeric(20, 2);
     _current_amount_in_base numeric(20, 2);
+    _event_metadata jsonb;
     _operation_id bigint;
     _normalized_income_kind text := lower(coalesce(nullif(btrim(_income_kind), ''), 'income'));
     _normalized_destination text := lower(coalesce(nullif(btrim(_destination), ''), 'account'));
 BEGIN
     SET search_path TO budgeting;
-
-    IF _amount IS NULL OR _amount <= 0 THEN
-        RAISE EXCEPTION 'Portfolio income amount must be positive';
-    END IF;
 
     IF _normalized_income_kind !~ '^[a-z][a-z0-9_]{1,29}$' THEN
         RAISE EXCEPTION 'Unsupported portfolio income kind: %', _income_kind;
@@ -87,14 +84,6 @@ BEGIN
         RAISE EXCEPTION 'Active investment account is missing for portfolio position %', _position_id;
     END IF;
 
-    PERFORM 1
-    FROM currencies
-    WHERE code = _currency_code;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Unknown currency code: %', _currency_code;
-    END IF;
-
     _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
     IF _base_currency_code IS NULL THEN
@@ -110,22 +99,37 @@ BEGIN
     FROM portfolio_positions
     WHERE id = _position_id;
 
-    IF _currency_code = _base_currency_code THEN
-        _effective_amount_in_base := round(_amount, 2);
-    ELSE
-        IF _amount_in_base IS NULL OR _amount_in_base <= 0 THEN
-            RAISE EXCEPTION 'Historical base amount is required for non-base currency portfolio income';
-        END IF;
-
-        _effective_amount_in_base := round(_amount_in_base, 2);
-    END IF;
-
     IF _asset_type_code = 'crypto' THEN
         IF _normalized_destination <> 'position' THEN
             RAISE EXCEPTION 'Crypto income must stay in the position';
         END IF;
         IF _quantity IS NULL OR _quantity <= 0 THEN
             RAISE EXCEPTION 'Crypto income quantity is required';
+        END IF;
+        _amount := 0;
+        _currency_code := _base_currency_code;
+        _effective_amount_in_base := 0;
+    ELSE
+        IF _amount IS NULL OR _amount <= 0 THEN
+            RAISE EXCEPTION 'Portfolio income amount must be positive';
+        END IF;
+
+        PERFORM 1
+        FROM currencies
+        WHERE code = _currency_code;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Unknown currency code: %', _currency_code;
+        END IF;
+
+        IF _currency_code = _base_currency_code THEN
+            _effective_amount_in_base := round(_amount, 2);
+        ELSE
+            IF _amount_in_base IS NULL OR _amount_in_base <= 0 THEN
+                RAISE EXCEPTION 'Historical base amount is required for non-base currency portfolio income';
+            END IF;
+
+            _effective_amount_in_base := round(_amount_in_base, 2);
         END IF;
     END IF;
 
@@ -194,32 +198,14 @@ BEGIN
         WHERE id = _position_id;
     ELSE
         UPDATE portfolio_positions
-        SET amount_in_currency = amount_in_currency + CASE
-                WHEN _asset_type_code = 'crypto' THEN _effective_amount_in_base
-                ELSE _amount
-            END,
+        SET amount_in_currency = amount_in_currency + CASE WHEN _asset_type_code = 'crypto' THEN 0 ELSE _amount END,
             quantity = CASE
                 WHEN _asset_type_code = 'crypto' THEN COALESCE(quantity, 0) + _quantity
                 ELSE quantity
             END,
             metadata = CASE
                 WHEN _asset_type_code = 'crypto' THEN
-                    jsonb_set(
-                        jsonb_set(
-                            jsonb_set(
-                                COALESCE(metadata, '{}'::jsonb),
-                                '{income_in_base}',
-                                to_jsonb(_current_income_in_base + _effective_amount_in_base),
-                                true
-                            ),
-                            '{amount_in_base}',
-                            to_jsonb(_current_amount_in_base + _effective_amount_in_base),
-                            true
-                        ),
-                        '{current_value_in_base}',
-                        to_jsonb(COALESCE((metadata ->> 'current_value_in_base')::numeric, _current_amount_in_base) + _effective_amount_in_base),
-                        true
-                    )
+                    COALESCE(metadata, '{}'::jsonb)
                 ELSE
                     jsonb_set(
                         jsonb_set(
@@ -234,6 +220,17 @@ BEGIN
                     )
             END
         WHERE id = _position_id;
+    END IF;
+
+    _event_metadata := jsonb_build_object(
+        'income_kind', _normalized_income_kind,
+        'asset_type_code', _asset_type_code,
+        'destination', _normalized_destination,
+        'quantity', _quantity
+    );
+
+    IF _asset_type_code <> 'crypto' THEN
+        _event_metadata := _event_metadata || jsonb_build_object('amount_in_base', _effective_amount_in_base);
     END IF;
 
     INSERT INTO portfolio_events (
@@ -252,18 +249,12 @@ BEGIN
         _position_id,
         'income',
         COALESCE(_received_at, CURRENT_DATE),
-        _amount,
-        _currency_code,
+        CASE WHEN _asset_type_code = 'crypto' THEN NULL ELSE _amount END,
+        CASE WHEN _asset_type_code = 'crypto' THEN NULL ELSE _currency_code END,
         _quantity,
         _operation_id,
         NULLIF(btrim(_comment), ''),
-        jsonb_build_object(
-            'income_kind', _normalized_income_kind,
-            'asset_type_code', _asset_type_code,
-            'amount_in_base', _effective_amount_in_base,
-            'destination', _normalized_destination,
-            'quantity', _quantity
-        ),
+        _event_metadata,
         _user_id
     );
 

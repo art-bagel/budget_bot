@@ -189,8 +189,6 @@ export interface CryptoOperationResponse {
   operation_id: number;
   position_id?: number | null;
   amount_in_base?: number | null;
-  principal_amount_in_base?: number | null;
-  realized_result_in_base?: number | null;
   base_currency_code: string;
 }
 
@@ -199,7 +197,6 @@ export interface TransferCryptoToInvestmentRequest {
   investment_account_id: number;
   crypto_asset_id: number;
   amount: number;
-  market_value_in_base?: number;
   position_id?: number;
   title?: string;
   comment?: string;
@@ -215,10 +212,22 @@ export interface TransferCryptoFromInvestmentRequest {
   operated_at?: string;
 }
 
-export interface UpdateCryptoValuationRequest {
-  current_value_in_base: number;
-  valued_at?: string;
+export interface TransferCryptoBetweenInvestmentAccountsRequest {
+  position_id: number;
+  target_investment_account_id: number;
+  amount: number;
   comment?: string;
+  operated_at?: string;
+}
+
+export interface SwapCryptoInvestmentAssetRequest {
+  position_id: number;
+  from_amount: number;
+  to_crypto_asset_id: number;
+  to_amount: number;
+  target_investment_account_id?: number;
+  comment?: string;
+  operated_at?: string;
 }
 
 export interface CryptoProtocolPosition {
@@ -263,6 +272,26 @@ export interface CreateCryptoProtocolPositionRequest {
   deposited_at?: string;
   comment?: string;
   metadata?: Record<string, unknown>;
+  source_position_id?: number;
+}
+
+export interface UpdateCryptoProtocolPositionRequest {
+  quantity?: number;
+  current_quantity?: number;
+  current_value_in_base?: number;
+  rewards_claimed_in_base?: number;
+  rewards_unclaimed_in_base?: number;
+  comment?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CloseCryptoProtocolPositionRequest {
+  withdrawn_at?: string;
+  current_quantity?: number;
+  current_value_in_base?: number;
+  return_quantity?: number;
+  return_value_in_base?: number;
+  comment?: string;
 }
 
 export interface AllocateBudgetRequest {
@@ -541,7 +570,7 @@ export interface PortfolioPosition {
 export interface PortfolioEvent {
   id: number;
   position_id: number;
-  event_type: 'open' | 'top_up' | 'partial_close' | 'close' | 'income' | 'fee' | 'adjustment';
+  event_type: 'open' | 'top_up' | 'partial_close' | 'close' | 'income' | 'fee' | 'adjustment' | 'transfer_in' | 'transfer_out' | 'swap_in' | 'swap_out';
   event_at: string;
   quantity?: number | null;
   amount?: number | null;

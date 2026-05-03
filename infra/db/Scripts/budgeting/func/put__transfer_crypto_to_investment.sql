@@ -5,7 +5,6 @@ CREATE FUNCTION budgeting.put__transfer_crypto_to_investment(
     _investment_account_id bigint,
     _crypto_asset_id bigint,
     _amount numeric,
-    _market_value_in_base numeric DEFAULT NULL,
     _position_id bigint DEFAULT NULL,
     _title text DEFAULT NULL,
     _comment text DEFAULT NULL,
@@ -47,6 +46,7 @@ BEGIN
     IF _amount <= 0 THEN
         RAISE EXCEPTION 'Crypto transfer amount must be positive';
     END IF;
+    _amount := round(_amount, 12);
 
     SELECT owner_type, owner_user_id, owner_family_id, account_kind
     INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind
@@ -191,11 +191,21 @@ BEGIN
         'asset_symbol', _asset.symbol,
         'asset_name', _asset.name,
         'network_code', _asset.network_code,
-        'contract_address', _asset.contract_address,
-        'amount_in_base', _consumed_cost_base,
-        'current_value_in_base', COALESCE(_market_value_in_base, _consumed_cost_base),
-        'valuation_updated_at', current_timestamp
+        'contract_address', _asset.contract_address
     );
+
+    IF _position_id IS NULL THEN
+        SELECT id
+        INTO _position_id
+        FROM portfolio_positions
+        WHERE investment_account_id = _investment_account_id
+          AND asset_type_code = 'crypto'
+          AND status = 'open'
+          AND COALESCE((metadata ->> 'crypto_asset_id')::bigint, 0) = _crypto_asset_id
+        ORDER BY opened_at ASC, id ASC
+        LIMIT 1
+        FOR UPDATE;
+    END IF;
 
     IF _position_id IS NOT NULL THEN
         SELECT *
@@ -217,13 +227,8 @@ BEGIN
 
         UPDATE portfolio_positions
         SET quantity = COALESCE(quantity, 0) + _amount,
-            amount_in_currency = amount_in_currency + _consumed_cost_base,
-            metadata = metadata
-                || jsonb_build_object(
-                    'amount_in_base', COALESCE((metadata ->> 'amount_in_base')::numeric, 0) + _consumed_cost_base,
-                    'current_value_in_base', COALESCE(_market_value_in_base, COALESCE((metadata ->> 'current_value_in_base')::numeric, 0) + _consumed_cost_base),
-                    'valuation_updated_at', current_timestamp
-                )
+            amount_in_currency = 0,
+            metadata = metadata || _metadata
         WHERE id = _position_id
         RETURNING id INTO _target_position_id;
 
@@ -244,8 +249,8 @@ BEGIN
             'top_up',
             COALESCE(_operated_at, current_date),
             _amount,
-            _consumed_cost_base,
-            _base_currency_code,
+            NULL,
+            NULL,
             _operation_id,
             NULLIF(btrim(_comment), ''),
             _metadata,
@@ -275,7 +280,7 @@ BEGIN
             'crypto',
             COALESCE(NULLIF(btrim(_title), ''), _asset.symbol),
             _amount,
-            _consumed_cost_base,
+            0,
             _base_currency_code,
             COALESCE(_operated_at, current_date),
             NULLIF(btrim(_comment), ''),
@@ -301,8 +306,8 @@ BEGIN
             'open',
             COALESCE(_operated_at, current_date),
             _amount,
-            _consumed_cost_base,
-            _base_currency_code,
+            NULL,
+            NULL,
             _operation_id,
             NULLIF(btrim(_comment), ''),
             _metadata,
@@ -326,7 +331,6 @@ BEGIN
     RETURN jsonb_build_object(
         'operation_id', _operation_id,
         'position_id', _target_position_id,
-        'amount_in_base', _consumed_cost_base,
         'base_currency_code', _base_currency_code
     );
 END

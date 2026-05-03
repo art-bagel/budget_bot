@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS budgeting.portfolio_positions (
     title varchar(150) NOT NULL,
     status varchar(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
     quantity numeric(20, 8),
-    amount_in_currency numeric(20, 8) NOT NULL CHECK (amount_in_currency > 0),
+    amount_in_currency numeric(20, 8) NOT NULL,
     currency_code char(3) NOT NULL REFERENCES budgeting.currencies(code),
     opened_at date NOT NULL DEFAULT CURRENT_DATE,
     closed_at date,
@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS budgeting.portfolio_positions (
         (owner_type = 'user' AND owner_user_id IS NOT NULL AND owner_family_id IS NULL)
         OR
         (owner_type = 'family' AND owner_user_id IS NULL AND owner_family_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_portfolio_positions_amount CHECK (
+        (asset_type_code = 'crypto' AND amount_in_currency >= 0)
+        OR
+        (asset_type_code <> 'crypto' AND amount_in_currency > 0)
     ),
     CONSTRAINT chk_portfolio_positions_close_fields CHECK (
         (status = 'open' AND closed_at IS NULL AND close_amount_in_currency IS NULL AND close_currency_code IS NULL)
