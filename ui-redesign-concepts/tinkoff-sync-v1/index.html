@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#F1EBDC" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)" />
+  <title>Тинькофф · Подключение и синхронизация</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Icon sprite -->
+  <svg class="sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.4 1.4M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9 5.5A11 11 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.2 6.2C3.4 8 2 12 2 12s3.5 7 10 7c1.7 0 3.3-.4 4.7-1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v6M12 7.5v.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2.5 19h19L12 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4M12 17v.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" opacity=".22"/><path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 6l8 6-8 6V6zM18 5v14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-coupon" viewBox="0 0 24 24"><path d="M3 9V7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 7v10" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.5 2"/></symbol>
+      <symbol id="i-percent" viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="17" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19 5 5 19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="9" cy="14" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11.5 12.5 21 3M17 7l3 3M14 10l3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v8M19 10v8M9 10v8M15 10v8M3 19h18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1V9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="16" cy="14" r="1.4" fill="currentColor"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar__left">
+        <button class="icon-btn" type="button" aria-label="Назад">
+          <svg><use href="#i-back"/></svg>
+        </button>
+        <div class="topbar__meta">
+          <span class="topbar__greet">Портфель · Инвестиции</span>
+          <h1 class="topbar__title">Тинькофф Брокер</h1>
+        </div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему">
+        <svg class="theme-toggle__icon theme-toggle__icon--sun"><use href="#i-sun"/></svg>
+        <svg class="theme-toggle__icon theme-toggle__icon--moon"><use href="#i-moon"/></svg>
+      </button>
+    </header>
+
+    <main class="content">
+
+      <!-- Account hero -->
+      <article class="acc">
+        <div class="acc__top">
+          <span class="acc__brand">
+            <span class="acc__brand-dot"></span>
+            <span>T-Bank · Брокерский</span>
+          </span>
+          <span class="acc__chip">
+            <span class="acc__chip-dot"></span>
+            подключено
+          </span>
+        </div>
+        <div class="acc__amount">
+          <span class="acc__cur">₽</span>
+          <span class="acc__val">1 562 000</span>
+        </div>
+        <div class="acc__sub">
+          <span class="acc__sub-l">Последняя синхронизация</span>
+          <span class="acc__sub-r">3 мая, 14:22</span>
+        </div>
+        <div class="acc__actions">
+          <button class="btn btn--primary" type="button" data-open="sync">
+            <svg class="btn__ico"><use href="#i-refresh"/></svg>
+            Подтянуть данные
+          </button>
+          <button class="btn btn--ghost" type="button" data-open="connect">
+            <svg class="btn__ico"><use href="#i-key"/></svg>
+            Перепривязать
+          </button>
+        </div>
+      </article>
+
+      <section class="hint">
+        <span class="hint__ico"><svg><use href="#i-info"/></svg></span>
+        <p>Это демо-страница концепта. Нажмите <em>«Подтянуть данные»</em> или <em>«Перепривязать»</em>, чтобы открыть слайд-панели в новом дизайне.</p>
+      </section>
+
+      <section class="sample">
+        <h2 class="sample__title">Превью внутри сервиса</h2>
+        <div class="sample__grid">
+          <div class="sample__card sample__card--ok">
+            <span class="sample__tag">Connect</span>
+            <p>Подключение токена и привязка нескольких счетов Тинькофф к инвест-счетам в боте.</p>
+          </div>
+          <div class="sample__card sample__card--accent">
+            <span class="sample__tag">Sync</span>
+            <p>Разбор движений: вводы, выводы, автоматические операции — с массовыми действиями.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- SLIDE-OVER · CONNECT                                      -->
+  <!-- ======================================================== -->
+  <div class="sx-root" id="sxConnect" role="dialog" aria-modal="true" aria-labelledby="sxConnectTitle">
+    <div class="sx-backdrop" data-close="connect"></div>
+    <aside class="sx">
+
+      <header class="sx__head">
+        <button class="sx__close" type="button" data-close="connect" aria-label="Закрыть">
+          <svg><use href="#i-back"/></svg>
+        </button>
+        <div class="sx__head-meta">
+          <span class="sx__eyebrow">Интеграция · Тинькофф</span>
+          <h2 class="sx__title" id="sxConnectTitle">Подключить брокера</h2>
+        </div>
+        <button class="sx__close sx__close--x" type="button" data-close="connect" aria-label="Закрыть">
+          <svg><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <!-- Stepper -->
+      <nav class="steps" aria-label="Шаги подключения">
+        <ol class="steps__list">
+          <li class="steps__item is-active" data-step="1">
+            <span class="steps__num">1</span>
+            <span class="steps__label">Токен</span>
+          </li>
+          <li class="steps__item" data-step="2">
+            <span class="steps__num">2</span>
+            <span class="steps__label">Счета</span>
+          </li>
+          <li class="steps__item" data-step="3">
+            <span class="steps__num">3</span>
+            <span class="steps__label">Готово</span>
+          </li>
+        </ol>
+      </nav>
+
+      <!-- Body -->
+      <div class="sx__body">
+
+        <!-- Step 1: token -->
+        <section class="sx__step is-visible" data-step-content="1">
+          <div class="lead">
+            <span class="lead__ico"><svg><use href="#i-key"/></svg></span>
+            <div class="lead__text">
+              <h3>Введите API-токен Тинькофф Инвестиции</h3>
+              <p>Создайте токен в приложении: <em>Инвестиции → Настройки → Токены API</em>. Нужен readonly-токен — мы только читаем операции, ничего не изменяем.</p>
+            </div>
+          </div>
+
+          <label class="field">
+            <span class="field__label">API-токен</span>
+            <div class="token-input">
+              <span class="token-input__pfx">t.</span>
+              <input
+                id="tokenField"
+                class="token-input__field"
+                type="password"
+                placeholder="••••••••••••••••••••••••"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button class="token-input__eye" type="button" id="tokenEye" aria-label="Показать токен">
+                <svg class="token-input__ico-on"><use href="#i-eye"/></svg>
+                <svg class="token-input__ico-off"><use href="#i-eye-off"/></svg>
+              </button>
+            </div>
+            <p class="field__hint">Токен зашифровывается на сервере. Доступ — только чтение операций.</p>
+          </label>
+
+          <ul class="checks">
+            <li><svg class="checks__ico"><use href="#i-check"/></svg>Не совершаем сделки</li>
+            <li><svg class="checks__ico"><use href="#i-check"/></svg>Не имеем доступа к выводу средств</li>
+            <li><svg class="checks__ico"><use href="#i-check"/></svg>Можно отозвать токен в любой момент</li>
+          </ul>
+        </section>
+
+        <!-- Step 2: accounts -->
+        <section class="sx__step" data-step-content="2">
+          <div class="lead">
+            <span class="lead__ico lead__ico--ok"><svg><use href="#i-bank"/></svg></span>
+            <div class="lead__text">
+              <h3>Найдено 2 счёта в Тинькофф</h3>
+              <p>Свяжите каждый с инвест-счётом в боте. Можно пропустить, если не хотите подтягивать.</p>
+            </div>
+          </div>
+
+          <ul class="link-list" id="accountList">
+            <li class="link-row">
+              <div class="link-row__src">
+                <span class="link-row__brand">T</span>
+                <div class="link-row__text">
+                  <span class="link-row__name">Брокерский счёт</span>
+                  <span class="link-row__id">#2078901234</span>
+                </div>
+              </div>
+              <div class="link-row__arrow"><svg><use href="#i-chev"/></svg></div>
+              <label class="link-row__pick">
+                <span class="link-row__pick-label">Привязать к</span>
+                <select class="select">
+                  <option>Тинькофф · Брокер</option>
+                  <option>Финам · ИИС</option>
+                  <option>СберИнвестор</option>
+                </select>
+              </label>
+              <button class="link-row__skip" type="button" aria-pressed="false">
+                <svg><use href="#i-skip"/></svg>
+                Пропустить
+              </button>
+            </li>
+            <li class="link-row">
+              <div class="link-row__src">
+                <span class="link-row__brand">T</span>
+                <div class="link-row__text">
+                  <span class="link-row__name">ИИС</span>
+                  <span class="link-row__id">#3041112222</span>
+                </div>
+              </div>
+              <div class="link-row__arrow"><svg><use href="#i-chev"/></svg></div>
+              <label class="link-row__pick">
+                <span class="link-row__pick-label">Привязать к</span>
+                <select class="select">
+                  <option value="">— Выберите счёт —</option>
+                  <option>Финам · ИИС</option>
+                  <option>СберИнвестор</option>
+                </select>
+              </label>
+              <button class="link-row__skip" type="button" aria-pressed="false">
+                <svg><use href="#i-skip"/></svg>
+                Пропустить
+              </button>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Step 3: done -->
+        <section class="sx__step" data-step-content="3">
+          <div class="done">
+            <div class="done__seal">
+              <svg><use href="#i-check"/></svg>
+            </div>
+            <h3 class="done__title">Готово</h3>
+            <p class="done__sub">Подключили <strong>2 счёта</strong> к Тинькофф. Теперь можно подтягивать операции.</p>
+            <ul class="done__list">
+              <li>
+                <span>Брокерский → Тинькофф · Брокер</span>
+                <span class="done__ok">привязан</span>
+              </li>
+              <li>
+                <span>ИИС → Финам · ИИС</span>
+                <span class="done__ok">привязан</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <!-- Footer -->
+      <footer class="sx__foot">
+        <button class="btn btn--ghost" type="button" id="connectBack">Назад</button>
+        <button class="btn btn--primary" type="button" id="connectNext">
+          <span id="connectNextLabel">Проверить токен</span>
+          <svg class="btn__ico btn__ico--r"><use href="#i-chev"/></svg>
+        </button>
+      </footer>
+
+    </aside>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- SLIDE-OVER · SYNC                                         -->
+  <!-- ======================================================== -->
+  <div class="sx-root" id="sxSync" role="dialog" aria-modal="true" aria-labelledby="sxSyncTitle">
+    <div class="sx-backdrop" data-close="sync"></div>
+    <aside class="sx">
+
+      <header class="sx__head">
+        <button class="sx__close" type="button" data-close="sync" aria-label="Закрыть">
+          <svg><use href="#i-back"/></svg>
+        </button>
+        <div class="sx__head-meta">
+          <span class="sx__eyebrow">Тинькофф · Брокер</span>
+          <h2 class="sx__title" id="sxSyncTitle">Подтянуть операции</h2>
+        </div>
+        <button class="sx__close sx__close--x" type="button" data-close="sync" aria-label="Закрыть">
+          <svg><use href="#i-close"/></svg>
+        </button>
+      </header>
+
+      <!-- Summary strip -->
+      <div class="sum">
+        <div class="sum__cell">
+          <span class="sum__label">Всего новых</span>
+          <span class="sum__val">42</span>
+        </div>
+        <div class="sum__div"></div>
+        <div class="sum__cell">
+          <span class="sum__label">Ручных</span>
+          <span class="sum__val sum__val--accent">7</span>
+        </div>
+        <div class="sum__div"></div>
+        <div class="sum__cell">
+          <span class="sum__label">Уже было</span>
+          <span class="sum__val sum__val--mute">128</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <nav class="tabs" role="tablist" aria-label="Группы операций">
+        <button class="tabs__btn is-active" role="tab" aria-selected="true" data-tab="dep">
+          Вводы
+          <span class="tabs__badge tabs__badge--warn">5</span>
+        </button>
+        <button class="tabs__btn" role="tab" aria-selected="false" data-tab="wd">
+          Выводы
+          <span class="tabs__badge tabs__badge--warn">2</span>
+        </button>
+        <button class="tabs__btn" role="tab" aria-selected="false" data-tab="auto">
+          Автоматические
+          <span class="tabs__badge">35</span>
+        </button>
+      </nav>
+
+      <!-- Body -->
+      <div class="sx__body">
+
+        <!-- Tab: deposits -->
+        <section class="tabpane is-visible" data-tabpane="dep">
+          <div class="bulk">
+            <span class="bulk__label">Применить ко всем:</span>
+            <button class="bulk__btn" type="button" data-bulk="external">Внешнее</button>
+            <button class="bulk__btn" type="button" data-bulk="recorded">Уже учтено</button>
+            <details class="bulk__more">
+              <summary>Перевод со счёта…</summary>
+              <ul>
+                <li><button type="button">Тинькофф · Карта (1 200 ₽)</button></li>
+                <li><button type="button">Сбер · Зарплата (84 000 ₽)</button></li>
+                <li><button type="button">Наличные (12 500 ₽)</button></li>
+              </ul>
+            </details>
+          </div>
+
+          <article class="op">
+            <header class="op__head">
+              <div class="op__head-l">
+                <span class="op__date">3 мая</span>
+                <h4 class="op__title">Пополнение</h4>
+              </div>
+              <span class="op__amt op__amt--in">+50 000 ₽</span>
+            </header>
+            <div class="op__body">
+              <p class="op__hint">Откуда пришли деньги?</p>
+              <div class="res">
+                <label class="res__opt res__opt--on">
+                  <input type="radio" name="dep-1" checked />
+                  <span class="res__bullet"></span>
+                  <span class="res__text">
+                    <strong>Внешнее пополнение</strong>
+                    <em>деньги пришли извне, не из других счетов в боте</em>
+                  </span>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="dep-1" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text">
+                    <strong>Перевод со счёта</strong>
+                    <em>списать с одного из ваших счетов</em>
+                  </span>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="dep-1" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text">
+                    <strong>Уже учтено в боте</strong>
+                    <em>на инвест-счёте: 845 200 ₽</em>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="op">
+            <header class="op__head">
+              <div class="op__head-l">
+                <span class="op__date">29 апр</span>
+                <h4 class="op__title">Пополнение</h4>
+              </div>
+              <span class="op__amt op__amt--in">+12 500 ₽</span>
+            </header>
+            <div class="op__body">
+              <p class="op__hint">Откуда пришли деньги?</p>
+              <div class="res">
+                <label class="res__opt">
+                  <input type="radio" name="dep-2" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Внешнее пополнение</strong></span>
+                </label>
+                <label class="res__opt res__opt--on res__opt--detail">
+                  <input type="radio" name="dep-2" checked />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Перевод со счёта</strong></span>
+                  <div class="res__detail">
+                    <select class="select select--inline">
+                      <option>Тинькофф · Карта (1 200 ₽ ⚠)</option>
+                      <option>Сбер · Зарплата (84 000 ₽)</option>
+                      <option>Наличные (12 500 ₽)</option>
+                    </select>
+                    <p class="res__warn">
+                      <svg><use href="#i-warn"/></svg>
+                      Недостаточно средств на счёте — выберите другой источник.
+                    </p>
+                  </div>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="dep-2" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Уже учтено в боте</strong></span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="op op--unresolved">
+            <header class="op__head">
+              <div class="op__head-l">
+                <span class="op__date">22 апр</span>
+                <h4 class="op__title">Пополнение</h4>
+              </div>
+              <span class="op__amt op__amt--in">+200 000 ₽</span>
+            </header>
+            <div class="op__body">
+              <p class="op__hint">Откуда пришли деньги?</p>
+              <div class="res">
+                <label class="res__opt">
+                  <input type="radio" name="dep-3" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Внешнее пополнение</strong></span>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="dep-3" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Перевод со счёта</strong></span>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="dep-3" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Уже учтено в боте</strong></span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <button class="show-more" type="button">Показать ещё 2 пополнения</button>
+        </section>
+
+        <!-- Tab: withdrawals -->
+        <section class="tabpane" data-tabpane="wd">
+          <div class="bulk">
+            <span class="bulk__label">Применить ко всем:</span>
+            <button class="bulk__btn" type="button">Внешний</button>
+            <button class="bulk__btn" type="button">Уже учтено</button>
+          </div>
+
+          <article class="op">
+            <header class="op__head">
+              <div class="op__head-l">
+                <span class="op__date">28 апр</span>
+                <h4 class="op__title">Вывод</h4>
+              </div>
+              <span class="op__amt op__amt--out">−15 000 ₽</span>
+            </header>
+            <div class="op__body">
+              <p class="op__hint">Куда ушли деньги?</p>
+              <div class="res">
+                <label class="res__opt">
+                  <input type="radio" name="wd-1" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Внешний вывод</strong></span>
+                </label>
+                <label class="res__opt res__opt--on res__opt--detail">
+                  <input type="radio" name="wd-1" checked />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Перевод на счёт</strong></span>
+                  <div class="res__detail">
+                    <select class="select select--inline">
+                      <option>Тинькофф · Карта</option>
+                      <option>Сбер · Зарплата</option>
+                    </select>
+                  </div>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="wd-1" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Уже учтено в боте</strong></span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="op">
+            <header class="op__head">
+              <div class="op__head-l">
+                <span class="op__date">14 апр</span>
+                <h4 class="op__title">Вывод</h4>
+              </div>
+              <span class="op__amt op__amt--out">−2 400 ₽</span>
+            </header>
+            <div class="op__body">
+              <p class="op__hint">Куда ушли деньги?</p>
+              <div class="res">
+                <label class="res__opt">
+                  <input type="radio" name="wd-2" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Внешний вывод</strong></span>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="wd-2" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Перевод на счёт</strong></span>
+                </label>
+                <label class="res__opt">
+                  <input type="radio" name="wd-2" />
+                  <span class="res__bullet"></span>
+                  <span class="res__text"><strong>Уже учтено в боте</strong></span>
+                </label>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <!-- Tab: auto -->
+        <section class="tabpane" data-tabpane="auto">
+          <p class="muted">Эти операции применятся автоматически — здесь только список для контроля.</p>
+          <ul class="auto-list">
+            <li class="auto-row auto-row--buy">
+              <span class="auto-row__ico"><svg><use href="#i-bag"/></svg></span>
+              <div class="auto-row__main">
+                <span class="auto-row__type">Покупка</span>
+                <span class="auto-row__title">SBER · 100 шт.</span>
+              </div>
+              <div class="auto-row__meta">
+                <span class="auto-row__amt">−24 530 ₽</span>
+                <span class="auto-row__date">2 мая</span>
+              </div>
+            </li>
+            <li class="auto-row auto-row--coupon">
+              <span class="auto-row__ico"><svg><use href="#i-coupon"/></svg></span>
+              <div class="auto-row__main">
+                <span class="auto-row__type">Купон</span>
+                <span class="auto-row__title">ОФЗ 26240</span>
+              </div>
+              <div class="auto-row__meta">
+                <span class="auto-row__amt auto-row__amt--in">+412 ₽</span>
+                <span class="auto-row__date">30 апр</span>
+              </div>
+            </li>
+            <li class="auto-row auto-row--div">
+              <span class="auto-row__ico"><svg><use href="#i-percent"/></svg></span>
+              <div class="auto-row__main">
+                <span class="auto-row__type">Дивиденды</span>
+                <span class="auto-row__title">LKOH</span>
+              </div>
+              <div class="auto-row__meta">
+                <span class="auto-row__amt auto-row__amt--in">+8 920 ₽</span>
+                <span class="auto-row__date">28 апр</span>
+              </div>
+            </li>
+            <li class="auto-row auto-row--sell">
+              <span class="auto-row__ico"><svg><use href="#i-bag"/></svg></span>
+              <div class="auto-row__main">
+                <span class="auto-row__type">Продажа</span>
+                <span class="auto-row__title">YNDX · 5 шт.</span>
+              </div>
+              <div class="auto-row__meta">
+                <span class="auto-row__amt auto-row__amt--in">+19 800 ₽</span>
+                <span class="auto-row__date">25 апр</span>
+              </div>
+            </li>
+            <li class="auto-row auto-row--buy">
+              <span class="auto-row__ico"><svg><use href="#i-bag"/></svg></span>
+              <div class="auto-row__main">
+                <span class="auto-row__type">Покупка</span>
+                <span class="auto-row__title">GAZP · 200 шт.</span>
+              </div>
+              <div class="auto-row__meta">
+                <span class="auto-row__amt">−31 200 ₽</span>
+                <span class="auto-row__date">22 апр</span>
+              </div>
+            </li>
+          </ul>
+          <button class="show-more" type="button">Показать ещё 30 автоопераций</button>
+        </section>
+
+      </div>
+
+      <!-- Footer -->
+      <footer class="sx__foot sx__foot--split">
+        <div class="sx__foot-hint" id="syncFootHint">
+          <svg><use href="#i-info"/></svg>
+          Осталось разобрать: <strong>3 ввода</strong>, <strong>2 вывода</strong>
+        </div>
+        <button class="btn btn--primary btn--lg" type="button" id="syncApply">
+          Применить 42 операции
+        </button>
+      </footer>
+
+    </aside>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Check, Info } from 'lucide-react';
 
-import { applyTinkoffSync, fetchBankAccounts, fetchBankAccountSnapshot, getTinkoffInstrumentLogoUrl, previewTinkoffSync } from '../api';
+import {
+  applyTinkoffSync,
+  fetchBankAccounts,
+  fetchBankAccountSnapshot,
+  getTinkoffInstrumentLogoUrl,
+  previewTinkoffSync,
+} from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
+import BottomSheet from './BottomSheet';
 import type {
   BankAccount,
   DashboardBankBalance,
@@ -28,13 +36,12 @@ interface ResolutionState {
   accountId: string;
 }
 
-type ManualTab = 'deposits' | 'withdrawals';
+type ManualTab = 'deposits' | 'withdrawals' | 'auto';
 
 
 export default function TinkoffSyncDialog({
   connectionId,
   investmentAccountId,
-  baseCurrencyCode,
   onClose,
   onSuccess,
 }: Props) {
@@ -44,25 +51,20 @@ export default function TinkoffSyncDialog({
   const [preview, setPreview] = useState<TinkoffPreviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Per-operation resolution state keyed by tinkoff_op_id
   const [depositStates, setDepositStates] = useState<Record<string, ResolutionState>>({});
   const [withdrawalStates, setWithdrawalStates] = useState<Record<string, ResolutionState>>({});
 
-  // Cash accounts for "transfer" resolution
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [accountBalances, setAccountBalances] = useState<Record<number, DashboardBankBalance[]>>({});
-
-  // Investment account balances for "already_recorded" validation
   const [investmentBalances, setInvestmentBalances] = useState<DashboardBankBalance[]>([]);
 
   const [applyResult, setApplyResult] = useState<{ applied: number; skipped: number } | null>(null);
   const [showAllDeposits, setShowAllDeposits] = useState(false);
   const [showAllWithdrawals, setShowAllWithdrawals] = useState(false);
   const [showAllAutoOperations, setShowAllAutoOperations] = useState(false);
-  const [manualTab, setManualTab] = useState<ManualTab>('deposits');
+  const [activeTab, setActiveTab] = useState<ManualTab>('deposits');
   const [applyWarning, setApplyWarning] = useState<string | null>(null);
 
-  // Load preview + account balances on mount
   useEffect(() => {
     let cancelled = false;
 
@@ -80,7 +82,6 @@ export default function TinkoffSyncDialog({
         setCashAccounts(cashAccountList);
         setInvestmentBalances(investmentSnapshot);
 
-        // Init deposit states
         const nextDepositStates: Record<string, ResolutionState> = {};
         for (const d of previewData.deposits) {
           if (!d.already_imported) {
@@ -98,10 +99,13 @@ export default function TinkoffSyncDialog({
         setShowAllDeposits(false);
         setShowAllWithdrawals(false);
         setShowAllAutoOperations(false);
-        setManualTab(previewData.deposits.some((d) => !d.already_imported) ? 'deposits' : 'withdrawals');
+
+        const newDepCount = previewData.deposits.filter((d) => !d.already_imported).length;
+        const newWdCount = previewData.withdrawals.filter((w) => !w.already_imported).length;
+        const newAutoCount = previewData.auto_operations.filter((o) => !o.already_imported).length;
+        setActiveTab(newDepCount > 0 ? 'deposits' : newWdCount > 0 ? 'withdrawals' : newAutoCount > 0 ? 'auto' : 'deposits');
         setApplyWarning(null);
 
-        // Load balances for all cash accounts
         const balanceEntries = await Promise.all(
           cashAccountList.map(async (acc) => {
             const bal = await fetchBankAccountSnapshot(acc.id);
@@ -132,15 +136,10 @@ export default function TinkoffSyncDialog({
       [opId]: { ...prev[opId], resolution, accountId: prev[opId]?.accountId ?? '' },
     }));
   };
-
   const setDepositSourceAccount = (opId: string, accountId: string) => {
     setApplyWarning(null);
-    setDepositStates((prev) => ({
-      ...prev,
-      [opId]: { ...prev[opId], accountId },
-    }));
+    setDepositStates((prev) => ({ ...prev, [opId]: { ...prev[opId], accountId } }));
   };
-
   const setWithdrawalResolution = (opId: string, resolution: WithdrawalResolutionKind) => {
     setApplyWarning(null);
     setWithdrawalStates((prev) => ({
@@ -148,13 +147,9 @@ export default function TinkoffSyncDialog({
       [opId]: { ...prev[opId], resolution, accountId: prev[opId]?.accountId ?? '' },
     }));
   };
-
   const setWithdrawalTargetAccount = (opId: string, accountId: string) => {
     setApplyWarning(null);
-    setWithdrawalStates((prev) => ({
-      ...prev,
-      [opId]: { ...prev[opId], accountId },
-    }));
+    setWithdrawalStates((prev) => ({ ...prev, [opId]: { ...prev[opId], accountId } }));
   };
 
   const getAccountBalance = (accountId: number, currency: string): number | null => {
@@ -163,85 +158,75 @@ export default function TinkoffSyncDialog({
     const bal = bals.find((b) => b.currency_code === currency);
     return bal !== undefined ? bal.amount : 0;
   };
-
   const getInvestmentBalance = (currency: string): number | null => {
     const bal = investmentBalances.find((b) => b.currency_code === currency);
     return bal !== undefined ? bal.amount : 0;
   };
 
-  const newDeposits = preview?.deposits.filter((d) => !d.already_imported) ?? [];
-  const newWithdrawals = preview?.withdrawals.filter((w) => !w.already_imported) ?? [];
+  const newDeposits = useMemo(() => preview?.deposits.filter((d) => !d.already_imported) ?? [], [preview]);
+  const newWithdrawals = useMemo(() => preview?.withdrawals.filter((w) => !w.already_imported) ?? [], [preview]);
+  const newAutoOperations = useMemo(
+    () => (preview?.auto_operations ?? []).filter((o) => !o.already_imported),
+    [preview],
+  );
 
-  // Check if any "already_recorded" choice would fail balance check
   const alreadyRecordedBalanceOk = (deposit: TinkoffDepositPreview): boolean => {
     const bal = getInvestmentBalance(deposit.currency_code);
     return bal === null || bal >= deposit.amount;
   };
 
-  const depositsResolved = newDeposits.every((d) => {
+  const isDepositResolved = (d: TinkoffDepositPreview): boolean => {
     const s = depositStates[d.tinkoff_op_id];
     if (!s || s.resolution === '') return false;
     if (s.resolution === 'transfer' && !s.accountId) return false;
     if (s.resolution === 'already_recorded' && !alreadyRecordedBalanceOk(d)) return false;
     return true;
-  });
-  const withdrawalsResolved = newWithdrawals.every((w) => {
+  };
+  const isWithdrawalResolved = (w: TinkoffDepositPreview): boolean => {
     const s = withdrawalStates[w.tinkoff_op_id];
     if (!s || s.resolution === '') return false;
     if (s.resolution === 'transfer' && !s.accountId) return false;
     return true;
-  });
-  const allResolved = depositsResolved && withdrawalsResolved;
-  const unresolvedDepositsCount = newDeposits.filter((d) => {
-    const s = depositStates[d.tinkoff_op_id];
-    if (!s || s.resolution === '') return true;
-    if (s.resolution === 'transfer' && !s.accountId) return true;
-    if (s.resolution === 'already_recorded' && !alreadyRecordedBalanceOk(d)) return true;
-    return false;
-  }).length;
-  const unresolvedWithdrawalsCount = newWithdrawals.filter((w) => {
-    const s = withdrawalStates[w.tinkoff_op_id];
-    if (!s || s.resolution === '') return true;
-    if (s.resolution === 'transfer' && !s.accountId) return true;
-    return false;
-  }).length;
+  };
 
-  const totalNewAuto = (preview?.auto_operations ?? []).filter((o) => !o.already_imported).length;
+  const depositsResolved = newDeposits.every(isDepositResolved);
+  const withdrawalsResolved = newWithdrawals.every(isWithdrawalResolved);
+  const allResolved = depositsResolved && withdrawalsResolved;
+  const unresolvedDepositsCount = newDeposits.filter((d) => !isDepositResolved(d)).length;
+  const unresolvedWithdrawalsCount = newWithdrawals.filter((w) => !isWithdrawalResolved(w)).length;
+
+  const totalNewAuto = newAutoOperations.length;
   const totalManualNew = newDeposits.length + newWithdrawals.length;
   const totalNew = totalManualNew + totalNewAuto;
+  const totalAlreadyImported = preview?.total_already_imported ?? 0;
+
   const shouldCompactDeposits = newDeposits.length > 24;
   const shouldCompactWithdrawals = newWithdrawals.length > 12;
   const shouldCompactAutoOperations = totalNewAuto > 40;
   const visibleDeposits = shouldCompactDeposits && !showAllDeposits ? newDeposits.slice(0, 12) : newDeposits;
   const visibleWithdrawals = shouldCompactWithdrawals && !showAllWithdrawals ? newWithdrawals.slice(0, 8) : newWithdrawals;
   const visibleAutoOperations = shouldCompactAutoOperations && !showAllAutoOperations
-    ? (preview?.auto_operations ?? []).filter((o) => !o.already_imported).slice(0, 24)
-    : (preview?.auto_operations ?? []).filter((o) => !o.already_imported);
+    ? newAutoOperations.slice(0, 24)
+    : newAutoOperations;
 
   const setAllDepositResolutions = (resolution: DepositResolutionKind, accountId = '') => {
     const next: Record<string, ResolutionState> = {};
-    for (const d of newDeposits) {
-      next[d.tinkoff_op_id] = { resolution, accountId };
-    }
+    for (const d of newDeposits) next[d.tinkoff_op_id] = { resolution, accountId };
     setDepositStates((prev) => ({ ...prev, ...next }));
+    setApplyWarning(null);
   };
-
   const setAllWithdrawalResolutions = (resolution: WithdrawalResolutionKind, accountId = '') => {
     const next: Record<string, ResolutionState> = {};
-    for (const w of newWithdrawals) {
-      next[w.tinkoff_op_id] = { resolution, accountId };
-    }
+    for (const w of newWithdrawals) next[w.tinkoff_op_id] = { resolution, accountId };
     setWithdrawalStates((prev) => ({ ...prev, ...next }));
+    setApplyWarning(null);
   };
 
   const handleApply = async () => {
     if (!preview) return;
     if (!allResolved && totalManualNew > 0) {
-      if (unresolvedDepositsCount > 0) {
-        setManualTab('deposits');
-      } else if (unresolvedWithdrawalsCount > 0) {
-        setManualTab('withdrawals');
-      }
+      if (unresolvedDepositsCount > 0) setActiveTab('deposits');
+      else if (unresolvedWithdrawalsCount > 0) setActiveTab('withdrawals');
       setApplyWarning(
         `Сначала выбери способ учёта для всех ручных операций: осталось ${unresolvedDepositsCount} пополн. и ${unresolvedWithdrawalsCount} вывод.`,
       );
@@ -279,293 +264,432 @@ export default function TinkoffSyncDialog({
     }
   };
 
+  // ── Resolution card renderers ─────────────────────────────────────────────
+
   const renderDepositCard = (deposit: TinkoffDepositPreview) => {
     const state = depositStates[deposit.tinkoff_op_id];
     if (!state) return null;
 
-    const amountFormatted = formatAmount(deposit.amount, deposit.currency_code);
+    const resolved = isDepositResolved(deposit);
     const investBal = getInvestmentBalance(deposit.currency_code);
     const investEnough = investBal === null || investBal >= deposit.amount;
 
     return (
-      <div key={deposit.tinkoff_op_id} className="tinkoff-deposit-card">
-        <div className="tinkoff-deposit-card__header">
-          <span className="tinkoff-deposit-card__amount">{amountFormatted}</span>
-          <span className="tinkoff-deposit-card__date">{deposit.date}</span>
-        </div>
+      <article
+        key={deposit.tinkoff_op_id}
+        className={`tk-op${!resolved ? ' tk-op--unresolved' : ''}`}
+      >
+        <header className="tk-op__head">
+          <div className="tk-op__head-l">
+            <span className="tk-op__date">{deposit.date}</span>
+            <h4 className="tk-op__title">Пополнение</h4>
+          </div>
+          <span className="tk-op__amt tk-op__amt--in">
+            +{formatAmount(deposit.amount, deposit.currency_code)}
+          </span>
+        </header>
+        <div className="tk-op__body">
+          <p className="tk-op__hint">Откуда пришли деньги?</p>
+          <div className="tk-res">
+            <label className={`tk-res__opt${state.resolution === 'external' ? ' tk-res__opt--on' : ''}`}>
+              <input
+                type="radio"
+                name={`dep-${deposit.tinkoff_op_id}`}
+                checked={state.resolution === 'external'}
+                onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'external')}
+              />
+              <span className="tk-res__bullet" />
+              <span className="tk-res__text">
+                <strong>Внешнее пополнение</strong>
+                <em>деньги пришли извне, не из других счетов в боте</em>
+              </span>
+            </label>
 
-        <div className="tinkoff-deposit-card__options">
-          <label className="tinkoff-deposit-card__option">
-            <input
-              type="radio"
-              name={`resolution-${deposit.tinkoff_op_id}`}
-              checked={state.resolution === 'external'}
-              onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'external')}
-            />
-            <span>Внешнее пополнение</span>
-          </label>
+            <label className={`tk-res__opt${state.resolution === 'transfer' ? ' tk-res__opt--on' : ''}`}>
+              <input
+                type="radio"
+                name={`dep-${deposit.tinkoff_op_id}`}
+                checked={state.resolution === 'transfer'}
+                onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'transfer')}
+              />
+              <span className="tk-res__bullet" />
+              <span className="tk-res__text">
+                <strong>Перевод со счёта</strong>
+                {state.resolution === 'transfer' && (
+                  <div className="tk-res__detail">
+                    <select
+                      className="tk-res__select"
+                      value={state.accountId}
+                      onChange={(e) => setDepositSourceAccount(deposit.tinkoff_op_id, e.target.value)}
+                    >
+                      <option value="">— Выберите счёт —</option>
+                      {cashAccounts.map((acc) => {
+                        const bal = getAccountBalance(acc.id, deposit.currency_code);
+                        const enough = bal !== null && bal >= deposit.amount;
+                        return (
+                          <option key={acc.id} value={String(acc.id)}>
+                            {acc.name}
+                            {bal !== null
+                              ? ` · ${formatAmount(bal, deposit.currency_code)}${enough ? '' : ' ⚠'}`
+                              : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {state.accountId && (() => {
+                      const bal = getAccountBalance(Number(state.accountId), deposit.currency_code);
+                      const enough = bal !== null && bal >= deposit.amount;
+                      if (!enough && bal !== null) {
+                        return (
+                          <p className="tk-res__warn">
+                            <AlertTriangle strokeWidth={2} />
+                            Недостаточно средств на счёте ({formatAmount(bal, deposit.currency_code)})
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+              </span>
+            </label>
 
-          <label className="tinkoff-deposit-card__option">
-            <input
-              type="radio"
-              name={`resolution-${deposit.tinkoff_op_id}`}
-              checked={state.resolution === 'transfer'}
-              onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'transfer')}
-            />
-            <span>Перевод со счёта</span>
-          </label>
-
-          {state.resolution === 'transfer' && (
-            <div className="tinkoff-deposit-card__transfer-detail">
-              <select
-                value={state.accountId}
-                onChange={(e) => setDepositSourceAccount(deposit.tinkoff_op_id, e.target.value)}
-                className="tinkoff-deposit-card__select"
-              >
-                <option value="">— Выберите счёт —</option>
-                {cashAccounts.map((acc) => {
-                  const bal = getAccountBalance(acc.id, deposit.currency_code);
-                  const enough = bal !== null && bal >= deposit.amount;
-                  return (
-                    <option key={acc.id} value={String(acc.id)}>
-                      {acc.name}
-                      {bal !== null ? ` (${formatAmount(bal, deposit.currency_code)}${enough ? '' : ' ⚠'})` : ''}
-                    </option>
-                  );
-                })}
-              </select>
-              {state.accountId && (() => {
-                const bal = getAccountBalance(Number(state.accountId), deposit.currency_code);
-                const enough = bal !== null && bal >= deposit.amount;
-                if (!enough && bal !== null) {
-                  return (
-                    <p className="tinkoff-deposit-card__warn">
-                      Недостаточно средств на счёте ({formatAmount(bal, deposit.currency_code)})
+            <label className={`tk-res__opt${state.resolution === 'already_recorded' ? ' tk-res__opt--on' : ''}`}>
+              <input
+                type="radio"
+                name={`dep-${deposit.tinkoff_op_id}`}
+                checked={state.resolution === 'already_recorded'}
+                onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'already_recorded')}
+              />
+              <span className="tk-res__bullet" />
+              <span className="tk-res__text">
+                <strong>Уже учтено в боте</strong>
+                {investBal !== null && (
+                  <em className="tk-res__balance-hint">
+                    на инвест-счёте: {formatAmount(investBal, deposit.currency_code)}
+                  </em>
+                )}
+                {state.resolution === 'already_recorded' && !investEnough && (
+                  <div className="tk-res__detail">
+                    <p className="tk-res__warn">
+                      <AlertTriangle strokeWidth={2} />
+                      На инвест-счёте недостаточно средств — деньги там ещё не учтены
+                      {investBal !== null && ` (есть ${formatAmount(investBal, deposit.currency_code)})`}
                     </p>
-                  );
-                }
-                return null;
-              })()}
-            </div>
-          )}
-
-          <label className="tinkoff-deposit-card__option">
-            <input
-              type="radio"
-              name={`resolution-${deposit.tinkoff_op_id}`}
-              checked={state.resolution === 'already_recorded'}
-              onChange={() => setDepositResolution(deposit.tinkoff_op_id, 'already_recorded')}
-            />
-            <span>
-              Уже учтено в боте
-              {investBal !== null && (
-                <span className="tinkoff-deposit-card__balance-hint">
-                  {' '}(на инвест-счёте: {formatAmount(investBal, deposit.currency_code)})
-                </span>
-              )}
-            </span>
-          </label>
-
-          {state.resolution === 'already_recorded' && !investEnough && (
-            <p className="tinkoff-deposit-card__warn">
-              На инвест-счёте недостаточно средств — деньги там ещё не учтены
-              {investBal !== null && ` (есть ${formatAmount(investBal, deposit.currency_code)})`}
-            </p>
-          )}
+                  </div>
+                )}
+              </span>
+            </label>
+          </div>
         </div>
-      </div>
+      </article>
     );
   };
 
   const renderWithdrawalCard = (withdrawal: TinkoffDepositPreview) => {
     const state = withdrawalStates[withdrawal.tinkoff_op_id];
     if (!state) return null;
-
-    const amountFormatted = formatAmount(withdrawal.amount, withdrawal.currency_code);
+    const resolved = isWithdrawalResolved(withdrawal);
 
     return (
-      <div key={withdrawal.tinkoff_op_id} className="tinkoff-deposit-card">
-        <div className="tinkoff-deposit-card__header">
-          <span className="tinkoff-deposit-card__amount">{amountFormatted}</span>
-          <span className="tinkoff-deposit-card__date">{withdrawal.date}</span>
+      <article
+        key={withdrawal.tinkoff_op_id}
+        className={`tk-op${!resolved ? ' tk-op--unresolved' : ''}`}
+      >
+        <header className="tk-op__head">
+          <div className="tk-op__head-l">
+            <span className="tk-op__date">{withdrawal.date}</span>
+            <h4 className="tk-op__title">Вывод</h4>
+          </div>
+          <span className="tk-op__amt tk-op__amt--out">
+            −{formatAmount(withdrawal.amount, withdrawal.currency_code)}
+          </span>
+        </header>
+        <div className="tk-op__body">
+          <p className="tk-op__hint">Куда ушли деньги?</p>
+          <div className="tk-res">
+            <label className={`tk-res__opt${state.resolution === 'external' ? ' tk-res__opt--on' : ''}`}>
+              <input
+                type="radio"
+                name={`wd-${withdrawal.tinkoff_op_id}`}
+                checked={state.resolution === 'external'}
+                onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'external')}
+              />
+              <span className="tk-res__bullet" />
+              <span className="tk-res__text">
+                <strong>Внешний вывод</strong>
+                <em>деньги ушли наружу, не на другой счёт в боте</em>
+              </span>
+            </label>
+
+            <label className={`tk-res__opt${state.resolution === 'transfer' ? ' tk-res__opt--on' : ''}`}>
+              <input
+                type="radio"
+                name={`wd-${withdrawal.tinkoff_op_id}`}
+                checked={state.resolution === 'transfer'}
+                onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'transfer')}
+              />
+              <span className="tk-res__bullet" />
+              <span className="tk-res__text">
+                <strong>Перевод на счёт</strong>
+                {state.resolution === 'transfer' && (
+                  <div className="tk-res__detail">
+                    <select
+                      className="tk-res__select"
+                      value={state.accountId}
+                      onChange={(e) => setWithdrawalTargetAccount(withdrawal.tinkoff_op_id, e.target.value)}
+                    >
+                      <option value="">— Выберите счёт —</option>
+                      {cashAccounts.map((acc) => {
+                        const bal = getAccountBalance(acc.id, withdrawal.currency_code);
+                        return (
+                          <option key={acc.id} value={String(acc.id)}>
+                            {acc.name}
+                            {bal !== null ? ` · ${formatAmount(bal, withdrawal.currency_code)}` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+              </span>
+            </label>
+
+            <label className={`tk-res__opt${state.resolution === 'already_recorded' ? ' tk-res__opt--on' : ''}`}>
+              <input
+                type="radio"
+                name={`wd-${withdrawal.tinkoff_op_id}`}
+                checked={state.resolution === 'already_recorded'}
+                onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'already_recorded')}
+              />
+              <span className="tk-res__bullet" />
+              <span className="tk-res__text">
+                <strong>Уже учтено в боте</strong>
+              </span>
+            </label>
+          </div>
         </div>
-
-        <div className="tinkoff-deposit-card__options">
-          <label className="tinkoff-deposit-card__option">
-            <input
-              type="radio"
-              name={`withdrawal-resolution-${withdrawal.tinkoff_op_id}`}
-              checked={state.resolution === 'external'}
-              onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'external')}
-            />
-            <span>Внешний вывод</span>
-          </label>
-
-          <label className="tinkoff-deposit-card__option">
-            <input
-              type="radio"
-              name={`withdrawal-resolution-${withdrawal.tinkoff_op_id}`}
-              checked={state.resolution === 'transfer'}
-              onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'transfer')}
-            />
-            <span>Перевод на счёт</span>
-          </label>
-
-          {state.resolution === 'transfer' && (
-            <div className="tinkoff-deposit-card__transfer-detail">
-              <select
-                value={state.accountId}
-                onChange={(e) => setWithdrawalTargetAccount(withdrawal.tinkoff_op_id, e.target.value)}
-                className="tinkoff-deposit-card__select"
-              >
-                <option value="">— Выберите счёт —</option>
-                {cashAccounts.map((acc) => {
-                  const bal = getAccountBalance(acc.id, withdrawal.currency_code);
-                  return (
-                    <option key={acc.id} value={String(acc.id)}>
-                      {acc.name}
-                      {bal !== null ? ` (${formatAmount(bal, withdrawal.currency_code)})` : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
-
-          <label className="tinkoff-deposit-card__option">
-            <input
-              type="radio"
-              name={`withdrawal-resolution-${withdrawal.tinkoff_op_id}`}
-              checked={state.resolution === 'already_recorded'}
-              onChange={() => setWithdrawalResolution(withdrawal.tinkoff_op_id, 'already_recorded')}
-            />
-            <span>Уже учтено в боте</span>
-          </label>
-        </div>
-      </div>
+      </article>
     );
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Footer actions ────────────────────────────────────────────────────────
 
-  return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog__header">
-          <h2 className="dialog__title">Подтянуть данные из Тинькофф</h2>
-          <button className="dialog__close" onClick={onClose} type="button">✕</button>
-        </div>
+  const renderFooterActions = () => {
+    if (stage === 'review') {
+      const hintParts: string[] = [];
+      if (unresolvedDepositsCount > 0) hintParts.push(`${unresolvedDepositsCount} пополн.`);
+      if (unresolvedWithdrawalsCount > 0) hintParts.push(`${unresolvedWithdrawalsCount} вывод.`);
 
-        {stage === 'review' && applyWarning && (
-          <div className="tinkoff-sync__warning-popover" role="alert" aria-live="assertive">
-            <div className="tinkoff-sync__warning-title">Не всё выбрано</div>
-            <p className="tinkoff-sync__warning-text">{applyWarning}</p>
-            <button
-              type="button"
-              className="tinkoff-sync__warning-close"
-              onClick={() => setApplyWarning(null)}
-            >
-              Понятно
+      return (
+        <div className="tk-foot pf-sheet-actions">
+          {!allResolved && totalManualNew > 0 && (
+            <div className="tk-foot__hint">
+              <Info strokeWidth={2} />
+              <span>Осталось разобрать: <strong>{hintParts.join(', ')}</strong></span>
+            </div>
+          )}
+          {applyWarning && (
+            <div className="tk-error">
+              <AlertCircle strokeWidth={2} />
+              <span>{applyWarning}</span>
+            </div>
+          )}
+          <div className="tk-foot__row">
+            <button className="btn btn--ghost" onClick={onClose} type="button">Отмена</button>
+            <button className="btn btn--primary" onClick={handleApply} type="button">
+              Применить{totalNew > 0 ? ` ${totalNew}` : ''}
             </button>
           </div>
-        )}
+        </div>
+      );
+    }
 
-        <div className="dialog__body">
-          {stage === 'loading' && (
-            <p className="tinkoff-sync__status">Загружаем операции из Тинькофф…</p>
-          )}
+    if (stage === 'done' || stage === 'error') {
+      return (
+        <div className="tk-foot pf-sheet-actions">
+          <div className="tk-foot__row">
+            <button className="btn btn--primary" onClick={onClose} type="button">Закрыть</button>
+          </div>
+        </div>
+      );
+    }
 
-          {stage === 'applying' && (
-            <p className="tinkoff-sync__status">Применяем операции…</p>
-          )}
+    if (stage === 'applying') {
+      return (
+        <div className="tk-foot pf-sheet-actions">
+          <div className="tk-foot__row">
+            <button className="btn btn--ghost" disabled type="button">Применяем…</button>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
-          {stage === 'error' && (
-            <>
-              <p className="tinkoff-sync__error">{error ?? 'Неизвестная ошибка'}</p>
-              <p style={{ marginTop: 8, fontSize: '0.82rem', color: 'var(--text-tertiary)' }}>
-                Никакие данные не были изменены.
-              </p>
-            </>
-          )}
+  return (
+    <BottomSheet
+      open
+      tag="Тинькофф · Брокер"
+      title="Подтянуть операции"
+      onClose={onClose}
+      actions={renderFooterActions()}
+    >
+      {stage === 'loading' && (
+        <div className="tk-state">
+          <div className="tk-state__spinner" />
+          <div className="tk-state__title">Загружаем операции…</div>
+          <div className="tk-state__sub">Запрашиваем у Тинькофф последние движения по счёту.</div>
+        </div>
+      )}
 
-          {stage === 'done' && applyResult && (
-            <div className="tinkoff-sync__done">
-              <p>Готово! Применено операций: <strong>{applyResult.applied}</strong></p>
-              {applyResult.skipped > 0 && (
-                <p className="tinkoff-sync__done-skipped">Пропущено (уже были): {applyResult.skipped}</p>
-              )}
+      {stage === 'applying' && (
+        <div className="tk-state">
+          <div className="tk-state__spinner" />
+          <div className="tk-state__title">Применяем операции…</div>
+          <div className="tk-state__sub">Записываем выбранные движения и обновляем балансы.</div>
+        </div>
+      )}
+
+      {stage === 'error' && (
+        <div className="tk-state tk-state--error">
+          <div className="tk-state__seal--err">
+            <AlertCircle size={26} strokeWidth={2} />
+          </div>
+          <div className="tk-state__title">Не получилось применить</div>
+          <div className="tk-state__sub">{error ?? 'Неизвестная ошибка'}</div>
+          <div className="tk-state__sub">Никакие данные не были изменены.</div>
+        </div>
+      )}
+
+      {stage === 'done' && applyResult && (
+        <div className="tk-done">
+          <div className="tk-done__seal">
+            <Check size={34} strokeWidth={3} />
+          </div>
+          <h3 className="tk-done__title">Готово</h3>
+          <p className="tk-done__sub">
+            Применено операций: <strong>{applyResult.applied}</strong>
+            {applyResult.skipped > 0 && <> · пропущено уже импортированных: <strong>{applyResult.skipped}</strong></>}
+          </p>
+        </div>
+      )}
+
+      {stage === 'review' && preview && (
+        <>
+          <div className="tk-sum">
+            <div className="tk-sum__cell">
+              <span className="tk-sum__label">Всего</span>
+              <span className="tk-sum__val">{totalNew}</span>
+            </div>
+            <div className="tk-sum__div" />
+            <div className="tk-sum__cell">
+              <span className="tk-sum__label">Ручных</span>
+              <span className={`tk-sum__val${totalManualNew > 0 ? ' tk-sum__val--accent' : ''}`}>
+                {totalManualNew}
+              </span>
+            </div>
+            <div className="tk-sum__div" />
+            <div className="tk-sum__cell">
+              <span className="tk-sum__label">Уже было</span>
+              <span className="tk-sum__val tk-sum__val--mute">{totalAlreadyImported}</span>
+            </div>
+          </div>
+
+          {totalNew === 0 && (
+            <div className="tk-state">
+              <div className="tk-state__title">Новых операций нет</div>
+              <div className="tk-state__sub">
+                {totalAlreadyImported > 0
+                  ? `Все ${totalAlreadyImported} операций уже импортированы ранее.`
+                  : 'Похоже, по этому счёту движений ещё не было.'}
+              </div>
             </div>
           )}
 
-          {stage === 'review' && preview && (
+          {totalNew > 0 && (
             <>
               {totalManualNew > 0 && (
-                <div className="tinkoff-sync__hint">
-                  Нужно разобрать ручные движения перед импортом.
-                  {unresolvedDepositsCount > 0 && ` Пополнения без решения: ${unresolvedDepositsCount}.`}
-                  {unresolvedWithdrawalsCount > 0 && ` Выводы без решения: ${unresolvedWithdrawalsCount}.`}
-                  {newWithdrawals.length > 0 && ' У этого счёта есть не только пополнения, но и выводы ниже по списку.'}
+                <div className="tk-hint">
+                  <Info className="tk-hint__ico" strokeWidth={2} />
+                  <span>
+                    Нужно разобрать ручные движения перед импортом.
+                    {newWithdrawals.length > 0 && newDeposits.length > 0 && ' Под счётом есть и пополнения, и выводы.'}
+                  </span>
                 </div>
               )}
 
-              {totalManualNew > 0 && (newDeposits.length > 0 || newWithdrawals.length > 0) && (
-                <section className="tinkoff-sync__section">
-                  <div className="tinkoff-sync__tabs" role="tablist" aria-label="Ручные операции">
-                    {newDeposits.length > 0 && (
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={manualTab === 'deposits'}
-                        className={`tinkoff-sync__tab${manualTab === 'deposits' ? ' tinkoff-sync__tab--active' : ''}`}
-                        onClick={() => setManualTab('deposits')}
-                      >
-                        Вводы ({newDeposits.length})
-                      </button>
-                    )}
-                    {newWithdrawals.length > 0 && (
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={manualTab === 'withdrawals'}
-                        className={`tinkoff-sync__tab${manualTab === 'withdrawals' ? ' tinkoff-sync__tab--active' : ''}`}
-                        onClick={() => setManualTab('withdrawals')}
-                      >
-                        Выводы ({newWithdrawals.length})
-                      </button>
-                    )}
-                  </div>
-                </section>
-              )}
+              <nav className="tk-tabs" role="tablist" aria-label="Группы операций">
+                {newDeposits.length > 0 && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'deposits'}
+                    className={`tk-tabs__btn${activeTab === 'deposits' ? ' is-active' : ''}`}
+                    onClick={() => setActiveTab('deposits')}
+                  >
+                    Вводы
+                    <span className={`tk-tabs__badge${unresolvedDepositsCount > 0 ? ' tk-tabs__badge--warn' : ''}`}>
+                      {newDeposits.length}
+                    </span>
+                  </button>
+                )}
+                {newWithdrawals.length > 0 && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'withdrawals'}
+                    className={`tk-tabs__btn${activeTab === 'withdrawals' ? ' is-active' : ''}`}
+                    onClick={() => setActiveTab('withdrawals')}
+                  >
+                    Выводы
+                    <span className={`tk-tabs__badge${unresolvedWithdrawalsCount > 0 ? ' tk-tabs__badge--warn' : ''}`}>
+                      {newWithdrawals.length}
+                    </span>
+                  </button>
+                )}
+                {totalNewAuto > 0 && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'auto'}
+                    className={`tk-tabs__btn${activeTab === 'auto' ? ' is-active' : ''}`}
+                    onClick={() => setActiveTab('auto')}
+                  >
+                    Авто
+                    <span className="tk-tabs__badge">{totalNewAuto}</span>
+                  </button>
+                )}
+              </nav>
 
-              {newDeposits.length > 0 && manualTab === 'deposits' && (
-                <section className="tinkoff-sync__section">
-                  <h3 className="tinkoff-sync__section-title">
-                    Пополнения ({newDeposits.length}) — требуют решения
-                  </h3>
-
+              {activeTab === 'deposits' && newDeposits.length > 0 && (
+                <>
                   {newDeposits.length > 1 && (
-                    <div className="tinkoff-sync__bulk-actions">
-                      <span className="tinkoff-sync__bulk-label">Для всех:</span>
+                    <div className="tk-bulk">
+                      <span className="tk-bulk__label">Для всех:</span>
                       <button
                         type="button"
-                        className="tinkoff-sync__bulk-btn"
+                        className="tk-bulk__btn"
                         onClick={() => setAllDepositResolutions('external')}
                       >
+                        <ArrowDownToLine size={13} strokeWidth={2} style={{ display: 'inline', marginRight: 4, verticalAlign: '-2px' }} />
                         Внешнее
                       </button>
                       <button
                         type="button"
-                        className="tinkoff-sync__bulk-btn"
+                        className="tk-bulk__btn"
                         onClick={() => setAllDepositResolutions('already_recorded')}
                       >
+                        <Check size={13} strokeWidth={2.5} style={{ display: 'inline', marginRight: 4, verticalAlign: '-2px' }} />
                         Уже учтено
                       </button>
                       {cashAccounts.length > 0 && (
                         <select
-                          className="tinkoff-sync__bulk-select"
+                          className="tk-bulk__select"
                           value=""
                           onChange={(e) => {
                             if (e.target.value) setAllDepositResolutions('transfer', e.target.value);
+                            e.target.value = '';
                           }}
                         >
                           <option value="">Перевод со счёта…</option>
@@ -576,51 +700,49 @@ export default function TinkoffSyncDialog({
                       )}
                     </div>
                   )}
-
                   {visibleDeposits.map(renderDepositCard)}
                   {shouldCompactDeposits && (
                     <button
                       type="button"
-                      className="tinkoff-sync__show-more"
-                      onClick={() => setShowAllDeposits((prev) => !prev)}
+                      className="tk-show-more"
+                      onClick={() => setShowAllDeposits((v) => !v)}
                     >
                       {showAllDeposits
-                        ? 'Свернуть список пополнений'
+                        ? 'Свернуть пополнения'
                         : `Показать все пополнения (${newDeposits.length})`}
                     </button>
                   )}
-                </section>
+                </>
               )}
 
-              {newWithdrawals.length > 0 && manualTab === 'withdrawals' && (
-                <section className="tinkoff-sync__section">
-                  <h3 className="tinkoff-sync__section-title">
-                    Выводы ({newWithdrawals.length}) — требуют решения
-                  </h3>
-
+              {activeTab === 'withdrawals' && newWithdrawals.length > 0 && (
+                <>
                   {newWithdrawals.length > 1 && (
-                    <div className="tinkoff-sync__bulk-actions">
-                      <span className="tinkoff-sync__bulk-label">Для всех:</span>
+                    <div className="tk-bulk">
+                      <span className="tk-bulk__label">Для всех:</span>
                       <button
                         type="button"
-                        className="tinkoff-sync__bulk-btn"
+                        className="tk-bulk__btn"
                         onClick={() => setAllWithdrawalResolutions('external')}
                       >
+                        <ArrowUpFromLine size={13} strokeWidth={2} style={{ display: 'inline', marginRight: 4, verticalAlign: '-2px' }} />
                         Внешний
                       </button>
                       <button
                         type="button"
-                        className="tinkoff-sync__bulk-btn"
+                        className="tk-bulk__btn"
                         onClick={() => setAllWithdrawalResolutions('already_recorded')}
                       >
+                        <Check size={13} strokeWidth={2.5} style={{ display: 'inline', marginRight: 4, verticalAlign: '-2px' }} />
                         Уже учтено
                       </button>
                       {cashAccounts.length > 0 && (
                         <select
-                          className="tinkoff-sync__bulk-select"
+                          className="tk-bulk__select"
                           value=""
                           onChange={(e) => {
                             if (e.target.value) setAllWithdrawalResolutions('transfer', e.target.value);
+                            e.target.value = '';
                           }}
                         >
                           <option value="">Перевод на счёт…</option>
@@ -631,103 +753,66 @@ export default function TinkoffSyncDialog({
                       )}
                     </div>
                   )}
-
                   {visibleWithdrawals.map(renderWithdrawalCard)}
                   {shouldCompactWithdrawals && (
                     <button
                       type="button"
-                      className="tinkoff-sync__show-more"
-                      onClick={() => setShowAllWithdrawals((prev) => !prev)}
+                      className="tk-show-more"
+                      onClick={() => setShowAllWithdrawals((v) => !v)}
                     >
                       {showAllWithdrawals
-                        ? 'Свернуть список выводов'
+                        ? 'Свернуть выводы'
                         : `Показать все выводы (${newWithdrawals.length})`}
                     </button>
                   )}
-                </section>
+                </>
               )}
 
-              {totalNewAuto > 0 && (
-                <section className="tinkoff-sync__section">
-                  <h3 className="tinkoff-sync__section-title">
-                    Автоматические операции ({totalNewAuto})
-                  </h3>
-                  <div className="tinkoff-sync__auto-list">
+              {activeTab === 'auto' && totalNewAuto > 0 && (
+                <>
+                  <p className="tk-muted">
+                    Эти операции применятся автоматически — здесь только список для контроля.
+                  </p>
+                  <ul className="tk-auto-list">
                     {visibleAutoOperations.map((op) => (
-                      <div key={op.tinkoff_op_id} className="tinkoff-sync__auto-item">
-                        {op.logo_name && (
-                          <img
-                            className="instrument-logo instrument-logo--sync"
-                            src={getTinkoffInstrumentLogoUrl(op.logo_name)}
-                            alt=""
-                            loading="lazy"
-                          />
-                        )}
-                        <span className="tinkoff-sync__auto-type">{op.type}</span>
-                        <span className="tinkoff-sync__auto-ticker">{op.ticker || op.title || op.figi}</span>
-                        <span className="tinkoff-sync__auto-amount">
-                          {formatAmount(op.amount, op.currency_code)}
+                      <li key={op.tinkoff_op_id} className="tk-auto-row">
+                        <span className="tk-auto-row__ico">
+                          {op.logo_name
+                            ? <img src={getTinkoffInstrumentLogoUrl(op.logo_name)} alt="" loading="lazy" />
+                            : <Check strokeWidth={2} />}
                         </span>
-                        <span className="tinkoff-sync__auto-date">{op.date}</span>
-                      </div>
+                        <div className="tk-auto-row__main">
+                          <span className="tk-auto-row__type">{op.type}</span>
+                          <span className="tk-auto-row__title">
+                            {op.ticker || op.title || op.figi}
+                          </span>
+                        </div>
+                        <div className="tk-auto-row__meta">
+                          <span className={`tk-auto-row__amt${op.amount > 0 ? ' tk-op__amt--in' : ''}`}>
+                            {op.amount > 0 ? '+' : ''}{formatAmount(op.amount, op.currency_code)}
+                          </span>
+                          <span className="tk-auto-row__date">{op.date}</span>
+                        </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                   {shouldCompactAutoOperations && (
                     <button
                       type="button"
-                      className="tinkoff-sync__show-more"
-                      onClick={() => setShowAllAutoOperations((prev) => !prev)}
+                      className="tk-show-more"
+                      onClick={() => setShowAllAutoOperations((v) => !v)}
                     >
                       {showAllAutoOperations
                         ? 'Свернуть автооперации'
                         : `Показать все автооперации (${totalNewAuto})`}
                     </button>
                   )}
-                </section>
-              )}
-
-              {totalNew === 0 && (
-                <p className="tinkoff-sync__empty">Новых операций нет.</p>
-              )}
-
-              {preview.total_already_imported > 0 && (
-                <p className="tinkoff-sync__already">
-                  Уже импортировано ранее: {preview.total_already_imported}
-                </p>
+                </>
               )}
             </>
           )}
-        </div>
-
-        <div className="dialog__footer">
-          <button className="btn btn--secondary" onClick={onClose} type="button">
-            Отмена
-          </button>
-
-          {stage === 'review' && (
-            <div className="tinkoff-sync__footer-actions">
-              {!allResolved && totalManualNew > 0 && (
-                <p className="tinkoff-sync__footer-hint">
-                  Осталось выбрать: {unresolvedDepositsCount} пополн. и {unresolvedWithdrawalsCount} вывод.
-                </p>
-              )}
-              <button
-                className="btn btn--primary"
-                onClick={handleApply}
-                type="button"
-              >
-                Применить {totalNew > 0 ? `${totalNew} опер.` : ''}
-              </button>
-            </div>
-          )}
-
-          {(stage === 'done' || stage === 'error') && (
-            <button className="btn btn--primary" onClick={onClose} type="button">
-              Закрыть
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    </BottomSheet>
   );
 }
