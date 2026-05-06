@@ -22,6 +22,11 @@ DECLARE
     _asset_name text;
     _asset_network_code text;
     _asset_contract_address text;
+    _original_quantity numeric(30, 12);
+    _carried_cost numeric(20, 2);
+    _principal_qty numeric(30, 12);
+    _rewards_qty numeric(30, 12);
+    _principal_entry_value numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
@@ -73,6 +78,17 @@ BEGIN
         _asset_name := COALESCE(_asset_name, _existing.asset_symbol);
         _asset_network_code := COALESCE(_asset_network_code, _existing.network_code);
 
+        -- Split returned quantity into principal (carries cost basis) and rewards (zero cost).
+        _original_quantity := COALESCE(_existing.quantity, 0);
+        _carried_cost := COALESCE(_existing.cost_basis_in_base, 0);
+        _principal_qty := LEAST(_resolved_return_quantity, _original_quantity);
+        _rewards_qty := GREATEST(_resolved_return_quantity - _original_quantity, 0);
+        _principal_entry_value := CASE
+            WHEN _original_quantity > 0
+                THEN round(_carried_cost * _principal_qty / _original_quantity, 2)
+            ELSE 0
+        END;
+
         SELECT id
         INTO _target_position_id
         FROM portfolio_positions
@@ -111,7 +127,7 @@ BEGIN
                 0,
                 _base_currency_code,
                 COALESCE(_withdrawn_at, current_date),
-                COALESCE(NULLIF(btrim(_comment), ''), 'Возврат из staking'),
+                COALESCE(NULLIF(btrim(_comment), ''), 'Возврат из DeFi-протокола'),
                 jsonb_build_object(
                     'crypto_kind', 'spot',
                     'crypto_asset_id', _existing.crypto_asset_id,
@@ -124,6 +140,7 @@ BEGIN
             )
             RETURNING id INTO _target_position_id;
 
+            -- Principal return: 'open' (new position) carries cost basis from DeFi.
             INSERT INTO portfolio_events (
                 position_id,
                 event_type,
@@ -140,15 +157,18 @@ BEGIN
                 _target_position_id,
                 'open',
                 COALESCE(_withdrawn_at, current_date),
-                _resolved_return_quantity,
+                _principal_qty,
                 NULL,
                 NULL,
                 NULL,
-                COALESCE(NULLIF(btrim(_comment), ''), 'Возврат из staking'),
+                COALESCE(NULLIF(btrim(_comment), ''), 'Возврат принципала из DeFi'),
                 jsonb_build_object(
                     'action', 'return_from_protocol',
                     'protocol_position_id', _position_id,
-                    'protocol_name', _existing.protocol_name
+                    'protocol_name', _existing.protocol_name,
+                    'entry_value_in_base', _principal_entry_value,
+                    'source_kind', 'defi_return',
+                    'source_protocol_position_id', _position_id
                 ),
                 _user_id
             );
@@ -158,6 +178,7 @@ BEGIN
                 amount_in_currency = 0
             WHERE id = _target_position_id;
 
+            -- Principal return: 'top_up' on existing position.
             INSERT INTO portfolio_events (
                 position_id,
                 event_type,
@@ -174,22 +195,66 @@ BEGIN
                 _target_position_id,
                 'top_up',
                 COALESCE(_withdrawn_at, current_date),
-                _resolved_return_quantity,
+                _principal_qty,
                 NULL,
                 NULL,
                 NULL,
-                COALESCE(NULLIF(btrim(_comment), ''), 'Возврат из staking'),
+                COALESCE(NULLIF(btrim(_comment), ''), 'Возврат принципала из DeFi'),
                 jsonb_build_object(
                     'action', 'return_from_protocol',
                     'protocol_position_id', _position_id,
-                    'protocol_name', _existing.protocol_name
+                    'protocol_name', _existing.protocol_name,
+                    'entry_value_in_base', _principal_entry_value,
+                    'source_kind', 'defi_return',
+                    'source_protocol_position_id', _position_id
+                ),
+                _user_id
+            );
+        END IF;
+
+        -- Rewards (if returned > original): separate 'income' event with zero cost.
+        IF _rewards_qty > 0 THEN
+            INSERT INTO portfolio_events (
+                position_id,
+                event_type,
+                event_at,
+                quantity,
+                amount,
+                currency_code,
+                linked_operation_id,
+                comment,
+                metadata,
+                created_by_user_id
+            )
+            VALUES (
+                _target_position_id,
+                'income',
+                COALESCE(_withdrawn_at, current_date),
+                _rewards_qty,
+                NULL,
+                NULL,
+                NULL,
+                'Награды из DeFi-протокола',
+                jsonb_build_object(
+                    'action', 'rewards_from_protocol',
+                    'protocol_position_id', _position_id,
+                    'protocol_name', _existing.protocol_name,
+                    'entry_value_in_base', 0,
+                    'source_kind', 'income',
+                    'income_kind', 'defi_rewards',
+                    'source_protocol_position_id', _position_id
                 ),
                 _user_id
             );
         END IF;
 
         UPDATE crypto_protocol_positions
-        SET metadata = metadata || jsonb_build_object('return_position_id', _target_position_id)
+        SET metadata = metadata || jsonb_build_object(
+            'return_position_id', _target_position_id,
+            'returned_principal_qty', _principal_qty,
+            'returned_rewards_qty', _rewards_qty,
+            'returned_principal_value_in_base', _principal_entry_value
+        )
         WHERE id = _position_id;
     END IF;
 

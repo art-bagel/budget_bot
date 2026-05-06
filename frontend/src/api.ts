@@ -66,6 +66,8 @@ import type {
   TinkoffLivePrice,
   CryptoAsset,
   CryptoLivePrice,
+  CryptoAccountAssetSummary,
+  CryptoAssetDetail,
   UpsertCryptoAssetRequest,
   CryptoOperationResponse,
   TransferCryptoToInvestmentRequest,
@@ -76,6 +78,7 @@ import type {
   CreateCryptoProtocolPositionRequest,
   UpdateCryptoProtocolPositionRequest,
   CloseCryptoProtocolPositionRequest,
+  PartialCloseCryptoProtocolPositionRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -291,6 +294,23 @@ export async function fetchCryptoAssets(): Promise<CryptoAsset[]> {
   return apiFetch<CryptoAsset[]>('/crypto/assets');
 }
 
+export async function fetchCryptoAccountAssets(
+  investmentAccountId: number,
+): Promise<CryptoAccountAssetSummary[]> {
+  return apiFetch<CryptoAccountAssetSummary[]>(
+    `/crypto/accounts/${investmentAccountId}/assets`,
+  );
+}
+
+export async function fetchCryptoAssetDetail(
+  investmentAccountId: number,
+  cryptoAssetId: number,
+): Promise<CryptoAssetDetail | null> {
+  return apiFetch<CryptoAssetDetail | null>(
+    `/crypto/accounts/${investmentAccountId}/assets/${cryptoAssetId}`,
+  );
+}
+
 export async function fetchCryptoLivePrices(
   assetIds: number[],
   vsCurrency: string,
@@ -385,6 +405,19 @@ export async function closeCryptoProtocolPosition(
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function partialCloseCryptoProtocolPosition(
+  positionId: number,
+  data: PartialCloseCryptoProtocolPositionRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>(
+    `/crypto/protocol-positions/${positionId}/partial-close`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 export async function fetchCategories(): Promise<Category[]> {

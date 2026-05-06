@@ -11603,3 +11603,339 @@ select.dlg-row__ghost option {
 [data-theme='dark'] .tk-foot__hint svg { color: var(--yellow); }
 .tk-foot__row { display: flex; gap: 8px; }
 .tk-foot__row .btn { flex: 1; }
+
+/* ============================================================
+   Protocol partial-close sheet (ppc-sheet-*)
+   ============================================================ */
+.ppc-sheet__summary {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2, #f6f4ee);
+  margin-bottom: 16px;
+  font-size: 12.5px;
+}
+.ppc-sheet__summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ppc-sheet__summary-row span { color: var(--text-3); }
+.ppc-sheet__summary-row strong {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ppc-sheet__section {
+  margin: 14px 0 4px;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.ppc-sheet__hint {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+/* ============================================================
+   Crypto asset detail sheet (ca-sheet-*)
+   ============================================================ */
+
+.ca-sheet__state {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px;
+  padding: 24px 12px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.ca-sheet__state--error { color: var(--neg); }
+.ca-sheet__spinner {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--surface-inset);
+  border-top-color: var(--yellow);
+  animation: tkSpin 0.9s linear infinite;
+}
+
+.ca-sheet__hero {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface-inset);
+  border-radius: var(--r-md);
+}
+.ca-sheet__hero-qty {
+  display: flex; align-items: baseline; gap: 6px;
+}
+.ca-sheet__hero-qty-num {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -.025em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ca-sheet__hero-qty-sym {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: -.005em;
+}
+.ca-sheet__hero-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.ca-sheet__hero-price {
+  font-size: 11.5px;
+  color: var(--text-3);
+  letter-spacing: -.005em;
+  margin-top: 2px;
+}
+.ca-sheet__hero-stale {
+  margin-left: 6px;
+  color: var(--text-warn, #b88600);
+  font-size: 11px;
+}
+
+.ca-sheet__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.ca-sheet__stat {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft);
+  min-width: 0;
+}
+.ca-sheet__stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ca-sheet__stat-val {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.015em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+.ca-sheet__stat-val--pos { color: var(--pos); }
+.ca-sheet__stat-val--neg { color: var(--neg); }
+.ca-sheet__stat-val--mute { color: var(--text-3); font-weight: 700; }
+.ca-sheet__stat-sub {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: -.005em;
+}
+
+.ca-sheet__hist {
+  display: flex; flex-direction: column;
+  gap: 8px;
+}
+.ca-sheet__hist-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-left: 2px;
+  margin: 4px 0 0;
+}
+.ca-sheet__hist-count {
+  color: var(--text);
+  font-weight: 800;
+}
+.ca-sheet__hist-empty {
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 20px 8px;
+}
+
+.ca-sheet__row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft);
+}
+.ca-sheet__row-date {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+.ca-sheet__row-body {
+  display: flex; flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ca-sheet__row-line {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.ca-sheet__row-arrow {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.ca-sheet__row-arrow--in {
+  background: var(--pos-bg);
+  color: var(--pos);
+}
+.ca-sheet__row-arrow--out {
+  background: var(--neg-bg);
+  color: var(--neg);
+}
+.ca-sheet__row-qty {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.005em;
+}
+.ca-sheet__row-val {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.005em;
+  white-space: nowrap;
+}
+.ca-sheet__row-meta {
+  display: flex; align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  flex-wrap: wrap;
+}
+.ca-sheet__row-cp {
+  color: var(--text-3);
+  font-weight: 600;
+}
+.ca-sheet__row-real {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ca-sheet__row-real--pos {
+  color: var(--pos);
+  background: var(--pos-bg);
+}
+.ca-sheet__row-real--neg {
+  color: var(--neg);
+  background: var(--neg-bg);
+}
+.ca-sheet__row-legacy {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-style: italic;
+}
+.ca-sheet__row-legacy svg { flex-shrink: 0; }
+.ca-sheet__row-comment {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.ca-sheet__actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.ca-sheet__action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.005em;
+  border: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.ca-sheet__action:hover {
+  background: var(--yellow-tint);
+  border-color: var(--yellow);
+}
+.ca-sheet__action:active { transform: scale(.98); }
+.ca-sheet__action svg { flex-shrink: 0; }
+
+/* ============================================================
+   Crypto action sheets shared atoms (cs-sheet-*)
+   ============================================================ */
+
+.cs-sheet__pair {
+  display: flex; flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+.cs-sheet__leg {
+  display: flex; flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface-inset);
+  border-radius: var(--r-md);
+}
+.cs-sheet__divider {
+  align-self: center;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-2);
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  margin: -10px 0;
+  z-index: 1;
+}
+[data-theme='dark'] .cs-sheet__divider { background: var(--surface); }
+
+.cs-sheet__hint {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-inset);
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.cs-sheet__hint em { color: var(--text-3); font-style: normal; }
+.cs-sheet__hint svg {
+  color: var(--text-2);
+  flex-shrink: 0;
+  margin-top: 2px;
+}

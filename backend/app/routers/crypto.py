@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
@@ -49,6 +49,8 @@ class CryptoPriceItem(BaseModel):
     price: float
     source: str
     fetched_at: str
+    is_stale: bool = False
+    stale_age_seconds: Optional[int] = None
 
 
 class UpsertCryptoAssetRequest(BaseModel):
@@ -136,6 +138,7 @@ class SwapCryptoInvestmentAssetRequest(BaseModel):
     target_investment_account_id: Optional[int] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
+    value_in_base: Optional[float] = None
 
     @field_validator('from_amount', 'to_amount')
     @classmethod
@@ -143,6 +146,57 @@ class SwapCryptoInvestmentAssetRequest(BaseModel):
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
+
+    @field_validator('value_in_base')
+    @classmethod
+    def value_must_be_positive_if_provided(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError('Стоимость должна быть положительной')
+        return v
+
+
+class CryptoAccountAssetSummary(BaseModel):
+    crypto_asset_id: int
+    symbol: str
+    name: Optional[str] = None
+    network_code: Optional[str] = None
+    contract_address: Optional[str] = None
+    decimals: int = 8
+    asset_metadata: dict[str, Any] = Field(default_factory=dict)
+    position_id: int
+    quantity: float
+    opened_at: Optional[date] = None
+    total_entry_value_in_base: float
+    total_consumed_cost_basis: float
+    remaining_cost_basis: float
+    avg_cost_per_unit: float
+    realized_pnl_lifetime_in_base: float
+    last_event_at: Optional[date] = None
+
+
+class CryptoAssetEntry(BaseModel):
+    event_id: int
+    event_type: str
+    event_at: date
+    quantity: Optional[float] = None
+    amount: Optional[float] = None
+    currency_code: Optional[str] = None
+    comment: Optional[str] = None
+    linked_operation_id: Optional[int] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    entry_value_in_base: Optional[float] = None
+    value_in_base: Optional[float] = None
+    consumed_cost_basis: Optional[float] = None
+    realized_in_base: Optional[float] = None
+    source_kind: Optional[str] = None
+    target_kind: Optional[str] = None
+    is_legacy_no_basis: bool = False
+
+
+class CryptoAssetDetail(CryptoAccountAssetSummary):
+    investment_account_id: int
+    investment_account_name: str
+    entries: List[CryptoAssetEntry] = Field(default_factory=list)
 
 
 class CryptoProtocolPositionItem(BaseModel):
@@ -216,6 +270,29 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
         return v
 
 
+class PartialCloseCryptoProtocolPositionRequest(BaseModel):
+    principal_qty: float = 0
+    rewards_qty: float = 0
+    principal_value_in_base: Optional[float] = None
+    rewards_value_in_base: Optional[float] = None
+    returned_at: Optional[date] = None
+    comment: Optional[str] = None
+
+    @field_validator('principal_qty', 'rewards_qty')
+    @classmethod
+    def non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('Количество не может быть отрицательным')
+        return v
+
+    @field_validator('principal_value_in_base', 'rewards_value_in_base')
+    @classmethod
+    def value_non_negative(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v < 0:
+            raise ValueError('Оценка в базовой валюте не может быть отрицательной')
+        return v
+
+
 def _coingecko_id_for_asset(asset: dict[str, Any]) -> str | None:
     metadata = asset.get('metadata') or {}
     explicit_id = metadata.get('coingecko_id') or metadata.get('coin_gecko_id')
@@ -264,47 +341,51 @@ async def get_crypto_prices(
         return []
 
     now = datetime.now(timezone.utc)
-    missing_ids = [
+    stale_ids = [
         coingecko_id
         for coingecko_id in id_to_assets
         if (coingecko_id, normalized_vs) not in _PRICE_CACHE
         or now - _PRICE_CACHE[(coingecko_id, normalized_vs)][0] > _PRICE_CACHE_TTL
     ]
 
-    if missing_ids:
+    if stale_ids:
         try:
             async with httpx.AsyncClient(timeout=8) as client:
                 response = await client.get(
                     'https://api.coingecko.com/api/v3/simple/price',
                     params={
-                        'ids': ','.join(missing_ids),
+                        'ids': ','.join(stale_ids),
                         'vs_currencies': normalized_vs,
                     },
                 )
                 response.raise_for_status()
                 payload = response.json()
-            for coingecko_id in missing_ids:
+            for coingecko_id in stale_ids:
                 raw_price = (payload.get(coingecko_id) or {}).get(normalized_vs)
                 if isinstance(raw_price, (int, float)) and raw_price > 0:
                     _PRICE_CACHE[(coingecko_id, normalized_vs)] = (now, float(raw_price))
         except httpx.HTTPError:
+            # Keep whatever is in cache; below we'll surface it as stale.
             pass
 
     result: list[CryptoPriceItem] = []
-    fetched_at = now.isoformat()
     for coingecko_id, mapped_assets in id_to_assets.items():
         cached = _PRICE_CACHE.get((coingecko_id, normalized_vs))
         if not cached:
             continue
-        _, price = cached
+        cached_at, price = cached
+        age = now - cached_at
+        is_stale = age > _PRICE_CACHE_TTL
         for asset in mapped_assets:
             result.append(CryptoPriceItem(
                 crypto_asset_id=int(asset['id']),
                 symbol=str(asset['symbol']),
                 vs_currency=normalized_vs.upper(),
                 price=price,
-                source='coingecko',
-                fetched_at=fetched_at,
+                source='coingecko_stale' if is_stale else 'coingecko',
+                fetched_at=cached_at.isoformat(),
+                is_stale=is_stale,
+                stale_age_seconds=int(age.total_seconds()) if is_stale else None,
             ))
     return result
 
@@ -323,6 +404,33 @@ async def upsert_crypto_asset(
         metadata=body.metadata,
     )
     return CryptoAssetItem(**result)
+
+
+@router.get(
+    '/accounts/{investment_account_id}/assets',
+    response_model=List[CryptoAccountAssetSummary],
+)
+async def get_crypto_account_assets(
+    investment_account_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> List[CryptoAccountAssetSummary]:
+    items = await reports.get__crypto_account_assets(user.user_id, investment_account_id)
+    return [CryptoAccountAssetSummary(**item) for item in items]
+
+
+@router.get(
+    '/accounts/{investment_account_id}/assets/{crypto_asset_id}',
+    response_model=Optional[CryptoAssetDetail],
+)
+async def get_crypto_asset_detail(
+    investment_account_id: int,
+    crypto_asset_id: int,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> Optional[CryptoAssetDetail]:
+    item = await reports.get__crypto_asset_detail(
+        user.user_id, investment_account_id, crypto_asset_id,
+    )
+    return CryptoAssetDetail(**item) if item else None
 
 
 @router.post('/transfer-to-investment', response_model=CryptoOperationResponse)
@@ -391,6 +499,7 @@ async def swap_crypto_investment_asset(
         target_investment_account_id=body.target_investment_account_id,
         comment=body.comment,
         operated_at=body.operated_at,
+        value_in_base=body.value_in_base,
     )
     return CryptoOperationResponse(**result)
 
@@ -471,5 +580,32 @@ async def close_crypto_protocol_position(
         comment=body.comment,
         return_quantity=body.return_quantity,
         return_value_in_base=body.return_value_in_base,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
+@router.post(
+    '/protocol-positions/{position_id}/partial-close',
+    response_model=CryptoProtocolPositionItem,
+)
+async def partial_close_crypto_protocol_position(
+    position_id: int,
+    body: PartialCloseCryptoProtocolPositionRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CryptoProtocolPositionItem:
+    if body.principal_qty == 0 and body.rewards_qty == 0:
+        raise HTTPException(
+            status_code=400,
+            detail='Нужно указать principal_qty или rewards_qty',
+        )
+    result = await ledger.put__partial_close_crypto_protocol_position(
+        user_id=user.user_id,
+        position_id=position_id,
+        principal_qty=body.principal_qty,
+        rewards_qty=body.rewards_qty,
+        principal_value_in_base=body.principal_value_in_base,
+        rewards_value_in_base=body.rewards_value_in_base,
+        returned_at=body.returned_at,
+        comment=body.comment,
     )
     return CryptoProtocolPositionItem(**result)

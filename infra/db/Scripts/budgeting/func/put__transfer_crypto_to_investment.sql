@@ -253,7 +253,11 @@ BEGIN
             NULL,
             _operation_id,
             NULLIF(btrim(_comment), ''),
-            _metadata,
+            _metadata || jsonb_build_object(
+                'entry_value_in_base', _consumed_cost_base,
+                'source_kind', 'bank',
+                'source_bank_account_id', _bank_account_id
+            ),
             _user_id
         );
     ELSE
@@ -310,7 +314,11 @@ BEGIN
             NULL,
             _operation_id,
             NULLIF(btrim(_comment), ''),
-            _metadata,
+            _metadata || jsonb_build_object(
+                'entry_value_in_base', _consumed_cost_base,
+                'source_kind', 'bank',
+                'source_bank_account_id', _bank_account_id
+            ),
             _user_id
         );
     END IF;

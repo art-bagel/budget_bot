@@ -32,6 +32,10 @@ DECLARE
     _remaining_quantity numeric(30, 12);
     _asset record;
     _asset_symbol_resolved text;
+    _entry_summary jsonb;
+    _remaining_basis numeric(20, 2);
+    _consumed_cost_basis numeric(20, 2);
+    _source_quantity numeric(30, 12);
 BEGIN
     SET search_path TO budgeting;
 
@@ -83,12 +87,22 @@ BEGIN
         END IF;
 
         _quantity := round(_quantity, 12);
+        _source_quantity := COALESCE(_source_position.quantity, 0);
 
-        IF COALESCE(_source_position.quantity, 0) < _quantity THEN
+        IF _source_quantity < _quantity THEN
             RAISE EXCEPTION 'Сумма превышает остаток';
         END IF;
 
-        _remaining_quantity := round(COALESCE(_source_position.quantity, 0) - _quantity, 12);
+        _remaining_quantity := round(_source_quantity - _quantity, 12);
+
+        -- Compute weighted-average cost basis to carry into DeFi.
+        _entry_summary := budgeting.get__crypto_position_entry_summary(_source_position_id);
+        _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+        _consumed_cost_basis := CASE
+            WHEN _source_quantity > 0
+                THEN round(_remaining_basis * _quantity / _source_quantity, 2)
+            ELSE 0
+        END;
         _crypto_asset_id := COALESCE(_crypto_asset_id, (_source_position.metadata ->> 'crypto_asset_id')::bigint);
         _network_code := COALESCE(NULLIF(btrim(_network_code), ''), NULLIF(btrim(_source_position.metadata ->> 'network_code'), ''));
         _asset_symbol_resolved := COALESCE(
@@ -113,13 +127,17 @@ BEGIN
             RAISE EXCEPTION 'Unable to resolve source crypto asset for protocol position';
         END IF;
 
-        _cost_basis_in_base := 0;
+        -- Carry the consumed cost basis from source asset into DeFi position.
+        -- DeFi does not "create" value: principal returns at the same basis when closed.
+        _cost_basis_in_base := _consumed_cost_basis;
         _current_quantity := COALESCE(_current_quantity, _quantity);
-        _current_value_in_base := 0;
+        -- Initial current_value_in_base = consumed cost basis if not provided by caller.
+        _current_value_in_base := COALESCE(NULLIF(_current_value_in_base, 0), _consumed_cost_basis);
         _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
             'source_position_id', _source_position_id,
             'source_asset_symbol', _asset_symbol_resolved,
-            'source_network_code', _network_code
+            'source_network_code', _network_code,
+            'cost_basis_carried', _consumed_cost_basis
         );
         _asset_symbol := _asset_symbol_resolved;
 
@@ -152,19 +170,23 @@ BEGIN
         )
         VALUES (
             _source_position_id,
-            'adjustment',
+            'transfer_out',
             COALESCE(_deposited_at, current_date),
-            -_quantity,
+            _quantity,
             NULL,
             NULL,
             NULL,
-            COALESCE(NULLIF(btrim(_comment), ''), 'Перевод в staking'),
+            COALESCE(NULLIF(btrim(_comment), ''), 'Перевод в DeFi-протокол'),
             jsonb_build_object(
                 'action', 'stake_to_protocol',
                 'protocol_name', btrim(_protocol_name),
                 'position_type', _position_type,
                 'protocol_asset_symbol', _asset_symbol_resolved,
-                'protocol_quantity', _quantity
+                'protocol_quantity', _quantity,
+                'value_in_base', _consumed_cost_basis,
+                'consumed_cost_basis', _consumed_cost_basis,
+                'realized_in_base', 0,
+                'target_kind', 'defi'
             ),
             _user_id
         );

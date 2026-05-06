@@ -20,6 +20,9 @@ DECLARE
     _target_position_id bigint;
     _operation_id bigint;
     _metadata jsonb;
+    _entry_summary jsonb;
+    _remaining_basis numeric(20, 2);
+    _consumed_cost_basis numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
@@ -86,6 +89,15 @@ BEGIN
     IF _source_quantity < _amount THEN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
+
+    -- Compute weighted-average consumed cost basis to carry over to target.
+    _entry_summary := budgeting.get__crypto_position_entry_summary(_position_id);
+    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _consumed_cost_basis := CASE
+        WHEN _source_quantity > 0
+            THEN round(_remaining_basis * _amount / _source_quantity, 2)
+        ELSE 0
+    END;
 
     INSERT INTO operations (
         actor_user_id,
@@ -192,7 +204,13 @@ BEGIN
         NULL,
         _operation_id,
         NULLIF(btrim(_comment), ''),
-        _metadata || jsonb_build_object('target_position_id', _target_position_id),
+        _metadata || jsonb_build_object(
+            'target_position_id', _target_position_id,
+            'value_in_base', _consumed_cost_basis,
+            'consumed_cost_basis', _consumed_cost_basis,
+            'realized_in_base', 0,
+            'target_kind', 'cross_account'
+        ),
         _user_id
     ),
     (
@@ -204,7 +222,12 @@ BEGIN
         NULL,
         _operation_id,
         NULLIF(btrim(_comment), ''),
-        _metadata || jsonb_build_object('target_position_id', _target_position_id),
+        _metadata || jsonb_build_object(
+            'target_position_id', _target_position_id,
+            'entry_value_in_base', _consumed_cost_basis,
+            'source_kind', 'cross_account',
+            'source_position_id', _position_id
+        ),
         _user_id
     );
 

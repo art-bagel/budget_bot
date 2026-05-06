@@ -24,6 +24,9 @@ DECLARE
     _operation_id bigint;
     _event_type text;
     _remaining_quantity numeric(30, 12);
+    _entry_summary jsonb;
+    _remaining_basis numeric(20, 2);
+    _consumed_cost_basis numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
@@ -140,6 +143,15 @@ BEGIN
 
     _event_type := CASE WHEN _amount = _position_quantity THEN 'close' ELSE 'partial_close' END;
 
+    -- Compute weighted-average consumed cost basis for this exit.
+    _entry_summary := budgeting.get__crypto_position_entry_summary(_position_id);
+    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _consumed_cost_basis := CASE
+        WHEN _position_quantity > 0
+            THEN round(_remaining_basis * _amount / _position_quantity, 2)
+        ELSE 0
+    END;
+
     INSERT INTO portfolio_events (
         position_id,
         event_type,
@@ -163,8 +175,13 @@ BEGIN
         NULLIF(btrim(_comment), ''),
         jsonb_build_object(
             'amount_in_base', round(_value_in_base, 2),
+            'value_in_base', round(_value_in_base, 2),
+            'consumed_cost_basis', _consumed_cost_basis,
+            'realized_in_base', round(_value_in_base, 2) - _consumed_cost_basis,
             'crypto_asset_id', _crypto_asset_id,
-            'action', 'transfer_to_banking'
+            'action', 'transfer_to_banking',
+            'target_kind', 'bank',
+            'target_bank_account_id', _bank_account_id
         ),
         _user_id
     );

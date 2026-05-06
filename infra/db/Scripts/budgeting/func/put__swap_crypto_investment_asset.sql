@@ -7,7 +7,8 @@ CREATE FUNCTION budgeting.put__swap_crypto_investment_asset(
     _to_amount numeric,
     _target_investment_account_id bigint DEFAULT NULL,
     _comment text DEFAULT NULL,
-    _operated_at date DEFAULT NULL
+    _operated_at date DEFAULT NULL,
+    _value_in_base numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -24,6 +25,10 @@ DECLARE
     _target_position_id bigint;
     _operation_id bigint;
     _metadata jsonb;
+    _entry_summary jsonb;
+    _remaining_basis numeric(20, 2);
+    _consumed_cost_basis numeric(20, 2);
+    _resolved_value_in_base numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
@@ -103,6 +108,19 @@ BEGIN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
+    -- Compute weighted-average consumed cost basis for the FROM side.
+    _entry_summary := budgeting.get__crypto_position_entry_summary(_position_id);
+    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _consumed_cost_basis := CASE
+        WHEN _source_quantity > 0
+            THEN round(_remaining_basis * _from_amount / _source_quantity, 2)
+        ELSE 0
+    END;
+
+    -- value_in_base for the swap: caller-provided live × from_amount, or fall
+    -- back to consumed_cost_basis (zero realized P&L for legacy callers).
+    _resolved_value_in_base := COALESCE(round(_value_in_base, 2), _consumed_cost_basis);
+
     INSERT INTO operations (
         actor_user_id,
         owner_type,
@@ -135,7 +153,8 @@ BEGIN
         'to_asset_name', _to_asset.name,
         'to_network_code', _to_asset.network_code,
         'to_contract_address', _to_asset.contract_address,
-        'to_amount', _to_amount
+        'to_amount', _to_amount,
+        'value_at_swap_in_base', _resolved_value_in_base
     );
 
     SELECT id
@@ -226,7 +245,13 @@ BEGIN
         NULL,
         _operation_id,
         NULLIF(btrim(_comment), ''),
-        _metadata || jsonb_build_object('target_position_id', _target_position_id),
+        _metadata || jsonb_build_object(
+            'target_position_id', _target_position_id,
+            'value_in_base', _resolved_value_in_base,
+            'consumed_cost_basis', _consumed_cost_basis,
+            'realized_in_base', _resolved_value_in_base - _consumed_cost_basis,
+            'target_kind', 'swap'
+        ),
         _user_id
     ),
     (
@@ -238,7 +263,12 @@ BEGIN
         NULL,
         _operation_id,
         NULLIF(btrim(_comment), ''),
-        _metadata || jsonb_build_object('target_position_id', _target_position_id),
+        _metadata || jsonb_build_object(
+            'target_position_id', _target_position_id,
+            'entry_value_in_base', _resolved_value_in_base,
+            'source_kind', 'swap',
+            'source_position_id', _position_id
+        ),
         _user_id
     );
 

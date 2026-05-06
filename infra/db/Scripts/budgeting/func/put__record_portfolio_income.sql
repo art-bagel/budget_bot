@@ -229,7 +229,12 @@ BEGIN
         'quantity', _quantity
     );
 
-    IF _asset_type_code <> 'crypto' THEN
+    IF _asset_type_code = 'crypto' THEN
+        _event_metadata := _event_metadata || jsonb_build_object(
+            'entry_value_in_base', 0,
+            'source_kind', 'income'
+        );
+    ELSE
         _event_metadata := _event_metadata || jsonb_build_object('amount_in_base', _effective_amount_in_base);
     END IF;
 

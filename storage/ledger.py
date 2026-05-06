@@ -25,6 +25,7 @@ class Ledger(DataBase):
     F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION = 'put__create_crypto_protocol_position'
     F_SET__UPDATE_CRYPTO_PROTOCOL_POSITION = 'set__update_crypto_protocol_position'
     F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION = 'set__close_crypto_protocol_position'
+    F_PUT__PARTIAL_CLOSE_CRYPTO_PROTOCOL_POSITION = 'put__partial_close_crypto_protocol_position'
     F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
 
     async def put__record_fx_rate_snapshot(
@@ -396,6 +397,7 @@ class Ledger(DataBase):
         target_investment_account_id: Optional[int] = None,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
+        value_in_base: Optional[float] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__SWAP_CRYPTO_INVESTMENT_ASSET),
@@ -407,6 +409,7 @@ class Ledger(DataBase):
             target_investment_account_id,
             comment,
             operated_at,
+            value_in_base,
         )
 
     async def put__create_crypto_protocol_position(
@@ -496,6 +499,29 @@ class Ledger(DataBase):
             comment,
             return_quantity,
             return_value_in_base,
+        )
+
+    async def put__partial_close_crypto_protocol_position(
+        self,
+        user_id: int,
+        position_id: int,
+        principal_qty: float = 0,
+        rewards_qty: float = 0,
+        principal_value_in_base: Optional[float] = None,
+        rewards_value_in_base: Optional[float] = None,
+        returned_at: Optional[date] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__PARTIAL_CLOSE_CRYPTO_PROTOCOL_POSITION),
+            user_id,
+            position_id,
+            principal_qty,
+            rewards_qty,
+            principal_value_in_base,
+            rewards_value_in_base,
+            returned_at,
+            comment,
         )
 
     F_PUT__TRANSFER_BETWEEN_ACCOUNTS = 'put__transfer_between_accounts'

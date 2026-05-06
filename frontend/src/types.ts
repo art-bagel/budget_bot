@@ -174,6 +174,52 @@ export interface CryptoLivePrice {
   price: number;
   source: string;
   fetched_at: string;
+  is_stale?: boolean;
+  stale_age_seconds?: number | null;
+}
+
+export interface CryptoAccountAssetSummary {
+  crypto_asset_id: number;
+  symbol: string;
+  name?: string | null;
+  network_code?: string | null;
+  contract_address?: string | null;
+  decimals: number;
+  asset_metadata: Record<string, unknown>;
+  position_id: number;
+  quantity: number;
+  opened_at?: string | null;
+  total_entry_value_in_base: number;
+  total_consumed_cost_basis: number;
+  remaining_cost_basis: number;
+  avg_cost_per_unit: number;
+  realized_pnl_lifetime_in_base: number;
+  last_event_at?: string | null;
+}
+
+export interface CryptoAssetEntry {
+  event_id: number;
+  event_type: string;
+  event_at: string;
+  quantity?: number | null;
+  amount?: number | null;
+  currency_code?: string | null;
+  comment?: string | null;
+  linked_operation_id?: number | null;
+  metadata: Record<string, unknown>;
+  entry_value_in_base?: number | null;
+  value_in_base?: number | null;
+  consumed_cost_basis?: number | null;
+  realized_in_base?: number | null;
+  source_kind?: string | null;
+  target_kind?: string | null;
+  is_legacy_no_basis: boolean;
+}
+
+export interface CryptoAssetDetail extends CryptoAccountAssetSummary {
+  investment_account_id: number;
+  investment_account_name: string;
+  entries: CryptoAssetEntry[];
 }
 
 export interface UpsertCryptoAssetRequest {
@@ -228,6 +274,7 @@ export interface SwapCryptoInvestmentAssetRequest {
   target_investment_account_id?: number;
   comment?: string;
   operated_at?: string;
+  value_in_base?: number;
 }
 
 export interface CryptoProtocolPosition {
@@ -291,6 +338,15 @@ export interface CloseCryptoProtocolPositionRequest {
   current_value_in_base?: number;
   return_quantity?: number;
   return_value_in_base?: number;
+  comment?: string;
+}
+
+export interface PartialCloseCryptoProtocolPositionRequest {
+  principal_qty?: number;
+  rewards_qty?: number;
+  principal_value_in_base?: number;
+  rewards_value_in_base?: number;
+  returned_at?: string;
   comment?: string;
 }
 
