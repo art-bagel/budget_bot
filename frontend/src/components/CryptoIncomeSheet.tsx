@@ -10,11 +10,13 @@ import { todayIso } from '../utils/portfolioPosition';
 import type { CryptoLivePrice } from '../types';
 
 
-type IncomeKind = 'airdrop' | 'reward' | 'fork' | 'other';
+type IncomeKind = 'airdrop' | 'reward' | 'interest' | 'lp_fees' | 'fork' | 'other';
 
 const KIND_OPTIONS: { value: IncomeKind; label: string }[] = [
   { value: 'airdrop', label: 'Airdrop' },
   { value: 'reward', label: 'Награда' },
+  { value: 'interest', label: 'Проценты (lending)' },
+  { value: 'lp_fees', label: 'Комиссии пула (LP)' },
   { value: 'fork', label: 'Fork' },
   { value: 'other', label: 'Другое' },
 ];

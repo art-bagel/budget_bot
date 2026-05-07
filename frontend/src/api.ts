@@ -79,6 +79,7 @@ import type {
   UpdateCryptoProtocolPositionRequest,
   CloseCryptoProtocolPositionRequest,
   PartialCloseCryptoProtocolPositionRequest,
+  TopUpCryptoProtocolPositionRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -413,6 +414,19 @@ export async function partialCloseCryptoProtocolPosition(
 ): Promise<CryptoProtocolPosition> {
   return apiFetch<CryptoProtocolPosition>(
     `/crypto/protocol-positions/${positionId}/partial-close`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function topUpCryptoProtocolPosition(
+  positionId: number,
+  data: TopUpCryptoProtocolPositionRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>(
+    `/crypto/protocol-positions/${positionId}/top-up`,
     {
       method: 'POST',
       body: JSON.stringify(data),

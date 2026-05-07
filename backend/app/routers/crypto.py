@@ -242,6 +242,8 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     comment: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     source_position_id: Optional[int] = None
+    secondary_source_position_id: Optional[int] = None
+    secondary_quantity: Optional[float] = None
 
 
 class UpdateCryptoProtocolPositionRequest(BaseModel):
@@ -260,9 +262,11 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
     current_value_in_base: Optional[float] = None
     return_quantity: Optional[float] = None
     return_value_in_base: Optional[float] = None
+    secondary_return_quantity: Optional[float] = None
+    secondary_return_value_in_base: Optional[float] = None
     comment: Optional[str] = None
 
-    @field_validator('return_quantity', 'return_value_in_base')
+    @field_validator('return_quantity', 'return_value_in_base', 'secondary_return_quantity', 'secondary_return_value_in_base')
     @classmethod
     def positive_if_provided(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and v <= 0:
@@ -275,21 +279,41 @@ class PartialCloseCryptoProtocolPositionRequest(BaseModel):
     rewards_qty: float = 0
     principal_value_in_base: Optional[float] = None
     rewards_value_in_base: Optional[float] = None
+    secondary_principal_qty: float = 0
+    secondary_value_in_base: Optional[float] = None
+    secondary_rewards_qty: float = 0
+    secondary_rewards_value_in_base: Optional[float] = None
     returned_at: Optional[date] = None
     comment: Optional[str] = None
 
-    @field_validator('principal_qty', 'rewards_qty')
+    @field_validator('principal_qty', 'rewards_qty', 'secondary_principal_qty', 'secondary_rewards_qty')
     @classmethod
     def non_negative(cls, v: float) -> float:
         if v < 0:
             raise ValueError('Количество не может быть отрицательным')
         return v
 
-    @field_validator('principal_value_in_base', 'rewards_value_in_base')
+    @field_validator('principal_value_in_base', 'rewards_value_in_base', 'secondary_value_in_base', 'secondary_rewards_value_in_base')
     @classmethod
     def value_non_negative(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and v < 0:
             raise ValueError('Оценка в базовой валюте не может быть отрицательной')
+        return v
+
+
+class TopUpCryptoProtocolPositionRequest(BaseModel):
+    source_position_id: int
+    quantity: float
+    secondary_source_position_id: Optional[int] = None
+    secondary_quantity: Optional[float] = None
+    operated_at: Optional[date] = None
+    comment: Optional[str] = None
+
+    @field_validator('quantity', 'secondary_quantity')
+    @classmethod
+    def positive_if_provided(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError('Сумма должна быть положительной')
         return v
 
 
@@ -541,6 +565,8 @@ async def create_crypto_protocol_position(
         comment=body.comment,
         metadata=body.metadata,
         source_position_id=body.source_position_id,
+        secondary_source_position_id=body.secondary_source_position_id,
+        secondary_quantity=body.secondary_quantity,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -580,6 +606,8 @@ async def close_crypto_protocol_position(
         comment=body.comment,
         return_quantity=body.return_quantity,
         return_value_in_base=body.return_value_in_base,
+        secondary_return_quantity=body.secondary_return_quantity,
+        secondary_return_value_in_base=body.secondary_return_value_in_base,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -593,10 +621,15 @@ async def partial_close_crypto_protocol_position(
     body: PartialCloseCryptoProtocolPositionRequest,
     user: TelegramUser = Depends(get_telegram_user),
 ) -> CryptoProtocolPositionItem:
-    if body.principal_qty == 0 and body.rewards_qty == 0:
+    if (
+        body.principal_qty == 0
+        and body.rewards_qty == 0
+        and body.secondary_principal_qty == 0
+        and body.secondary_rewards_qty == 0
+    ):
         raise HTTPException(
             status_code=400,
-            detail='Нужно указать principal_qty или rewards_qty',
+            detail='Нужно указать хотя бы одно ненулевое количество',
         )
     result = await ledger.put__partial_close_crypto_protocol_position(
         user_id=user.user_id,
@@ -606,6 +639,32 @@ async def partial_close_crypto_protocol_position(
         principal_value_in_base=body.principal_value_in_base,
         rewards_value_in_base=body.rewards_value_in_base,
         returned_at=body.returned_at,
+        comment=body.comment,
+        secondary_principal_qty=body.secondary_principal_qty if body.secondary_principal_qty > 0 else None,
+        secondary_value_in_base=body.secondary_value_in_base,
+        secondary_rewards_qty=body.secondary_rewards_qty if body.secondary_rewards_qty > 0 else None,
+        secondary_rewards_value_in_base=body.secondary_rewards_value_in_base,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
+@router.post(
+    '/protocol-positions/{position_id}/top-up',
+    response_model=CryptoProtocolPositionItem,
+)
+async def top_up_crypto_protocol_position(
+    position_id: int,
+    body: TopUpCryptoProtocolPositionRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CryptoProtocolPositionItem:
+    result = await ledger.put__top_up_crypto_protocol_position(
+        user_id=user.user_id,
+        position_id=position_id,
+        source_position_id=body.source_position_id,
+        quantity=body.quantity,
+        secondary_source_position_id=body.secondary_source_position_id,
+        secondary_quantity=body.secondary_quantity,
+        operated_at=body.operated_at,
         comment=body.comment,
     )
     return CryptoProtocolPositionItem(**result)

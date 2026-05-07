@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Gift, Info, Repeat, Wallet } from 'lucide-react';
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, Info } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -111,6 +111,11 @@ export default function CryptoAssetSheet({
   const [detail, setDetail] = useState<CryptoAssetDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (open) setHistoryCollapsed(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -157,50 +162,6 @@ export default function CryptoAssetSheet({
       icon={iconUrl ? <img src={iconUrl} alt="" /> : undefined}
       iconColor={iconUrl ? undefined : 'o'}
       onClose={onClose}
-      actions={showActions ? (
-        <div className="ca-sheet__actions">
-          {onOpenIncome && (
-            <button
-              type="button"
-              className="ca-sheet__action"
-              onClick={() => { onClose(); onOpenIncome(); }}
-            >
-              <Gift size={16} strokeWidth={2.2} />
-              <span>Зачислить</span>
-            </button>
-          )}
-          {hasOutflowActions && onOpenSwap && (
-            <button
-              type="button"
-              className="ca-sheet__action"
-              onClick={() => { onClose(); onOpenSwap(); }}
-            >
-              <Repeat size={16} strokeWidth={2.2} />
-              <span>Свопнуть</span>
-            </button>
-          )}
-          {hasOutflowActions && onOpenTransfer && canTransferBetweenAccounts && (
-            <button
-              type="button"
-              className="ca-sheet__action"
-              onClick={() => { onClose(); onOpenTransfer(); }}
-            >
-              <ArrowLeftRight size={16} strokeWidth={2.2} />
-              <span>На счёт</span>
-            </button>
-          )}
-          {hasOutflowActions && onOpenWithdraw && (
-            <button
-              type="button"
-              className="ca-sheet__action"
-              onClick={() => { onClose(); onOpenWithdraw(); }}
-            >
-              <Wallet size={16} strokeWidth={2.2} />
-              <span>В банк</span>
-            </button>
-          )}
-        </div>
-      ) : undefined}
     >
       {loading && (
         <div className="ca-sheet__state">
@@ -279,16 +240,67 @@ export default function CryptoAssetSheet({
             </div>
           </div>
 
-          <div className="ca-sheet__hist">
-            <h3 className="ca-sheet__hist-title">
-              История · <span className="ca-sheet__hist-count">{detail.entries.length}</span>
-            </h3>
+          {showActions && (
+            <div className="pf-sheet-actions">
+              {onOpenIncome && (
+                <button
+                  className="btn btn--primary"
+                  type="button"
+                  onClick={() => { onClose(); onOpenIncome(); }}
+                >
+                  Зачислить
+                </button>
+              )}
+              {hasOutflowActions && onOpenSwap && (
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => { onClose(); onOpenSwap(); }}
+                >
+                  Свопнуть
+                </button>
+              )}
+              {hasOutflowActions && onOpenTransfer && canTransferBetweenAccounts && (
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => { onClose(); onOpenTransfer(); }}
+                >
+                  На счёт
+                </button>
+              )}
+              {hasOutflowActions && onOpenWithdraw && (
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => { onClose(); onOpenWithdraw(); }}
+                >
+                  В банк
+                </button>
+              )}
+            </div>
+          )}
 
-            {detail.entries.length === 0 && (
+          <div className="ca-sheet__hist">
+            <button
+              type="button"
+              className="ca-sheet__hist-toggle"
+              onClick={() => setHistoryCollapsed((v) => !v)}
+              aria-expanded={!historyCollapsed}
+            >
+              <h3 className="ca-sheet__hist-title">
+                История · <span className="ca-sheet__hist-count">{detail.entries.length}</span>
+              </h3>
+              {historyCollapsed
+                ? <ChevronDown size={16} strokeWidth={2.2} />
+                : <ChevronUp size={16} strokeWidth={2.2} />}
+            </button>
+
+            {!historyCollapsed && detail.entries.length === 0 && (
               <p className="ca-sheet__hist-empty">Событий пока нет.</p>
             )}
 
-            {detail.entries.map((entry) => {
+            {!historyCollapsed && detail.entries.map((entry) => {
               const isEntry = ENTRY_TYPES.has(entry.event_type);
               const valueShown = isEntry ? entry.entry_value_in_base : entry.value_in_base;
               const realized = entry.realized_in_base;

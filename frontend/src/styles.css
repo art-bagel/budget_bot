@@ -7723,6 +7723,59 @@ select.dlg-row__ghost option {
 }
 .apf-input[disabled] { opacity: .5; }
 
+.tok-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.tok-row__pick {
+  flex: 1.1 1 0;
+  min-width: 0;
+}
+.tok-row__amt {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+}
+.tok-row__hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-2, #6B7380);
+}
+.tok-row__hint--muted { opacity: .7; }
+
+.seg-row {
+  display: flex;
+  gap: 4px;
+  background: var(--bg, #EEF0F3);
+  border-radius: var(--r-md);
+  padding: 3px;
+}
+.seg-row__btn {
+  flex: 1;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--r-md) - 3px);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2, #6B7380);
+  cursor: pointer;
+  transition: background .15s, color .15s, box-shadow .15s;
+}
+.seg-row__btn:hover:not(.is-active):not([disabled]) {
+  color: var(--text);
+}
+.seg-row__btn.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+.seg-row__btn[disabled] { opacity: .5; cursor: default; }
+
 .apf-row {
   display: flex;
   gap: 10px;
@@ -11746,14 +11799,31 @@ select.dlg-row__ghost option {
   display: flex; flex-direction: column;
   gap: 8px;
 }
+.ca-sheet__hist-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 6px 2px;
+  margin: 4px 0 0;
+  cursor: pointer;
+  color: var(--text-3);
+  font-family: inherit;
+}
+.ca-sheet__hist-toggle:hover { color: var(--text-2); }
+.ca-sheet__hist-toggle:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; border-radius: 4px; }
 .ca-sheet__hist-title {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--text-3);
-  padding-left: 2px;
-  margin: 4px 0 0;
+  color: inherit;
+  padding-left: 0;
+  margin: 0;
 }
 .ca-sheet__hist-count {
   color: var(--text);

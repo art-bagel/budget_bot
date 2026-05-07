@@ -16,7 +16,9 @@ CREATE FUNCTION budgeting.put__create_crypto_protocol_position(
     _deposited_at date DEFAULT NULL,
     _comment text DEFAULT NULL,
     _metadata jsonb DEFAULT '{}'::jsonb,
-    _source_position_id bigint DEFAULT NULL
+    _source_position_id bigint DEFAULT NULL,
+    _secondary_source_position_id bigint DEFAULT NULL,
+    _secondary_quantity numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -36,6 +38,16 @@ DECLARE
     _remaining_basis numeric(20, 2);
     _consumed_cost_basis numeric(20, 2);
     _source_quantity numeric(30, 12);
+    _secondary_position record;
+    _secondary_remaining_quantity numeric(30, 12);
+    _secondary_asset record;
+    _secondary_asset_symbol_resolved text;
+    _secondary_network_code text;
+    _secondary_crypto_asset_id bigint;
+    _secondary_entry_summary jsonb;
+    _secondary_remaining_basis numeric(20, 2);
+    _secondary_consumed_cost_basis numeric(20, 2);
+    _secondary_source_quantity numeric(30, 12);
 BEGIN
     SET search_path TO budgeting;
 
@@ -63,6 +75,14 @@ BEGIN
 
     IF _position_type NOT IN ('staking', 'lending', 'liquidity_pool', 'vault', 'other') THEN
         RAISE EXCEPTION 'Unsupported protocol position type: %', _position_type;
+    END IF;
+
+    IF _secondary_source_position_id IS NOT NULL AND _position_type <> 'liquidity_pool' THEN
+        RAISE EXCEPTION 'Secondary source position is only allowed for liquidity_pool positions';
+    END IF;
+
+    IF _secondary_source_position_id IS NOT NULL AND _secondary_source_position_id = _source_position_id THEN
+        RAISE EXCEPTION 'Token B must differ from token A';
     END IF;
 
     IF _source_position_id IS NOT NULL THEN
@@ -186,7 +206,8 @@ BEGIN
                 'value_in_base', _consumed_cost_basis,
                 'consumed_cost_basis', _consumed_cost_basis,
                 'realized_in_base', 0,
-                'target_kind', 'defi'
+                'target_kind', 'defi',
+                'token_role', 'token_a'
             ),
             _user_id
         );
@@ -194,6 +215,131 @@ BEGIN
         IF NULLIF(btrim(_asset_symbol), '') IS NULL THEN
             RAISE EXCEPTION 'Asset symbol is required';
         END IF;
+    END IF;
+
+    -- Token B (only for liquidity_pool): same locking + decrement + transfer_out + cost-basis carry.
+    IF _secondary_source_position_id IS NOT NULL THEN
+        IF _secondary_quantity IS NULL OR _secondary_quantity <= 0 THEN
+            RAISE EXCEPTION 'Token B quantity must be positive';
+        END IF;
+
+        SELECT *
+        INTO _secondary_position
+        FROM portfolio_positions
+        WHERE id = _secondary_source_position_id
+          AND status = 'open'
+        FOR UPDATE;
+
+        IF _secondary_position.id IS NULL THEN
+            RAISE EXCEPTION 'Unknown open crypto asset position %', _secondary_source_position_id;
+        END IF;
+
+        IF _secondary_position.investment_account_id <> _investment_account_id
+           OR _secondary_position.asset_type_code <> 'crypto' THEN
+            RAISE EXCEPTION 'Secondary source position must be an open crypto asset on the same account';
+        END IF;
+
+        _secondary_quantity := round(_secondary_quantity, 12);
+        _secondary_source_quantity := COALESCE(_secondary_position.quantity, 0);
+
+        IF _secondary_source_quantity < _secondary_quantity THEN
+            RAISE EXCEPTION 'Сумма превышает остаток (token B)';
+        END IF;
+
+        _secondary_remaining_quantity := round(_secondary_source_quantity - _secondary_quantity, 12);
+
+        _secondary_entry_summary := budgeting.get__crypto_position_entry_summary(_secondary_source_position_id);
+        _secondary_remaining_basis := COALESCE((_secondary_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+        _secondary_consumed_cost_basis := CASE
+            WHEN _secondary_source_quantity > 0
+                THEN round(_secondary_remaining_basis * _secondary_quantity / _secondary_source_quantity, 2)
+            ELSE 0
+        END;
+
+        _secondary_crypto_asset_id := (_secondary_position.metadata ->> 'crypto_asset_id')::bigint;
+        _secondary_network_code := NULLIF(btrim(_secondary_position.metadata ->> 'network_code'), '');
+        _secondary_asset_symbol_resolved := COALESCE(
+            NULLIF(btrim(_secondary_position.metadata ->> 'asset_symbol'), ''),
+            NULLIF(btrim(_secondary_position.title), '')
+        );
+
+        IF _secondary_crypto_asset_id IS NOT NULL THEN
+            SELECT *
+            INTO _secondary_asset
+            FROM crypto_assets
+            WHERE id = _secondary_crypto_asset_id;
+
+            IF _secondary_asset.id IS NOT NULL THEN
+                _secondary_asset_symbol_resolved := COALESCE(_secondary_asset_symbol_resolved, _secondary_asset.symbol);
+            END IF;
+        END IF;
+
+        IF _secondary_asset_symbol_resolved IS NULL THEN
+            RAISE EXCEPTION 'Unable to resolve token B asset symbol';
+        END IF;
+
+        -- Aggregate cost basis: protocol position carries A + B.
+        _cost_basis_in_base := COALESCE(_cost_basis_in_base, 0) + _secondary_consumed_cost_basis;
+        _current_value_in_base := COALESCE(_current_value_in_base, 0) + _secondary_consumed_cost_basis;
+
+        _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
+            'token1_position_id', _secondary_source_position_id,
+            'token1_symbol', _secondary_asset_symbol_resolved,
+            'token1_quantity', _secondary_quantity,
+            'token1_crypto_asset_id', _secondary_crypto_asset_id,
+            'token1_cost_basis_carried', _secondary_consumed_cost_basis
+        );
+
+        IF _secondary_remaining_quantity <= 0 THEN
+            UPDATE portfolio_positions
+            SET status = 'closed',
+                quantity = 0,
+                closed_at = COALESCE(_deposited_at, current_date),
+                close_amount_in_currency = 0,
+                close_currency_code = currency_code
+            WHERE id = _secondary_source_position_id;
+        ELSE
+            UPDATE portfolio_positions
+            SET quantity = _secondary_remaining_quantity,
+                amount_in_currency = 0
+            WHERE id = _secondary_source_position_id;
+        END IF;
+
+        INSERT INTO portfolio_events (
+            position_id,
+            event_type,
+            event_at,
+            quantity,
+            amount,
+            currency_code,
+            linked_operation_id,
+            comment,
+            metadata,
+            created_by_user_id
+        )
+        VALUES (
+            _secondary_source_position_id,
+            'transfer_out',
+            COALESCE(_deposited_at, current_date),
+            _secondary_quantity,
+            NULL,
+            NULL,
+            NULL,
+            COALESCE(NULLIF(btrim(_comment), ''), 'Перевод в DeFi-протокол'),
+            jsonb_build_object(
+                'action', 'stake_to_protocol',
+                'protocol_name', btrim(_protocol_name),
+                'position_type', _position_type,
+                'protocol_asset_symbol', _secondary_asset_symbol_resolved,
+                'protocol_quantity', _secondary_quantity,
+                'value_in_base', _secondary_consumed_cost_basis,
+                'consumed_cost_basis', _secondary_consumed_cost_basis,
+                'realized_in_base', 0,
+                'target_kind', 'defi',
+                'token_role', 'token_b'
+            ),
+            _user_id
+        );
     END IF;
 
     INSERT INTO crypto_protocol_positions (

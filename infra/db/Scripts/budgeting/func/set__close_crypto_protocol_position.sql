@@ -7,7 +7,9 @@ CREATE FUNCTION budgeting.set__close_crypto_protocol_position(
     _current_value_in_base numeric DEFAULT NULL,
     _comment text DEFAULT NULL,
     _return_quantity numeric DEFAULT NULL,
-    _return_value_in_base numeric DEFAULT NULL
+    _return_value_in_base numeric DEFAULT NULL,
+    _secondary_return_quantity numeric DEFAULT NULL,
+    _secondary_return_value_in_base numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -27,6 +29,16 @@ DECLARE
     _principal_qty numeric(30, 12);
     _rewards_qty numeric(30, 12);
     _principal_entry_value numeric(20, 2);
+    _secondary_qty numeric(30, 12);
+    _secondary_value numeric(20, 2);
+    _secondary_position_id bigint;
+    _secondary_symbol text;
+    _secondary_existing_qty numeric(30, 12);
+    _secondary_existing_basis numeric(20, 2);
+    _secondary_target_position_id bigint;
+    _secondary_event_type text;
+    _operated_on date;
+    _comment_clean text;
 BEGIN
     SET search_path TO budgeting;
 
@@ -254,6 +266,108 @@ BEGIN
             'returned_principal_qty', _principal_qty,
             'returned_rewards_qty', _rewards_qty,
             'returned_principal_value_in_base', _principal_entry_value
+        )
+        WHERE id = _position_id;
+    END IF;
+
+    -- Token B return (LP only).
+    _secondary_qty := round(COALESCE(_secondary_return_quantity, 0), 12);
+    IF _secondary_qty > 0 THEN
+        IF _existing.position_type <> 'liquidity_pool' THEN
+            RAISE EXCEPTION 'Secondary return is only allowed for liquidity_pool positions';
+        END IF;
+
+        _operated_on := COALESCE(_withdrawn_at, current_date);
+        _comment_clean := NULLIF(btrim(_comment), '');
+        _base_currency_code := COALESCE(_base_currency_code, budgeting.get__owner_base_currency(_existing.owner_type, _existing.owner_user_id, _existing.owner_family_id));
+
+        _secondary_position_id := (_existing.metadata ->> 'token1_position_id')::bigint;
+        _secondary_symbol := COALESCE(NULLIF(btrim(_existing.metadata ->> 'token1_symbol'), ''), 'TOKEN_B');
+        _secondary_existing_qty := COALESCE((_existing.metadata ->> 'token1_quantity')::numeric, 0);
+        _secondary_existing_basis := COALESCE((_existing.metadata ->> 'token1_cost_basis_carried')::numeric, 0);
+
+        IF _secondary_return_value_in_base IS NULL THEN
+            _secondary_value := _secondary_existing_basis;
+        ELSE
+            _secondary_value := round(_secondary_return_value_in_base, 2);
+        END IF;
+
+        SELECT id
+        INTO _secondary_target_position_id
+        FROM portfolio_positions
+        WHERE id = _secondary_position_id
+          AND status = 'open'
+        FOR UPDATE;
+
+        IF _secondary_target_position_id IS NULL THEN
+            SELECT id
+            INTO _secondary_target_position_id
+            FROM portfolio_positions
+            WHERE investment_account_id = _existing.investment_account_id
+              AND status = 'open'
+              AND asset_type_code = 'crypto'
+              AND COALESCE(NULLIF(btrim(metadata ->> 'asset_symbol'), ''), title) = _secondary_symbol
+            ORDER BY id
+            LIMIT 1
+            FOR UPDATE;
+        END IF;
+
+        IF _secondary_target_position_id IS NULL THEN
+            INSERT INTO portfolio_positions (
+                owner_type, owner_user_id, owner_family_id, investment_account_id,
+                asset_type_code, title, quantity, amount_in_currency, currency_code,
+                opened_at, comment, metadata, created_by_user_id
+            )
+            VALUES (
+                _existing.owner_type, _existing.owner_user_id, _existing.owner_family_id,
+                _existing.investment_account_id,
+                'crypto', _secondary_symbol, _secondary_qty, 0, _base_currency_code,
+                _operated_on,
+                COALESCE(_comment_clean, 'Возврат token B из DeFi-протокола'),
+                jsonb_build_object(
+                    'crypto_kind', 'spot',
+                    'asset_symbol', _secondary_symbol
+                ),
+                _user_id
+            )
+            RETURNING id INTO _secondary_target_position_id;
+            _secondary_event_type := 'open';
+        ELSE
+            UPDATE portfolio_positions
+            SET quantity = COALESCE(quantity, 0) + _secondary_qty,
+                amount_in_currency = 0
+            WHERE id = _secondary_target_position_id;
+            _secondary_event_type := 'top_up';
+        END IF;
+
+        INSERT INTO portfolio_events (
+            position_id, event_type, event_at, quantity, amount, currency_code,
+            linked_operation_id, comment, metadata, created_by_user_id
+        )
+        VALUES (
+            _secondary_target_position_id,
+            _secondary_event_type,
+            _operated_on,
+            _secondary_qty,
+            NULL, NULL, NULL,
+            COALESCE(_comment_clean, 'Возврат token B из DeFi-протокола'),
+            jsonb_build_object(
+                'action', 'return_from_protocol',
+                'protocol_position_id', _position_id,
+                'protocol_name', _existing.protocol_name,
+                'entry_value_in_base', _secondary_value,
+                'source_kind', 'defi_return',
+                'source_protocol_position_id', _position_id,
+                'token_role', 'token_b'
+            ),
+            _user_id
+        );
+
+        UPDATE crypto_protocol_positions
+        SET metadata = metadata || jsonb_build_object(
+            'token1_return_position_id', _secondary_target_position_id,
+            'returned_token1_qty', _secondary_qty,
+            'returned_token1_value_in_base', _secondary_value
         )
         WHERE id = _position_id;
     END IF;

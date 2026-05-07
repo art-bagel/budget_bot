@@ -320,6 +320,8 @@ export interface CreateCryptoProtocolPositionRequest {
   comment?: string;
   metadata?: Record<string, unknown>;
   source_position_id?: number;
+  secondary_source_position_id?: number;
+  secondary_quantity?: number;
 }
 
 export interface UpdateCryptoProtocolPositionRequest {
@@ -338,6 +340,8 @@ export interface CloseCryptoProtocolPositionRequest {
   current_value_in_base?: number;
   return_quantity?: number;
   return_value_in_base?: number;
+  secondary_return_quantity?: number;
+  secondary_return_value_in_base?: number;
   comment?: string;
 }
 
@@ -346,9 +350,78 @@ export interface PartialCloseCryptoProtocolPositionRequest {
   rewards_qty?: number;
   principal_value_in_base?: number;
   rewards_value_in_base?: number;
+  secondary_principal_qty?: number;
+  secondary_value_in_base?: number;
+  secondary_rewards_qty?: number;
+  secondary_rewards_value_in_base?: number;
   returned_at?: string;
   comment?: string;
 }
+
+export interface TopUpCryptoProtocolPositionRequest {
+  source_position_id: number;
+  quantity: number;
+  secondary_source_position_id?: number;
+  secondary_quantity?: number;
+  operated_at?: string;
+  comment?: string;
+}
+
+export interface CryptoLendingMetadata {
+  apr?: number;
+  collateral_asset?: string;
+  collateral_quantity?: number;
+  borrowed_asset?: string;
+  borrowed_quantity?: number;
+  accrued_interest_in_base?: number;
+}
+
+export interface CryptoLiquidityPoolMetadata {
+  pool_name?: string;
+  token1_symbol?: string;
+  token1_quantity?: number;
+  token1_position_id?: number;
+  token1_crypto_asset_id?: number;
+  token1_cost_basis_carried?: number;
+  fees_earned_in_base?: number;
+  lp_token_symbol?: string;
+}
+
+export function getLendingMetadata(position: CryptoProtocolPosition): CryptoLendingMetadata {
+  if (position.position_type !== 'lending') return {};
+  const m = position.metadata ?? {};
+  return {
+    apr: typeof m.apr === 'number' ? m.apr : undefined,
+    collateral_asset: typeof m.collateral_asset === 'string' ? m.collateral_asset : undefined,
+    collateral_quantity: typeof m.collateral_quantity === 'number' ? m.collateral_quantity : undefined,
+    borrowed_asset: typeof m.borrowed_asset === 'string' ? m.borrowed_asset : undefined,
+    borrowed_quantity: typeof m.borrowed_quantity === 'number' ? m.borrowed_quantity : undefined,
+    accrued_interest_in_base: typeof m.accrued_interest_in_base === 'number' ? m.accrued_interest_in_base : undefined,
+  };
+}
+
+export function getLiquidityPoolMetadata(position: CryptoProtocolPosition): CryptoLiquidityPoolMetadata {
+  if (position.position_type !== 'liquidity_pool') return {};
+  const m = position.metadata ?? {};
+  return {
+    pool_name: typeof m.pool_name === 'string' ? m.pool_name : undefined,
+    token1_symbol: typeof m.token1_symbol === 'string' ? m.token1_symbol : undefined,
+    token1_quantity: typeof m.token1_quantity === 'number' ? m.token1_quantity : undefined,
+    token1_position_id: typeof m.token1_position_id === 'number' ? m.token1_position_id : undefined,
+    token1_crypto_asset_id: typeof m.token1_crypto_asset_id === 'number' ? m.token1_crypto_asset_id : undefined,
+    token1_cost_basis_carried: typeof m.token1_cost_basis_carried === 'number' ? m.token1_cost_basis_carried : undefined,
+    fees_earned_in_base: typeof m.fees_earned_in_base === 'number' ? m.fees_earned_in_base : undefined,
+    lp_token_symbol: typeof m.lp_token_symbol === 'string' ? m.lp_token_symbol : undefined,
+  };
+}
+
+export const PROTOCOL_TYPE_LABELS: Record<CryptoProtocolPosition['position_type'], string> = {
+  staking: 'Стейкинг',
+  lending: 'Лендинг',
+  liquidity_pool: 'Ликвидность',
+  vault: 'Vault',
+  other: 'Прочее',
+};
 
 export interface AllocateBudgetRequest {
   from_category_id: number;

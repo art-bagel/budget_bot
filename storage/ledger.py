@@ -26,6 +26,7 @@ class Ledger(DataBase):
     F_SET__UPDATE_CRYPTO_PROTOCOL_POSITION = 'set__update_crypto_protocol_position'
     F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION = 'set__close_crypto_protocol_position'
     F_PUT__PARTIAL_CLOSE_CRYPTO_PROTOCOL_POSITION = 'put__partial_close_crypto_protocol_position'
+    F_PUT__TOP_UP_CRYPTO_PROTOCOL_POSITION = 'put__top_up_crypto_protocol_position'
     F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
 
     async def put__record_fx_rate_snapshot(
@@ -431,6 +432,8 @@ class Ledger(DataBase):
         comment: Optional[str] = None,
         metadata: Optional[dict] = None,
         source_position_id: Optional[int] = None,
+        secondary_source_position_id: Optional[int] = None,
+        secondary_quantity: Optional[float] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION),
@@ -451,6 +454,8 @@ class Ledger(DataBase):
             comment,
             metadata or {},
             source_position_id,
+            secondary_source_position_id,
+            secondary_quantity,
         )
 
     async def set__update_crypto_protocol_position(
@@ -488,6 +493,8 @@ class Ledger(DataBase):
         comment: Optional[str] = None,
         return_quantity: Optional[float] = None,
         return_value_in_base: Optional[float] = None,
+        secondary_return_quantity: Optional[float] = None,
+        secondary_return_value_in_base: Optional[float] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION),
@@ -499,6 +506,8 @@ class Ledger(DataBase):
             comment,
             return_quantity,
             return_value_in_base,
+            secondary_return_quantity,
+            secondary_return_value_in_base,
         )
 
     async def put__partial_close_crypto_protocol_position(
@@ -511,6 +520,10 @@ class Ledger(DataBase):
         rewards_value_in_base: Optional[float] = None,
         returned_at: Optional[date] = None,
         comment: Optional[str] = None,
+        secondary_principal_qty: Optional[float] = None,
+        secondary_value_in_base: Optional[float] = None,
+        secondary_rewards_qty: Optional[float] = None,
+        secondary_rewards_value_in_base: Optional[float] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__PARTIAL_CLOSE_CRYPTO_PROTOCOL_POSITION),
@@ -521,6 +534,33 @@ class Ledger(DataBase):
             principal_value_in_base,
             rewards_value_in_base,
             returned_at,
+            comment,
+            secondary_principal_qty,
+            secondary_value_in_base,
+            secondary_rewards_qty,
+            secondary_rewards_value_in_base,
+        )
+
+    async def put__top_up_crypto_protocol_position(
+        self,
+        user_id: int,
+        position_id: int,
+        source_position_id: int,
+        quantity: float,
+        secondary_source_position_id: Optional[int] = None,
+        secondary_quantity: Optional[float] = None,
+        operated_at: Optional[date] = None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__TOP_UP_CRYPTO_PROTOCOL_POSITION),
+            user_id,
+            position_id,
+            source_position_id,
+            quantity,
+            secondary_source_position_id,
+            secondary_quantity,
+            operated_at,
             comment,
         )
 

@@ -623,11 +623,11 @@ export default function Operations({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyTypeFilter, setHistoryTypeFilter] = useState<Set<string>>(
-    () => new Set(['income', 'expense']),
+    () => new Set(['income', 'expense', 'exchange']),
   );
   const [investmentHistoryFilter, setInvestmentHistoryFilter] = useState<InvestmentHistoryFilter>('all');
   const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(
-    () => new Set(['income', 'expense']),
+    () => new Set(['income', 'expense', 'exchange']),
   );
   const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
   const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
