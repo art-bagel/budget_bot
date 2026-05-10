@@ -5969,7 +5969,10 @@ select.dlg-row__ghost option {
 }
 
 .op-row__detail {
-  margin-top: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-right: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5982,6 +5985,7 @@ select.dlg-row__ghost option {
   padding: 8px 10px;
   background: var(--surface-inset);
   border-radius: 8px;
+  margin-right: 0;
 }
 [data-theme='dark'] .op-detail__comment { background: var(--surface-2); }
 
@@ -5989,6 +5993,8 @@ select.dlg-row__ghost option {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .op-detail__entry {
@@ -5997,9 +6003,11 @@ select.dlg-row__ghost option {
   align-items: center;
   gap: 8px;
   padding: 4px 0;
+  min-width: 0;
 }
 .op-detail__entries--bank .op-detail__entry {
   grid-template-columns: 1fr auto;
+  column-gap: 12px;
 }
 
 .op-detail__ico {

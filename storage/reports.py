@@ -247,6 +247,7 @@ class Reports(DataBase):
         limit: int = 20,
         offset: int = 0,
         operation_type: Optional[str] = None,
+        investment_asset_type: Optional[str] = None,
     ) -> dict:
         """
         Возвращает историю операций пользователя.
@@ -254,6 +255,7 @@ class Reports(DataBase):
         :param limit: Количество операций в выборке.
         :param offset: Смещение от начала истории.
         :param operation_type: Тип операции для фильтрации истории.
+        :param investment_asset_type: Тип инвестиционного актива для фильтра портфеля.
         :return: Словарь с массивом операций и параметрами пагинации.
         """
         result = await self.call_function(
@@ -262,6 +264,7 @@ class Reports(DataBase):
             limit,
             offset,
             operation_type,
+            investment_asset_type,
         )
         return result if result else {
             'items': [],

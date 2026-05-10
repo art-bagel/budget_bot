@@ -573,6 +573,7 @@ export async function fetchOperationsHistory(
   limit = 20,
   offset = 0,
   operationType?: string,
+  investmentAssetType?: string | null,
 ): Promise<OperationHistoryResponse> {
   const params = new URLSearchParams({
     limit: String(limit),
@@ -581,6 +582,10 @@ export async function fetchOperationsHistory(
 
   if (operationType) {
     params.set('operation_type', operationType);
+  }
+
+  if (investmentAssetType && investmentAssetType !== 'all') {
+    params.set('investment_asset_type', investmentAssetType);
   }
 
   return apiFetch<OperationHistoryResponse>(`/operations/history?${params.toString()}`);

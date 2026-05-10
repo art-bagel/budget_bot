@@ -1,9 +1,11 @@
-DROP FUNCTION IF EXISTS budgeting.get__operations_history;
+DROP FUNCTION IF EXISTS budgeting.get__operations_history(bigint, integer, integer, text);
+DROP FUNCTION IF EXISTS budgeting.get__operations_history(bigint, integer, integer, text, text);
 CREATE FUNCTION budgeting.get__operations_history(
     _user_id bigint,
     _limit integer DEFAULT 20,
     _offset integer DEFAULT 0,
-    _operation_type text DEFAULT NULL
+    _operation_type text DEFAULT NULL,
+    _investment_asset_type text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -11,12 +13,17 @@ AS $function$
 DECLARE
     _result jsonb;
     _normalized_operation_type text;
+    _normalized_investment_asset_type text;
     _family_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
     _family_id := budgeting.get__user_family_id(_user_id);
     _normalized_operation_type := nullif(trim(_operation_type), '');
+    _normalized_investment_asset_type := nullif(trim(_investment_asset_type), '');
+    IF _normalized_investment_asset_type = 'all' THEN
+        _normalized_investment_asset_type := NULL;
+    END IF;
 
     IF _limit IS NULL OR _limit <= 0 THEN
         RAISE EXCEPTION 'History limit must be positive';
@@ -47,6 +54,11 @@ BEGIN
         IF FOUND THEN
             RAISE EXCEPTION 'Unsupported operation type filter: %', _normalized_operation_type;
         END IF;
+    END IF;
+
+    IF _normalized_investment_asset_type IS NOT NULL
+       AND _normalized_investment_asset_type NOT IN ('security', 'deposit', 'crypto', 'other') THEN
+        RAISE EXCEPTION 'Unsupported investment asset type filter: %', _normalized_investment_asset_type;
     END IF;
 
     -- total_count is computed once via a window function to avoid a second
@@ -131,6 +143,35 @@ BEGIN
                 OR (
                     _normalized_operation_type NOT IN ('investment', 'banking', 'cancelled')
                     AND o.type = ANY(string_to_array(_normalized_operation_type, ','))
+                )
+          )
+          AND (
+                _normalized_investment_asset_type IS NULL
+                OR EXISTS (
+                    SELECT 1
+                    FROM portfolio_events pe_asset_filter
+                    JOIN portfolio_positions pp_asset_filter
+                      ON pp_asset_filter.id = pe_asset_filter.position_id
+                    WHERE pe_asset_filter.linked_operation_id = o.id
+                      AND pp_asset_filter.asset_type_code = _normalized_investment_asset_type
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM bank_entries be_asset_filter
+                    JOIN bank_accounts ba_asset_filter
+                      ON ba_asset_filter.id = be_asset_filter.bank_account_id
+                    WHERE be_asset_filter.operation_id = o.id
+                      AND ba_asset_filter.account_kind = 'investment'
+                      AND ba_asset_filter.investment_asset_type = _normalized_investment_asset_type
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM crypto_bank_entries cbe_asset_filter
+                    JOIN bank_accounts cba_asset_filter
+                      ON cba_asset_filter.id = cbe_asset_filter.bank_account_id
+                    WHERE cbe_asset_filter.operation_id = o.id
+                      AND cba_asset_filter.account_kind = 'investment'
+                      AND cba_asset_filter.investment_asset_type = _normalized_investment_asset_type
                 )
           )
         ORDER BY o.operated_on DESC, o.created_at DESC, o.id DESC
@@ -220,6 +261,42 @@ BEGIN
           ON so.id = bue.operation_id
         GROUP BY bue.operation_id
     ),
+    portfolio_event_agg AS (
+        SELECT
+            pe.linked_operation_id AS operation_id,
+            jsonb_agg(
+                jsonb_build_object(
+                    'id', pe.id,
+                    'position_id', pe.position_id,
+                    'event_type', pe.event_type,
+                    'event_at', pe.event_at,
+                    'quantity', pe.quantity,
+                    'amount', pe.amount,
+                    'currency_code', pe.currency_code,
+                    'linked_operation_id', pe.linked_operation_id,
+                    'comment', pe.comment,
+                    'metadata', pe.metadata,
+                    'position_title', pp.title,
+                    'position_asset_type_code', pp.asset_type_code,
+                    'position_metadata', pp.metadata,
+                    'investment_account_id', pp.investment_account_id,
+                    'investment_account_name', ba.name,
+                    'investment_account_owner_type', ba.owner_type,
+                    'created_by_user_id', pe.created_by_user_id,
+                    'created_at', pe.created_at
+                )
+                ORDER BY pe.event_at, pe.id
+            ) AS portfolio_events
+        FROM portfolio_events pe
+        JOIN portfolio_positions pp
+          ON pp.id = pe.position_id
+        JOIN bank_accounts ba
+          ON ba.id = pp.investment_account_id
+        JOIN selected_operations so
+          ON so.id = pe.linked_operation_id
+        WHERE pe.linked_operation_id IS NOT NULL
+        GROUP BY pe.linked_operation_id
+    ),
     items AS (
         SELECT
             jsonb_build_object(
@@ -237,7 +314,8 @@ BEGIN
                 'owner_family_id', so.owner_family_id,
                 'income_source_name', so.income_source_name,
                 'bank_entries', COALESCE(ba.bank_entries, '[]'::jsonb),
-                'budget_entries', COALESCE(bga.budget_entries, '[]'::jsonb)
+                'budget_entries', COALESCE(bga.budget_entries, '[]'::jsonb),
+                'portfolio_events', COALESCE(pea.portfolio_events, '[]'::jsonb)
             ) AS item,
             so.total_count
         FROM selected_operations so
@@ -245,6 +323,8 @@ BEGIN
           ON ba.operation_id = so.id
         LEFT JOIN budget_agg bga
           ON bga.operation_id = so.id
+        LEFT JOIN portfolio_event_agg pea
+          ON pea.operation_id = so.id
         ORDER BY so.operated_on DESC, so.created_at DESC, so.id DESC
     )
     SELECT jsonb_build_object(

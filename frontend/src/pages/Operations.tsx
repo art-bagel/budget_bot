@@ -16,6 +16,7 @@ import type {
   OperationAnalyticsMonth,
   OperationAnalyticsResponse,
   OperationHistoryItem,
+  OperationHistoryPortfolioEvent,
   UserContext,
 } from '../types';
 import { formatAmount } from '../utils/format';
@@ -60,6 +61,8 @@ const ANALYTICS_PERIOD_MODE_OPTIONS: { value: 'week' | 'month' | 'year'; label: 
 const INVESTMENT_HISTORY_FILTER_OPTIONS = [
   { value: 'all', label: 'Все' },
   { value: 'trade', label: 'Сделки' },
+  { value: 'swap', label: 'Обмен' },
+  { value: 'defi', label: 'DeFi' },
   { value: 'income', label: 'Доход' },
   { value: 'transfer', label: 'Переводы' },
 ] as const;
@@ -93,12 +96,14 @@ type AnalyticsSegment = {
 
 type AnalyticsPeriodMode = 'week' | 'month' | 'year';
 type OperationsHistoryScope = 'all' | 'banking';
+type ProtocolPositionType = 'staking' | 'lending' | 'liquidity_pool' | 'vault' | 'other';
 type OperationsProps = {
   user: UserContext;
   embedded?: boolean;
   initialViewMode?: OperationsViewMode;
   allowedModes?: OperationsViewMode[];
   historyScope?: OperationsHistoryScope;
+  investmentAssetTypeCode?: string | null;
 };
 
 
@@ -334,6 +339,120 @@ function formatSignedAmount(amount: number, currencyCode: string): string {
 }
 
 
+function formatSignedQuantity(amount: number, symbol: string): string {
+  const absAmount = Math.abs(amount);
+  const prefix = amount > 0 ? '+' : amount < 0 ? '-' : '';
+  return prefix + new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 8,
+  }).format(absAmount) + ' ' + symbol;
+}
+
+
+function metadataText(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+
+function portfolioEventsOf(item: OperationHistoryItem): OperationHistoryPortfolioEvent[] {
+  return item.portfolio_events ?? [];
+}
+
+
+function getPortfolioEventSymbol(event: OperationHistoryPortfolioEvent): string {
+  return metadataText(event.metadata, 'asset_symbol')
+    ?? metadataText(event.metadata, 'protocol_asset_symbol')
+    ?? event.position_title
+    ?? event.currency_code
+    ?? '';
+}
+
+
+function isCrossAccountPortfolioTransfer(item: OperationHistoryItem): boolean {
+  const events = portfolioEventsOf(item);
+  const hasTransferOut = events.some((event) => event.event_type === 'transfer_out');
+  const hasTransferIn = events.some((event) => event.event_type === 'transfer_in');
+  const accountIds = new Set(events.map((event) => event.investment_account_id));
+  return hasTransferOut && hasTransferIn && (
+    accountIds.size > 1
+    || events.some((event) => metadataText(event.metadata, 'target_kind') === 'cross_account')
+    || events.some((event) => metadataText(event.metadata, 'source_kind') === 'cross_account')
+  );
+}
+
+
+function isBankToPortfolioTransfer(item: OperationHistoryItem): boolean {
+  const events = portfolioEventsOf(item);
+  return item.type === 'investment_trade'
+    && item.bank_entries.some((entry) => entry.asset_type === 'crypto' && entry.bank_account_kind !== 'investment' && entry.amount < 0)
+    && events.some((event) => metadataText(event.metadata, 'source_kind') === 'bank'
+      && (event.event_type === 'open' || event.event_type === 'top_up' || event.event_type === 'transfer_in'));
+}
+
+
+function isPortfolioSwap(item: OperationHistoryItem): boolean {
+  const events = portfolioEventsOf(item);
+  return events.some((event) => event.event_type === 'swap_out')
+    && events.some((event) => event.event_type === 'swap_in');
+}
+
+
+function getProtocolPositionType(item: OperationHistoryItem): ProtocolPositionType | null {
+  const events = portfolioEventsOf(item);
+  for (const event of events) {
+    const typed = metadataText(event.metadata, 'position_type');
+    if (typed === 'staking' || typed === 'lending' || typed === 'liquidity_pool' || typed === 'vault' || typed === 'other') {
+      return typed;
+    }
+  }
+
+  const text = [
+    item.comment,
+    ...events.flatMap((event) => [
+      event.comment,
+      metadataText(event.metadata, 'protocol_name'),
+      metadataText(event.metadata, 'my_comment'),
+      metadataText(event.metadata, 'source_comment'),
+    ]),
+  ].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
+
+  if (!text) return null;
+  if (text.includes('ликвид') || text.includes('ston') || text.includes('dedust')) return 'liquidity_pool';
+  if (text.includes('ленд') || text.includes('lending') || text.includes('evaa') || text.includes('залог') || text.includes('займ')) return 'lending';
+  if (text.includes('стейк') || text.includes('staking')) return 'staking';
+  if (text.includes('defi')) return 'other';
+  return null;
+}
+
+
+function getProtocolMovementDirection(item: OperationHistoryItem): 'top_up' | 'withdraw' | null {
+  const events = portfolioEventsOf(item);
+  if (events.some((event) => metadataText(event.metadata, 'source_kind') === 'defi_return'
+    || metadataText(event.metadata, 'action') === 'partial_return_from_protocol')) {
+    return 'withdraw';
+  }
+  if (events.some((event) => event.event_type === 'transfer_in') && !events.some((event) => event.event_type === 'transfer_out')) {
+    return 'withdraw';
+  }
+  if (events.some((event) => metadataText(event.metadata, 'target_kind') === 'defi'
+    || metadataText(event.metadata, 'action') === 'stake_to_protocol'
+    || metadataText(event.metadata, 'action') === 'top_up_protocol'
+    || event.event_type === 'transfer_out')) {
+    return 'top_up';
+  }
+  return null;
+}
+
+
+function getProtocolLabel(type: ProtocolPositionType): string {
+  if (type === 'liquidity_pool') return 'ликвидности';
+  if (type === 'lending') return 'лендинга';
+  if (type === 'staking') return 'стейкинга';
+  if (type === 'vault') return 'vault';
+  return 'DeFi';
+}
+
+
 function getOperationTitle(item: OperationHistoryItem): string {
   if (item.comment?.includes('Платёж по кредиту')) return 'Платёж по кредиту';
   if (item.comment?.includes('Частичное закрытие позиции')) return 'Частичное закрытие позиции';
@@ -343,6 +462,16 @@ function getOperationTitle(item: OperationHistoryItem): string {
     return item.income_source_name ? 'Доход · ' + item.income_source_name : 'Доход';
   }
   if (item.type === 'investment_trade') {
+    if (isPortfolioSwap(item)) return 'Обмен криптовалюты';
+    if (isCrossAccountPortfolioTransfer(item)) return 'Перевод между счетами';
+    if (isBankToPortfolioTransfer(item)) return 'Перевод из банка в портфель';
+    const protocolType = getProtocolPositionType(item);
+    const protocolDirection = protocolType ? getProtocolMovementDirection(item) : null;
+    if (protocolType && protocolDirection) {
+      return protocolDirection === 'withdraw'
+        ? `Вывод из ${getProtocolLabel(protocolType)}`
+        : `Пополнение ${getProtocolLabel(protocolType)}`;
+    }
     const investmentEntry = item.bank_entries.find((entry) => entry.bank_account_kind === 'investment');
     if (investmentEntry?.amount && investmentEntry.amount < 0) return 'Покупка позиции';
     if (investmentEntry?.amount && investmentEntry.amount > 0) return 'Закрытие позиции';
@@ -404,6 +533,8 @@ const CAT_COLOR_KEYS = ['g', 'o', 'b', 'p', 'r', 'v'] as const;
 function getOpIcoClass(item: OperationHistoryItem): string {
   if (item.type === 'income') return 'op-ico--income';
   if (item.type === 'account_transfer') return 'op-ico--xfer';
+  if (isPortfolioSwap(item)) return 'op-ico--exch';
+  if (isCrossAccountPortfolioTransfer(item) || isBankToPortfolioTransfer(item)) return 'op-ico--xfer';
   if (item.type === 'allocate' || item.type === 'group_allocate') return 'op-ico--alloc';
   if (item.type === 'exchange') return 'op-ico--exch';
   if (item.type === 'investment_trade' || item.type === 'investment_income' || item.type === 'investment_adjustment') return 'op-ico--invest';
@@ -426,12 +557,46 @@ function getOpIcoContent(item: OperationHistoryItem): React.ReactNode {
     return <IconTag />;
   }
   if (item.type === 'income') return <IconPlus />;
+  if (isPortfolioSwap(item)) return <IconArrowRightLeft />;
+  if (isCrossAccountPortfolioTransfer(item) || isBankToPortfolioTransfer(item)) return <IconArrowRightLeft />;
   if (item.type === 'investment_trade' || item.type === 'investment_income' || item.type === 'investment_adjustment') return <IconPortfolio />;
   if (item.type === 'credit_repayment') return <IconCredit />;
   return <IconArrowRightLeft />;
 }
 
 function getOpAmount(item: OperationHistoryItem): { text: string; cls: string } | null {
+  if (isPortfolioSwap(item)) return null;
+  if (getProtocolPositionType(item)) return null;
+
+  if (isBankToPortfolioTransfer(item)) {
+    const event = portfolioEventsOf(item).find((entry) => entry.event_type === 'open' || entry.event_type === 'top_up' || entry.event_type === 'transfer_in');
+    if (event?.quantity) {
+      return {
+        text: formatSignedQuantity(Math.abs(event.quantity), getPortfolioEventSymbol(event)),
+        cls: '',
+      };
+    }
+  }
+
+  if (item.bank_entries.length === 0 && portfolioEventsOf(item).length > 0) {
+    const events = portfolioEventsOf(item);
+    const event = events.find((entry) => entry.event_type === 'transfer_out' || entry.event_type === 'close' || entry.event_type === 'partial_close')
+      ?? events.find((entry) => entry.event_type === 'transfer_in' || entry.event_type === 'open' || entry.event_type === 'top_up')
+      ?? events[0];
+    if (event?.quantity) {
+      const symbol = getPortfolioEventSymbol(event);
+      const sign = isCrossAccountPortfolioTransfer(item)
+        ? Math.abs(event.quantity)
+        : ['transfer_out', 'swap_out', 'close', 'partial_close', 'fee'].includes(event.event_type)
+          ? -Math.abs(event.quantity)
+          : Math.abs(event.quantity);
+      return {
+        text: formatSignedQuantity(sign, symbol),
+        cls: sign < 0 ? 'op-row__amt--neg' : sign > 0 && !isCrossAccountPortfolioTransfer(item) ? 'op-row__amt--pos' : '',
+      };
+    }
+  }
+
   const entry = item.type === 'allocate' || item.type === 'group_allocate'
     ? item.budget_entries[0]
     : item.bank_entries[0];
@@ -460,14 +625,43 @@ function getOpSubtitle(item: OperationHistoryItem): string {
     const to = ownerLabel(item.bank_entries[1].bank_account_owner_type) ?? 'Счет';
     return `${from} → ${to} · ${time}`;
   }
+  if (isPortfolioSwap(item)) {
+    const events = portfolioEventsOf(item);
+    const from = events.find((event) => event.event_type === 'swap_out');
+    const to = events.find((event) => event.event_type === 'swap_in');
+    const fromSymbol = from ? getPortfolioEventSymbol(from) : null;
+    const toSymbol = to ? getPortfolioEventSymbol(to) : null;
+    return [fromSymbol && toSymbol ? `${fromSymbol} → ${toSymbol}` : null, time].filter(Boolean).join(' · ');
+  }
+  if (isCrossAccountPortfolioTransfer(item)) {
+    const events = portfolioEventsOf(item);
+    const from = events.find((event) => event.event_type === 'transfer_out')?.investment_account_name;
+    const to = events.find((event) => event.event_type === 'transfer_in')?.investment_account_name;
+    return [from && to ? `${from} → ${to}` : null, time].filter(Boolean).join(' · ');
+  }
+  if (isBankToPortfolioTransfer(item)) {
+    const from = item.bank_entries.find((entry) => entry.asset_type === 'crypto' && entry.amount < 0)?.bank_account_name;
+    const to = portfolioEventsOf(item).find((event) => event.event_type === 'open' || event.event_type === 'top_up' || event.event_type === 'transfer_in')?.investment_account_name;
+    return [from && to ? `${from} → ${to}` : null, time].filter(Boolean).join(' · ');
+  }
+  if (getProtocolPositionType(item)) {
+    const events = portfolioEventsOf(item);
+    const protocolName = events.map((event) => metadataText(event.metadata, 'protocol_name')).find(Boolean);
+    const positionName = events[0]?.position_title;
+    return [protocolName ?? positionName, time].filter(Boolean).join(' · ');
+  }
   return [ownerLabel(item.bank_entries[0]?.bank_account_owner_type), time].filter(Boolean).join(' · ');
 }
 
 function formatDateGroupLabel(isoKey: string): string {
-  const date = new Date(isoKey + 'T12:00:00');
-  const todayKey = new Date().toLocaleDateString('en-CA');
-  const yestKey = new Date(Date.now() - 864e5).toLocaleDateString('en-CA');
-  const dayLabel = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
+  const date = fromIsoDate(isoKey);
+  const now = new Date();
+  const todayKey = toIsoDate(now);
+  const yestKey = toIsoDate(addDays(now, -1));
+  const dateOptions: Intl.DateTimeFormatOptions = date.getFullYear() === now.getFullYear()
+    ? { day: 'numeric', month: 'long' }
+    : { day: 'numeric', month: 'long', year: 'numeric' };
+  const dayLabel = new Intl.DateTimeFormat('ru-RU', dateOptions).format(date);
   if (isoKey === todayKey) return `Сегодня · ${dayLabel}`;
   if (isoKey === yestKey) return `Вчера · ${dayLabel}`;
   return dayLabel;
@@ -507,6 +701,7 @@ function hasOpDetail(item: OperationHistoryItem): boolean {
   if (item.budget_entries.length > 1) return true;
   if (item.budget_entries.length === 1 && (item.type === 'allocate' || item.type === 'group_allocate')) return true;
   if (item.bank_entries.length > 1) return true;
+  if (portfolioEventsOf(item).length > 0) return true;
   if (isCancellable(item)) return true;
   return false;
 }
@@ -531,6 +726,27 @@ function getOperationLines(item: OperationHistoryItem): OperationLine[] {
     lines.push({
       label: getBudgetEntryLabel(entry.category_name),
       amount: formatSignedAmount(entry.amount, entry.currency_code),
+    });
+  });
+
+  portfolioEventsOf(item).forEach((event) => {
+    const eventLabel = event.event_type === 'transfer_out'
+      ? 'Списано'
+      : event.event_type === 'transfer_in'
+        ? 'Зачислено'
+        : event.event_type === 'top_up' || event.event_type === 'open'
+          ? 'Пополнение'
+          : event.event_type === 'close' || event.event_type === 'partial_close'
+            ? 'Вывод'
+            : event.event_type;
+    lines.push({
+      label: [event.investment_account_name, event.position_title, eventLabel].filter(Boolean).join(' · '),
+      amount: event.quantity ? formatSignedQuantity(
+        ['transfer_out', 'swap_out', 'close', 'partial_close', 'fee'].includes(event.event_type)
+          ? -Math.abs(event.quantity)
+          : Math.abs(event.quantity),
+        getPortfolioEventSymbol(event),
+      ) : undefined,
     });
   });
 
@@ -591,6 +807,10 @@ function buildDonutGradient(segments: AnalyticsSegment[]): string {
 }
 
 function getInvestmentHistoryKind(item: OperationHistoryItem): InvestmentHistoryFilter {
+  if (isPortfolioSwap(item)) return 'swap';
+  if (isBankToPortfolioTransfer(item)) return 'transfer';
+  if (isCrossAccountPortfolioTransfer(item)) return 'transfer';
+  if (getProtocolPositionType(item)) return 'defi';
   if (item.type === 'investment_trade') return 'trade';
   if (item.type === 'investment_income') return 'income';
   if (item.type === 'investment_adjustment') {
@@ -607,6 +827,7 @@ export default function Operations({
   initialViewMode = 'history',
   allowedModes,
   historyScope = 'all',
+  investmentAssetTypeCode = null,
 }: OperationsProps) {
   const resolvedAllowedModes = useMemo<OperationsViewMode[]>(
     () => (allowedModes && allowedModes.length > 0 ? allowedModes : ['history', 'investment', 'analytics']),
@@ -704,6 +925,7 @@ export default function Operations({
         HISTORY_PAGE_SIZE,
         offset,
         operationType || undefined,
+        viewMode === 'investment' ? investmentAssetTypeCode : null,
       );
       setHistoryItems((prev) => (replace ? result.items : [...prev, ...result.items]));
       setHistoryTotalCount(result.total_count);
@@ -752,7 +974,7 @@ export default function Operations({
       }
     }
     void loadHistory(0, true);
-  }, [viewMode, historyTypeFilterKey]);
+  }, [viewMode, historyTypeFilterKey, investmentAssetTypeCode]);
 
   useEffect(() => {
     if (viewMode !== 'analytics') {
@@ -798,7 +1020,7 @@ export default function Operations({
 
   const loadMoreHistory = useCallback(() => {
     if (canLoadMoreHistory) loadHistory(historyItems.length);
-  }, [canLoadMoreHistory, historyItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canLoadMoreHistory, historyItems.length, investmentAssetTypeCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
@@ -1086,6 +1308,38 @@ export default function Operations({
                                           <span className="op-detail__amt">{formatSignedAmount(entry.amount, entry.currency_code)}</span>
                                         </div>
                                       ))}
+                                    </div>
+                                  )}
+                                  {portfolioEventsOf(item).length > 0 && (
+                                    <div className="op-detail__entries op-detail__entries--bank">
+                                      {portfolioEventsOf(item).map((event) => {
+                                        const eventLabel = event.event_type === 'transfer_out'
+                                          ? 'Списано'
+                                          : event.event_type === 'transfer_in'
+                                            ? 'Зачислено'
+                                            : event.event_type === 'top_up' || event.event_type === 'open'
+                                              ? 'Пополнение'
+                                              : event.event_type === 'close' || event.event_type === 'partial_close'
+                                                ? 'Вывод'
+                                                : event.event_type;
+                                        const symbol = getPortfolioEventSymbol(event);
+                                        const amount = event.quantity
+                                          ? formatSignedQuantity(
+                                              ['transfer_out', 'swap_out', 'close', 'partial_close', 'fee'].includes(event.event_type)
+                                                ? -Math.abs(event.quantity)
+                                                : Math.abs(event.quantity),
+                                              symbol,
+                                            )
+                                          : undefined;
+                                        return (
+                                          <div className="op-detail__entry" key={event.id}>
+                                            <span className="op-detail__name">
+                                              {[event.investment_account_name, event.position_title, eventLabel].filter(Boolean).join(' · ')}
+                                            </span>
+                                            {amount && <span className="op-detail__amt">{amount}</span>}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                   {item.reversal_of_operation_id && (

@@ -500,6 +500,27 @@ export interface OperationHistoryBudgetEntry {
   amount: number;
 }
 
+export interface OperationHistoryPortfolioEvent {
+  id: number;
+  position_id: number;
+  event_type: PortfolioEvent['event_type'];
+  event_at: string;
+  quantity?: number | null;
+  amount?: number | null;
+  currency_code?: string | null;
+  linked_operation_id?: number | null;
+  comment?: string | null;
+  metadata: Record<string, unknown>;
+  position_title: string;
+  position_asset_type_code: string;
+  position_metadata: Record<string, unknown>;
+  investment_account_id: number;
+  investment_account_name: string;
+  investment_account_owner_type: 'user' | 'family';
+  created_by_user_id: number;
+  created_at: string;
+}
+
 export interface OperationHistoryItem {
   operation_id: number;
   type: string;
@@ -511,6 +532,7 @@ export interface OperationHistoryItem {
   income_source_name?: string | null;
   bank_entries: OperationHistoryBankEntry[];
   budget_entries: OperationHistoryBudgetEntry[];
+  portfolio_events: OperationHistoryPortfolioEvent[];
 }
 
 export interface OperationHistoryResponse {

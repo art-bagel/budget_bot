@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -224,6 +224,27 @@ class OperationBudgetEntry(BaseModel):
     amount: float
 
 
+class OperationPortfolioEvent(BaseModel):
+    id: int
+    position_id: int
+    event_type: str
+    event_at: str
+    quantity: Optional[float] = None
+    amount: Optional[float] = None
+    currency_code: Optional[str] = None
+    linked_operation_id: Optional[int] = None
+    comment: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    position_title: str
+    position_asset_type_code: str
+    position_metadata: Dict[str, Any] = Field(default_factory=dict)
+    investment_account_id: int
+    investment_account_name: str
+    investment_account_owner_type: str
+    created_by_user_id: int
+    created_at: str
+
+
 class OperationHistoryItem(BaseModel):
     operation_id: int
     type: str
@@ -240,6 +261,7 @@ class OperationHistoryItem(BaseModel):
     income_source_name: Optional[str] = None
     bank_entries: List[OperationBankEntry]
     budget_entries: List[OperationBudgetEntry]
+    portfolio_events: List[OperationPortfolioEvent] = Field(default_factory=list)
 
 
 class OperationHistoryResponse(BaseModel):
@@ -524,6 +546,7 @@ async def get_operations_history(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     operation_type: Optional[str] = Query(None),
+    investment_asset_type: Optional[str] = Query(None),
     user: TelegramUser = Depends(get_telegram_user),
 ) -> OperationHistoryResponse:
     result = await reports.get__operations_history(
@@ -531,6 +554,7 @@ async def get_operations_history(
         limit=limit,
         offset=offset,
         operation_type=operation_type,
+        investment_asset_type=investment_asset_type,
     )
     return OperationHistoryResponse(**result)
 

@@ -3324,6 +3324,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
             embedded
             initialViewMode="investment"
             allowedModes={['investment']}
+            investmentAssetTypeCode={activeAssetTypeCode}
           />
         </div>
       )}
