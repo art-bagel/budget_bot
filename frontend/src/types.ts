@@ -322,6 +322,32 @@ export interface CreateCryptoProtocolPositionRequest {
   source_position_id?: number;
   secondary_source_position_id?: number;
   secondary_quantity?: number;
+  borrowed_crypto_asset_id?: number;
+  borrowed_quantity?: number;
+  borrowed_value_in_base?: number;
+}
+
+export interface TakeLendingDebtRequest {
+  debt_qty: number;
+  value_in_base?: number;
+  comment?: string;
+  operated_at?: string;
+  borrowed_crypto_asset_id?: number;
+}
+
+export interface RepayLendingDebtRequest {
+  source_position_id: number;
+  repay_qty: number;
+  value_in_base?: number;
+  comment?: string;
+  operated_at?: string;
+}
+
+export interface PayCryptoFeeRequest {
+  quantity: number;
+  comment?: string;
+  operated_at?: string;
+  link_protocol_position_id?: number;
 }
 
 export interface UpdateCryptoProtocolPositionRequest {
@@ -372,7 +398,11 @@ export interface CryptoLendingMetadata {
   collateral_asset?: string;
   collateral_quantity?: number;
   borrowed_asset?: string;
+  borrowed_asset_symbol?: string;
+  borrowed_crypto_asset_id?: number;
   borrowed_quantity?: number;
+  borrowed_position_id?: number;
+  borrowed_value_in_base?: number;
   accrued_interest_in_base?: number;
 }
 
@@ -395,7 +425,11 @@ export function getLendingMetadata(position: CryptoProtocolPosition): CryptoLend
     collateral_asset: typeof m.collateral_asset === 'string' ? m.collateral_asset : undefined,
     collateral_quantity: typeof m.collateral_quantity === 'number' ? m.collateral_quantity : undefined,
     borrowed_asset: typeof m.borrowed_asset === 'string' ? m.borrowed_asset : undefined,
+    borrowed_asset_symbol: typeof m.borrowed_asset_symbol === 'string' ? m.borrowed_asset_symbol : undefined,
+    borrowed_crypto_asset_id: typeof m.borrowed_crypto_asset_id === 'number' ? m.borrowed_crypto_asset_id : undefined,
     borrowed_quantity: typeof m.borrowed_quantity === 'number' ? m.borrowed_quantity : undefined,
+    borrowed_position_id: typeof m.borrowed_position_id === 'number' ? m.borrowed_position_id : undefined,
+    borrowed_value_in_base: typeof m.borrowed_value_in_base === 'number' ? m.borrowed_value_in_base : undefined,
     accrued_interest_in_base: typeof m.accrued_interest_in_base === 'number' ? m.accrued_interest_in_base : undefined,
   };
 }

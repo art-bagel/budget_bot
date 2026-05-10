@@ -244,6 +244,53 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     source_position_id: Optional[int] = None
     secondary_source_position_id: Optional[int] = None
     secondary_quantity: Optional[float] = None
+    borrowed_crypto_asset_id: Optional[int] = None
+    borrowed_quantity: Optional[float] = None
+    borrowed_value_in_base: Optional[float] = None
+
+
+class TakeLendingDebtRequest(BaseModel):
+    debt_qty: float
+    value_in_base: Optional[float] = None
+    comment: Optional[str] = None
+    operated_at: Optional[date] = None
+    borrowed_crypto_asset_id: Optional[int] = None
+
+    @field_validator('debt_qty')
+    @classmethod
+    def positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма заёма должна быть положительной')
+        return v
+
+
+class RepayLendingDebtRequest(BaseModel):
+    source_position_id: int
+    repay_qty: float
+    value_in_base: Optional[float] = None
+    comment: Optional[str] = None
+    operated_at: Optional[date] = None
+
+    @field_validator('repay_qty')
+    @classmethod
+    def positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма погашения должна быть положительной')
+        return v
+
+
+class PayCryptoFeeRequest(BaseModel):
+    quantity: float
+    comment: Optional[str] = None
+    operated_at: Optional[date] = None
+    link_protocol_position_id: Optional[int] = None
+
+    @field_validator('quantity')
+    @classmethod
+    def positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Сумма комиссии должна быть положительной')
+        return v
 
 
 class UpdateCryptoProtocolPositionRequest(BaseModel):
@@ -567,6 +614,9 @@ async def create_crypto_protocol_position(
         source_position_id=body.source_position_id,
         secondary_source_position_id=body.secondary_source_position_id,
         secondary_quantity=body.secondary_quantity,
+        borrowed_crypto_asset_id=body.borrowed_crypto_asset_id,
+        borrowed_quantity=body.borrowed_quantity,
+        borrowed_value_in_base=body.borrowed_value_in_base,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -668,3 +718,61 @@ async def top_up_crypto_protocol_position(
         comment=body.comment,
     )
     return CryptoProtocolPositionItem(**result)
+
+
+@router.post(
+    '/protocol-positions/{position_id}/take-debt',
+    response_model=CryptoProtocolPositionItem,
+)
+async def take_lending_debt(
+    position_id: int,
+    body: TakeLendingDebtRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CryptoProtocolPositionItem:
+    result = await ledger.put__lending_take_more_debt(
+        user_id=user.user_id,
+        position_id=position_id,
+        debt_qty=body.debt_qty,
+        value_in_base=body.value_in_base,
+        comment=body.comment,
+        operated_at=body.operated_at,
+        borrowed_crypto_asset_id=body.borrowed_crypto_asset_id,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
+@router.post(
+    '/protocol-positions/{position_id}/repay-debt',
+    response_model=CryptoProtocolPositionItem,
+)
+async def repay_lending_debt(
+    position_id: int,
+    body: RepayLendingDebtRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> CryptoProtocolPositionItem:
+    result = await ledger.put__lending_repay_debt(
+        user_id=user.user_id,
+        position_id=position_id,
+        source_position_id=body.source_position_id,
+        repay_qty=body.repay_qty,
+        value_in_base=body.value_in_base,
+        comment=body.comment,
+        operated_at=body.operated_at,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
+@router.post('/asset-positions/{position_id}/pay-fee')
+async def pay_crypto_fee(
+    position_id: int,
+    body: PayCryptoFeeRequest,
+    user: TelegramUser = Depends(get_telegram_user),
+) -> dict[str, Any]:
+    return await ledger.put__crypto_pay_fee(
+        user_id=user.user_id,
+        source_position_id=position_id,
+        quantity=body.quantity,
+        comment=body.comment,
+        operated_at=body.operated_at,
+        link_protocol_position_id=body.link_protocol_position_id,
+    )

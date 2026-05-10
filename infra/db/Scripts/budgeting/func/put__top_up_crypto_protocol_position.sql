@@ -225,26 +225,33 @@ BEGIN
         _new_token1_quantity := COALESCE((_existing.metadata ->> 'token1_quantity')::numeric, 0) + _secondary_quantity;
     END IF;
 
-    UPDATE crypto_protocol_positions
-    SET quantity = COALESCE(quantity, 0) + _quantity,
-        current_quantity = COALESCE(current_quantity, 0) + _quantity,
-        cost_basis_in_base = COALESCE(cost_basis_in_base, 0) + _added_basis,
-        current_value_in_base = COALESCE(current_value_in_base, 0) + _added_basis,
-        comment = COALESCE(NULLIF(btrim(_comment), ''), comment),
-        metadata = CASE
-            WHEN _secondary_source_position_id IS NOT NULL
-                THEN metadata || jsonb_build_object(
-                    'token1_quantity', _new_token1_quantity,
-                    'token1_crypto_asset_id', COALESCE(
-                        (metadata ->> 'token1_crypto_asset_id')::bigint,
-                        (_secondary_position.metadata ->> 'crypto_asset_id')::bigint
-                    ),
-                    'token1_cost_basis_carried', COALESCE((metadata ->> 'token1_cost_basis_carried')::numeric, 0) + _secondary_consumed_cost_basis
-                )
-            ELSE metadata
-        END,
-        updated_at = current_timestamp
-    WHERE id = _position_id;
+    IF _secondary_source_position_id IS NOT NULL THEN
+        UPDATE crypto_protocol_positions
+        SET quantity = COALESCE(quantity, 0) + _quantity,
+            current_quantity = COALESCE(current_quantity, 0) + _quantity,
+            cost_basis_in_base = COALESCE(cost_basis_in_base, 0) + _added_basis,
+            current_value_in_base = COALESCE(current_value_in_base, 0) + _added_basis,
+            comment = COALESCE(NULLIF(btrim(_comment), ''), comment),
+            metadata = metadata || jsonb_build_object(
+                'token1_quantity', _new_token1_quantity,
+                'token1_crypto_asset_id', COALESCE(
+                    (metadata ->> 'token1_crypto_asset_id')::bigint,
+                    (_secondary_position.metadata ->> 'crypto_asset_id')::bigint
+                ),
+                'token1_cost_basis_carried', COALESCE((metadata ->> 'token1_cost_basis_carried')::numeric, 0) + _secondary_consumed_cost_basis
+            ),
+            updated_at = current_timestamp
+        WHERE id = _position_id;
+    ELSE
+        UPDATE crypto_protocol_positions
+        SET quantity = COALESCE(quantity, 0) + _quantity,
+            current_quantity = COALESCE(current_quantity, 0) + _quantity,
+            cost_basis_in_base = COALESCE(cost_basis_in_base, 0) + _added_basis,
+            current_value_in_base = COALESCE(current_value_in_base, 0) + _added_basis,
+            comment = COALESCE(NULLIF(btrim(_comment), ''), comment),
+            updated_at = current_timestamp
+        WHERE id = _position_id;
+    END IF;
 
     RETURN (
         SELECT item

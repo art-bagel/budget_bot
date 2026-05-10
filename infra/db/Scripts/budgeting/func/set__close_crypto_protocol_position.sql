@@ -56,6 +56,12 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF _existing.position_type = 'lending'
+       AND COALESCE(NULLIF(_existing.metadata ->> 'borrowed_quantity', ''), '0')::numeric > 0
+    THEN
+        RAISE EXCEPTION 'Нельзя закрыть лендинг, пока долг не погашен';
+    END IF;
+
     _resolved_return_quantity := round(COALESCE(_return_quantity, _current_quantity, _existing.current_quantity, 0), 12);
     _base_currency_code := budgeting.get__owner_base_currency(_existing.owner_type, _existing.owner_user_id, _existing.owner_family_id);
 

@@ -80,6 +80,9 @@ import type {
   CloseCryptoProtocolPositionRequest,
   PartialCloseCryptoProtocolPositionRequest,
   TopUpCryptoProtocolPositionRequest,
+  TakeLendingDebtRequest,
+  RepayLendingDebtRequest,
+  PayCryptoFeeRequest,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 
@@ -427,6 +430,45 @@ export async function topUpCryptoProtocolPosition(
 ): Promise<CryptoProtocolPosition> {
   return apiFetch<CryptoProtocolPosition>(
     `/crypto/protocol-positions/${positionId}/top-up`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function takeLendingDebt(
+  positionId: number,
+  data: TakeLendingDebtRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>(
+    `/crypto/protocol-positions/${positionId}/take-debt`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function repayLendingDebt(
+  positionId: number,
+  data: RepayLendingDebtRequest,
+): Promise<CryptoProtocolPosition> {
+  return apiFetch<CryptoProtocolPosition>(
+    `/crypto/protocol-positions/${positionId}/repay-debt`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export async function payCryptoFee(
+  assetPositionId: number,
+  data: PayCryptoFeeRequest,
+): Promise<{ position_id: number; remaining_quantity: number; consumed_cost_basis: number }> {
+  return apiFetch(
+    `/crypto/asset-positions/${assetPositionId}/pay-fee`,
     {
       method: 'POST',
       body: JSON.stringify(data),

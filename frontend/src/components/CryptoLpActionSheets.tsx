@@ -17,6 +17,8 @@ import type {
   PortfolioPosition,
 } from '../types';
 import { getLiquidityPoolMetadata } from '../types';
+import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from './DefiFeeField';
+import type { DefiFeeDraft } from './DefiFeeField';
 
 
 type LpSheetCommon = {
@@ -64,6 +66,7 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
   const [qtyB, setQtyB] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +76,7 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
       setQtyB('');
       setOperatedAt(todayIso());
       setComment('');
+      setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
   }, [open]);
@@ -96,12 +100,18 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
       });
-      onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
       setSubmitting(false);
+      return;
     }
+    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
+    if (feeError) {
+      setError(feeError);
+      setSubmitting(false);
+      return;
+    }
+    onSuccess();
   };
 
   return (
@@ -181,12 +191,13 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
           disabled={submitting}
         />
       </div>
+      <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
     </BottomSheet>
   );
 }
 
 
-export function LpPartialWithdrawSheet({ open, position, onClose, onSuccess }: LpSheetCommon) {
+export function LpPartialWithdrawSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -198,6 +209,7 @@ export function LpPartialWithdrawSheet({ open, position, onClose, onSuccess }: L
   const [qtyB, setQtyB] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -207,6 +219,7 @@ export function LpPartialWithdrawSheet({ open, position, onClose, onSuccess }: L
       setQtyB('');
       setOperatedAt(todayIso());
       setComment('');
+      setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
   }, [open]);
@@ -228,12 +241,18 @@ export function LpPartialWithdrawSheet({ open, position, onClose, onSuccess }: L
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
       });
-      onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
       setSubmitting(false);
+      return;
     }
+    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
+    if (feeError) {
+      setError(feeError);
+      setSubmitting(false);
+      return;
+    }
+    onSuccess();
   };
 
   return (
@@ -290,12 +309,13 @@ export function LpPartialWithdrawSheet({ open, position, onClose, onSuccess }: L
         <label className="apf-label">Комментарий</label>
         <input className="apf-input" type="text" placeholder="Необязательно" value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
       </div>
+      <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
     </BottomSheet>
   );
 }
 
 
-export function LpCloseSheet({ open, position, onClose, onSuccess }: LpSheetCommon) {
+export function LpCloseSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -307,6 +327,7 @@ export function LpCloseSheet({ open, position, onClose, onSuccess }: LpSheetComm
   const [qtyB, setQtyB] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -316,6 +337,7 @@ export function LpCloseSheet({ open, position, onClose, onSuccess }: LpSheetComm
       setQtyB(maxB > 0 ? String(maxB) : '');
       setOperatedAt(todayIso());
       setComment('');
+      setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
   }, [open, maxA, maxB]);
@@ -337,12 +359,18 @@ export function LpCloseSheet({ open, position, onClose, onSuccess }: LpSheetComm
         withdrawn_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
       });
-      onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
       setSubmitting(false);
+      return;
     }
+    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
+    if (feeError) {
+      setError(feeError);
+      setSubmitting(false);
+      return;
+    }
+    onSuccess();
   };
 
   return (
@@ -402,12 +430,13 @@ export function LpCloseSheet({ open, position, onClose, onSuccess }: LpSheetComm
         <label className="apf-label">Комментарий</label>
         <input className="apf-input" type="text" placeholder="Необязательно" value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
       </div>
+      <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
     </BottomSheet>
   );
 }
 
 
-export function LpClaimFeesSheet({ open, position, onClose, onSuccess }: LpSheetCommon) {
+export function LpClaimFeesSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -417,6 +446,7 @@ export function LpClaimFeesSheet({ open, position, onClose, onSuccess }: LpSheet
   const [qtyB, setQtyB] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -426,6 +456,7 @@ export function LpClaimFeesSheet({ open, position, onClose, onSuccess }: LpSheet
       setQtyB('');
       setOperatedAt(todayIso());
       setComment('');
+      setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
   }, [open]);
@@ -449,12 +480,18 @@ export function LpClaimFeesSheet({ open, position, onClose, onSuccess }: LpSheet
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
       });
-      onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
       setSubmitting(false);
+      return;
     }
+    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
+    if (feeError) {
+      setError(feeError);
+      setSubmitting(false);
+      return;
+    }
+    onSuccess();
   };
 
   return (
@@ -512,6 +549,7 @@ export function LpClaimFeesSheet({ open, position, onClose, onSuccess }: LpSheet
         <label className="apf-label">Комментарий</label>
         <input className="apf-input" type="text" placeholder="Необязательно" value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
       </div>
+      <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
     </BottomSheet>
   );
 }

@@ -49,6 +49,16 @@ import {
   LpCloseSheet,
   LpClaimFeesSheet,
 } from '../components/CryptoLpActionSheets';
+import {
+  LendingTopUpSheet,
+  LendingTakeDebtSheet,
+  LendingRepayDebtSheet,
+  LendingAdjustSheet,
+  LendingPartialWithdrawSheet,
+  LendingCloseSheet,
+} from '../components/CryptoLendingActionSheets';
+import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from '../components/DefiFeeField';
+import type { DefiFeeDraft } from '../components/DefiFeeField';
 import type {
   BankAccount,
   Currency,
@@ -142,9 +152,7 @@ type StakingCreateDraft = {
   depositedAt: string;
   comment: string;
   apr: string;
-  collateralAsset: string;
-  collateralQuantity: string;
-  borrowedAsset: string;
+  borrowedCryptoAssetId: string;
   borrowedQuantity: string;
   poolName: string;
   pairSourcePositionId: string;
@@ -163,6 +171,7 @@ type StakingCloseDraft = {
   withdrawnAt: string;
   comment: string;
 };
+
 
 type PortfolioAssetTab = {
   code: string;
@@ -524,9 +533,7 @@ function createInitialStakingCreateDraft(defaultSourcePositionId?: number): Stak
     depositedAt: todayIso(),
     comment: '',
     apr: '',
-    collateralAsset: '',
-    collateralQuantity: '',
-    borrowedAsset: '',
+    borrowedCryptoAssetId: '',
     borrowedQuantity: '',
     poolName: '',
     pairSourcePositionId: '',
@@ -640,6 +647,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [cryptoIncomeSheetPosition, setCryptoIncomeSheetPosition] = useState<PortfolioPosition | null>(null);
   const [partialCloseProtocolId, setPartialCloseProtocolId] = useState<number | null>(null);
   const [lpSheet, setLpSheet] = useState<{ kind: 'add' | 'partial' | 'close' | 'claim'; positionId: number } | null>(null);
+  const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close'; positionId: number } | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
@@ -668,6 +676,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [cryptoAssetsByAccount, setCryptoAssetsByAccount] = useState<Map<number, CryptoAccountAssetSummary[]>>(new Map());
   const [stakingCreateAccountId, setStakingCreateAccountId] = useState<number | null>(null);
   const [stakingCreateDraft, setStakingCreateDraft] = useState<StakingCreateDraft>(createInitialStakingCreateDraft());
+  const [stakingCreateFeeDraft, setStakingCreateFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
   const [stakingCreateError, setStakingCreateError] = useState<string | null>(null);
   const [submittingStakingCreateAccountId, setSubmittingStakingCreateAccountId] = useState<number | null>(null);
   const [selectedProtocolPositionId, setSelectedProtocolPositionId] = useState<number | null>(null);
@@ -796,6 +805,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
         ...cryptoProtocolPositions
           .filter((position) => position.status === 'open')
           .map((position) => position.crypto_asset_id ?? null),
+        ...cryptoProtocolPositions
+          .filter((position) => position.status === 'open' && position.position_type === 'lending')
+          .map((position) => {
+            const value = position.metadata?.borrowed_crypto_asset_id;
+            return typeof value === 'number' ? value : null;
+          }),
       ]
         .filter((value): value is number => value !== null),
     ));
@@ -1751,6 +1766,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     );
     setStakingCreateAccountId(accountId);
     setStakingCreateDraft(createInitialStakingCreateDraft(defaultSource?.id));
+    setStakingCreateFeeDraft(EMPTY_FEE_DRAFT);
     setStakingCreateError(null);
   };
 
@@ -1761,6 +1777,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
     } else {
       setStakingCreateAccountId(null);
       setStakingCreateDraft(createInitialStakingCreateDraft());
+      setStakingCreateFeeDraft(EMPTY_FEE_DRAFT);
       setStakingCreateError('Сначала переведи крипту на crypto-счёт, чтобы открыть staking.');
     }
   };
@@ -1828,32 +1845,45 @@ export default function Portfolio({ user }: { user: UserContext }) {
     setStakingCreateError(null);
 
     const metadata: Record<string, unknown> = {};
+    let borrowedCryptoAssetId: number | undefined;
+    let borrowedQuantity: number | undefined;
+    let borrowedValueInBase: number | undefined;
     if (positionType === 'lending') {
       const aprNum = Number(stakingCreateDraft.apr);
       if (stakingCreateDraft.apr.trim() && Number.isFinite(aprNum)) metadata.apr = aprNum;
-      if (stakingCreateDraft.collateralAsset.trim()) metadata.collateral_asset = stakingCreateDraft.collateralAsset.trim();
-      if (stakingCreateDraft.collateralQuantity.trim()) {
-        const collQty = Number(stakingCreateDraft.collateralQuantity);
-        if (Number.isFinite(collQty) && collQty > 0) metadata.collateral_quantity = collQty;
-      }
-      if (stakingCreateDraft.borrowedAsset.trim()) metadata.borrowed_asset = stakingCreateDraft.borrowedAsset.trim();
-      if (stakingCreateDraft.borrowedQuantity.trim()) {
-        const borrowQty = Number(stakingCreateDraft.borrowedQuantity);
-        if (Number.isFinite(borrowQty) && borrowQty > 0) metadata.borrowed_quantity = borrowQty;
+      const borrowAssetIdNum = Number(stakingCreateDraft.borrowedCryptoAssetId);
+      const borrowQtyNum = Number(stakingCreateDraft.borrowedQuantity);
+      if (
+        stakingCreateDraft.borrowedCryptoAssetId
+        && Number.isFinite(borrowAssetIdNum)
+        && borrowAssetIdNum > 0
+        && stakingCreateDraft.borrowedQuantity.trim()
+        && Number.isFinite(borrowQtyNum)
+        && borrowQtyNum > 0
+      ) {
+        borrowedCryptoAssetId = borrowAssetIdNum;
+        borrowedQuantity = borrowQtyNum;
+        const livePrice = cryptoLivePrices.get(borrowAssetIdNum)?.price;
+        if (typeof livePrice === 'number' && livePrice > 0) {
+          borrowedValueInBase = Math.round(livePrice * borrowQtyNum * 100) / 100;
+        }
       }
     } else if (positionType === 'liquidity_pool') {
       if (stakingCreateDraft.poolName.trim()) metadata.pool_name = stakingCreateDraft.poolName.trim();
     }
 
+    let createdPosition: CryptoProtocolPosition | null = null;
     try {
-      await createCryptoProtocolPosition({
+      createdPosition = await createCryptoProtocolPosition({
         investment_account_id: accountId,
         protocol_name: stakingCreateDraft.protocolName.trim(),
         position_type: positionType,
         asset_symbol: sourceAssetSymbol,
         quantity,
         current_quantity: quantity,
-        rewards_unclaimed_in_base: stakingCreateDraft.rewardsUnclaimedInBase.trim() ? Number(stakingCreateDraft.rewardsUnclaimedInBase) : undefined,
+        rewards_unclaimed_in_base: positionType !== 'lending' && stakingCreateDraft.rewardsUnclaimedInBase.trim()
+          ? Number(stakingCreateDraft.rewardsUnclaimedInBase)
+          : undefined,
         crypto_asset_id: getPositionMetadataNumber(sourcePosition, 'crypto_asset_id') ?? undefined,
         network_code: getPositionMetadataText(sourcePosition, 'network_code') ?? undefined,
         deposited_at: stakingCreateDraft.depositedAt || undefined,
@@ -1862,20 +1892,33 @@ export default function Portfolio({ user }: { user: UserContext }) {
         source_position_id: sourcePosition.id,
         secondary_source_position_id: pairPosition?.id,
         secondary_quantity: pairPosition ? pairQty : undefined,
+        borrowed_crypto_asset_id: borrowedCryptoAssetId,
+        borrowed_quantity: borrowedQuantity,
+        borrowed_value_in_base: borrowedValueInBase,
       });
-      setStakingCreateAccountId(null);
-      setStakingCreateDraft(createInitialStakingCreateDraft());
-      if (addSheetOpen) {
-        setAddSheetOpen(false);
-        setAddSheetTypeCode(null);
-        setAddCryptoMode('pick');
-      }
-      await loadPortfolio();
     } catch (reason: unknown) {
       setStakingCreateError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
       setSubmittingStakingCreateAccountId(null);
+      return;
     }
+    const accountFeePositions = positions.filter((p) => p.investment_account_id === accountId);
+    const feeError = await applyDefiFee(stakingCreateFeeDraft, accountFeePositions, createdPosition?.id ?? null, stakingCreateDraft.depositedAt);
+    if (feeError) {
+      setStakingCreateError(feeError);
+      setSubmittingStakingCreateAccountId(null);
+      void loadPortfolio();
+      return;
+    }
+    setStakingCreateAccountId(null);
+    setStakingCreateDraft(createInitialStakingCreateDraft());
+    setStakingCreateFeeDraft(EMPTY_FEE_DRAFT);
+    if (addSheetOpen) {
+      setAddSheetOpen(false);
+      setAddSheetTypeCode(null);
+      setAddCryptoMode('pick');
+    }
+    await loadPortfolio();
+    setSubmittingStakingCreateAccountId(null);
   };
 
   const handleOpenProtocolDetails = (positionId: number) => {
@@ -2042,6 +2085,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setSubmittingStakingCloseId(null);
     }
   };
+
 
   const handleChangeRate = async (position: PortfolioPosition, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2358,10 +2402,25 @@ export default function Portfolio({ user }: { user: UserContext }) {
       : position.current_value_in_base;
   };
 
+  const getLendingNetValue = (position: CryptoProtocolPosition): number => {
+    const collateralValue = getCryptoProtocolEstimatedValue(position);
+    if (position.position_type !== 'lending') return collateralValue;
+    const lend = getLendingMetadata(position);
+    const borrowQty = lend.borrowed_quantity ?? 0;
+    if (borrowQty <= 0) return collateralValue;
+    const livePrice = lend.borrowed_crypto_asset_id
+      ? cryptoLivePrices.get(lend.borrowed_crypto_asset_id)?.price ?? null
+      : null;
+    const debtValue = livePrice && livePrice > 0
+      ? livePrice * borrowQty
+      : (lend.borrowed_value_in_base ?? 0);
+    return collateralValue - debtValue;
+  };
+
   const cryptoProtocolValueInBase = useMemo(
     () => visibleCryptoProtocolPositions
       .filter((position) => position.status === 'open')
-      .reduce((sum, position) => sum + getCryptoProtocolEstimatedValue(position), 0),
+      .reduce((sum, position) => sum + getLendingNetValue(position), 0),
     [visibleCryptoProtocolPositions, cryptoLivePrices],
   );
 
@@ -3171,7 +3230,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       <div className="pf-grp__subhead">DeFi</div>
                       {groupProtocolPositions.length > 0 ? (
                         groupProtocolPositions.map((position) => {
-                          const protocolValue = getCryptoProtocolEstimatedValue(position);
+                          const protocolValue = getLendingNetValue(position);
                           const typeLabel = PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type;
                           let extra = '';
                           if (position.position_type === 'liquidity_pool') {
@@ -3180,9 +3239,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             else if (position.current_quantity) extra = ` · ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}`;
                           } else if (position.position_type === 'lending') {
                             const lend = getLendingMetadata(position);
-                            const aprPart = lend.apr != null ? ` · ${lend.apr}% APR` : '';
                             const qtyPart = position.current_quantity ? ` · ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}` : '';
-                            extra = `${qtyPart}${aprPart}`;
+                            const debtPart = (lend.borrowed_quantity ?? 0) > 0
+                              ? ` · долг ${formatNumericAmount(lend.borrowed_quantity ?? 0, 8)} ${lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}`
+                              : '';
+                            const aprPart = lend.apr != null ? ` · ${lend.apr}% APR` : '';
+                            extra = `${qtyPart}${debtPart}${aprPart}`;
                           } else if (position.current_quantity) {
                             extra = ` · ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}`;
                           }
@@ -3523,7 +3585,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
               </div>
               <div className="portfolio-analytics-stack">
                 {visibleCryptoProtocolPositions.map((position) => {
-                  const protocolValue = getCryptoProtocolEstimatedValue(position);
+                  const protocolValue = getLendingNetValue(position);
                   return (
                     <div key={position.id} className="portfolio-analytics-row">
                       <div className="portfolio-analytics-row__top">
@@ -3548,9 +3610,11 @@ export default function Portfolio({ user }: { user: UserContext }) {
                           if (position.position_type === 'lending') {
                             const lend = getLendingMetadata(position);
                             const qty = position.current_quantity ? `Поставлено ${formatNumericAmount(position.current_quantity)} ${position.asset_symbol}` : position.asset_symbol;
+                            const debt = (lend.borrowed_quantity ?? 0) > 0
+                              ? ` · Долг ${formatNumericAmount(lend.borrowed_quantity ?? 0)} ${lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}`
+                              : '';
                             const apr = lend.apr != null ? ` · ${lend.apr}% APR` : '';
-                            const interest = position.rewards_unclaimed_in_base > 0 ? ` · Начислено ${formatAmount(position.rewards_unclaimed_in_base, user.base_currency_code)}` : '';
-                            return `${qty}${apr}${interest}`;
+                            return `${qty}${debt}${apr}`;
                           }
                           const qty = position.current_quantity ? `Сейчас ${formatNumericAmount(position.current_quantity)} ${position.asset_symbol}` : position.asset_symbol;
                           const rewards = position.rewards_unclaimed_in_base > 0 ? ` · Награды ${formatAmount(position.rewards_unclaimed_in_base, user.base_currency_code)}` : '';
@@ -4593,6 +4657,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
                 );
               })() : selectedProtocolPosition.position_type === 'lending' ? (() => {
                 const lend = getLendingMetadata(selectedProtocolPosition);
+                const collateralValue = getCryptoProtocolEstimatedValue(selectedProtocolPosition);
+                const borrowQty = lend.borrowed_quantity ?? 0;
+                const borrowAssetId = lend.borrowed_crypto_asset_id;
+                const borrowLivePrice = borrowAssetId ? cryptoLivePrices.get(borrowAssetId)?.price ?? null : null;
+                const borrowValue = borrowQty > 0
+                  ? (borrowLivePrice && borrowLivePrice > 0
+                      ? borrowLivePrice * borrowQty
+                      : (lend.borrowed_value_in_base ?? 0))
+                  : 0;
+                const netValue = collateralValue - borrowValue;
                 return (
                   <>
                     <div className="pf-dstats__cell">
@@ -4600,9 +4674,16 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       <span className="pf-dstats__value">{formatNumericAmount(selectedProtocolPosition.current_quantity ?? selectedProtocolPosition.quantity ?? 0, 8)}</span>
                       <span className="pf-dstats__sub">{selectedProtocolPosition.asset_symbol}</span>
                     </div>
+                    {borrowQty > 0 ? (
+                      <div className="pf-dstats__cell">
+                        <span className="pf-dstats__label">Долг</span>
+                        <span className="pf-dstats__value">{formatNumericAmount(borrowQty, 8)}</span>
+                        <span className="pf-dstats__sub">{lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}</span>
+                      </div>
+                    ) : null}
                     <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">Стоимость</span>
-                      <span className="pf-dstats__value">{formatNumericAmount(getCryptoProtocolEstimatedValue(selectedProtocolPosition), 0)}</span>
+                      <span className="pf-dstats__label">Баланс</span>
+                      <span className="pf-dstats__value">{formatNumericAmount(netValue, 0)}</span>
                       <span className="pf-dstats__sub">{user.base_currency_code}</span>
                     </div>
                     {lend.apr != null && (
@@ -4612,11 +4693,6 @@ export default function Portfolio({ user }: { user: UserContext }) {
                         <span className="pf-dstats__sub">% годовых</span>
                       </div>
                     )}
-                    <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">Начислено</span>
-                      <span className="pf-dstats__value">{formatNumericAmount(selectedProtocolPosition.rewards_unclaimed_in_base, 0)}</span>
-                      <span className="pf-dstats__sub">% к получению</span>
-                    </div>
                   </>
                 );
               })() : (
@@ -4751,34 +4827,95 @@ export default function Portfolio({ user }: { user: UserContext }) {
               </div>
             )}
 
-            {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type !== 'liquidity_pool' && (
-              <div className="pf-sheet-actions">
-                <button
-                  className="btn btn--primary"
-                  type="button"
-                  onClick={() => handleOpenStakingUpdateForm(selectedProtocolPosition)}
-                >
-                  Обновить состояние
-                </button>
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => {
-                    setSelectedProtocolPositionId(null);
-                    setPartialCloseProtocolId(selectedProtocolPosition.id);
-                  }}
-                >
-                  Частичный вывод
-                </button>
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => handleOpenStakingCloseForm(selectedProtocolPosition)}
-                >
-                  Вывести обратно в актив
-                </button>
-              </div>
-            )}
+            {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type !== 'liquidity_pool' && (() => {
+              const isLending = selectedProtocolPosition.position_type === 'lending';
+              const lend = isLending ? getLendingMetadata(selectedProtocolPosition) : null;
+              const hasDebt = (lend?.borrowed_quantity ?? 0) > 0;
+              const openLendingSheet = (kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close') => {
+                setSelectedProtocolPositionId(null);
+                setLendingSheet({ kind, positionId: selectedProtocolPosition.id });
+              };
+              if (isLending) {
+                return (
+                  <div className="pf-sheet-actions">
+                    <button
+                      className="btn btn--primary"
+                      type="button"
+                      onClick={() => openLendingSheet('adjust')}
+                    >
+                      Корректировка
+                    </button>
+                    <button
+                      className="btn btn--ghost"
+                      type="button"
+                      onClick={() => openLendingSheet('top_up')}
+                    >
+                      Долить из актива
+                    </button>
+                    <button
+                      className="btn btn--ghost"
+                      type="button"
+                      onClick={() => openLendingSheet('take_debt')}
+                    >
+                      {lend?.borrowed_crypto_asset_id != null ? 'Взять ещё в долг' : 'Взять в долг'}
+                    </button>
+                    {hasDebt && (
+                      <button
+                        className="btn btn--ghost"
+                        type="button"
+                        onClick={() => openLendingSheet('repay_debt')}
+                      >
+                        Погасить долг
+                      </button>
+                    )}
+                    <button
+                      className="btn btn--ghost"
+                      type="button"
+                      onClick={() => openLendingSheet('partial')}
+                    >
+                      Снять из залога
+                    </button>
+                    <button
+                      className="btn btn--ghost"
+                      type="button"
+                      disabled={hasDebt}
+                      title={hasDebt ? 'Сначала погаси долг' : undefined}
+                      onClick={() => openLendingSheet('close')}
+                    >
+                      Закрыть лендинг
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div className="pf-sheet-actions">
+                  <button
+                    className="btn btn--primary"
+                    type="button"
+                    onClick={() => handleOpenStakingUpdateForm(selectedProtocolPosition)}
+                  >
+                    Обновить состояние
+                  </button>
+                  <button
+                    className="btn btn--ghost"
+                    type="button"
+                    onClick={() => {
+                      setSelectedProtocolPositionId(null);
+                      setPartialCloseProtocolId(selectedProtocolPosition.id);
+                    }}
+                  >
+                    Частичный вывод
+                  </button>
+                  <button
+                    className="btn btn--ghost"
+                    type="button"
+                    onClick={() => handleOpenStakingCloseForm(selectedProtocolPosition)}
+                  >
+                    Вывести обратно в актив
+                  </button>
+                </div>
+              );
+            })()}
 
             {stakingUpdateDrafts[selectedProtocolPosition.id] && (
               <form className="pf-pos-form" onSubmit={(event) => void handleSubmitStakingUpdate(selectedProtocolPosition, event)}>
@@ -4919,6 +5056,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
           setAddCryptoMode('pick');
           setStakingCreateAccountId(null);
           setStakingCreateDraft(createInitialStakingCreateDraft());
+          setStakingCreateFeeDraft(EMPTY_FEE_DRAFT);
           setStakingCreateError(null);
         };
         return (
@@ -5163,11 +5301,54 @@ export default function Portfolio({ user }: { user: UserContext }) {
                     );
                   })()}
 
-                  {stakingCreateDraft.positionType === 'lending' && (
-                    <>
-                      <div className="apf-row apf-row--compact-labels">
-                        <div className="apf-field" style={{ flex: 1 }}>
-                          <label className="apf-label">APR, %</label>
+                  {stakingCreateDraft.positionType === 'lending' && (() => {
+                    const sortedAssets = [...cryptoAssets].sort((a, b) => a.symbol.localeCompare(b.symbol));
+                    const selectedBorrowAsset = sortedAssets.find((asset) => String(asset.id) === stakingCreateDraft.borrowedCryptoAssetId);
+                    const borrowQtyNum = Number(stakingCreateDraft.borrowedQuantity);
+                    const livePrice = selectedBorrowAsset
+                      ? cryptoLivePrices.get(selectedBorrowAsset.id)?.price ?? null
+                      : null;
+                    const borrowValueHint = (selectedBorrowAsset && Number.isFinite(borrowQtyNum) && borrowQtyNum > 0 && livePrice && livePrice > 0)
+                      ? `≈ ${formatNumericAmount(livePrice * borrowQtyNum, 2)} ${currencySymbol(user.base_currency_code)}`
+                      : null;
+                    return (
+                      <>
+                        <div className="apf-field">
+                          <label className="apf-label">Заём (опционально)</label>
+                          <div className="tok-row">
+                            <div className="tok-row__pick">
+                              <ApfSelect
+                                value={stakingCreateDraft.borrowedCryptoAssetId}
+                                onChange={(value) => setStakingCreateDraft((prev) => ({ ...prev, borrowedCryptoAssetId: value }))}
+                                disabled={submittingStakingCreateAccountId !== null}
+                                options={[
+                                  { value: '', label: 'Без заёма' },
+                                  ...sortedAssets.map((asset) => ({
+                                    value: String(asset.id),
+                                    label: asset.symbol,
+                                  })),
+                                ]}
+                              />
+                            </div>
+                            <input
+                              className="apf-input tok-row__amt"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={stakingCreateDraft.borrowedQuantity}
+                              onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, borrowedQuantity: sanitizeDecimalInput(event.target.value) }))}
+                              disabled={submittingStakingCreateAccountId !== null || !selectedBorrowAsset}
+                            />
+                          </div>
+                          {borrowValueHint ? (
+                            <span className="tok-row__hint">{borrowValueHint}</span>
+                          ) : selectedBorrowAsset ? (
+                            <span className="tok-row__hint tok-row__hint--muted">Заёмные монеты появятся на счёте</span>
+                          ) : null}
+                        </div>
+
+                        <div className="apf-field">
+                          <label className="apf-label">APR, % (опционально)</label>
                           <input
                             className="apf-input"
                             type="text"
@@ -5178,71 +5359,9 @@ export default function Portfolio({ user }: { user: UserContext }) {
                             disabled={submittingStakingCreateAccountId !== null}
                           />
                         </div>
-                        <div className="apf-field" style={{ flex: 1 }}>
-                          <label className="apf-label">Начислено %, в базе</label>
-                          <input
-                            className="apf-input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={stakingCreateDraft.rewardsUnclaimedInBase}
-                            onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, rewardsUnclaimedInBase: sanitizeDecimalInput(event.target.value) }))}
-                            disabled={submittingStakingCreateAccountId !== null}
-                          />
-                        </div>
-                      </div>
-                      <div className="apf-row apf-row--compact-labels">
-                        <div className="apf-field" style={{ flex: 1 }}>
-                          <label className="apf-label">Залог (актив)</label>
-                          <input
-                            className="apf-input"
-                            type="text"
-                            placeholder="Опционально"
-                            value={stakingCreateDraft.collateralAsset}
-                            onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, collateralAsset: event.target.value }))}
-                            disabled={submittingStakingCreateAccountId !== null}
-                          />
-                        </div>
-                        <div className="apf-field" style={{ flex: 1 }}>
-                          <label className="apf-label">Залог (кол-во)</label>
-                          <input
-                            className="apf-input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={stakingCreateDraft.collateralQuantity}
-                            onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, collateralQuantity: sanitizeDecimalInput(event.target.value) }))}
-                            disabled={submittingStakingCreateAccountId !== null}
-                          />
-                        </div>
-                      </div>
-                      <div className="apf-row apf-row--compact-labels">
-                        <div className="apf-field" style={{ flex: 1 }}>
-                          <label className="apf-label">Заём (актив)</label>
-                          <input
-                            className="apf-input"
-                            type="text"
-                            placeholder="Опционально"
-                            value={stakingCreateDraft.borrowedAsset}
-                            onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, borrowedAsset: event.target.value }))}
-                            disabled={submittingStakingCreateAccountId !== null}
-                          />
-                        </div>
-                        <div className="apf-field" style={{ flex: 1 }}>
-                          <label className="apf-label">Заём (кол-во)</label>
-                          <input
-                            className="apf-input"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={stakingCreateDraft.borrowedQuantity}
-                            onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, borrowedQuantity: sanitizeDecimalInput(event.target.value) }))}
-                            disabled={submittingStakingCreateAccountId !== null}
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
+                      </>
+                    );
+                  })()}
 
                   {stakingCreateDraft.positionType === 'staking' && (
                     <div className="apf-field">
@@ -5281,6 +5400,14 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       disabled={submittingStakingCreateAccountId !== null}
                     />
                   </div>
+                  {stakingCreateAccountId != null && (
+                    <DefiFeeField
+                      accountPositions={positions.filter((p) => p.investment_account_id === stakingCreateAccountId)}
+                      value={stakingCreateFeeDraft}
+                      onChange={setStakingCreateFeeDraft}
+                      disabled={submittingStakingCreateAccountId !== null}
+                    />
+                  )}
                   {stakingCreateError && <p className="pf-new-account-form__error">{stakingCreateError}</p>}
                   <div className="apf-actions">
                     <button type="button" className="apf-cancel" onClick={() => setAddCryptoMode('pick')} disabled={submittingStakingCreateAccountId !== null}>
@@ -5570,12 +5697,39 @@ export default function Portfolio({ user }: { user: UserContext }) {
           return <LpAddLiquiditySheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
         }
         if (lpSheet.kind === 'partial') {
-          return <LpPartialWithdrawSheet open position={target} onClose={close} onSuccess={onSuccess} />;
+          return <LpPartialWithdrawSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
         }
         if (lpSheet.kind === 'close') {
-          return <LpCloseSheet open position={target} onClose={close} onSuccess={onSuccess} />;
+          return <LpCloseSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
         }
-        return <LpClaimFeesSheet open position={target} onClose={close} onSuccess={onSuccess} />;
+        return <LpClaimFeesSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
+      })()}
+
+      {lendingSheet && (() => {
+        const target = cryptoProtocolPositions.find((p) => p.id === lendingSheet.positionId);
+        if (!target || target.position_type !== 'lending') return null;
+        const accountPositions = positions.filter((p) => p.investment_account_id === target.investment_account_id);
+        const close = () => setLendingSheet(null);
+        const onSuccess = () => {
+          setLendingSheet(null);
+          void loadPortfolio();
+        };
+        if (lendingSheet.kind === 'top_up') {
+          return <LendingTopUpSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
+        }
+        if (lendingSheet.kind === 'take_debt') {
+          return <LendingTakeDebtSheet open position={target} accountPositions={accountPositions} cryptoAssets={cryptoAssets} cryptoLivePrices={cryptoLivePrices} baseCurrencyCode={user.base_currency_code} onClose={close} onSuccess={onSuccess} />;
+        }
+        if (lendingSheet.kind === 'repay_debt') {
+          return <LendingRepayDebtSheet open position={target} accountPositions={accountPositions} cryptoLivePrices={cryptoLivePrices} baseCurrencyCode={user.base_currency_code} onClose={close} onSuccess={onSuccess} />;
+        }
+        if (lendingSheet.kind === 'adjust') {
+          return <LendingAdjustSheet open position={target} onClose={close} onSuccess={onSuccess} />;
+        }
+        if (lendingSheet.kind === 'partial') {
+          return <LendingPartialWithdrawSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
+        }
+        return <LendingCloseSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
       })()}
 
       {cryptoIncomeSheetPosition && (() => {

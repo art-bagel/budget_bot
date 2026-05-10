@@ -18,7 +18,10 @@ CREATE FUNCTION budgeting.put__create_crypto_protocol_position(
     _metadata jsonb DEFAULT '{}'::jsonb,
     _source_position_id bigint DEFAULT NULL,
     _secondary_source_position_id bigint DEFAULT NULL,
-    _secondary_quantity numeric DEFAULT NULL
+    _secondary_quantity numeric DEFAULT NULL,
+    _borrowed_crypto_asset_id bigint DEFAULT NULL,
+    _borrowed_quantity numeric DEFAULT NULL,
+    _borrowed_value_in_base numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -48,6 +51,12 @@ DECLARE
     _secondary_remaining_basis numeric(20, 2);
     _secondary_consumed_cost_basis numeric(20, 2);
     _secondary_source_quantity numeric(30, 12);
+    _borrow_asset record;
+    _borrow_position_id bigint;
+    _borrow_existing record;
+    _borrow_asset_metadata jsonb;
+    _borrow_value_in_base numeric(20, 2);
+    _base_currency_code char(3);
 BEGIN
     SET search_path TO budgeting;
 
@@ -83,6 +92,11 @@ BEGIN
 
     IF _secondary_source_position_id IS NOT NULL AND _secondary_source_position_id = _source_position_id THEN
         RAISE EXCEPTION 'Token B must differ from token A';
+    END IF;
+
+    IF (_borrowed_crypto_asset_id IS NOT NULL OR (_borrowed_quantity IS NOT NULL AND _borrowed_quantity > 0))
+       AND _position_type <> 'lending' THEN
+        RAISE EXCEPTION 'Borrow params are only allowed for lending positions';
     END IF;
 
     IF _source_position_id IS NOT NULL THEN
@@ -339,6 +353,122 @@ BEGIN
                 'token_role', 'token_b'
             ),
             _user_id
+        );
+    END IF;
+
+    -- Borrow (lending only): credit borrowed crypto asset to the same account.
+    -- Cost basis = 0 — borrowed funds are debt, not user equity.
+    IF _position_type = 'lending'
+       AND _borrowed_crypto_asset_id IS NOT NULL
+       AND _borrowed_quantity IS NOT NULL
+       AND _borrowed_quantity > 0
+    THEN
+        _borrowed_quantity := round(_borrowed_quantity, 12);
+        _borrow_value_in_base := round(COALESCE(_borrowed_value_in_base, 0), 2);
+        _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
+
+        SELECT *
+        INTO _borrow_asset
+        FROM crypto_assets
+        WHERE id = _borrowed_crypto_asset_id;
+
+        IF _borrow_asset.id IS NULL THEN
+            RAISE EXCEPTION 'Unknown borrowed crypto asset %', _borrowed_crypto_asset_id;
+        END IF;
+
+        _borrow_asset_metadata := jsonb_build_object(
+            'crypto_kind', 'spot',
+            'crypto_asset_id', _borrow_asset.id,
+            'asset_symbol', _borrow_asset.symbol,
+            'asset_name', _borrow_asset.name,
+            'network_code', _borrow_asset.network_code,
+            'contract_address', _borrow_asset.contract_address
+        );
+
+        SELECT *
+        INTO _borrow_existing
+        FROM portfolio_positions
+        WHERE investment_account_id = _investment_account_id
+          AND asset_type_code = 'crypto'
+          AND status = 'open'
+          AND COALESCE((metadata ->> 'crypto_asset_id')::bigint, 0) = _borrow_asset.id
+        ORDER BY opened_at ASC, id ASC
+        LIMIT 1
+        FOR UPDATE;
+
+        IF _borrow_existing.id IS NOT NULL THEN
+            UPDATE portfolio_positions
+            SET quantity = COALESCE(quantity, 0) + _borrowed_quantity,
+                amount_in_currency = 0,
+                metadata = metadata || _borrow_asset_metadata
+            WHERE id = _borrow_existing.id;
+            _borrow_position_id := _borrow_existing.id;
+
+            INSERT INTO portfolio_events (
+                position_id, event_type, event_at, quantity, amount, currency_code,
+                linked_operation_id, comment, metadata, created_by_user_id
+            )
+            VALUES (
+                _borrow_position_id,
+                'top_up',
+                COALESCE(_deposited_at, current_date),
+                _borrowed_quantity,
+                NULL, NULL, NULL,
+                COALESCE(NULLIF(btrim(_comment), ''), 'Получено в долг (лендинг)'),
+                _borrow_asset_metadata || jsonb_build_object(
+                    'action', 'lending_borrow',
+                    'protocol_name', btrim(_protocol_name),
+                    'entry_value_in_base', 0,
+                    'source_kind', 'lending_borrow',
+                    'value_in_base', _borrow_value_in_base
+                ),
+                _user_id
+            );
+        ELSE
+            INSERT INTO portfolio_positions (
+                owner_type, owner_user_id, owner_family_id, investment_account_id,
+                asset_type_code, title, quantity, amount_in_currency, currency_code,
+                opened_at, comment, metadata, created_by_user_id
+            )
+            VALUES (
+                _owner_type, _owner_user_id, _owner_family_id, _investment_account_id,
+                'crypto', _borrow_asset.symbol, _borrowed_quantity, 0, _base_currency_code,
+                COALESCE(_deposited_at, current_date),
+                COALESCE(NULLIF(btrim(_comment), ''), 'Получено в долг (лендинг)'),
+                _borrow_asset_metadata,
+                _user_id
+            )
+            RETURNING id INTO _borrow_position_id;
+
+            INSERT INTO portfolio_events (
+                position_id, event_type, event_at, quantity, amount, currency_code,
+                linked_operation_id, comment, metadata, created_by_user_id
+            )
+            VALUES (
+                _borrow_position_id,
+                'open',
+                COALESCE(_deposited_at, current_date),
+                _borrowed_quantity,
+                NULL, NULL, NULL,
+                COALESCE(NULLIF(btrim(_comment), ''), 'Получено в долг (лендинг)'),
+                _borrow_asset_metadata || jsonb_build_object(
+                    'action', 'lending_borrow',
+                    'protocol_name', btrim(_protocol_name),
+                    'entry_value_in_base', 0,
+                    'source_kind', 'lending_borrow',
+                    'value_in_base', _borrow_value_in_base
+                ),
+                _user_id
+            );
+        END IF;
+
+        _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
+            'borrowed_crypto_asset_id', _borrow_asset.id,
+            'borrowed_asset', _borrow_asset.symbol,
+            'borrowed_asset_symbol', _borrow_asset.symbol,
+            'borrowed_quantity', _borrowed_quantity,
+            'borrowed_position_id', _borrow_position_id,
+            'borrowed_value_in_base', _borrow_value_in_base
         );
     END IF;
 

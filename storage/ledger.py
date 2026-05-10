@@ -27,6 +27,9 @@ class Ledger(DataBase):
     F_SET__CLOSE_CRYPTO_PROTOCOL_POSITION = 'set__close_crypto_protocol_position'
     F_PUT__PARTIAL_CLOSE_CRYPTO_PROTOCOL_POSITION = 'put__partial_close_crypto_protocol_position'
     F_PUT__TOP_UP_CRYPTO_PROTOCOL_POSITION = 'put__top_up_crypto_protocol_position'
+    F_PUT__LENDING_TAKE_MORE_DEBT = 'put__lending_take_more_debt'
+    F_PUT__LENDING_REPAY_DEBT = 'put__lending_repay_debt'
+    F_PUT__CRYPTO_PAY_FEE = 'put__crypto_pay_fee'
     F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
 
     async def put__record_fx_rate_snapshot(
@@ -434,6 +437,9 @@ class Ledger(DataBase):
         source_position_id: Optional[int] = None,
         secondary_source_position_id: Optional[int] = None,
         secondary_quantity: Optional[float] = None,
+        borrowed_crypto_asset_id: Optional[int] = None,
+        borrowed_quantity: Optional[float] = None,
+        borrowed_value_in_base: Optional[float] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__CREATE_CRYPTO_PROTOCOL_POSITION),
@@ -456,6 +462,70 @@ class Ledger(DataBase):
             source_position_id,
             secondary_source_position_id,
             secondary_quantity,
+            borrowed_crypto_asset_id,
+            borrowed_quantity,
+            borrowed_value_in_base,
+        )
+
+    async def put__lending_take_more_debt(
+        self,
+        user_id: int,
+        position_id: int,
+        debt_qty: float,
+        value_in_base: Optional[float] = None,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+        borrowed_crypto_asset_id: Optional[int] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__LENDING_TAKE_MORE_DEBT),
+            user_id,
+            position_id,
+            debt_qty,
+            value_in_base,
+            comment,
+            operated_at,
+            borrowed_crypto_asset_id,
+        )
+
+    async def put__lending_repay_debt(
+        self,
+        user_id: int,
+        position_id: int,
+        source_position_id: int,
+        repay_qty: float,
+        value_in_base: Optional[float] = None,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__LENDING_REPAY_DEBT),
+            user_id,
+            position_id,
+            source_position_id,
+            repay_qty,
+            value_in_base,
+            comment,
+            operated_at,
+        )
+
+    async def put__crypto_pay_fee(
+        self,
+        user_id: int,
+        source_position_id: int,
+        quantity: float,
+        comment: Optional[str] = None,
+        operated_at: Optional[date] = None,
+        link_protocol_position_id: Optional[int] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn(self.F_PUT__CRYPTO_PAY_FEE),
+            user_id,
+            source_position_id,
+            quantity,
+            comment,
+            operated_at,
+            link_protocol_position_id,
         )
 
     async def set__update_crypto_protocol_position(
