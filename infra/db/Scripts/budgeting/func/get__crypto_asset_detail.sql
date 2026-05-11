@@ -62,7 +62,12 @@ BEGIN
         MAX(pe.event_at)
     INTO _realized_total, _last_event_at
     FROM portfolio_events pe
-    WHERE pe.position_id = _position.id;
+    JOIN portfolio_positions event_position
+      ON event_position.id = pe.position_id
+    WHERE event_position.investment_account_id = _investment_account_id
+      AND event_position.asset_type_code = 'crypto'
+      AND event_position.metadata ->> 'crypto_asset_id' ~ '^[0-9]+$'
+      AND (event_position.metadata ->> 'crypto_asset_id')::bigint = _crypto_asset_id;
 
     SELECT COALESCE(jsonb_agg(item ORDER BY (item ->> 'event_at') DESC, (item ->> 'event_id')::bigint DESC), '[]'::jsonb)
     INTO _entries
@@ -102,7 +107,12 @@ BEGIN
             'is_legacy_no_basis', COALESCE((pe.metadata ->> 'legacy_no_basis')::boolean, false)
         ) AS item
         FROM portfolio_events pe
-        WHERE pe.position_id = _position.id
+        JOIN portfolio_positions event_position
+          ON event_position.id = pe.position_id
+        WHERE event_position.investment_account_id = _investment_account_id
+          AND event_position.asset_type_code = 'crypto'
+          AND event_position.metadata ->> 'crypto_asset_id' ~ '^[0-9]+$'
+          AND (event_position.metadata ->> 'crypto_asset_id')::bigint = _crypto_asset_id
     ) sub;
 
     RETURN jsonb_build_object(
