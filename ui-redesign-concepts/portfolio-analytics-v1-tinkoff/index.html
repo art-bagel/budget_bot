@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#EEF0F3" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0A0A0B" media="(prefers-color-scheme: dark)" />
+  <title>Аналитика портфеля · Бюджет</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <svg class="sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chev-down" viewBox="0 0 16 16"><path d="m3 6 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-up-r" viewBox="0 0 16 16"><path d="m4 12 8-8M5 4h7v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-down-r" viewBox="0 0 16 16"><path d="m4 4 8 8M12 5v7H5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v4M8 5v.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+
+      <!-- Source-of-return icons -->
+      <symbol id="i-capital" viewBox="0 0 16 16"><path d="M2 12 6 7l3 3 5-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 3h3v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-coupon" viewBox="0 0 16 16"><path d="M2 6h12v4H2zM5 4v8M11 4v8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+      <symbol id="i-dividend" viewBox="0 0 16 16"><path d="M8 1.5v9M5 8l3 3 3-3M2 13.5h12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-percent" viewBox="0 0 16 16"><circle cx="4.5" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="11.5" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M13 3 3 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+
+      <!-- Module icons -->
+      <symbol id="i-source" viewBox="0 0 16 16"><path d="M2 13.5h12M3 13V8M6 13V5M9 13V9M12 13V3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-trophy" viewBox="0 0 16 16"><path d="M5 2h6v4a3 3 0 0 1-6 0V2zM3.5 3v1.5a2 2 0 0 0 1.5 1.9M12.5 3v1.5a2 2 0 0 1-1.5 1.9M6 14h4M7.5 9.5h1V14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-donut" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+      <symbol id="i-hourglass" viewBox="0 0 16 16"><path d="M4 2.5h8M4 13.5h8M5 2.5c0 3 6 3.5 6 5.5s-6 2.5-6 5.5M11 2.5c0 3-6 3.5-6 5.5s6 2.5 6 5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1" fill="currentColor"/></symbol>
+      <symbol id="i-trade" viewBox="0 0 16 16"><path d="M2 5h9l-2-2M14 11H5l2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-bench" viewBox="0 0 16 16"><path d="M2 11l3-3 3 2 5-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13.5h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.5 1.5"/></symbol>
+
+      <!-- Asset glyphs -->
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 19V11M10 19V7M15 19v-6M20 19v-9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-safe" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="13" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13 9.5V11M7 12h2M13 19.5v1M17 19.5v1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14.5 9H11a1.8 1.8 0 0 0 0 3.6h2a1.8 1.8 0 0 1 0 3.6H9M12 7.5V9M12 15v1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-diamond" viewBox="0 0 24 24"><path d="m12 3 9 7-9 11L3 10l9-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 10h18" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="app" data-active="all" data-view="analytics" data-period="1Y">
+
+    <!-- Top bar -->
+    <header class="bar">
+      <div class="bar__left">
+        <button class="icon-btn icon-btn--sm" type="button" aria-label="Назад">
+          <svg><use href="#i-back"/></svg>
+        </button>
+        <div class="bar__meta">
+          <span class="bar__hello">Мини-приложение</span>
+          <h1 class="bar__title">Портфель</h1>
+        </div>
+      </div>
+      <div class="bar__right">
+        <button class="icon-btn icon-btn--sm" id="themeToggle" type="button" aria-label="Переключить тему">
+          <svg class="tg__sun"><use href="#i-sun"/></svg>
+          <svg class="tg__moon"><use href="#i-moon"/></svg>
+        </button>
+        <button class="icon-btn icon-btn--sm" type="button" aria-label="Меню">
+          <svg><use href="#i-more"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- HERO — морфирует в Аналитике в "доходность за период" -->
+      <article class="hero" id="hero">
+        <div class="hero__head">
+          <span class="hero__eyebrow" id="heroEyebrow">Доходность · 12 месяцев</span>
+          <div class="segtog segtog--period" role="tablist" aria-label="Период">
+            <button class="segtog__opt" data-period="1M" role="tab" aria-selected="false">1М</button>
+            <button class="segtog__opt" data-period="3M" role="tab" aria-selected="false">3М</button>
+            <button class="segtog__opt" data-period="6M" role="tab" aria-selected="false">6М</button>
+            <button class="segtog__opt segtog__opt--on" data-period="1Y" role="tab" aria-selected="true">1Г</button>
+            <button class="segtog__opt" data-period="ALL" role="tab" aria-selected="false">Всё</button>
+          </div>
+        </div>
+        <div class="hero__amount">
+          <span class="hero__value" id="heroValue">+218 600</span>
+          <span class="hero__sym">₽</span>
+        </div>
+        <div class="hero__delta-row">
+          <span class="hero__delta" id="heroDelta">
+            <svg class="hero__delta-ico"><use href="#i-arrow-up-r"/></svg>
+            <span id="heroDeltaText">+8,9% · обогнал MOEX на +3,5 п.п.</span>
+          </span>
+        </div>
+
+        <!-- Breakdown rows — в Аналитике показывают «принесли» по типам активов -->
+        <dl class="hero__rows" id="heroRows">
+          <div class="hero__row" data-tab="security" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--ink"></span>Бумаги</dt>
+            <dd>
+              <span class="hero__row-val">+124 800 ₽</span>
+              <span class="hero__row-pct pos">+10,5%</span>
+              <svg class="hero__row-chev"><use href="#i-chev"/></svg>
+            </dd>
+          </div>
+          <div class="hero__row" data-tab="deposit" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--mint"></span>Депозиты</dt>
+            <dd>
+              <span class="hero__row-val">+58 000 ₽</span>
+              <span class="hero__row-pct pos">+7,3%</span>
+              <svg class="hero__row-chev"><use href="#i-chev"/></svg>
+            </dd>
+          </div>
+          <div class="hero__row" data-tab="crypto" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--coral"></span>Крипта</dt>
+            <dd>
+              <span class="hero__row-val">−12 400 ₽</span>
+              <span class="hero__row-pct neg">−4,8%</span>
+              <svg class="hero__row-chev"><use href="#i-chev"/></svg>
+            </dd>
+          </div>
+          <div class="hero__row" data-tab="other" role="button" tabindex="0">
+            <dt><span class="hero__mark hero__mark--grape"></span>Другое</dt>
+            <dd>
+              <span class="hero__row-val">+48 200 ₽</span>
+              <span class="hero__row-pct pos">+23,1%</span>
+              <svg class="hero__row-chev"><use href="#i-chev"/></svg>
+            </dd>
+          </div>
+        </dl>
+      </article>
+
+      <!-- Asset tabs -->
+      <nav class="tabs" role="tablist" aria-label="Типы активов">
+        <button class="tabs__item tabs__item--on" data-tab="all" role="tab" aria-selected="true">Все</button>
+        <button class="tabs__item" data-tab="security" role="tab" aria-selected="false">Бумаги</button>
+        <button class="tabs__item" data-tab="deposit" role="tab" aria-selected="false">Депозиты</button>
+        <button class="tabs__item" data-tab="crypto" role="tab" aria-selected="false">Крипта</button>
+        <button class="tabs__item" data-tab="other" role="tab" aria-selected="false">Другое</button>
+      </nav>
+
+      <!-- View switcher: Позиции | Операции | Аналитика -->
+      <div class="viewtog" role="tablist" aria-label="Раздел портфеля">
+        <button class="viewtog__opt" data-view="positions" role="tab" aria-selected="false">Позиции</button>
+        <button class="viewtog__opt" data-view="ops" role="tab" aria-selected="false">Операции</button>
+        <button class="viewtog__opt viewtog__opt--on" data-view="analytics" role="tab" aria-selected="true">Аналитика</button>
+      </div>
+
+      <!-- =========================================================
+           PANE: Аналитика
+           ========================================================= -->
+      <div class="view-pane view-pane--on" data-pane="analytics">
+
+        <!-- Tab-aware eyebrow strip — что мы сейчас анализируем -->
+        <header class="ascope" id="ascope">
+          <span class="ascope__ico" id="ascopeIco" data-tint="ink"><svg><use href="#i-chart"/></svg></span>
+          <div class="ascope__meta">
+            <span class="ascope__eyebrow" id="ascopeEyebrow">Весь портфель</span>
+            <span class="ascope__sub" id="ascopeSub">4 типа активов · 14 позиций · 5 счетов</span>
+          </div>
+          <span class="ascope__pill pos" id="ascopePill">+8,9%</span>
+        </header>
+
+        <!-- =========== M1: Источники дохода =========== -->
+        <section class="card" data-only="all security deposit crypto other">
+          <header class="card__head">
+            <span class="card__ico" data-tint="ink"><svg><use href="#i-source"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">Откуда пришёл доход</h3>
+              <span class="card__sub" id="srcSub">За 12 месяцев · 4 источника</span>
+            </div>
+            <span class="card__totalpill pos" id="srcTotal">+218 600 ₽</span>
+          </header>
+
+          <div class="src" id="srcModule">
+            <div class="src__bar" id="srcBar" role="img" aria-label="Распределение источников дохода">
+              <span class="src__seg src__seg--capital" style="--w: 54;" data-src="capital"></span>
+              <span class="src__seg src__seg--coupon"  style="--w: 6;"  data-src="coupon"></span>
+              <span class="src__seg src__seg--dividend" style="--w: 13;" data-src="dividend"></span>
+              <span class="src__seg src__seg--interest" style="--w: 27;" data-src="interest"></span>
+            </div>
+
+            <ul class="src__legend" id="srcLegend">
+              <li data-src="capital">
+                <span class="src__dot src__dot--capital"></span>
+                <span class="src__name">Прирост капитала</span>
+                <span class="src__amt pos">+118 600<i>₽</i></span>
+                <span class="src__pct">54%</span>
+              </li>
+              <li data-src="coupon">
+                <span class="src__dot src__dot--coupon"></span>
+                <span class="src__name">Купоны</span>
+                <span class="src__amt pos">+14 200<i>₽</i></span>
+                <span class="src__pct">6%</span>
+              </li>
+              <li data-src="dividend">
+                <span class="src__dot src__dot--dividend"></span>
+                <span class="src__name">Дивиденды</span>
+                <span class="src__amt pos">+27 800<i>₽</i></span>
+                <span class="src__pct">13%</span>
+              </li>
+              <li data-src="interest">
+                <span class="src__dot src__dot--interest"></span>
+                <span class="src__name">Проценты по вкладам</span>
+                <span class="src__amt pos">+58 000<i>₽</i></span>
+                <span class="src__pct">27%</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- =========== M2: По месяцам (12 баров) =========== -->
+        <section class="card" data-only="all security deposit crypto other">
+          <header class="card__head">
+            <span class="card__ico" data-tint="mint"><svg><use href="#i-calendar"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">По месяцам</h3>
+              <span class="card__sub" id="calSub">Прирост портфеля · 12 месяцев</span>
+            </div>
+            <div class="card__legend-mini">
+              <span class="legend-dot legend-dot--pos"></span><i>прибыль</i>
+              <span class="legend-dot legend-dot--neg"></span><i>убыток</i>
+            </div>
+          </header>
+
+          <div class="mbar" id="mbarModule" aria-hidden="false">
+            <!-- Each cell: --h is bar height (0-100 of axis half), --dir is pos|neg -->
+            <button class="mbar__cell" data-m="2025-05" style="--h: 28; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">М</span>
+            </button>
+            <button class="mbar__cell" data-m="2025-06" style="--h: 42; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">И</span>
+            </button>
+            <button class="mbar__cell" data-m="2025-07" style="--h: 34; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">И</span>
+            </button>
+            <button class="mbar__cell" data-m="2025-08" style="--h: 49; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">А</span>
+            </button>
+            <button class="mbar__cell mbar__cell--neg" data-m="2025-09" style="--h: 19; --dir: neg">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">С</span>
+            </button>
+            <button class="mbar__cell" data-m="2025-10" style="--h: 32; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">О</span>
+            </button>
+            <button class="mbar__cell" data-m="2025-11" style="--h: 67; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">Н</span>
+            </button>
+            <button class="mbar__cell" data-m="2025-12" style="--h: 50; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">Д</span>
+            </button>
+            <button class="mbar__cell" data-m="2026-01" style="--h: 41; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">Я</span>
+            </button>
+            <button class="mbar__cell mbar__cell--neg" data-m="2026-02" style="--h: 8; --dir: neg">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">Ф</span>
+            </button>
+            <button class="mbar__cell" data-m="2026-03" style="--h: 79; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">М</span>
+            </button>
+            <button class="mbar__cell mbar__cell--on" data-m="2026-04" style="--h: 100; --dir: pos">
+              <span class="mbar__bar"></span>
+              <span class="mbar__label">А</span>
+            </button>
+          </div>
+
+          <div class="mbar__pick" id="mbarPick" aria-live="polite">
+            <span class="mbar__pick-month">Апрель 2026</span>
+            <span class="mbar__pick-val pos">+44 600<i>₽</i></span>
+            <span class="mbar__pick-meta">+1,7% · лучший месяц года</span>
+          </div>
+        </section>
+
+        <!-- =========== M3: Лидеры и аутсайдеры =========== -->
+        <section class="card" data-only="all security crypto other">
+          <header class="card__head">
+            <span class="card__ico" data-tint="coral"><svg><use href="#i-trophy"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">Лидеры и аутсайдеры</h3>
+              <span class="card__sub" id="contSub">Топ-вклад в результат за период</span>
+            </div>
+          </header>
+
+          <ul class="cont" id="contList">
+            <li class="cont__row cont__row--pos" data-asset="security" data-rank="1" style="--mag: 92">
+              <span class="cont__rank">1</span>
+              <div class="cont__bar">
+                <span class="cont__fill cont__fill--pos"></span>
+              </div>
+              <div class="cont__meta">
+                <span class="cont__name">Сбербанк</span>
+                <span class="cont__sub">SBER · акция · 1 200 шт</span>
+              </div>
+              <div class="cont__amt">
+                <strong class="pos">+58 400<i>₽</i></strong>
+                <em class="pos">+22,1%</em>
+              </div>
+            </li>
+            <li class="cont__row cont__row--pos" data-asset="other" data-rank="2" style="--mag: 64">
+              <span class="cont__rank">2</span>
+              <div class="cont__bar">
+                <span class="cont__fill cont__fill--pos"></span>
+              </div>
+              <div class="cont__meta">
+                <span class="cont__name">Золото ОМС</span>
+                <span class="cont__sub">22,4 г · Сбербанк</span>
+              </div>
+              <div class="cont__amt">
+                <strong class="pos">+24 800<i>₽</i></strong>
+                <em class="pos">+17,7%</em>
+              </div>
+            </li>
+            <li class="cont__row cont__row--pos" data-asset="security" data-rank="3" style="--mag: 48">
+              <span class="cont__rank">3</span>
+              <div class="cont__bar">
+                <span class="cont__fill cont__fill--pos"></span>
+              </div>
+              <div class="cont__meta">
+                <span class="cont__name">FXUS</span>
+                <span class="cont__sub">ETF · 80 шт</span>
+              </div>
+              <div class="cont__amt">
+                <strong class="pos">+18 400<i>₽</i></strong>
+                <em class="pos">+14,1%</em>
+              </div>
+            </li>
+            <li class="cont__row cont__row--neg" data-asset="crypto" data-rank="-1" style="--mag: 32">
+              <span class="cont__rank">−</span>
+              <div class="cont__bar">
+                <span class="cont__fill cont__fill--neg"></span>
+              </div>
+              <div class="cont__meta">
+                <span class="cont__name">Bitcoin</span>
+                <span class="cont__sub">BTC · 0,024</span>
+              </div>
+              <div class="cont__amt">
+                <strong class="neg">−18 400<i>₽</i></strong>
+                <em class="neg">−11,3%</em>
+              </div>
+            </li>
+            <li class="cont__row cont__row--neg" data-asset="crypto" data-rank="-2" style="--mag: 18">
+              <span class="cont__rank">−</span>
+              <div class="cont__bar">
+                <span class="cont__fill cont__fill--neg"></span>
+              </div>
+              <div class="cont__meta">
+                <span class="cont__name">Toncoin</span>
+                <span class="cont__sub">TON · 148</span>
+              </div>
+              <div class="cont__amt">
+                <strong class="neg">−6 800<i>₽</i></strong>
+                <em class="neg">−9,4%</em>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- =========== M4: Распределение (только Все) =========== -->
+        <section class="card" data-only="all">
+          <header class="card__head">
+            <span class="card__ico" data-tint="grape"><svg><use href="#i-donut"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">Распределение</h3>
+              <span class="card__sub">По типам активов · 2 665 000 ₽</span>
+            </div>
+          </header>
+
+          <div class="donut">
+            <!-- Donut: 4 segments. circumference of r=42 ≈ 263.89. Lengths: 49.2%, 31.9%, 9.2%, 9.7% -->
+            <svg class="donut__svg" viewBox="0 0 100 100" aria-hidden="true">
+              <circle class="donut__track" cx="50" cy="50" r="42" pathLength="100" fill="none" stroke-width="13"/>
+              <circle class="donut__seg donut__seg--ink"   cx="50" cy="50" r="42" pathLength="100" fill="none" stroke-width="13"
+                      stroke-dasharray="49.2 50.8" stroke-dashoffset="0"/>
+              <circle class="donut__seg donut__seg--mint"  cx="50" cy="50" r="42" pathLength="100" fill="none" stroke-width="13"
+                      stroke-dasharray="31.9 68.1" stroke-dashoffset="-49.2"/>
+              <circle class="donut__seg donut__seg--coral" cx="50" cy="50" r="42" pathLength="100" fill="none" stroke-width="13"
+                      stroke-dasharray="9.2 90.8" stroke-dashoffset="-81.1"/>
+              <circle class="donut__seg donut__seg--grape" cx="50" cy="50" r="42" pathLength="100" fill="none" stroke-width="13"
+                      stroke-dasharray="9.7 90.3" stroke-dashoffset="-90.3"/>
+            </svg>
+            <div class="donut__center">
+              <span class="donut__eyebrow">Бумаги</span>
+              <strong class="donut__value">49,2%</strong>
+              <span class="donut__sub">самая большая доля</span>
+            </div>
+          </div>
+
+          <ul class="donut__legend">
+            <li><span class="alloc__dot alloc__dot--ink"></span>Бумаги<em>49,2%</em><i>1 311 780 ₽</i></li>
+            <li><span class="alloc__dot alloc__dot--mint"></span>Депозиты<em>31,9%</em><i>850 420 ₽</i></li>
+            <li><span class="alloc__dot alloc__dot--coral"></span>Крипта<em>9,2%</em><i>245 800 ₽</i></li>
+            <li><span class="alloc__dot alloc__dot--grape"></span>Другое<em>9,7%</em><i>257 000 ₽</i></li>
+          </ul>
+        </section>
+
+        <!-- =========== M5: Прогресс по вкладам (только Депозиты) =========== -->
+        <section class="card" data-only="deposit">
+          <header class="card__head">
+            <span class="card__ico" data-tint="mint"><svg><use href="#i-hourglass"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">Прогресс по вкладам</h3>
+              <span class="card__sub">Срок · накоплено · до выплаты</span>
+            </div>
+          </header>
+
+          <ul class="depo">
+            <li class="depo__row">
+              <div class="depo__top">
+                <span class="depo__name">Вклад «Доход» · Т-Банк</span>
+                <span class="depo__rate">18%</span>
+              </div>
+              <div class="depo__progress" style="--p: 83">
+                <span class="depo__progress-fill"></span>
+                <span class="depo__progress-tick"></span>
+              </div>
+              <div class="depo__foot">
+                <span class="depo__foot-left">83% срока · до 14 июля 2026</span>
+                <span class="depo__accrued pos">+32 400 ₽ накоплено</span>
+              </div>
+            </li>
+            <li class="depo__row">
+              <div class="depo__top">
+                <span class="depo__name">Валютный · Т-Банк</span>
+                <span class="depo__rate">8%</span>
+              </div>
+              <div class="depo__progress" style="--p: 70">
+                <span class="depo__progress-fill"></span>
+                <span class="depo__progress-tick"></span>
+              </div>
+              <div class="depo__foot">
+                <span class="depo__foot-left">70% срока · до 22 декабря 2026</span>
+                <span class="depo__accrued pos">+10 800 ₽ начислено</span>
+              </div>
+            </li>
+            <li class="depo__row">
+              <div class="depo__top">
+                <span class="depo__name">Накопительный · Сбербанк</span>
+                <span class="depo__rate">14%</span>
+              </div>
+              <div class="depo__progress depo__progress--open" style="--p: 100">
+                <span class="depo__progress-fill"></span>
+              </div>
+              <div class="depo__foot">
+                <span class="depo__foot-left">До востребования · с 11 ноября 2025</span>
+                <span class="depo__accrued pos">+14 800 ₽ начислено</span>
+              </div>
+            </li>
+          </ul>
+
+          <div class="kpi-row">
+            <div class="kpi">
+              <span class="kpi__label">Средневзв. ставка</span>
+              <strong class="kpi__value">15,2<i>%</i></strong>
+              <span class="kpi__note">по 3 вкладам</span>
+            </div>
+            <div class="kpi kpi--mid">
+              <span class="kpi__label">Накоплено за год</span>
+              <strong class="kpi__value pos">+58 000<i>₽</i></strong>
+              <span class="kpi__note pos">+7,3% к телу</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi__label">До выплаты</span>
+              <strong class="kpi__value">63<i>дн</i></strong>
+              <span class="kpi__note">ближайший</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- =========== M6: Дистанция до пика (только Крипта) =========== -->
+        <section class="card" data-only="crypto">
+          <header class="card__head">
+            <span class="card__ico" data-tint="coral"><svg><use href="#i-target"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">Дистанция до пика</h3>
+              <span class="card__sub">Текущая цена vs all-time high</span>
+            </div>
+          </header>
+
+          <ul class="ath">
+            <li class="ath__row">
+              <div class="ath__head">
+                <span class="ath__logo pos__logo pos__logo--btc">₿</span>
+                <span class="ath__name">Bitcoin</span>
+                <span class="ath__delta neg">−16,1%</span>
+              </div>
+              <div class="ath__track" style="--p: 84">
+                <span class="ath__fill"></span>
+                <span class="ath__cursor"></span>
+                <span class="ath__peak"></span>
+              </div>
+              <div class="ath__foot">
+                <span class="ath__low">6 041 666 ₽<i>сейчас</i></span>
+                <span class="ath__high">7 200 000 ₽<i>ATH · фев 2026</i></span>
+              </div>
+            </li>
+            <li class="ath__row">
+              <div class="ath__head">
+                <span class="ath__logo pos__logo pos__logo--ton">◊</span>
+                <span class="ath__name">Toncoin</span>
+                <span class="ath__delta neg">−19,2%</span>
+              </div>
+              <div class="ath__track" style="--p: 81">
+                <span class="ath__fill"></span>
+                <span class="ath__cursor"></span>
+                <span class="ath__peak"></span>
+              </div>
+              <div class="ath__foot">
+                <span class="ath__low">444,59 ₽<i>сейчас</i></span>
+                <span class="ath__high">550,00 ₽<i>ATH · янв 2026</i></span>
+              </div>
+            </li>
+            <li class="ath__row">
+              <div class="ath__head">
+                <span class="ath__logo pos__logo pos__logo--eth">Ξ</span>
+                <span class="ath__name">Ethereum</span>
+                <span class="ath__delta neg">−26,2%</span>
+              </div>
+              <div class="ath__track" style="--p: 74">
+                <span class="ath__fill"></span>
+                <span class="ath__cursor"></span>
+                <span class="ath__peak"></span>
+              </div>
+              <div class="ath__foot">
+                <span class="ath__low">291 666 ₽<i>сейчас</i></span>
+                <span class="ath__high">395 000 ₽<i>ATH · дек 2025</i></span>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- =========== M7: Активность сделок (только Бумаги) =========== -->
+        <section class="card" data-only="security">
+          <header class="card__head">
+            <span class="card__ico" data-tint="ink"><svg><use href="#i-trade"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title">Активность · сделки</h3>
+              <span class="card__sub">За 12 месяцев · 2 счёта</span>
+            </div>
+          </header>
+
+          <div class="kpi-row">
+            <div class="kpi">
+              <span class="kpi__label">Сделок</span>
+              <strong class="kpi__value">38</strong>
+              <span class="kpi__note">22 купил · 16 продал</span>
+            </div>
+            <div class="kpi kpi--mid">
+              <span class="kpi__label">Оборот</span>
+              <strong class="kpi__value">1,82<i>М</i></strong>
+              <span class="kpi__note">₽ за период</span>
+            </div>
+            <div class="kpi">
+              <span class="kpi__label">Нетто</span>
+              <strong class="kpi__value pos">+208<i>тыс</i></strong>
+              <span class="kpi__note pos">приток в портфель</span>
+            </div>
+          </div>
+
+          <div class="paystr">
+            <span class="paystr__row">
+              <span class="paystr__label">Дивиденды получены</span>
+              <span class="paystr__bar"><span style="width: 67%"></span></span>
+              <strong class="paystr__val pos">+27 800<i>₽</i></strong>
+            </span>
+            <span class="paystr__row">
+              <span class="paystr__label">Купоны получены</span>
+              <span class="paystr__bar paystr__bar--mint"><span style="width: 34%"></span></span>
+              <strong class="paystr__val pos">+14 200<i>₽</i></strong>
+            </span>
+          </div>
+        </section>
+
+        <!-- =========== M8: Сравнение с бенчмарком =========== -->
+        <section class="card" data-only="all security deposit crypto other">
+          <header class="card__head">
+            <span class="card__ico" data-tint="grape"><svg><use href="#i-bench"/></svg></span>
+            <div class="card__title-meta">
+              <h3 class="card__title" id="benchTitle">Сравнение с рынком</h3>
+              <span class="card__sub" id="benchSub">Портфель vs MOEX · 12 месяцев</span>
+            </div>
+            <span class="card__totalpill pos" id="benchPill">+3,5 п.п.</span>
+          </header>
+
+          <div class="bench" id="benchRows">
+            <span class="bench__row bench__row--me">
+              <span class="bench__label">Портфель</span>
+              <span class="bench__bar"><span class="bench__fill" style="width: 89%"></span></span>
+              <strong class="bench__val pos">+8,9%</strong>
+            </span>
+            <span class="bench__row">
+              <span class="bench__label">MOEX TR</span>
+              <span class="bench__bar"><span class="bench__fill bench__fill--alt" style="width: 54%"></span></span>
+              <strong class="bench__val">+5,4%</strong>
+            </span>
+            <span class="bench__row">
+              <span class="bench__label">Инфляция</span>
+              <span class="bench__bar"><span class="bench__fill bench__fill--alt" style="width: 74%"></span></span>
+              <strong class="bench__val">+7,4%</strong>
+            </span>
+            <span class="bench__row">
+              <span class="bench__label">Ключ. ставка</span>
+              <span class="bench__bar"><span class="bench__fill bench__fill--alt" style="width: 100%"></span></span>
+              <strong class="bench__val">+16,5%</strong>
+            </span>
+          </div>
+          <p class="bench__note" id="benchNote">
+            <svg><use href="#i-info"/></svg>
+            <span>Портфель обогнал MOEX и инфляцию, но проиграл ключевой ставке — основной тормоз: крипта и просадка облигаций.</span>
+          </p>
+        </section>
+
+      </div><!-- /.view-pane[analytics] -->
+
+      <!-- Placeholder panes — концепт фокусируется на Аналитике -->
+      <div class="view-pane" data-pane="positions">
+        <section class="stub">
+          <h3>Позиции</h3>
+          <p>См. концепт <code>portfolio-v1-tinkoff/</code> — этот прототип сфокусирован на UX редизайне «Аналитики».</p>
+        </section>
+      </div>
+      <div class="view-pane" data-pane="ops">
+        <section class="stub">
+          <h3>Операции</h3>
+          <p>См. концепт <code>portfolio-v1-tinkoff/</code> — этот прототип сфокусирован на UX редизайне «Аналитики».</p>
+        </section>
+      </div>
+
+      <p class="updated">Обновлено сегодня в 14:32 · MOEX · Binance · ЦБ РФ</p>
+
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
