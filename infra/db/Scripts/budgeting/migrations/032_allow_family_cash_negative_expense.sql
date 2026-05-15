@@ -198,6 +198,7 @@ BEGIN
         _bank_account_id, _currency_code, -_amount, -_expense_cost_base
     );
 
+
     PERFORM budgeting.put__apply_current_budget_delta(
         _category_id, _base_currency_code, -_expense_cost_base
     );
