@@ -1,5 +1,10 @@
-DROP FUNCTION IF EXISTS budgeting.put__record_expense;
-CREATE FUNCTION budgeting.put__record_expense(
+-- Allow family cash accounts to go negative on expense.
+-- Personal cash accounts still cannot. Credit accounts are unchanged
+-- (gated by their credit_limit). Non-base currency expenses on family
+-- cash remain bounded by available FX lots — only the redundant bank
+-- balance pre-check is dropped.
+
+CREATE OR REPLACE FUNCTION budgeting.put__record_expense(
     _user_id         bigint,
     _bank_account_id bigint,
     _category_id     bigint,
