@@ -209,6 +209,7 @@ export default function CategoryActionSheet({
   }, [expAccountId, expBalancesByAccountId]);
 
   const expAssetOptions: CurrencyPickerOption[] = useMemo(() => {
+    const selectedAccount = bankAccounts.find((account) => account.id === expAccountId);
     const fiatBalances = expAccountBalances.filter((item) => item.asset_type !== 'crypto' && item.currency_code && item.amount > 0);
     const cryptoBalances = expAccountBalances.filter((item) => item.asset_type === 'crypto' && item.crypto_asset_id && item.amount > 0);
     const fiatOptions = fiatBalances.map((item) => ({
@@ -216,9 +217,9 @@ export default function CategoryActionSheet({
       label: item.currency_code,
       group: 'Фиат',
     }));
-    // Family cash accounts may go negative — keep the base currency selectable
-    // even when its current balance is zero or already negative.
-    if (category.owner_type === 'family') {
+    // Family cash accounts and credit cards may go negative. Keep base currency
+    // selectable even when the current balance is zero or already negative.
+    if (category.owner_type === 'family' || selectedAccount?.credit_kind === 'credit_card') {
       const baseValue = `fiat:${user.base_currency_code}`;
       if (!fiatOptions.some((o) => o.value === baseValue)) {
         fiatOptions.push({ value: baseValue, label: user.base_currency_code, group: 'Фиат' });
@@ -232,7 +233,7 @@ export default function CategoryActionSheet({
         group: 'Крипта',
       })),
     ];
-  }, [expAccountBalances, category.owner_type, user.base_currency_code]);
+  }, [bankAccounts, expAccountBalances, expAccountId, category.owner_type, user.base_currency_code]);
 
   useEffect(() => {
     if (expAssetOptions.length === 0) return;

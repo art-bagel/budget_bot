@@ -45,8 +45,8 @@ DECLARE
     _consume_amount       numeric(20, 8);
     _consume_cost         numeric(20, 2);
     _lot                  record;
-    -- True when paying off a credit card: expense already recorded in categories.
-    _is_cc_repayment      boolean;
+    _credit_card_budget_debt_base numeric(20, 2) := 0;
+    _budget_debit_base    numeric(20, 2) := 0;
 BEGIN
     SET search_path TO budgeting;
 
@@ -84,18 +84,11 @@ BEGIN
         RAISE EXCEPTION 'Access denied to target bank account %', _to_account_id;
     END IF;
 
-    -- cash → credit_card is a repayment: expense already counted in categories.
-    _is_cc_repayment := (
-        _from_account_kind = 'cash'
-        AND COALESCE(_to_credit_kind = 'credit_card', false)
-    );
-
     _base_currency_code := budgeting.get__owner_base_currency(
         _from_owner_type, _from_owner_user_id, _from_owner_family_id
     );
 
-    -- Only need Unallocated for cash source when it's NOT a CC repayment.
-    IF _from_account_kind = 'cash' AND NOT _is_cc_repayment THEN
+    IF _from_account_kind = 'cash' THEN
         _from_unallocated_id := budgeting.get__owner_system_category_id(
             _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
         );
@@ -174,6 +167,24 @@ BEGIN
         END IF;
     END IF;
 
+    IF _from_account_kind = 'cash'
+       AND _to_account_kind = 'credit'
+       AND _to_credit_kind = 'credit_card' THEN
+        SELECT GREATEST(0, round(COALESCE(sum(bue.amount), 0), 2))
+        INTO _credit_card_budget_debt_base
+        FROM operations o
+        JOIN bank_entries credit_be
+          ON credit_be.operation_id = o.id
+         AND credit_be.bank_account_id = _to_account_id
+        JOIN budget_entries bue
+          ON bue.operation_id = o.id
+        WHERE o.type = 'account_transfer';
+
+        _budget_debit_base := LEAST(_cost_base, _credit_card_budget_debt_base);
+    ELSIF _from_account_kind = 'cash' THEN
+        _budget_debit_base := _cost_base;
+    END IF;
+
     INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, operated_on)
     VALUES (
         _user_id, _from_owner_type, _from_owner_user_id, _from_owner_family_id,
@@ -186,10 +197,9 @@ BEGIN
         (_operation_id, _from_account_id, _currency_code, -_amount),
         (_operation_id, _to_account_id,   _currency_code,  _amount);
 
-    -- CC repayment: skip budget entry — expense was already recorded against the category.
-    IF _from_account_kind = 'cash' AND NOT _is_cc_repayment THEN
+    IF _budget_debit_base > 0 THEN
         INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-        VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_cost_base);
+        VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_budget_debit_base);
     END IF;
 
     IF _to_account_kind = 'cash' THEN
@@ -200,8 +210,8 @@ BEGIN
     PERFORM budgeting.put__apply_current_bank_delta(_from_account_id, _currency_code, -_amount, -_cost_base);
     PERFORM budgeting.put__apply_current_bank_delta(_to_account_id,   _currency_code,  _amount,  _cost_base);
 
-    IF _from_account_kind = 'cash' AND NOT _is_cc_repayment THEN
-        PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_cost_base);
+    IF _budget_debit_base > 0 THEN
+        PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_budget_debit_base);
     END IF;
 
     IF _to_account_kind = 'cash' THEN
