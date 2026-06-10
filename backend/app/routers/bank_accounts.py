@@ -282,7 +282,41 @@ def _actual_actual_interest(principal: float, annual_rate: float, date_from: dat
     return round(total, 2)
 
 
-def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[dict]:
+def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Optional[tuple[date, float]]:
+    candidates: list[tuple[date, int, float]] = []
+    for item in history_items:
+        if item.get('status') != 'paid':
+            continue
+
+        scheduled_date = _parse_iso_date(item.get('scheduled_date'))
+        total_payment = item.get('total_payment')
+        principal_component = float(item.get('principal_component') or 0)
+        operation_id = int(item.get('operation_id') or 0)
+
+        if (
+            scheduled_date is None
+            or scheduled_date.day != payment_day
+            or total_payment is None
+            or float(total_payment) <= 0
+            or principal_component <= 0
+        ):
+            continue
+
+        candidates.append((scheduled_date, operation_id, round(float(total_payment), 2)))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    latest_date, _, latest_amount = candidates[-1]
+    return latest_date, latest_amount
+
+
+def _build_credit_schedule(
+    summary: dict,
+    limit: Optional[int] = None,
+    history_items: Optional[list[dict]] = None,
+) -> list[dict]:
     credit_kind = summary.get('credit_kind')
     annual_rate_raw = summary.get('annual_rate')
     annual_rate = float(annual_rate_raw or 0)
@@ -290,6 +324,7 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
     as_of_date = _parse_iso_date(summary.get('as_of_date'))
     credit_started_at = _parse_iso_date(summary.get('credit_started_at'))
     credit_ends_at = _parse_iso_date(summary.get('credit_ends_at'))
+    last_accrual_date = _parse_iso_date(summary.get('last_accrual_date'))
     principal = round(float(summary.get('principal_outstanding') or 0), 2)
     payments_count = int(summary.get('payments_count') or 0)
 
@@ -324,7 +359,7 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
     if not payment_dates:
         return []
 
-    remaining_payments = len(payment_dates)
+    remaining_payments = full_term_payments
     monthly_rate = annual_rate / 1200 if annual_rate > 0 else 0
     if monthly_rate > 0:
         annuity_payment = principal * monthly_rate / (1 - (1 + monthly_rate) ** (-remaining_payments))
@@ -332,9 +367,20 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
         annuity_payment = principal / remaining_payments
     annuity_payment = round(annuity_payment, 2)
 
+    latest_regular_payment = _latest_regular_payment(history_items or [], int(payment_day))
+    if (
+        latest_regular_payment is not None
+        and last_accrual_date is not None
+        and last_accrual_date <= latest_regular_payment[0]
+    ):
+        annuity_payment = latest_regular_payment[1]
+
     items: list[dict] = []
     current_principal = principal
-    prev_date = as_of_date
+    if last_accrual_date is not None and last_accrual_date <= start_payment_date:
+        prev_date = last_accrual_date
+    else:
+        prev_date = as_of_date
 
     for idx, payment_date in enumerate(payment_dates):
         if current_principal <= 0:
@@ -345,7 +391,8 @@ def _build_credit_schedule(summary: dict, limit: Optional[int] = None) -> list[d
         total_payment = annuity_payment
         principal_component = round(max(0, total_payment - interest_component), 2)
 
-        if idx == len(payment_dates) - 1 or principal_component >= current_principal:
+        is_final_payment = _month_key(payment_date) >= end_month_key
+        if is_final_payment or principal_component >= current_principal:
             principal_component = round(current_principal, 2)
             total_payment = round(principal_component + interest_component, 2)
 
@@ -482,7 +529,12 @@ async def get_credit_account_summary(
     if not result:
         raise HTTPException(status_code=404, detail='Кредитный счёт не найден')
 
-    schedule_items = _build_credit_schedule(result)
+    history_items = await reports.get__credit_payment_schedule_events(
+        user.user_id,
+        bank_account_id,
+        effective_as_of,
+    )
+    schedule_items = _build_credit_schedule(result, history_items=history_items)
     next_payment = schedule_items[0] if schedule_items else None
     result = {
         **result,
@@ -516,7 +568,7 @@ async def get_credit_account_schedule(
         bank_account_id,
         effective_as_of,
     )
-    planned_items = _build_credit_schedule(summary, limit=limit)
+    planned_items = _build_credit_schedule(summary, limit=limit, history_items=history_items)
     return _merge_credit_schedule(history_items, planned_items)
 
 
