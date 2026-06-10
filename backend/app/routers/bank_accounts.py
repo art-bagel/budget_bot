@@ -282,7 +282,7 @@ def _actual_actual_interest(principal: float, annual_rate: float, date_from: dat
     return round(total, 2)
 
 
-def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Optional[tuple[date, float]]:
+def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Optional[tuple[date, int, float]]:
     candidates: list[tuple[date, int, float]] = []
     for item in history_items:
         if item.get('status') != 'paid':
@@ -291,6 +291,7 @@ def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Opti
         scheduled_date = _parse_iso_date(item.get('scheduled_date'))
         total_payment = item.get('total_payment')
         principal_component = float(item.get('principal_component') or 0)
+        interest_component = float(item.get('interest_component') or 0)
         operation_id = int(item.get('operation_id') or 0)
 
         if (
@@ -299,6 +300,7 @@ def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Opti
             or total_payment is None
             or float(total_payment) <= 0
             or principal_component <= 0
+            or interest_component <= 0
         ):
             continue
 
@@ -308,8 +310,21 @@ def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Opti
         return None
 
     candidates.sort(key=lambda item: (item[0], item[1]))
-    latest_date, _, latest_amount = candidates[-1]
-    return latest_date, latest_amount
+    latest_date, latest_operation_id, latest_amount = candidates[-1]
+    return latest_date, latest_operation_id, latest_amount
+
+
+def _has_payment_after(history_items: list[dict], payment_key: tuple[date, int]) -> bool:
+    for item in history_items:
+        if item.get('status') != 'paid':
+            continue
+
+        scheduled_date = _parse_iso_date(item.get('scheduled_date'))
+        operation_id = int(item.get('operation_id') or 0)
+        if scheduled_date is not None and (scheduled_date, operation_id) > payment_key:
+            return True
+
+    return False
 
 
 def _build_credit_schedule(
@@ -344,6 +359,10 @@ def _build_credit_schedule(
         and as_of_date <= credit_started_at
     )
     start_payment_date = _next_payment_date(as_of_date, int(payment_day), include_same_day=include_same_day)
+    while last_accrual_date is not None and start_payment_date <= last_accrual_date:
+        base = date(start_payment_date.year, start_payment_date.month, 1)
+        next_base = _add_months(base, 1)
+        start_payment_date = _payment_date_for_month(next_base.year, next_base.month, int(payment_day))
     end_month_key = _month_key(credit_ends_at)
     full_term_payments = max(0, end_month_key - _month_key(start_payment_date) + 1)
 
@@ -372,8 +391,9 @@ def _build_credit_schedule(
         latest_regular_payment is not None
         and last_accrual_date is not None
         and last_accrual_date <= latest_regular_payment[0]
+        and not _has_payment_after(history_items or [], (latest_regular_payment[0], latest_regular_payment[1]))
     ):
-        annuity_payment = latest_regular_payment[1]
+        annuity_payment = latest_regular_payment[2]
 
     items: list[dict] = []
     current_principal = principal
