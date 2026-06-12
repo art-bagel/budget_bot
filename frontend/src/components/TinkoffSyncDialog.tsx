@@ -209,6 +209,17 @@ export default function TinkoffSyncDialog({
     ? newAutoOperations.slice(0, 24)
     : newAutoOperations;
 
+  const renderShowMoreButton = (expanded: boolean, total: number, noun: string, onClick: () => void) => (
+    <button
+      type="button"
+      className="tk-show-more"
+      onClick={onClick}
+      aria-expanded={expanded}
+    >
+      {expanded ? `Свернуть ${noun}` : `Показать все ${noun} (${total})`}
+    </button>
+  );
+
   const setAllDepositResolutions = (resolution: DepositResolutionKind, accountId = '') => {
     const next: Record<string, ResolutionState> = {};
     for (const d of newDeposits) next[d.tinkoff_op_id] = { resolution, accountId };
@@ -686,6 +697,7 @@ export default function TinkoffSyncDialog({
                       {cashAccounts.length > 0 && (
                         <select
                           className="tk-bulk__select"
+                          aria-label="Выбрать счёт для всех пополнений"
                           value=""
                           onChange={(e) => {
                             if (e.target.value) setAllDepositResolutions('transfer', e.target.value);
@@ -700,18 +712,13 @@ export default function TinkoffSyncDialog({
                       )}
                     </div>
                   )}
-                  {visibleDeposits.map(renderDepositCard)}
-                  {shouldCompactDeposits && (
-                    <button
-                      type="button"
-                      className="tk-show-more"
-                      onClick={() => setShowAllDeposits((v) => !v)}
-                    >
-                      {showAllDeposits
-                        ? 'Свернуть пополнения'
-                        : `Показать все пополнения (${newDeposits.length})`}
-                    </button>
+                  {shouldCompactDeposits && renderShowMoreButton(
+                    showAllDeposits,
+                    newDeposits.length,
+                    'пополнения',
+                    () => setShowAllDeposits((v) => !v),
                   )}
+                  {visibleDeposits.map(renderDepositCard)}
                 </>
               )}
 
@@ -739,6 +746,7 @@ export default function TinkoffSyncDialog({
                       {cashAccounts.length > 0 && (
                         <select
                           className="tk-bulk__select"
+                          aria-label="Выбрать счёт для всех выводов"
                           value=""
                           onChange={(e) => {
                             if (e.target.value) setAllWithdrawalResolutions('transfer', e.target.value);
@@ -753,18 +761,13 @@ export default function TinkoffSyncDialog({
                       )}
                     </div>
                   )}
-                  {visibleWithdrawals.map(renderWithdrawalCard)}
-                  {shouldCompactWithdrawals && (
-                    <button
-                      type="button"
-                      className="tk-show-more"
-                      onClick={() => setShowAllWithdrawals((v) => !v)}
-                    >
-                      {showAllWithdrawals
-                        ? 'Свернуть выводы'
-                        : `Показать все выводы (${newWithdrawals.length})`}
-                    </button>
+                  {shouldCompactWithdrawals && renderShowMoreButton(
+                    showAllWithdrawals,
+                    newWithdrawals.length,
+                    'выводы',
+                    () => setShowAllWithdrawals((v) => !v),
                   )}
+                  {visibleWithdrawals.map(renderWithdrawalCard)}
                 </>
               )}
 
@@ -773,6 +776,12 @@ export default function TinkoffSyncDialog({
                   <p className="tk-muted">
                     Эти операции применятся автоматически — здесь только список для контроля.
                   </p>
+                  {shouldCompactAutoOperations && renderShowMoreButton(
+                    showAllAutoOperations,
+                    totalNewAuto,
+                    'автооперации',
+                    () => setShowAllAutoOperations((v) => !v),
+                  )}
                   <ul className="tk-auto-list">
                     {visibleAutoOperations.map((op) => (
                       <li key={op.tinkoff_op_id} className="tk-auto-row">
@@ -796,17 +805,6 @@ export default function TinkoffSyncDialog({
                       </li>
                     ))}
                   </ul>
-                  {shouldCompactAutoOperations && (
-                    <button
-                      type="button"
-                      className="tk-show-more"
-                      onClick={() => setShowAllAutoOperations((v) => !v)}
-                    >
-                      {showAllAutoOperations
-                        ? 'Свернуть автооперации'
-                        : `Показать все автооперации (${totalNewAuto})`}
-                    </button>
-                  )}
                 </>
               )}
             </>

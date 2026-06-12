@@ -1535,10 +1535,16 @@ input { font: inherit; color: inherit; }
   flex-direction: column;
   gap: 12px;
   padding-top: 2px;
+  padding-bottom: 8px;
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet__body > * {
+  flex-shrink: 0;
 }
 
 .sheet__actions {
@@ -11259,6 +11265,7 @@ select.dlg-row__ghost option {
   border-bottom: 1px solid var(--line-soft);
   margin: 0 -2px;
   overflow-x: auto;
+  flex-shrink: 0;
   scrollbar-width: none;
 }
 .tk-tabs::-webkit-scrollbar { display: none; }
@@ -11335,6 +11342,7 @@ select.dlg-row__ghost option {
   padding: 8px 10px;
   background: var(--surface-inset);
   border-radius: var(--r-sm);
+  flex-shrink: 0;
 }
 .tk-bulk__label {
   font-size: 10.5px;
@@ -11361,7 +11369,10 @@ select.dlg-row__ghost option {
   border-color: var(--yellow);
 }
 .tk-bulk__select {
-  padding: 5px 24px 5px 10px;
+  flex: 1 1 190px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 28px 5px 10px;
   border-radius: 7px;
   font-size: 12.5px;
   font-weight: 600;
@@ -11376,7 +11387,9 @@ select.dlg-row__ghost option {
   -webkit-appearance: none;
   appearance: none;
   outline: none;
-  max-width: 200px;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .tk-bulk__select:focus { outline: 2px solid var(--yellow); outline-offset: -1px; }
 
@@ -11388,6 +11401,7 @@ select.dlg-row__ghost option {
   overflow: hidden;
   position: relative;
   transition: border-color .2s ease;
+  flex-shrink: 0;
 }
 .tk-op--unresolved { border-color: var(--yellow); }
 .tk-op--unresolved::before {
@@ -11403,6 +11417,7 @@ select.dlg-row__ghost option {
   background: var(--surface-inset);
   border-bottom: 1px solid var(--line-soft);
   gap: 10px;
+  min-width: 0;
 }
 .tk-op__head-l { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .tk-op__date {
@@ -11425,6 +11440,7 @@ select.dlg-row__ghost option {
   font-variant-numeric: tabular-nums;
   color: var(--text);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .tk-op__amt--in { color: var(--pos); }
 .tk-op__amt--out { color: var(--neg); }
@@ -11562,6 +11578,11 @@ select.dlg-row__ghost option {
   transition: all .15s ease;
 }
 .tk-show-more:hover { background: var(--yellow-tint); }
+.tk-show-more[aria-expanded='true'] {
+  background: var(--yellow-tint);
+  color: var(--ink-on-yellow);
+}
+[data-theme='dark'] .tk-show-more[aria-expanded='true'] { color: var(--yellow); }
 
 /* — Auto operations list ────────────────────────────────── */
 .tk-muted {
@@ -11577,14 +11598,18 @@ select.dlg-row__ghost option {
   border-radius: var(--r-md);
   border: 1px solid var(--line-soft);
   overflow: hidden;
+  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 .tk-auto-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line-soft);
+  min-width: 0;
+  flex-shrink: 0;
 }
 .tk-auto-row:last-child { border-bottom: 0; }
 .tk-auto-row__ico {
@@ -11624,6 +11649,7 @@ select.dlg-row__ghost option {
   display: flex; flex-direction: column;
   align-items: flex-end;
   gap: 1px;
+  min-width: 86px;
 }
 .tk-auto-row__amt {
   font-size: 13px;
@@ -11664,6 +11690,36 @@ select.dlg-row__ghost option {
 [data-theme='dark'] .tk-foot__hint svg { color: var(--yellow); }
 .tk-foot__row { display: flex; gap: 8px; }
 .tk-foot__row .btn { flex: 1; }
+
+@media (max-width: 380px) {
+  .tk-bulk {
+    align-items: stretch;
+  }
+  .tk-bulk__label {
+    flex: 1 0 100%;
+  }
+  .tk-bulk__btn {
+    flex: 1 1 calc(50% - 3px);
+  }
+  .tk-bulk__select {
+    flex-basis: 100%;
+    min-height: 42px;
+    font-size: 13.5px;
+  }
+  .tk-auto-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: start;
+  }
+  .tk-auto-row__ico {
+    width: 32px;
+    height: 32px;
+  }
+  .tk-auto-row__meta {
+    grid-column: 2;
+    align-items: flex-start;
+    min-width: 0;
+  }
+}
 
 /* ============================================================
    Protocol partial-close sheet (ppc-sheet-*)
