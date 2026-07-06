@@ -9462,6 +9462,48 @@ select.dlg-row__ghost option {
   white-space: nowrap;
 }
 
+.pf-close-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.pf-close-sum__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pf-close-sum__row--total {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.pf-close-sum__label {
+  font-size: 13px;
+  color: var(--text-2);
+  min-width: 0;
+}
+.pf-close-sum__row--total .pf-close-sum__label {
+  font-weight: 700;
+  color: var(--text);
+}
+.pf-close-sum__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.pf-close-sum__row--total .pf-close-sum__value {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+.pf-close-sum__value--pos { color: var(--green, #17a34a); }
+
 .pf-dcond {
   background: var(--surface);
   border-radius: var(--r-lg);

@@ -77,6 +77,7 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
+import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
@@ -92,6 +93,7 @@ type AccountWithBalances = {
 
 type CloseDraft = {
   amount: string;
+  amountEdited: boolean;
   currencyCode: string;
   baseAmount: string;
   closedAt: string;
@@ -462,9 +464,79 @@ function isSameAccountOwner(account: BankAccount, position: PortfolioPosition): 
   return account.owner_type === position.investment_account_owner_type;
 }
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Formats a numeric amount as a plain, editable input string (no thousands separators). */
+function formatAmountInput(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return '';
+  return String(round2(value));
+}
+
+type DepositCloseInfo = {
+  isDeposit: boolean;
+  /** Interest is capitalized into the body instead of being credited to the account separately. */
+  capitalized: boolean;
+  /** Current principal of the deposit. */
+  body: number;
+  /** Interest accrued from the last accrual date up to the close date. */
+  interest: number;
+  /** Suggested value for the "Сумма выхода" field. */
+  suggestedAmount: number;
+  /** Total that will actually land on the linked account. */
+  totalToAccount: number;
+};
+
+/**
+ * Mirrors the backend close flow (portfolio.close_portfolio_position → _accrue_deposit_interest):
+ * on close, interest is accrued up to closed_at, then the entered amount is returned as principal.
+ * For at_end / monthly deposits the interest is credited to the account on top of the amount;
+ * for capitalized deposits it is folded into the body, so the amount must already include it.
+ */
+function getDepositCloseInfo(
+  position: PortfolioPosition,
+  closedAtIso: string,
+  amountOverride?: number,
+): DepositCloseInfo {
+  const meta = position.metadata ?? {};
+  const kind = meta.deposit_kind as DepositKind | undefined;
+  const body = position.amount_in_currency ?? 0;
+  const isDeposit = position.asset_type_code === 'deposit'
+    && (kind === 'term_deposit' || kind === 'savings_account');
+
+  if (!isDeposit) {
+    return { isDeposit: false, capitalized: false, body, interest: 0, suggestedAmount: body, totalToAccount: body };
+  }
+
+  const payout = meta.interest_payout as InterestPayout | undefined;
+  const capitalized = kind === 'savings_account' || payout === 'capitalize';
+  const accrualBase = typeof meta.last_accrual_date === 'string' && meta.last_accrual_date
+    ? meta.last_accrual_date
+    : position.opened_at;
+
+  const interest = calculateProjectedInterest({
+    depositKind: kind as DepositKind,
+    principal: body,
+    annualRate: Number(meta.interest_rate ?? 0),
+    startDate: accrualBase,
+    endDate: closedAtIso,
+    interestPayout: payout,
+    capitalizationPeriod: meta.capitalization_period as CapitalizationPeriod | undefined,
+  });
+
+  const suggestedAmount = capitalized ? round2(body + interest) : round2(body);
+  const amount = amountOverride ?? suggestedAmount;
+  const totalToAccount = capitalized ? round2(amount) : round2(amount + interest);
+
+  return { isDeposit: true, capitalized, body, interest, suggestedAmount, totalToAccount };
+}
+
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
+  const info = getDepositCloseInfo(position, todayIso());
   return {
-    amount: '',
+    amount: info.isDeposit ? formatAmountInput(info.suggestedAmount) : '',
+    amountEdited: false,
     currencyCode: position.currency_code,
     baseAmount: '',
     closedAt: todayIso(),
@@ -1495,19 +1567,33 @@ export default function Portfolio({ user }: { user: UserContext }) {
     positionId: number,
     patch: Partial<CloseDraft>,
   ) => {
-    setCloseDrafts((prev) => ({
-      ...prev,
-      [positionId]: {
-        ...(prev[positionId] ?? {
-          amount: '',
-          currencyCode: positions.find((position) => position.id === positionId)?.currency_code ?? user.base_currency_code,
-          baseAmount: '',
-          closedAt: todayIso(),
-          comment: '',
-        }),
-        ...patch,
-      },
-    }));
+    setCloseDrafts((prev) => {
+      const base = prev[positionId] ?? {
+        amount: '',
+        amountEdited: false,
+        currencyCode: positions.find((position) => position.id === positionId)?.currency_code ?? user.base_currency_code,
+        baseAmount: '',
+        closedAt: todayIso(),
+        comment: '',
+      };
+      const next: CloseDraft = { ...base, ...patch };
+
+      // Manual edits to the amount pin the value; otherwise keep it in sync with the close date.
+      if ('amount' in patch) {
+        next.amountEdited = true;
+      }
+      if ('closedAt' in patch && !next.amountEdited) {
+        const position = positions.find((item) => item.id === positionId);
+        if (position) {
+          const info = getDepositCloseInfo(position, next.closedAt);
+          if (info.isDeposit) {
+            next.amount = formatAmountInput(info.suggestedAmount);
+          }
+        }
+      }
+
+      return { ...prev, [positionId]: next };
+    });
   };
 
   const handleIncomeDraftChange = (
@@ -4069,6 +4155,37 @@ export default function Portfolio({ user }: { user: UserContext }) {
                       />
                     </div>
                   </div>
+                  {(() => {
+                    const draft = closeDrafts[selectedPosition.id];
+                    if (draft.currencyCode !== selectedPosition.currency_code) return null;
+                    const info = getDepositCloseInfo(
+                      selectedPosition,
+                      draft.closedAt,
+                      Number(draft.amount) || 0,
+                    );
+                    if (!info.isDeposit || info.interest <= 0) return null;
+                    const cur = selectedPosition.currency_code;
+                    return (
+                      <div className="pf-close-sum">
+                        <div className="pf-close-sum__row">
+                          <span className="pf-close-sum__label">Возврат тела</span>
+                          <span className="pf-close-sum__value">{formatAmount(Number(draft.amount) || 0, cur)}</span>
+                        </div>
+                        <div className="pf-close-sum__row">
+                          <span className="pf-close-sum__label">
+                            {info.capitalized ? 'в т.ч. проценты (капитализация)' : 'Проценты за период'}
+                          </span>
+                          <span className="pf-close-sum__value pf-close-sum__value--pos">
+                            +{formatAmount(info.interest, cur)}
+                          </span>
+                        </div>
+                        <div className="pf-close-sum__row pf-close-sum__row--total">
+                          <span className="pf-close-sum__label">Зачислится на счёт</span>
+                          <span className="pf-close-sum__value">{formatAmount(info.totalToAccount, cur)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {closeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
                     <div className="apf-field">
                       <label className="apf-label">Историческая стоимость в {user.base_currency_code}</label>
