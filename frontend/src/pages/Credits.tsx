@@ -206,10 +206,14 @@ function buildRepayDraft(
   baseCurrencyCode: string,
 ): RepayDraft {
   const currencyCode = credit?.balances[0]?.currency_code ?? baseCurrencyCode;
+  const defaultAccount =
+    cashAccounts.find((a) => a.owner_type === 'user' && a.is_primary)
+    ?? cashAccounts.find((a) => a.owner_type === 'user')
+    ?? cashAccounts[0];
   return {
     amount: '',
     currencyCode,
-    fromAccountId: String(cashAccounts[0]?.id ?? ''),
+    fromAccountId: String(defaultAccount?.id ?? ''),
     comment: '',
     paymentAt: todayIso(),
     paymentKind: 'scheduled',
@@ -1362,7 +1366,19 @@ export default function Credits({ user }: { user: UserContext }) {
 
               {/* actions */}
               <div className="credits-sheet-actions">
-                <button className="btn btn--primary" type="button" onClick={() => setRepaySheetOpen(true)}>
+                <button
+                  className="btn btn--primary"
+                  type="button"
+                  onClick={() => {
+                    const plannedTotal = selectedSummary?.next_payment_total;
+                    setRepayDrafts((prev) => {
+                      const draft = prev[selectedCredit.account.id];
+                      if (!draft || draft.paymentKind !== 'scheduled' || draft.amount.trim() || plannedTotal == null) return prev;
+                      return { ...prev, [selectedCredit.account.id]: { ...draft, amount: String(plannedTotal) } };
+                    });
+                    setRepaySheetOpen(true);
+                  }}
+                >
                   <ArrowDownLeft size={16} /> Погасить
                 </button>
                 {isCard && selectedCreditAvailableLimit > 0 && (
@@ -1399,7 +1415,16 @@ export default function Credits({ user }: { user: UserContext }) {
                         key={kind}
                         type="button"
                         className={`apf-segtog__opt${(repayDrafts[selectedCredit.account.id]?.paymentKind ?? 'scheduled') === kind ? ' apf-segtog__opt--on' : ''}`}
-                        onClick={() => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], paymentKind: kind } }))}
+                        onClick={() => setRepayDrafts((prev) => ({
+                          ...prev,
+                          [selectedCredit.account.id]: {
+                            ...prev[selectedCredit.account.id],
+                            paymentKind: kind,
+                            amount: kind === 'scheduled'
+                              ? (selectedSummary?.next_payment_total != null ? String(selectedSummary.next_payment_total) : prev[selectedCredit.account.id]?.amount ?? '')
+                              : '',
+                          },
+                        }))}
                         disabled={submittingRepayId === selectedCredit.account.id}
                       >
                         {label}
