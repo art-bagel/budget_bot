@@ -6,7 +6,173 @@
 <title>Плотность плиток категорий — варианты</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<style>
+/* Токены — копия действующих из frontend/src/styles.css (v2 tinkoff) */
+:root {
+  color-scheme: light dark;
+  font-family: 'Onest', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums lining-nums;
+
+  --bg: #EEF0F3;
+  --surface: #FFFFFF;
+  --surface-inset: #F3F5F7;
+  --text: #0A0B0D;
+  --text-2: #646870;
+  --text-3: #9AA0A8;
+  --line: #E3E6EA;
+  --yellow: #FFDD2D;
+  --pos: #1DA370;
+  --neg: #DF3F36;
+  --warn: #D98500;
+
+  --t-g-b: #DFF5E9; --t-g-f: #117A4B;
+  --t-o-b: #FFEAD3; --t-o-f: #A9570A;
+  --t-b-b: #DCECFB; --t-b-f: #1B559C;
+  --t-p-b: #E8E1F8; --t-p-f: #593DAA;
+  --t-r-b: #FBDDE0; --t-r-f: #A02232;
+  --t-v-b: #EFE1F4; --t-v-f: #7A2E96;
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --sh-1: 0 1px 2px rgba(14, 20, 30, .04);
+}
+
+html[data-theme="dark"] {
+  --bg: #0E0F11;
+  --surface: #17181A;
+  --surface-inset: #1E2023;
+  --text: #F2F3F5;
+  --text-2: #9CA0A7;
+  --text-3: #6D7178;
+  --line: #26282C;
+  --t-g-b: #0F2A1A; --t-g-f: #6FD4A3;
+  --t-o-b: #2E1F0D; --t-o-f: #F0A868;
+  --t-b-b: #10202F; --t-b-f: #7AB5F0;
+  --t-p-b: #201A31; --t-p-f: #B29DEC;
+  --t-r-b: #2E1418; --t-r-f: #F08C9A;
+  --t-v-b: #27162E; --t-v-f: #D093E8;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .3);
+}
+
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--text); }
+
+.phone { max-width: 390px; margin: 0 auto; padding: 16px 12px 48px; }
+
+.head { display: flex; justify-content: space-between; align-items: center; }
+.head h1 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.theme-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 14px; }
+.lede { font-size: 13px; color: var(--text-2); margin: 8px 0 20px; line-height: 1.4; }
+
+.variant { margin-bottom: 28px; }
+.variant__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.variant__head h2 { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+.variant__meta { font-size: 11px; color: var(--text-3); font-weight: 600; }
+.variant__note { font-size: 11.5px; color: var(--text-3); margin-top: 6px; line-height: 1.4; }
+
+/* ── база плитки (общее) ── */
+.catgrid { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cat {
+  position: relative;
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-1);
+  cursor: pointer;
+  user-select: none;
+}
+.cat--fam::before {
+  content: '';
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
+.cat__ico { border-radius: 9px; display: grid; place-items: center; flex: none; }
+.cat__ico svg { display: block; }
+.cat__ico--g { background: var(--t-g-b); color: var(--t-g-f); }
+.cat__ico--o { background: var(--t-o-b); color: var(--t-o-f); }
+.cat__ico--b { background: var(--t-b-b); color: var(--t-b-f); }
+.cat__ico--p { background: var(--t-p-b); color: var(--t-p-f); }
+.cat__ico--r { background: var(--t-r-b); color: var(--t-r-f); }
+.cat__ico--v { background: var(--t-v-b); color: var(--t-v-f); }
+.cat__name {
+  font-size: 12.5px; font-weight: 500; color: var(--text-2);
+  line-height: 1.25; letter-spacing: -.005em;
+  overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.cat__amt { font-size: 17px; font-weight: 800; letter-spacing: -.03em; color: var(--text); white-space: nowrap; }
+.cat__amt--warn { color: var(--warn); }
+.cat__amt--neg { color: var(--neg); }
+.cat__amt .rub { font-weight: 600; font-size: .85em; color: var(--text-3); }
+.cat__amt--warn .rub, .cat__amt--neg .rub { color: inherit; opacity: .7; }
+
+/* ── 0 · текущая ── */
+.catgrid--current .cat {
+  padding: 12px 12px 11px;
+  display: grid; grid-template-rows: auto 1fr auto; gap: 4px;
+  min-height: 98px;
+}
+.catgrid--current .cat__ico { width: 34px; height: 34px; }
+.catgrid--current .cat__ico svg { width: 18px; height: 18px; }
+.catgrid--current .cat__name { align-self: end; }
+
+/* ── A · горизонтальная ── */
+.catgrid--h .cat {
+  padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 62px;
+}
+.catgrid--h .cat__ico { width: 28px; height: 28px; border-radius: 8px; }
+.catgrid--h .cat__ico svg { width: 16px; height: 16px; }
+.catgrid--h .cat__body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.catgrid--h .cat__name { font-size: 12px; }
+.catgrid--h .cat__amt { font-size: 15.5px; }
+.catgrid--h .cat--fam::before { top: 8px; right: 8px; }
+
+/* ── B · иконка + сумма в строку ── */
+.catgrid--ia .cat {
+  padding: 10px 12px 9px;
+  display: flex; flex-direction: column; gap: 5px;
+  min-height: 72px;
+}
+.catgrid--ia .cat__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.catgrid--ia .cat__ico { width: 28px; height: 28px; border-radius: 8px; }
+.catgrid--ia .cat__ico svg { width: 16px; height: 16px; }
+.catgrid--ia .cat__amt { font-size: 16px; }
+.catgrid--ia .cat--fam::before { display: none; }
+.catgrid--ia .cat--fam .cat__name::after {
+  content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--yellow); margin-left: 5px; vertical-align: 2px;
+}
+
+/* ── C · компакт-вертикаль ── */
+.catgrid--cv .cat {
+  padding: 10px 11px 9px;
+  display: grid; grid-template-rows: auto 1fr auto; gap: 3px;
+  min-height: 82px;
+}
+.catgrid--cv .cat__ico { width: 26px; height: 26px; border-radius: 8px; }
+.catgrid--cv .cat__ico svg { width: 15px; height: 15px; }
+.catgrid--cv .cat__name { align-self: end; font-size: 12px; }
+.catgrid--cv .cat__amt { font-size: 16px; }
+
+/* ── D · строки ── */
+.catgrid--rows { grid-template-columns: 1fr; gap: 5px; }
+.catgrid--rows .cat {
+  padding: 9px 12px;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 48px;
+}
+.catgrid--rows .cat__ico { width: 30px; height: 30px; border-radius: 8px; }
+.catgrid--rows .cat__ico svg { width: 16px; height: 16px; }
+.catgrid--rows .cat__name { flex: 1; -webkit-line-clamp: 1; font-size: 13px; }
+.catgrid--rows .cat__amt { font-size: 15.5px; }
+.catgrid--rows .cat--fam::before { position: static; margin-right: -4px; flex: none; }
+
+</style>
 </head>
 <body>
 <div class="phone">
@@ -61,6 +227,73 @@
     <p class="variant__note">Максимальная плотность, но теряется «сеточность» и drag-цели мельче.</p>
   </section>
 </div>
-<script src="script.js"></script>
+<script>
+// Тестовые данные: длинные имена, warn (<500), отрицательный, семейные
+const ICONS = {
+  cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h-2v-6l2-5h12l2 5v6h-2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>',
+  fork: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>',
+  gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+};
+
+const CATS = [
+  { name: 'Продукты', icon: 'cart', color: 'g', amount: 18450, fam: false },
+  { name: 'Коммунальные платежи и связь', icon: 'home', color: 'b', amount: 7230.5, fam: false },
+  { name: 'Машина', icon: 'car', color: 'o', amount: 312, fam: false },       // warn
+  { name: 'Кафе и рестораны', icon: 'fork', color: 'r', amount: -1240, fam: true }, // neg + fam
+  { name: 'Подарки', icon: 'gift', color: 'p', amount: 5000, fam: true },
+  { name: 'Здоровье и спорт', icon: 'heart', color: 'v', amount: 9860, fam: false },
+];
+
+const fmt = (n) => n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+function tile(cat, layout) {
+  const amtCls = cat.amount < 0 ? ' cat__amt--neg' : cat.amount < 500 ? ' cat__amt--warn' : '';
+  const ico = `<span class="cat__ico cat__ico--${cat.color}">${ICONS[cat.icon]}</span>`;
+  const name = `<span class="cat__name">${cat.name}</span>`;
+  const amt = `<strong class="cat__amt${amtCls}">${fmt(cat.amount)}<span class="rub">&nbsp;₽</span></strong>`;
+  const li = document.createElement('li');
+  li.className = 'cat' + (cat.fam ? ' cat--fam' : '');
+  if (layout === 'horizontal' || layout === 'rows') {
+    li.innerHTML = layout === 'rows'
+      ? `${ico}${name}${cat.fam ? '' : ''}${amt}`
+      : `${ico}<span class="cat__body">${name}${amt}</span>`;
+  } else if (layout === 'inline-amt') {
+    li.innerHTML = `<span class="cat__top">${ico}${amt}</span>${name}`;
+  } else {
+    li.innerHTML = `${ico}${name}${amt}`;
+  }
+  return li;
+}
+
+document.querySelectorAll('.variant').forEach((section) => {
+  const layout = section.dataset.variant;
+  const grid = section.querySelector('[data-grid]');
+  CATS.forEach((cat) => grid.appendChild(tile(cat, layout)));
+});
+
+// метрики: фактическая высота блока и экономия к эталону
+requestAnimationFrame(() => {
+  const base = document.querySelector('[data-variant="current"] [data-grid]').offsetHeight;
+  document.querySelectorAll('.variant').forEach((section) => {
+    const h = section.querySelector('[data-grid]').offsetHeight;
+    const meta = section.querySelector('[data-meta]');
+    const diff = Math.round((1 - h / base) * 100);
+    meta.textContent = `${h}px` + (diff > 0 ? ` · −${diff}%` : ' · эталон');
+  });
+});
+
+// тема
+const btn = document.getElementById('themeToggle');
+const apply = (t) => {
+  document.documentElement.dataset.theme = t;
+  btn.textContent = t === 'dark' ? '☀️' : '🌙';
+};
+apply(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+btn.onclick = () => apply(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+
+</script>
 </body>
 </html>
