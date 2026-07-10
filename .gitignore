@@ -162,3 +162,23 @@ cython_debug/
 .env
 /infra/db/Scripts/.project
 /ton-wallet-report/
+
+# IDE / OS
+.idea/
+.DS_Store
+
+# Frontend build artifacts
+node_modules/
+*.tsbuildinfo
+/frontend/vite.config.js
+/frontend/vite.config.d.ts
+
+# Local tooling / generated outputs
+/outputs/
+/infra/db/Scripts/.dbeaver/
+/infra/db/Scripts/budgeting/manual/
+
+# Personal data — never commit
+/local-data/
+/skrin_shot/
+*.xlsx

@@ -43,6 +43,8 @@ jobs:
         run: python -m py_compile backend/app/config.py backend/app/main.py backend/app/dependencies.py
 
       - name: Validate docker compose
+        env:
+          POSTGRES_PASSWORD: ci-validation-only
         run: docker compose -f infra/docker-compose.yml config
 
   deploy:
@@ -90,7 +92,7 @@ jobs:
             git checkout -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
             git pull --ff-only origin "$DEPLOY_BRANCH"
 
-            printf '%s\n' "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" "DB_DATABASE=${{ secrets.DB_DATABASE }}" "DB_SCHEMA=${{ secrets.DB_SCHEMA }}" "APP_HOST=0.0.0.0" "APP_PORT=8000" "FRONTEND_ORIGINS=${{ secrets.FRONTEND_ORIGINS }}" "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" "TELEGRAM_INIT_DATA_TTL_SECONDS=${{ secrets.TELEGRAM_INIT_DATA_TTL_SECONDS || '86400' }}" "DB_HOST=db" "DB_PORT=5432" > infra/.env
+            printf '%s\n' "APP_ENV=production" "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" "DB_DATABASE=${{ secrets.DB_DATABASE }}" "DB_SCHEMA=${{ secrets.DB_SCHEMA }}" "APP_HOST=0.0.0.0" "APP_PORT=8000" "FRONTEND_ORIGINS=${{ secrets.FRONTEND_ORIGINS }}" "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" "TELEGRAM_INIT_DATA_TTL_SECONDS=${{ secrets.TELEGRAM_INIT_DATA_TTL_SECONDS || '10800' }}" "CREDENTIALS_ENCRYPTION_KEY=${{ secrets.CREDENTIALS_ENCRYPTION_KEY }}" "DB_HOST=db" "DB_PORT=5432" > infra/.env
 
             docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build --remove-orphans
             docker image prune -f

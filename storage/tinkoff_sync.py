@@ -19,6 +19,7 @@ from typing import Any, Optional
 import asyncpg
 import httpx
 
+from storage.secretbox import decrypt_secret
 from storage.tinkoff import TinkoffStorage
 
 TINKOFF_REST_URL = 'https://invest-public-api.tinkoff.ru/rest'
@@ -1236,7 +1237,7 @@ class TinkoffSync:
         creds = conn_row['credentials']
         if isinstance(creds, str):
             creds = json.loads(creds)
-        token              = creds['token']
+        token              = decrypt_secret(creds['token'])
         tinkoff_account_id = conn_row['provider_account_id']
         linked_account_id  = conn_row['linked_account_id']
         owner_type         = conn_row['owner_type']
@@ -1423,6 +1424,8 @@ class TinkoffSync:
                     creds = {}
 
             token = creds.get('token')
+            if token:
+                token = decrypt_secret(token)
             provider_account_id = info.get('provider_account_id')
             if not token or not provider_account_id:
                 continue

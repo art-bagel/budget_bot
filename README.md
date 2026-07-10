@@ -24,6 +24,10 @@ Telegram-бот для учета бюджета и инвестиций с Fast
 - [docs/crypto-investment-accounts.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/crypto-investment-accounts.md) — дизайн-концепт будущих крипто-счетов и DeFi-операций.
 - [docs/crypto-account-assets-defi-plan.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/crypto-account-assets-defi-plan.md) — implementation plan модели `crypto account -> assets -> DeFi`.
 - [docs/telegram-webapp-safe-area.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/telegram-webapp-safe-area.md) — особенности safe area в Telegram WebApp.
+- [docs/ISSUES.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/ISSUES.md) — актуальный анализ багов и уязвимостей, ранжированный по важности.
+- [docs/IMPROVEMENTS.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/IMPROVEMENTS.md) — предложения по улучшениям вне багфиксов (БД, бэкенд, фронтенд, UX/UI, продукт).
+- [docs/TODO.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/TODO.md) — сводный чеклист всех доработок из ISSUES и IMPROVEMENTS.
+- [docs/IDEAS.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/IDEAS.md) — идеи новых функций и развития имеющихся.
 
 ## Структура репозитория
 
