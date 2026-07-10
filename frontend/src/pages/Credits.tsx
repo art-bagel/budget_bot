@@ -618,6 +618,16 @@ export default function Credits({ user }: { user: UserContext }) {
     const draft = repayDrafts[creditId];
     if (!draft || !draft.amount.trim() || !draft.fromAccountId || submittingRepayId === creditId) return;
 
+    const plannedTotal = selectedSummary?.bank_account_id === creditId ? selectedSummary.next_payment_total : null;
+    if (
+      draft.paymentKind === 'scheduled'
+      && plannedTotal != null
+      && Number(draft.amount) > plannedTotal + 0.005
+    ) {
+      setRepayError(`Плановый платёж не может превышать ${formatAmount(plannedTotal, draft.currencyCode)}. Излишек вносите досрочным погашением`);
+      return;
+    }
+
     setSubmittingRepayId(creditId);
     setRepayError(null);
     try {

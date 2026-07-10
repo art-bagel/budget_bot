@@ -30,9 +30,14 @@ DECLARE
     _credit_created_at date;
     _credit_ends_at date;
     _credit_payment_day smallint;
+    _credit_monthly_payment numeric(20, 2);
     _next_due_date date;
     _remaining_months integer;
     _new_monthly_payment numeric(20, 2);
+    _cur_due_date date;
+    _prev_due_date date;
+    _period_paid numeric(20, 2);
+    _max_scheduled numeric(20, 2);
     _source_unallocated_id bigint;
     _base_currency_code char(3);
     _bank_balance numeric(20, 8);
@@ -102,7 +107,8 @@ BEGIN
         credit_started_at,
         created_at::date,
         credit_ends_at,
-        payment_day
+        payment_day,
+        monthly_payment
     INTO
         _credit_owner_type,
         _credit_owner_user_id,
@@ -114,7 +120,8 @@ BEGIN
         _credit_started_at,
         _credit_created_at,
         _credit_ends_at,
-        _credit_payment_day
+        _credit_payment_day,
+        _credit_monthly_payment
     FROM bank_accounts
     WHERE id = _credit_account_id AND is_active;
 
@@ -259,6 +266,59 @@ BEGIN
 
     IF round(_amount, 2) > round(_principal_before + _interest_accrued, 2) THEN
         RAISE EXCEPTION 'Payment exceeds current total due';
+    END IF;
+
+    -- A scheduled payment cannot exceed what is still due for the current
+    -- period: contractual monthly payment minus scheduled payments already
+    -- made in (previous due date, current due date]. Overpaying should be
+    -- recorded as an early repayment instead.
+    IF _payment_kind = 'scheduled' AND _credit_monthly_payment IS NOT NULL AND _credit_payment_day IS NOT NULL THEN
+        _cur_due_date := make_date(
+            extract(year FROM _payment_date)::integer,
+            extract(month FROM _payment_date)::integer,
+            LEAST(
+                _credit_payment_day::integer,
+                extract(day FROM (date_trunc('month', _payment_date::timestamp) + interval '1 month - 1 day'))::integer
+            )
+        );
+        IF _cur_due_date < _payment_date THEN
+            _cur_due_date := (date_trunc('month', _cur_due_date::timestamp) + interval '1 month')::date;
+            _cur_due_date := make_date(
+                extract(year FROM _cur_due_date)::integer,
+                extract(month FROM _cur_due_date)::integer,
+                LEAST(
+                    _credit_payment_day::integer,
+                    extract(day FROM (date_trunc('month', _cur_due_date::timestamp) + interval '1 month - 1 day'))::integer
+                )
+            );
+        END IF;
+        _prev_due_date := (date_trunc('month', _cur_due_date::timestamp) - interval '1 month')::date;
+        _prev_due_date := make_date(
+            extract(year FROM _prev_due_date)::integer,
+            extract(month FROM _prev_due_date)::integer,
+            LEAST(
+                _credit_payment_day::integer,
+                extract(day FROM (date_trunc('month', _prev_due_date::timestamp) + interval '1 month - 1 day'))::integer
+            )
+        );
+
+        SELECT COALESCE(SUM(payment_amount), 0)
+        INTO _period_paid
+        FROM credit_payment_events
+        WHERE credit_account_id = _credit_account_id
+          AND payment_kind = 'scheduled'
+          AND payment_at::date > _prev_due_date
+          AND payment_at::date <= _cur_due_date;
+
+        _max_scheduled := round(_credit_monthly_payment - _period_paid, 2);
+
+        IF _max_scheduled <= 0 THEN
+            RAISE EXCEPTION 'Плановый платёж за текущий период уже внесён. Используйте досрочное погашение';
+        END IF;
+
+        IF round(_amount, 2) > _max_scheduled THEN
+            RAISE EXCEPTION 'Плановый платёж не может превышать %. Излишек вносите досрочным погашением', _max_scheduled;
+        END IF;
     END IF;
 
     _interest_paid := LEAST(round(_amount, 2), _interest_accrued);
