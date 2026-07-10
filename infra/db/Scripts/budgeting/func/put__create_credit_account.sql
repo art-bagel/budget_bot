@@ -12,6 +12,24 @@ DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
     date,
     text,
     text,
+    text,
+    numeric
+);
+
+DROP FUNCTION IF EXISTS budgeting.put__create_credit_account(
+    bigint,
+    text,
+    text,
+    char(3),
+    numeric,
+    bigint,
+    text,
+    numeric,
+    smallint,
+    date,
+    date,
+    text,
+    text,
     text
 );
 
@@ -45,7 +63,8 @@ CREATE FUNCTION budgeting.put__create_credit_account(
     _credit_ends_at       date DEFAULT NULL,
     _provider_name        text DEFAULT NULL,
     _provider_account_ref text DEFAULT NULL,
-    _badge_color          text DEFAULT NULL
+    _badge_color          text DEFAULT NULL,
+    _monthly_payment      numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -55,6 +74,8 @@ DECLARE
     _owner_user_id    bigint;
     _owner_family_id  bigint;
     _account_id       bigint;
+    _term_months      integer;
+    _effective_monthly_payment numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
@@ -83,6 +104,23 @@ BEGIN
         RAISE EXCEPTION 'Credit end date must be after start date';
     END IF;
 
+    IF _monthly_payment IS NOT NULL AND _monthly_payment <= 0 THEN
+        RAISE EXCEPTION 'Monthly payment must be positive';
+    END IF;
+
+    IF _monthly_payment IS NOT NULL AND _credit_kind NOT IN ('loan', 'mortgage') THEN
+        RAISE EXCEPTION 'Monthly payment is supported only for loan and mortgage';
+    END IF;
+
+    _effective_monthly_payment := round(_monthly_payment, 2);
+    IF _effective_monthly_payment IS NULL AND _credit_kind IN ('loan', 'mortgage')
+       AND _credit_started_at IS NOT NULL AND _credit_ends_at IS NOT NULL THEN
+        _term_months :=
+            (extract(year FROM _credit_ends_at)::integer * 12 + extract(month FROM _credit_ends_at)::integer)
+            - (extract(year FROM _credit_started_at)::integer * 12 + extract(month FROM _credit_started_at)::integer);
+        _effective_monthly_payment := budgeting.get__annuity_payment(_credit_limit, _interest_rate, _term_months);
+    END IF;
+
     IF _owner_type = 'user' THEN
         _owner_user_id := _user_id;
     ELSIF _owner_type = 'family' THEN
@@ -108,14 +146,14 @@ BEGIN
     INSERT INTO bank_accounts (
         owner_type, owner_user_id, owner_family_id,
         name, account_kind, credit_kind, interest_rate, payment_day,
-        credit_started_at, credit_ends_at, credit_limit,
+        credit_started_at, credit_ends_at, credit_limit, monthly_payment,
         provider_name, provider_account_ref, badge_color,
         is_primary, is_active
     )
     VALUES (
         _owner_type, _owner_user_id, _owner_family_id,
         _normalized_name, 'credit', _credit_kind, _interest_rate, _payment_day,
-        _credit_started_at, _credit_ends_at, _credit_limit,
+        _credit_started_at, _credit_ends_at, _credit_limit, _effective_monthly_payment,
         NULLIF(btrim(_provider_name), ''),
         NULLIF(btrim(_provider_account_ref), ''),
         NULLIF(btrim(COALESCE(_badge_color, '')), ''),
@@ -154,6 +192,7 @@ BEGIN
             'credit_started_at',    ba.credit_started_at,
             'credit_ends_at',       ba.credit_ends_at,
             'credit_limit',         ba.credit_limit,
+            'monthly_payment',      ba.monthly_payment,
             'provider_name',        ba.provider_name,
             'provider_account_ref', ba.provider_account_ref,
             'badge_color',          ba.badge_color,

@@ -9,7 +9,8 @@ CREATE FUNCTION budgeting.set__update_credit_account(
     _credit_started_at date DEFAULT NULL,
     _credit_ends_at date DEFAULT NULL,
     _provider_name text DEFAULT NULL,
-    _badge_color text DEFAULT NULL
+    _badge_color text DEFAULT NULL,
+    _monthly_payment numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -20,6 +21,7 @@ DECLARE
     _owner_user_id bigint;
     _owner_family_id bigint;
     _account_kind text;
+    _credit_kind text;
     _created_at timestamptz;
     _current_balance numeric(20, 8);
     _current_principal numeric(20, 2) := 0;
@@ -42,6 +44,10 @@ BEGIN
         RAISE EXCEPTION 'Payment day must be between 1 and 31';
     END IF;
 
+    IF _monthly_payment IS NOT NULL AND _monthly_payment <= 0 THEN
+        RAISE EXCEPTION 'Monthly payment must be positive';
+    END IF;
+
     IF _credit_started_at IS NOT NULL AND _credit_ends_at IS NOT NULL
        AND _credit_ends_at <= _credit_started_at THEN
         RAISE EXCEPTION 'Credit end date must be after start date';
@@ -52,12 +58,14 @@ BEGIN
         ba.owner_user_id,
         ba.owner_family_id,
         ba.account_kind,
+        ba.credit_kind,
         ba.created_at
     INTO
         _owner_type,
         _owner_user_id,
         _owner_family_id,
         _account_kind,
+        _credit_kind,
         _created_at
     FROM bank_accounts ba
     WHERE ba.id = _credit_account_id
@@ -73,6 +81,10 @@ BEGIN
 
     IF _account_kind <> 'credit' THEN
         RAISE EXCEPTION 'Bank account % is not a credit account', _credit_account_id;
+    END IF;
+
+    IF _monthly_payment IS NOT NULL AND _credit_kind NOT IN ('loan', 'mortgage') THEN
+        RAISE EXCEPTION 'Monthly payment is supported only for loan and mortgage';
     END IF;
 
     IF EXISTS (
@@ -110,6 +122,10 @@ BEGIN
         payment_day = _payment_day,
         credit_started_at = _credit_started_at,
         credit_ends_at = _credit_ends_at,
+        monthly_payment = CASE
+            WHEN _credit_kind IN ('loan', 'mortgage') THEN COALESCE(round(_monthly_payment, 2), monthly_payment)
+            ELSE monthly_payment
+        END,
         provider_name = NULLIF(btrim(_provider_name), ''),
         badge_color = NULLIF(btrim(COALESCE(_badge_color, '')), '')
     WHERE id = _credit_account_id;
@@ -132,6 +148,7 @@ BEGIN
             'credit_started_at',    ba.credit_started_at,
             'credit_ends_at',       ba.credit_ends_at,
             'credit_limit',         ba.credit_limit,
+            'monthly_payment',      ba.monthly_payment,
             'provider_name',        ba.provider_name,
             'provider_account_ref', ba.provider_account_ref,
             'badge_color',          ba.badge_color,

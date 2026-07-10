@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     credit_started_at date,
     credit_ends_at date,
     credit_limit numeric(20, 2),
+    monthly_payment numeric(20, 2),
     investment_asset_type varchar(20),
     provider_name varchar(150),
     provider_account_ref varchar(150),
@@ -35,6 +36,10 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     ),
     CONSTRAINT chk_bank_accounts_credit_kind CHECK (
         credit_kind IS NULL OR credit_kind IN ('loan', 'credit_card', 'mortgage')
+    ),
+    CONSTRAINT chk_bank_accounts_monthly_payment CHECK (
+        monthly_payment IS NULL
+        OR (monthly_payment > 0 AND account_kind = 'credit' AND credit_kind IN ('loan', 'mortgage'))
     ),
     CONSTRAINT chk_bank_accounts_investment_asset_type CHECK (
         (account_kind != 'investment' AND investment_asset_type IS NULL)

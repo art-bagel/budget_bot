@@ -149,6 +149,8 @@ interface RepayDraft {
   fromAccountId: string;
   comment: string;
   paymentAt: string;
+  paymentKind: 'scheduled' | 'early';
+  recalcOption: 'term' | 'payment';
 }
 
 interface CreditTransferDraft {
@@ -177,6 +179,7 @@ interface CreditEditDraft {
   creditEndsAt: string;
   providerName: string;
   badgeColor: string;
+  monthlyPayment: string;
 }
 
 function isTermCredit(kind: CreditKind | null | undefined): boolean {
@@ -193,6 +196,7 @@ function buildCreditEditDraft(account: BankAccount): CreditEditDraft {
     creditEndsAt: account.credit_ends_at ?? '',
     providerName: account.provider_name ?? '',
     badgeColor: account.badge_color ?? '',
+    monthlyPayment: account.monthly_payment != null ? String(account.monthly_payment) : '',
   };
 }
 
@@ -208,6 +212,8 @@ function buildRepayDraft(
     fromAccountId: String(cashAccounts[0]?.id ?? ''),
     comment: '',
     paymentAt: todayIso(),
+    paymentKind: 'scheduled',
+    recalcOption: 'term',
   };
 }
 
@@ -316,6 +322,7 @@ export default function Credits({ user }: { user: UserContext }) {
   const [newPaymentDay, setNewPaymentDay] = useState('');
   const [newStartedAt, setNewStartedAt] = useState('');
   const [newEndsAt, setNewEndsAt] = useState('');
+  const [newMonthlyPayment, setNewMonthlyPayment] = useState('');
   const [newCreditLimit, setNewCreditLimit] = useState('');
   const [newTargetAccountId, setNewTargetAccountId] = useState('');
   const [newProvider, setNewProvider] = useState('');
@@ -333,6 +340,7 @@ export default function Credits({ user }: { user: UserContext }) {
     setNewPaymentDay('');
     setNewStartedAt('');
     setNewEndsAt('');
+    setNewMonthlyPayment('');
     setNewCreditLimit('');
     setNewTargetAccountId('');
     setNewProvider('');
@@ -571,6 +579,12 @@ export default function Credits({ user }: { user: UserContext }) {
       setSavingCredit(false);
       return;
     }
+    const parsedMonthlyPayment = parseDecimalInput(editDraft.monthlyPayment);
+    if (editDraft.monthlyPayment.trim() && (parsedMonthlyPayment == null || parsedMonthlyPayment <= 0)) {
+      setEditError('Ежемесячный платёж нужно ввести положительным числом');
+      setSavingCredit(false);
+      return;
+    }
     try {
       await updateCreditAccount(selectedCredit.account.id, {
         name: editDraft.name.trim(),
@@ -581,6 +595,7 @@ export default function Credits({ user }: { user: UserContext }) {
         credit_ends_at: editDraft.creditEndsAt || null,
         provider_name: editDraft.providerName.trim() || null,
         badge_color: editDraft.badgeColor || null,
+        monthly_payment: parsedMonthlyPayment,
       });
       setEditingCredit(false);
       setScheduleOpen(false);
@@ -610,6 +625,8 @@ export default function Credits({ user }: { user: UserContext }) {
           amount: Number(draft.amount),
           comment: draft.comment.trim() || undefined,
           payment_at: draft.paymentAt ? new Date(`${draft.paymentAt}T12:00:00`).toISOString() : undefined,
+          payment_kind: draft.paymentKind,
+          recalc_payment: draft.paymentKind === 'early' && draft.recalcOption === 'payment',
         });
       } else {
         await transferBetweenAccounts({
@@ -690,6 +707,12 @@ export default function Credits({ user }: { user: UserContext }) {
       setSubmittingNew(false);
       return;
     }
+    const parsedMonthlyPayment = parseDecimalInput(newMonthlyPayment);
+    if (newMonthlyPayment.trim() && (parsedMonthlyPayment == null || parsedMonthlyPayment <= 0)) {
+      setNewError('Ежемесячный платёж нужно ввести положительным числом');
+      setSubmittingNew(false);
+      return;
+    }
     try {
       await createCreditAccount({
         name: newName.trim(),
@@ -702,6 +725,7 @@ export default function Credits({ user }: { user: UserContext }) {
         payment_day: newPaymentDay.trim() ? Number(newPaymentDay) : undefined,
         credit_started_at: newStartedAt.trim() || undefined,
         credit_ends_at: newEndsAt.trim() || undefined,
+        monthly_payment: parsedMonthlyPayment ?? undefined,
         provider_name: newProvider.trim() || undefined,
         badge_color: newBadgeColor || undefined,
       });
@@ -1186,7 +1210,11 @@ export default function Credits({ user }: { user: UserContext }) {
               {isTerm && selectedSummary?.next_payment_date && selectedSummary.next_payment_total != null && (
                 <div className="credits-dnext">
                   <div className="credits-dnext__left">
-                    <span className="credits-dnext__label">Следующий платёж</span>
+                    <span className="credits-dnext__label">
+                      {selectedSummary.monthly_payment != null && selectedSummary.next_payment_total < selectedSummary.monthly_payment
+                        ? 'Осталось внести в этом периоде'
+                        : 'Следующий платёж'}
+                    </span>
                     <span className="credits-dnext__date">{new Date(selectedSummary.next_payment_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</span>
                     {selectedSummary.next_payment_interest != null && (
                       <div className="credits-dnext__row">
@@ -1309,6 +1337,12 @@ export default function Credits({ user }: { user: UserContext }) {
                           </div>
                         </div>
                       )}
+                      {isTerm && (
+                        <div className="apf-field">
+                          <label className="apf-label">Ежемесячный платёж</label>
+                          <input className="apf-input" type="text" inputMode="decimal" placeholder="21976.24" value={editDraft.monthlyPayment} onChange={(e) => setEditDraft((prev) => prev ? { ...prev, monthlyPayment: sanitizeDecimalInput(e.target.value) } : prev)} disabled={savingCredit} />
+                        </div>
+                      )}
                       {editError && <div className="apf-error">{editError}</div>}
                       <div className="apf-actions">
                         <button className="apf-cancel" type="button" disabled={savingCredit} onClick={() => { setEditingCredit(false); setEditDraft(buildCreditEditDraft(selectedCredit.account)); setEditError(null); }}>Отмена</button>
@@ -1356,6 +1390,47 @@ export default function Credits({ user }: { user: UserContext }) {
           <BottomSheet open={repaySheetOpen} title={selectedCredit.account.name} tag="Погашение" icon={<CategorySvgIcon code="coins" />} iconColor="g" onClose={() => setRepaySheetOpen(false)}>
             <form className="apf-body" onSubmit={(e) => void handleRepay(e, selectedCredit.account.id)}>
               {isTerm && <p className="apf-balance">Платёж сначала покроет начисленные проценты, остаток уменьшит основной долг.</p>}
+              {isTerm && (
+                <div className="apf-field">
+                  <label className="apf-label">Тип платежа</label>
+                  <div className="apf-segtog">
+                    {([['scheduled', 'Плановый'], ['early', 'Досрочный']] as const).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={`apf-segtog__opt${(repayDrafts[selectedCredit.account.id]?.paymentKind ?? 'scheduled') === kind ? ' apf-segtog__opt--on' : ''}`}
+                        onClick={() => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], paymentKind: kind } }))}
+                        disabled={submittingRepayId === selectedCredit.account.id}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {isTerm && repayDrafts[selectedCredit.account.id]?.paymentKind === 'early' && (
+                <div className="apf-field">
+                  <label className="apf-label">После досрочного погашения</label>
+                  <div className="apf-segtog">
+                    {([['term', 'Сократить срок'], ['payment', 'Уменьшить платёж']] as const).map(([opt, label]) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        className={`apf-segtog__opt${(repayDrafts[selectedCredit.account.id]?.recalcOption ?? 'term') === opt ? ' apf-segtog__opt--on' : ''}`}
+                        onClick={() => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], recalcOption: opt } }))}
+                        disabled={submittingRepayId === selectedCredit.account.id}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="apf-balance">
+                    {repayDrafts[selectedCredit.account.id]?.recalcOption === 'payment'
+                      ? 'Ежемесячный платёж будет пересчитан от нового долга, срок кредита не изменится.'
+                      : 'Ежемесячный платёж не изменится, кредит закроется раньше срока.'}
+                  </p>
+                </div>
+              )}
               <div className="apf-row">
                 <div className="apf-field" style={{ flex: 2 }}>
                   <label className="apf-label">Сумма</label>
@@ -1651,6 +1726,21 @@ export default function Credits({ user }: { user: UserContext }) {
                       disabled={submittingNew}
                     />
                   </div>
+                </div>
+              )}
+
+              {hasTerm(newKind) && (
+                <div className="apf-field">
+                  <label className="apf-label">Ежемесячный платёж (по договору)</label>
+                  <input
+                    className="apf-input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Если пусто — рассчитаем аннуитет"
+                    value={newMonthlyPayment}
+                    onChange={(e) => setNewMonthlyPayment(sanitizeDecimalInput(e.target.value))}
+                    disabled={submittingNew}
+                  />
                 </div>
               )}
 

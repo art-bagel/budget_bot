@@ -44,6 +44,7 @@ BEGIN
                 'interest_component', cpe.interest_paid,
                 'principal_before', cpe.principal_before,
                 'principal_after', cpe.principal_after,
+                'payment_kind', cpe.payment_kind,
                 'status', 'paid'
             )
             ORDER BY cpe.payment_at, cpe.id

@@ -6,7 +6,9 @@ CREATE FUNCTION budgeting.put__repay_credit_account(
     _currency_code char(3),
     _amount numeric,
     _comment text DEFAULT NULL,
-    _payment_at timestamptz DEFAULT CURRENT_TIMESTAMP
+    _payment_at timestamptz DEFAULT CURRENT_TIMESTAMP,
+    _payment_kind text DEFAULT 'scheduled',
+    _recalc_payment boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -26,6 +28,11 @@ DECLARE
     _credit_interest_rate numeric(5, 2);
     _credit_started_at date;
     _credit_created_at date;
+    _credit_ends_at date;
+    _credit_payment_day smallint;
+    _next_due_date date;
+    _remaining_months integer;
+    _new_monthly_payment numeric(20, 2);
     _source_unallocated_id bigint;
     _base_currency_code char(3);
     _bank_balance numeric(20, 8);
@@ -61,6 +68,10 @@ BEGIN
         RAISE EXCEPTION 'Source and target accounts must be different';
     END IF;
 
+    IF _payment_kind NOT IN ('scheduled', 'early') THEN
+        RAISE EXCEPTION 'Unsupported payment kind: %. Use scheduled or early', _payment_kind;
+    END IF;
+
     _payment_date := COALESCE(_payment_at::date, CURRENT_DATE);
 
     SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit
@@ -89,7 +100,9 @@ BEGIN
         name,
         interest_rate,
         credit_started_at,
-        created_at::date
+        created_at::date,
+        credit_ends_at,
+        payment_day
     INTO
         _credit_owner_type,
         _credit_owner_user_id,
@@ -99,7 +112,9 @@ BEGIN
         _credit_name,
         _credit_interest_rate,
         _credit_started_at,
-        _credit_created_at
+        _credit_created_at,
+        _credit_ends_at,
+        _credit_payment_day
     FROM bank_accounts
     WHERE id = _credit_account_id AND is_active;
 
@@ -368,6 +383,7 @@ BEGIN
         principal_paid,
         interest_paid,
         principal_after,
+        payment_kind,
         created_by_user_id
     )
     VALUES (
@@ -384,8 +400,41 @@ BEGIN
         _principal_paid,
         _interest_paid,
         _principal_after,
+        _payment_kind,
         _user_id
     );
+
+    -- Early repayment with "reduce payment": recalculate the annuity from the
+    -- new principal over the months left until the contractual end date.
+    IF _payment_kind = 'early' AND _recalc_payment AND _principal_after > 0
+       AND _credit_ends_at IS NOT NULL AND _credit_payment_day IS NOT NULL THEN
+        _next_due_date := make_date(
+            extract(year FROM _payment_date)::integer,
+            extract(month FROM _payment_date)::integer,
+            LEAST(
+                _credit_payment_day::integer,
+                extract(day FROM (date_trunc('month', _payment_date::timestamp) + interval '1 month - 1 day'))::integer
+            )
+        );
+        IF _next_due_date <= _payment_date THEN
+            _next_due_date := _next_due_date + interval '1 month';
+        END IF;
+
+        _remaining_months :=
+            (extract(year FROM _credit_ends_at)::integer * 12 + extract(month FROM _credit_ends_at)::integer)
+            - (extract(year FROM _next_due_date)::integer * 12 + extract(month FROM _next_due_date)::integer)
+            + 1;
+
+        _new_monthly_payment := budgeting.get__annuity_payment(
+            _principal_after, _credit_interest_rate, _remaining_months
+        );
+
+        IF _new_monthly_payment IS NOT NULL THEN
+            UPDATE bank_accounts
+            SET monthly_payment = _new_monthly_payment
+            WHERE id = _credit_account_id;
+        END IF;
+    END IF;
 
     RETURN jsonb_build_object(
         'operation_id', _operation_id,
@@ -396,7 +445,9 @@ BEGIN
         'principal_after', _principal_after,
         'accrued_interest', _interest_accrued,
         'amount_in_base', _cost_base,
-        'base_currency_code', _base_currency_code
+        'base_currency_code', _base_currency_code,
+        'payment_kind', _payment_kind,
+        'monthly_payment', _new_monthly_payment
     );
 END
 $function$;

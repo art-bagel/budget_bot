@@ -162,3 +162,21 @@ cython_debug/
 .env
 /infra/db/Scripts/.project
 /ton-wallet-report/
+
+# IDE / OS
+.idea/
+.DS_Store
+
+# Frontend
+node_modules/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Local data, dumps, screenshots — never commit
+local-data/
+outputs/
+skrin_shot/
+
+# DBeaver workspace (contains credentials)
+infra/db/Scripts/.dbeaver/

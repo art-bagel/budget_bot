@@ -20,6 +20,7 @@ DECLARE
     _credit_started_at date;
     _credit_ends_at date;
     _credit_limit numeric(20, 2);
+    _monthly_payment numeric(20, 2);
     _account_created_at date;
     _currency_code char(3);
     _raw_balance numeric(20, 8);
@@ -46,6 +47,7 @@ BEGIN
         ba.credit_started_at,
         ba.credit_ends_at,
         ba.credit_limit,
+        ba.monthly_payment,
         ba.created_at::date
     INTO
         _owner_type,
@@ -59,6 +61,7 @@ BEGIN
         _credit_started_at,
         _credit_ends_at,
         _credit_limit,
+        _monthly_payment,
         _account_created_at
     FROM bank_accounts ba
     WHERE ba.id = _credit_account_id
@@ -131,6 +134,7 @@ BEGIN
         'credit_started_at', _credit_started_at,
         'credit_ends_at', _credit_ends_at,
         'credit_limit', _credit_limit,
+        'monthly_payment', _monthly_payment,
         'last_accrual_date', _last_accrual_date,
         'last_payment_at', _last_payment_at,
         'payments_count', _payments_count,

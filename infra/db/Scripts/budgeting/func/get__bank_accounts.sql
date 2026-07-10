@@ -41,6 +41,7 @@ BEGIN
                 'credit_started_at', ba.credit_started_at,
                 'credit_ends_at', ba.credit_ends_at,
                 'credit_limit', ba.credit_limit,
+                'monthly_payment', ba.monthly_payment,
                 'provider_name', ba.provider_name,
                 'provider_account_ref', ba.provider_account_ref,
                 'badge_color', ba.badge_color,

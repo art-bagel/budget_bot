@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS budgeting.credit_payment_events (
     principal_paid numeric(20, 2) NOT NULL DEFAULT 0,
     interest_paid numeric(20, 2) NOT NULL DEFAULT 0,
     principal_after numeric(20, 2) NOT NULL,
+    payment_kind text NOT NULL DEFAULT 'scheduled',
     created_by_user_id bigint REFERENCES budgeting.users(id) ON DELETE SET NULL,
     created_at timestamptz NOT NULL DEFAULT current_timestamp,
     CONSTRAINT chk_credit_payment_events_amounts CHECK (
@@ -30,6 +31,9 @@ CREATE TABLE IF NOT EXISTS budgeting.credit_payment_events (
     ),
     CONSTRAINT chk_credit_payment_events_principal CHECK (
         round(principal_before - principal_paid, 2) = round(principal_after, 2)
+    ),
+    CONSTRAINT chk_credit_payment_events_kind CHECK (
+        payment_kind IN ('scheduled', 'early')
     )
 );
 

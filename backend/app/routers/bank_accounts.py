@@ -27,6 +27,7 @@ class BankAccountItem(BaseModel):
     credit_started_at: Optional[str] = None
     credit_ends_at: Optional[str] = None
     credit_limit: Optional[float] = None
+    monthly_payment: Optional[float] = None
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
     badge_color: Optional[str] = None
@@ -77,6 +78,7 @@ class CreateCreditAccountRequest(BaseModel):
     credit_ends_at: Optional[date] = None
     provider_name: Optional[str] = None
     badge_color: Optional[str] = None
+    monthly_payment: Optional[float] = None
 
     @field_validator('name')
     @classmethod
@@ -104,6 +106,13 @@ class CreateCreditAccountRequest(BaseModel):
     def interest_rate_must_not_be_negative(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and v < 0:
             raise ValueError('Ставка не может быть отрицательной')
+        return v
+
+    @field_validator('monthly_payment')
+    @classmethod
+    def monthly_payment_must_be_positive(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError('Ежемесячный платёж должен быть положительным')
         return v
 
 
@@ -116,6 +125,7 @@ class UpdateCreditAccountRequest(BaseModel):
     credit_ends_at: Optional[date] = None
     provider_name: Optional[str] = None
     badge_color: Optional[str] = None
+    monthly_payment: Optional[float] = None
 
     @field_validator('name')
     @classmethod
@@ -145,6 +155,13 @@ class UpdateCreditAccountRequest(BaseModel):
             raise ValueError('Ставка не может быть отрицательной')
         return v
 
+    @field_validator('monthly_payment')
+    @classmethod
+    def monthly_payment_must_be_positive(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError('Ежемесячный платёж должен быть положительным')
+        return v
+
 
 class CreditRepaymentRequest(BaseModel):
     from_account_id: int
@@ -152,6 +169,8 @@ class CreditRepaymentRequest(BaseModel):
     amount: float
     comment: Optional[str] = None
     payment_at: Optional[datetime] = None
+    payment_kind: Literal['scheduled', 'early'] = 'scheduled'
+    recalc_payment: bool = False
 
     @field_validator('amount')
     @classmethod
@@ -179,6 +198,8 @@ class CreditRepaymentResponse(BaseModel):
     accrued_interest: float
     amount_in_base: float
     base_currency_code: str
+    payment_kind: Literal['scheduled', 'early'] = 'scheduled'
+    monthly_payment: Optional[float] = None
 
 
 class CreditScheduleItem(BaseModel):
@@ -189,6 +210,7 @@ class CreditScheduleItem(BaseModel):
     interest_component: float
     principal_before: float
     principal_after: float
+    payment_kind: Optional[Literal['scheduled', 'early']] = None
     status: Literal['paid', 'planned'] = 'planned'
 
 
@@ -205,6 +227,7 @@ class CreditAccountSummaryResponse(BaseModel):
     credit_started_at: Optional[str] = None
     credit_ends_at: Optional[str] = None
     credit_limit: Optional[float] = None
+    monthly_payment: Optional[float] = None
     last_accrual_date: Optional[str] = None
     last_payment_at: Optional[str] = None
     payments_count: int
@@ -282,49 +305,25 @@ def _actual_actual_interest(principal: float, annual_rate: float, date_from: dat
     return round(total, 2)
 
 
-def _latest_regular_payment(history_items: list[dict], payment_day: int) -> Optional[tuple[date, int, float]]:
-    candidates: list[tuple[date, int, float]] = []
+def _previous_due_date(due_date: date, payment_day: int) -> date:
+    base = date(due_date.year, due_date.month, 1)
+    prev_base = _add_months(base, -1)
+    return _payment_date_for_month(prev_base.year, prev_base.month, payment_day)
+
+
+def _scheduled_paid_in_period(history_items: list[dict], period_start: date, period_end: date) -> float:
+    """Sum of scheduled (non-early) payments falling in (period_start, period_end]."""
+    total = 0.0
     for item in history_items:
         if item.get('status') != 'paid':
             continue
-
-        scheduled_date = _parse_iso_date(item.get('scheduled_date'))
-        total_payment = item.get('total_payment')
-        principal_component = float(item.get('principal_component') or 0)
-        interest_component = float(item.get('interest_component') or 0)
-        operation_id = int(item.get('operation_id') or 0)
-
-        if (
-            scheduled_date is None
-            or scheduled_date.day != payment_day
-            or total_payment is None
-            or float(total_payment) <= 0
-            or principal_component <= 0
-            or interest_component <= 0
-        ):
+        if item.get('payment_kind') == 'early':
             continue
-
-        candidates.append((scheduled_date, operation_id, round(float(total_payment), 2)))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda item: (item[0], item[1]))
-    latest_date, latest_operation_id, latest_amount = candidates[-1]
-    return latest_date, latest_operation_id, latest_amount
-
-
-def _has_payment_after(history_items: list[dict], payment_key: tuple[date, int]) -> bool:
-    for item in history_items:
-        if item.get('status') != 'paid':
-            continue
-
         scheduled_date = _parse_iso_date(item.get('scheduled_date'))
-        operation_id = int(item.get('operation_id') or 0)
-        if scheduled_date is not None and (scheduled_date, operation_id) > payment_key:
-            return True
-
-    return False
+        if scheduled_date is None or not (period_start < scheduled_date <= period_end):
+            continue
+        total += float(item.get('total_payment') or 0)
+    return round(total, 2)
 
 
 def _build_credit_schedule(
@@ -358,18 +357,40 @@ def _build_credit_schedule(
         and credit_started_at is not None
         and as_of_date <= credit_started_at
     )
-    start_payment_date = _next_payment_date(as_of_date, int(payment_day), include_same_day=include_same_day)
-    while last_accrual_date is not None and start_payment_date <= last_accrual_date:
-        base = date(start_payment_date.year, start_payment_date.month, 1)
+    # Current period: (previous due date, current due date]. The schedule is
+    # anchored to due dates only, so the interest/principal split does not
+    # drift day to day within a period.
+    current_due = _next_payment_date(as_of_date, int(payment_day), include_same_day=include_same_day)
+    period_start = _previous_due_date(current_due, int(payment_day))
+    end_month_key = _month_key(credit_ends_at)
+
+    monthly_payment_raw = summary.get('monthly_payment')
+    if monthly_payment_raw is not None and float(monthly_payment_raw) > 0:
+        annuity_payment = round(float(monthly_payment_raw), 2)
+    else:
+        remaining_payments = max(1, end_month_key - _month_key(current_due) + 1)
+        monthly_rate = annual_rate / 1200 if annual_rate > 0 else 0
+        if monthly_rate > 0:
+            annuity_payment = principal * monthly_rate / (1 - (1 + monthly_rate) ** (-remaining_payments))
+        else:
+            annuity_payment = principal / remaining_payments
+        annuity_payment = round(annuity_payment, 2)
+
+    # Scheduled payments already made in the current period reduce what is
+    # still due on the current due date; early repayments do not.
+    paid_in_period = _scheduled_paid_in_period(history_items or [], period_start, current_due)
+    first_due_total = round(annuity_payment - paid_in_period, 2)
+
+    start_payment_date = current_due
+    if first_due_total <= 0:
+        base = date(current_due.year, current_due.month, 1)
         next_base = _add_months(base, 1)
         start_payment_date = _payment_date_for_month(next_base.year, next_base.month, int(payment_day))
-    end_month_key = _month_key(credit_ends_at)
-    full_term_payments = max(0, end_month_key - _month_key(start_payment_date) + 1)
+        first_due_total = annuity_payment
 
     payment_dates: list[date] = []
     current_payment_date = start_payment_date
-    max_items = full_term_payments if limit is None else min(limit, full_term_payments)
-    while _month_key(current_payment_date) <= end_month_key and len(payment_dates) < max_items:
+    while _month_key(current_payment_date) <= end_month_key and (limit is None or len(payment_dates) < limit):
         payment_dates.append(current_payment_date)
         base = date(current_payment_date.year, current_payment_date.month, 1)
         next_base = _add_months(base, 1)
@@ -377,23 +398,6 @@ def _build_credit_schedule(
 
     if not payment_dates:
         return []
-
-    remaining_payments = full_term_payments
-    monthly_rate = annual_rate / 1200 if annual_rate > 0 else 0
-    if monthly_rate > 0:
-        annuity_payment = principal * monthly_rate / (1 - (1 + monthly_rate) ** (-remaining_payments))
-    else:
-        annuity_payment = principal / remaining_payments
-    annuity_payment = round(annuity_payment, 2)
-
-    latest_regular_payment = _latest_regular_payment(history_items or [], int(payment_day))
-    if (
-        latest_regular_payment is not None
-        and last_accrual_date is not None
-        and last_accrual_date <= latest_regular_payment[0]
-        and not _has_payment_after(history_items or [], (latest_regular_payment[0], latest_regular_payment[1]))
-    ):
-        annuity_payment = latest_regular_payment[2]
 
     items: list[dict] = []
     current_principal = principal
@@ -408,7 +412,9 @@ def _build_credit_schedule(
 
         interest_component = _actual_actual_interest(current_principal, annual_rate, prev_date, payment_date)
 
-        total_payment = annuity_payment
+        total_payment = first_due_total if idx == 0 else annuity_payment
+        if interest_component > total_payment:
+            interest_component = round(total_payment, 2)
         principal_component = round(max(0, total_payment - interest_component), 2)
 
         is_final_payment = _month_key(payment_date) >= end_month_key
@@ -486,6 +492,7 @@ async def create_credit_account(
         credit_ends_at=body.credit_ends_at,
         provider_name=body.provider_name,
         badge_color=body.badge_color,
+        monthly_payment=body.monthly_payment,
     )
     return BankAccountItem(**result)
 
@@ -530,6 +537,7 @@ async def update_credit_account(
         credit_ends_at=body.credit_ends_at,
         provider_name=body.provider_name,
         badge_color=body.badge_color,
+        monthly_payment=body.monthly_payment,
     )
     return BankAccountItem(**result)
 
@@ -606,6 +614,8 @@ async def repay_credit_account(
         amount=body.amount,
         comment=body.comment,
         payment_at=body.payment_at,
+        payment_kind=body.payment_kind,
+        recalc_payment=body.recalc_payment,
     )
     return CreditRepaymentResponse(**result)
 

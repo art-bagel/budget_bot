@@ -622,6 +622,7 @@ export interface BankAccount {
   credit_started_at?: string | null;
   credit_ends_at?: string | null;
   credit_limit?: number | null;
+  monthly_payment?: number | null;
   provider_name?: string | null;
   provider_account_ref?: string | null;
   badge_color?: string | null;
@@ -652,6 +653,7 @@ export interface CreateCreditAccountRequest {
   credit_ends_at?: string;
   provider_name?: string;
   badge_color?: string;
+  monthly_payment?: number;
 }
 
 export interface UpdateCreditAccountRequest {
@@ -663,6 +665,7 @@ export interface UpdateCreditAccountRequest {
   credit_ends_at?: string | null;
   provider_name?: string | null;
   badge_color?: string | null;
+  monthly_payment?: number | null;
 }
 
 export interface CreditRepaymentRequest {
@@ -671,6 +674,8 @@ export interface CreditRepaymentRequest {
   amount: number;
   comment?: string;
   payment_at?: string;
+  payment_kind?: 'scheduled' | 'early';
+  recalc_payment?: boolean;
 }
 
 export interface CreditRepaymentResponse {
@@ -683,6 +688,8 @@ export interface CreditRepaymentResponse {
   accrued_interest: number;
   amount_in_base: number;
   base_currency_code: string;
+  payment_kind?: 'scheduled' | 'early';
+  monthly_payment?: number | null;
 }
 
 export interface CreditScheduleItem {
@@ -693,6 +700,7 @@ export interface CreditScheduleItem {
   interest_component: number;
   principal_before: number;
   principal_after: number;
+  payment_kind?: 'scheduled' | 'early' | null;
   status: 'paid' | 'planned';
 }
 
@@ -709,6 +717,7 @@ export interface CreditAccountSummary {
   credit_started_at?: string | null;
   credit_ends_at?: string | null;
   credit_limit?: number | null;
+  monthly_payment?: number | null;
   last_accrual_date?: string | null;
   last_payment_at?: string | null;
   payments_count: number;
