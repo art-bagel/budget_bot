@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Плотность плиток категорий — варианты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="phone">
+  <header class="head">
+    <h1>Плитки категорий</h1>
+    <button id="themeToggle" class="theme-btn" type="button">🌙</button>
+  </header>
+  <p class="lede">Один и тот же набор из 6 категорий в каждом варианте. Смотрим высоту блока и читаемость.</p>
+
+  <section class="variant" data-variant="current">
+    <div class="variant__head">
+      <h2>0 · Текущая</h2>
+      <span class="variant__meta" data-meta></span>
+    </div>
+    <ul class="catgrid catgrid--current" data-grid></ul>
+    <p class="variant__note">Эталон: иконка 34px сверху, имя прижато вниз, min-height 98px.</p>
+  </section>
+
+  <section class="variant" data-variant="horizontal">
+    <div class="variant__head">
+      <h2>A · Горизонтальная</h2>
+      <span class="variant__meta" data-meta></span>
+    </div>
+    <ul class="catgrid catgrid--h" data-grid></ul>
+    <p class="variant__note">Иконка слева 28px, справа имя + сумма. Имя по-прежнему до 2 строк.</p>
+  </section>
+
+  <section class="variant" data-variant="inline-amt">
+    <div class="variant__head">
+      <h2>B · Иконка + сумма в строку</h2>
+      <span class="variant__meta" data-meta></span>
+    </div>
+    <ul class="catgrid catgrid--ia" data-grid></ul>
+    <p class="variant__note">Верхняя строка: иконка и сумма по краям. Имя под ними, до 2 строк.</p>
+  </section>
+
+  <section class="variant" data-variant="compact-v">
+    <div class="variant__head">
+      <h2>C · Компакт-вертикаль</h2>
+      <span class="variant__meta" data-meta></span>
+    </div>
+    <ul class="catgrid catgrid--cv" data-grid></ul>
+    <p class="variant__note">Та же композиция, что сейчас, но иконка 26px и ужатые отступы.</p>
+  </section>
+
+  <section class="variant" data-variant="rows">
+    <div class="variant__head">
+      <h2>D · Строки во всю ширину</h2>
+      <span class="variant__meta" data-meta></span>
+    </div>
+    <ul class="catgrid catgrid--rows" data-grid></ul>
+    <p class="variant__note">Максимальная плотность, но теряется «сеточность» и drag-цели мельче.</p>
+  </section>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
