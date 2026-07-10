@@ -484,10 +484,12 @@ BEGIN
             _next_due_date := _next_due_date + interval '1 month';
         END IF;
 
+        -- Bank-style: the annuity is spread over the full periods before the
+        -- contractual end date; the payment on the end date itself remains a
+        -- small corrective tail, so it is not counted here.
         _remaining_months :=
             (extract(year FROM _credit_ends_at)::integer * 12 + extract(month FROM _credit_ends_at)::integer)
-            - (extract(year FROM _next_due_date)::integer * 12 + extract(month FROM _next_due_date)::integer)
-            + 1;
+            - (extract(year FROM _next_due_date)::integer * 12 + extract(month FROM _next_due_date)::integer);
 
         _new_monthly_payment := budgeting.get__annuity_payment(
             _principal_after, _credit_interest_rate, _remaining_months
