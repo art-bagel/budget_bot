@@ -167,16 +167,18 @@ cython_debug/
 .idea/
 .DS_Store
 
-# Frontend
+# Frontend build artifacts
 node_modules/
 *.tsbuildinfo
-frontend/vite.config.js
-frontend/vite.config.d.ts
+/frontend/vite.config.js
+/frontend/vite.config.d.ts
 
-# Local data, dumps, screenshots — never commit
-local-data/
-outputs/
-skrin_shot/
+# Local tooling / generated outputs
+/outputs/
+/infra/db/Scripts/.dbeaver/
+/infra/db/Scripts/budgeting/manual/
 
-# DBeaver workspace (contains credentials)
-infra/db/Scripts/.dbeaver/
+# Personal data — never commit
+/local-data/
+/skrin_shot/
+*.xlsx

@@ -12,6 +12,7 @@ from starlette.responses import FileResponse
 
 from backend.app.dependencies import TelegramUser, get_telegram_user
 from backend.app import storage as app_storage
+from storage.secretbox import decrypt_secret
 from storage.tinkoff_sync import TinkoffConnections, TinkoffSync
 
 router = APIRouter(prefix='/api/v1/tinkoff', tags=['tinkoff'])
@@ -222,7 +223,7 @@ async def preview_tinkoff_sync(
     creds = conn_row['credentials']
     if isinstance(creds, str):
         creds = json.loads(creds)
-    token = creds['token']
+    token = decrypt_secret(creds['token'])
     tinkoff_account_id = conn_row['provider_account_id']
     linked_account_id = conn_row['linked_account_id']
 

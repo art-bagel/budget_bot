@@ -98,8 +98,8 @@ async def get_telegram_user(
         )
 
     # Dev-only fallback: accept user ID from header without signature.
-    # Only allowed when Telegram bot token is not configured (local dev).
-    if settings.telegram_bot_token:
+    # Never allowed in production; otherwise only when bot token is not configured.
+    if settings.is_production or settings.telegram_bot_token:
         raise HTTPException(status_code=401, detail='Missing Telegram init data')
 
     if x_telegram_user_id is None:

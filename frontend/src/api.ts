@@ -284,10 +284,17 @@ export async function register(baseCurrencyCode: string): Promise<UserContext> {
   });
 }
 
-export async function deleteAccount(): Promise<{ status: string; user_id: number }> {
-  return apiFetch<{ status: string; user_id: number }>('/auth/account', {
-    method: 'DELETE',
+export async function requestAccountDeletion(): Promise<{ confirm_token: string; expires_in_seconds: number }> {
+  return apiFetch<{ confirm_token: string; expires_in_seconds: number }>('/auth/account/delete-request', {
+    method: 'POST',
   });
+}
+
+export async function deleteAccount(confirmToken: string): Promise<{ status: string; user_id: number }> {
+  return apiFetch<{ status: string; user_id: number }>(
+    `/auth/account?confirm_token=${encodeURIComponent(confirmToken)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function fetchCurrencies(): Promise<Currency[]> {

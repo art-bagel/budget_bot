@@ -1,6 +1,7 @@
 import asyncpg
 
 from storage.databases import DataBase
+from storage.secretbox import encrypt_secret
 
 
 class TinkoffStorage(DataBase):
@@ -108,7 +109,7 @@ class TinkoffStorage(DataBase):
         result = await self._call(
             self.F_PUT__UPSERT_TINKOFF_CONNECTION,
             user_id,
-            token,
+            encrypt_secret(token),
             provider_account_id,
             linked_account_id,
         )

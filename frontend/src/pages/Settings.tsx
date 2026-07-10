@@ -30,6 +30,7 @@ import {
 import {
   createBankAccount,
   deleteAccount,
+  requestAccountDeletion,
   deleteInvestmentAccount,
   deleteTinkoffConnection,
   dissolveFamily,
@@ -249,7 +250,8 @@ export default function Settings({
     setDeleteInProgress(true);
     setDeleteError(null);
     try {
-      await deleteAccount();
+      const { confirm_token } = await requestAccountDeletion();
+      await deleteAccount(confirm_token);
       window.location.reload();
     } catch (reason: unknown) {
       setDeleteError(reason instanceof Error ? reason.message : String(reason));
