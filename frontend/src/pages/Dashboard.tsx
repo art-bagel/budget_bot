@@ -772,8 +772,10 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                     {isValidTarget ? (
                       <>
                         <span className={`cat__ico cat__ico${colorClass}`} />
-                        <span className="cat__name" style={{ color: 'var(--text)', fontWeight: 700 }}>Перевести сюда</span>
-                        <strong className="cat__amt">{formatAmount(category.balance, category.currency_code)}</strong>
+                        <span className="cat__body">
+                          <span className="cat__name" style={{ color: 'var(--text)', fontWeight: 700 }}>Перевести сюда</span>
+                          <strong className="cat__amt">{formatAmount(category.balance, category.currency_code)}</strong>
+                        </span>
                       </>
                     ) : (
                       <>
@@ -781,18 +783,20 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
                           {parsed.kind === 'svg' && parsed.icon
                             ? <CategorySvgIcon code={parsed.icon} />
                             : parsed.kind === 'emoji' && parsed.icon
-                              ? <span style={{ fontSize: '18px', lineHeight: 1 }}>{parsed.icon}</span>
+                              ? <span style={{ fontSize: '15px', lineHeight: 1 }}>{parsed.icon}</span>
                               : null}
                         </span>
-                        <span className="cat__name">{parsed.displayName}</span>
-                        <strong className={[
-                          'cat__amt',
-                          isNeg ? 'cat__amt--neg' : '',
-                          isWarn ? 'cat__amt--warn' : '',
-                        ].filter(Boolean).join(' ')}>
-                          {formatNumericAmount(category.balance)}
-                          <span className="ruble">&nbsp;{currencySymbol(category.currency_code)}</span>
-                        </strong>
+                        <span className="cat__body">
+                          <span className="cat__name">{parsed.displayName}</span>
+                          <strong className={[
+                            'cat__amt',
+                            isNeg ? 'cat__amt--neg' : '',
+                            isWarn ? 'cat__amt--warn' : '',
+                          ].filter(Boolean).join(' ')}>
+                            {formatNumericAmount(category.balance)}
+                            <span className="ruble">&nbsp;{currencySymbol(category.currency_code)}</span>
+                          </strong>
+                        </span>
                       </>
                     )}
                   </li>

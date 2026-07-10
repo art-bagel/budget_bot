@@ -1218,12 +1218,12 @@ input { font: inherit; color: inherit; }
 .cat {
   background: var(--surface);
   border-radius: var(--r-md);
-  padding: 12px 12px 11px;
+  padding: 10px 12px;
   box-shadow: var(--sh-1);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 4px;
-  min-height: 98px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -1235,13 +1235,21 @@ input { font: inherit; color: inherit; }
 .cat:hover { box-shadow: var(--sh-2); }
 .cat:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: 2px; }
 
-.cat__ico {
-  width: 34px; height: 34px;
-  border-radius: 9px;
-  display: grid; place-items: center;
-  justify-self: start;
+.cat__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-.cat__ico svg { width: 18px; height: 18px; }
+
+.cat__ico {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: grid; place-items: center;
+  flex: none;
+}
+.cat__ico svg { width: 16px; height: 16px; }
 .cat__ico--g { background: var(--t-g-b); color: var(--t-g-f); }
 .cat__ico--o { background: var(--t-o-b); color: var(--t-o-f); }
 .cat__ico--b { background: var(--t-b-b); color: var(--t-b-f); }
@@ -1250,20 +1258,20 @@ input { font: inherit; color: inherit; }
 .cat__ico--v { background: var(--t-v-b); color: var(--t-v-f); }
 
 .cat__name {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
   letter-spacing: -.005em;
   line-height: 1.25;
-  align-self: end;
+  white-space: nowrap;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* хвост длинного имени растворяется; короткие имена маска не затрагивает */
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
 }
 
 .cat__amt {
-  font-size: 17px;
+  font-size: 15.5px;
   font-weight: 800;
   letter-spacing: -.03em;
   color: var(--text);
@@ -1277,7 +1285,7 @@ input { font: inherit; color: inherit; }
 .cat--fam::before {
   content: '';
   position: absolute;
-  top: 12px; right: 12px;
+  top: 8px; right: 8px;
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--yellow-deep);
