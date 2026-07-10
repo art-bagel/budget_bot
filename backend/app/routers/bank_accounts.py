@@ -373,10 +373,11 @@ def _build_credit_schedule(
     if monthly_payment_raw is not None and float(monthly_payment_raw) > 0:
         annuity_payment = round(float(monthly_payment_raw), 2)
     else:
-        # Bank-style: spread over full periods before the end date, the end-date
-        # payment itself is a corrective tail.
-        remaining_payments = max(1, end_month_key - _month_key(current_due))
-        monthly_rate = annual_rate / 1200 if annual_rate > 0 else 0
+        # Bank-style recalc estimate (see put__repay_credit_account): average
+        # month of 30.4375 days over a 365-day year, all remaining payment
+        # dates counted including the end date.
+        remaining_payments = max(1, end_month_key - _month_key(current_due) + 1)
+        monthly_rate = annual_rate * 30.4375 / 36500 if annual_rate > 0 else 0
         if monthly_rate > 0:
             annuity_payment = principal * monthly_rate / (1 - (1 + monthly_rate) ** (-remaining_payments))
         else:

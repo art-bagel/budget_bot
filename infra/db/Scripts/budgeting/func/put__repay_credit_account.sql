@@ -484,16 +484,30 @@ BEGIN
             _next_due_date := _next_due_date + interval '1 month';
         END IF;
 
-        -- Bank-style: the annuity is spread over the full periods before the
-        -- contractual end date; the payment on the end date itself remains a
-        -- small corrective tail, so it is not counted here.
+        -- Bank recalc (calibrated against Sber/Domklik history): monthly rate
+        -- uses the average month of 30.4375 days (365.25/12) over a 365-day
+        -- year, and the term counts all remaining payment dates including the
+        -- end date. Matches the bank's recalculated annuity to within ~1 RUB;
+        -- the exact bank figure can still be set manually on the account.
         _remaining_months :=
             (extract(year FROM _credit_ends_at)::integer * 12 + extract(month FROM _credit_ends_at)::integer)
-            - (extract(year FROM _next_due_date)::integer * 12 + extract(month FROM _next_due_date)::integer);
+            - (extract(year FROM _next_due_date)::integer * 12 + extract(month FROM _next_due_date)::integer)
+            + 1;
 
-        _new_monthly_payment := budgeting.get__annuity_payment(
-            _principal_after, _credit_interest_rate, _remaining_months
-        );
+        IF _remaining_months > 0 AND COALESCE(_credit_interest_rate, 0) > 0 THEN
+            DECLARE
+                _monthly_rate numeric := _credit_interest_rate * 30.4375 / 36500.0;
+            BEGIN
+                _new_monthly_payment := round(
+                    _principal_after * _monthly_rate / (1 - power(1 + _monthly_rate, -_remaining_months)),
+                    2
+                );
+            END;
+        ELSE
+            _new_monthly_payment := budgeting.get__annuity_payment(
+                _principal_after, _credit_interest_rate, _remaining_months
+            );
+        END IF;
 
         IF _new_monthly_payment IS NOT NULL THEN
             UPDATE bank_accounts
