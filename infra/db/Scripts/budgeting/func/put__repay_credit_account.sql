@@ -302,11 +302,15 @@ BEGIN
             )
         );
 
-        SELECT COALESCE(SUM(payment_amount), 0)
+        -- Scheduled payments count in full; early repayments count only their
+        -- interest part (it offsets the interest portion of the upcoming due
+        -- payment), their principal part is a true prepayment.
+        SELECT COALESCE(SUM(
+            CASE WHEN payment_kind = 'scheduled' THEN payment_amount ELSE interest_paid END
+        ), 0)
         INTO _period_paid
         FROM credit_payment_events
         WHERE credit_account_id = _credit_account_id
-          AND payment_kind = 'scheduled'
           AND payment_at::date > _prev_due_date
           AND payment_at::date <= _cur_due_date;
 

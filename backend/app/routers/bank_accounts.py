@@ -311,18 +311,23 @@ def _previous_due_date(due_date: date, payment_day: int) -> date:
     return _payment_date_for_month(prev_base.year, prev_base.month, payment_day)
 
 
-def _scheduled_paid_in_period(history_items: list[dict], period_start: date, period_end: date) -> float:
-    """Sum of scheduled (non-early) payments falling in (period_start, period_end]."""
+def _paid_toward_period(history_items: list[dict], period_start: date, period_end: date) -> float:
+    """How much of the current period's due is already covered by payments in
+    (period_start, period_end]: scheduled payments count in full; early
+    repayments count only their interest part — that interest would otherwise
+    be part of the upcoming due payment, while their principal part is a true
+    prepayment and does not replace the monthly installment."""
     total = 0.0
     for item in history_items:
         if item.get('status') != 'paid':
             continue
-        if item.get('payment_kind') == 'early':
-            continue
         scheduled_date = _parse_iso_date(item.get('scheduled_date'))
         if scheduled_date is None or not (period_start < scheduled_date <= period_end):
             continue
-        total += float(item.get('total_payment') or 0)
+        if item.get('payment_kind') == 'early':
+            total += float(item.get('interest_component') or 0)
+        else:
+            total += float(item.get('total_payment') or 0)
     return round(total, 2)
 
 
@@ -376,9 +381,9 @@ def _build_credit_schedule(
             annuity_payment = principal / remaining_payments
         annuity_payment = round(annuity_payment, 2)
 
-    # Scheduled payments already made in the current period reduce what is
-    # still due on the current due date; early repayments do not.
-    paid_in_period = _scheduled_paid_in_period(history_items or [], period_start, current_due)
+    # Scheduled payments (in full) and the interest part of early repayments
+    # made in the current period reduce what is still due on the current due date.
+    paid_in_period = _paid_toward_period(history_items or [], period_start, current_due)
     first_due_total = round(annuity_payment - paid_in_period, 2)
 
     start_payment_date = current_due
