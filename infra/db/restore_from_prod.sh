@@ -8,11 +8,19 @@
 # tooling required.
 #
 # Usage:
-#   PROD_PASSWORD='WhHRchc9TAyPAy79xk2x' ./infra/db/restore_from_prod.sh
+#   ./infra/db/restore_from_prod.sh                      # reads PROD_PASSWORD from infra/db/.env.prod
+#   PROD_PASSWORD='...' ./infra/db/restore_from_prod.sh  # or pass it via the environment
 #
-# The password is read from the environment on purpose — do NOT hardcode it here.
+# The password lives in infra/db/.env.prod (gitignored) — do NOT hardcode it here.
 
 set -euo pipefail
+
+# Load local prod credentials if present (gitignored).
+ENV_FILE="$(cd "$(dirname "$0")" && pwd)/.env.prod"
+if [[ -z "${PROD_PASSWORD:-}" && -f "${ENV_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${ENV_FILE}"
+fi
 
 # ---- config (override via env) ------------------------------------------------
 PROD_HOST="${PROD_HOST:-192.168.30.105}"

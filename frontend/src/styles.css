@@ -282,6 +282,7 @@ html {
 body {
   margin: 0;
   min-height: 100%;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: fallback for browsers without vh support */
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
@@ -4259,9 +4260,6 @@ select.dlg-row__ghost option {
 }
 
 .dlg-currency {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-2);
   background: transparent;
   border: none;
   outline: none;

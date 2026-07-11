@@ -63,7 +63,7 @@ async def get_dashboard_overview(
         for account in all_bank_accounts
     }
     snapshot_results = await asyncio.gather(*snapshot_tasks.values())
-    account_snapshots: dict[int, list[dict]] = dict(zip(snapshot_tasks.keys(), snapshot_results))
+    account_snapshots: dict[int, list[dict]] = dict(zip(snapshot_tasks.keys(), snapshot_results, strict=True))
 
     bank_balances = account_snapshots.get(bank_account_id, [])
     budget_categories = await reports.get__budget_snapshot(user.user_id, True)

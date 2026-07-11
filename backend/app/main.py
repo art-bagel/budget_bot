@@ -8,12 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
-logger = logging.getLogger(__name__)
-
 from backend.app.config import settings
 from backend.app.routers import auth, bank_accounts, categories, crypto, currencies, dashboard, families, groups, income_sources, operations, portfolio, user_settings, scheduled_expenses, tinkoff
 from backend.app import storage as app_storage
 from backend.app.scheduler import scheduler_loop
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

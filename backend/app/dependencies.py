@@ -108,6 +108,6 @@ async def get_telegram_user(
     try:
         uid = int(x_telegram_user_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail='Invalid user id')
+        raise HTTPException(status_code=400, detail='Invalid user id') from None
 
     return TelegramUser(user_id=uid)

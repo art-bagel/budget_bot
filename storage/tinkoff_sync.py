@@ -1713,7 +1713,7 @@ class TinkoffSync:
         ticker_token = _normalize_lookup_token(ticker)
         if len(ticker_token) >= 2:
             ticker_candidates: list[int] = []
-            for position_id, position_title, position_meta in normalized_rows:
+            for position_id, _position_title, position_meta in normalized_rows:
                 stored_ticker_token = _normalize_lookup_token(str(position_meta.get('ticker', '')))
                 if ticker_token == stored_ticker_token:
                     ticker_candidates.append(position_id)

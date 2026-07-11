@@ -5,7 +5,7 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from backend.app.bootstrap import PROJECT_ROOT
+from backend.app.bootstrap import PROJECT_ROOT  # noqa: F401  # side effect: adds project root to sys.path
 from storage.databases import ConnectData
 
 
