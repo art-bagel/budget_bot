@@ -1219,11 +1219,14 @@ input { font: inherit; color: inherit; }
 .cat {
   background: var(--surface);
   border-radius: var(--r-md);
-  padding: 10px 12px;
+  padding: 9px 12px 10px;
   box-shadow: var(--sh-1);
-  display: flex;
+  /* two rows: amount left, icon right, name on its own line below */
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 4px;
   min-height: 62px;
   cursor: pointer;
   user-select: none;
@@ -1237,18 +1240,16 @@ input { font: inherit; color: inherit; }
 .cat:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: 2px; }
 
 .cat__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  /* name and amount become grid items of .cat */
+  display: contents;
 }
 
 .cat__ico {
   width: 28px; height: 28px;
   border-radius: 8px;
   display: grid; place-items: center;
-  flex: none;
+  grid-row: 1;
+  grid-column: 2;
 }
 .cat__ico svg { width: 16px; height: 16px; }
 .cat__ico--g { background: var(--t-g-b); color: var(--t-g-f); }
@@ -1259,6 +1260,9 @@ input { font: inherit; color: inherit; }
 .cat__ico--v { background: var(--t-v-b); color: var(--t-v-f); }
 
 .cat__name {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  min-width: 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
@@ -1272,6 +1276,9 @@ input { font: inherit; color: inherit; }
 }
 
 .cat__amt {
+  grid-row: 1;
+  grid-column: 1;
+  justify-self: start;
   font-size: 15.5px;
   font-weight: 800;
   letter-spacing: -.03em;
@@ -1286,7 +1293,7 @@ input { font: inherit; color: inherit; }
 .cat--fam::before {
   content: '';
   position: absolute;
-  top: 8px; right: 8px;
+  bottom: 10px; right: 8px;
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--yellow-deep);

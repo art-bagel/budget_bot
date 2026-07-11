@@ -14,6 +14,12 @@
       "port": 5173
     },
     {
+      "name": "frontend-docker",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev:docker"],
+      "port": 5173
+    },
+    {
       "name": "backend",
       "runtimeExecutable": "./venv/bin/uvicorn",
       "runtimeArgs": ["backend.app.main:app", "--reload", "--port", "8000"],
