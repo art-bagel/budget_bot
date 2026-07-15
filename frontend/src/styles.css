@@ -5760,6 +5760,63 @@ select.dlg-row__ghost option {
   color: var(--text-3);
 }
 
+.ana-cat--expandable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ana-cat__ops {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 0 2px;
+  border-top: 1px dashed var(--line-soft);
+  min-width: 0;
+}
+
+.ana-cat__ops-note {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.ana-cat__ops-note--error {
+  color: var(--neg);
+}
+
+.ana-op {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.78rem;
+  /* Грид-элемент по умолчанию имеет min-width:auto и не ужимается —
+     без этого длинный комментарий выталкивает сумму за границу карточки. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ana-op__date {
+  color: var(--text-3);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ana-op__label {
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ana-op__amt {
+  color: var(--text);
+  font-weight: 600;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .ana-period-select {
   border: none;
   outline: none;

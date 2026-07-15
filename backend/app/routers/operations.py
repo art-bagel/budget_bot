@@ -298,6 +298,24 @@ class OperationAnalyticsResponse(BaseModel):
     periods: List[OperationAnalyticsMonth]
 
 
+class OperationAnalyticsDetailItem(BaseModel):
+    operation_id: int
+    operated_at: Optional[str] = None
+    created_at: str
+    comment: Optional[str] = None
+    owner_type: Literal['user', 'family']
+    actor_username: Optional[str] = None
+    label: Optional[str] = None
+    amount: float
+
+
+class OperationAnalyticsDetailsResponse(BaseModel):
+    items: List[OperationAnalyticsDetailItem]
+    total_count: int
+    limit: int
+    offset: int
+
+
 def parse_anchor_date(anchor_date: Optional[str]) -> Optional[date]:
     if anchor_date is None:
         return None
@@ -578,3 +596,28 @@ async def get_operations_analytics(
         periods=periods,
     )
     return OperationAnalyticsResponse(**result)
+
+
+@router.get('/analytics/details', response_model=OperationAnalyticsDetailsResponse)
+async def get_operations_analytics_details(
+    entry_key: str = Query(..., min_length=1, description='Ключ строки аналитики: id категории или источника дохода'),
+    anchor_date: Optional[str] = Query(None, description='Дата внутри периода в формате YYYY-MM-DD'),
+    period_mode: Literal['week', 'month', 'year'] = Query('month'),
+    operation_type: Literal['expense', 'income'] = Query('expense'),
+    owner_scope: Literal['all', 'user', 'family'] = Query('all'),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: TelegramUser = Depends(get_telegram_user),
+) -> OperationAnalyticsDetailsResponse:
+    parsed_anchor_date = parse_anchor_date(anchor_date)
+    result = await reports.get__operations_analytics_details(
+        user_id=user.user_id,
+        entry_key=entry_key,
+        anchor_date=parsed_anchor_date,
+        period_mode=period_mode,
+        operation_type=operation_type,
+        owner_scope=owner_scope,
+        limit=limit,
+        offset=offset,
+    )
+    return OperationAnalyticsDetailsResponse(**result)

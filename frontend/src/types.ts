@@ -569,6 +569,24 @@ export interface OperationAnalyticsResponse {
   periods: OperationAnalyticsMonth[];
 }
 
+export interface OperationAnalyticsDetailItem {
+  operation_id: number;
+  operated_at?: string | null;
+  created_at: string;
+  comment?: string | null;
+  owner_type: 'user' | 'family';
+  actor_username?: string | null;
+  label?: string | null;
+  amount: number;
+}
+
+export interface OperationAnalyticsDetailsResponse {
+  items: OperationAnalyticsDetailItem[];
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
 export interface ReverseOperationRequest {
   operation_id: number;
   comment?: string;

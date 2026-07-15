@@ -23,6 +23,7 @@ class Reports(DataBase):
     F_GET__BUDGET_SNAPSHOT = 'get__budget_snapshot'
     F_GET__OPERATIONS_HISTORY = 'get__operations_history'
     F_GET__OPERATIONS_ANALYTICS = 'get__operations_analytics'
+    F_GET__OPERATIONS_ANALYTICS_DETAILS = 'get__operations_analytics_details'
     F_GET__PORTFOLIO_VALUATION = 'get__portfolio_valuation'
     F_GET__PORTFOLIO_SUMMARY = 'get__portfolio_summary'
     F_GET__PORTFOLIO_POSITION = 'get__portfolio_position'
@@ -312,6 +313,47 @@ class Reports(DataBase):
             'total_operations': 0,
             'items': [],
             'periods': [],
+        }
+
+    async def get__operations_analytics_details(
+        self,
+        user_id: int,
+        entry_key: str,
+        anchor_date: Optional[date] = None,
+        period_mode: str = 'month',
+        operation_type: str = 'expense',
+        owner_scope: str = 'all',
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """
+        Возвращает операции по строке аналитики (категории или источнику дохода) за выбранный период.
+        :param user_id: Идентификатор владельца операций.
+        :param entry_key: Ключ строки аналитики: id категории для расходов, id источника для доходов.
+        :param anchor_date: Дата внутри выбранного периода.
+        :param period_mode: Режим периода: week, month, year.
+        :param operation_type: Тип аналитики: income или expense.
+        :param owner_scope: Область владельца: all, user, family.
+        :param limit: Количество операций в выборке.
+        :param offset: Смещение от начала списка.
+        :return: Словарь с массивом операций и параметрами пагинации.
+        """
+        result = await self.call_function(
+            self._fn(self.F_GET__OPERATIONS_ANALYTICS_DETAILS),
+            user_id,
+            anchor_date,
+            period_mode,
+            operation_type,
+            owner_scope,
+            entry_key,
+            limit,
+            offset,
+        )
+        return result if result else {
+            'items': [],
+            'total_count': 0,
+            'limit': limit,
+            'offset': offset,
         }
 
     async def get__portfolio_valuation(

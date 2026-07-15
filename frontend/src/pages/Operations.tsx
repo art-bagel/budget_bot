@@ -3,6 +3,7 @@ import type { TouchEvent as ReactTouchEvent } from 'react';
 
 import {
   fetchOperationsAnalytics,
+  fetchOperationsAnalyticsDetails,
   fetchOperationsHistory,
   reverseOperation,
 } from '../api';
@@ -12,6 +13,7 @@ import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { parseCategoryIcon } from '../utils/categoryIcon';
 import { useHints } from '../hooks/useHints';
 import type {
+  OperationAnalyticsDetailItem,
   OperationAnalyticsItem,
   OperationAnalyticsMonth,
   OperationAnalyticsResponse,
@@ -868,6 +870,10 @@ export default function Operations({
   const [analyticsOwnerScope, setAnalyticsOwnerScope] = useState<'all' | 'user' | 'family'>('all');
   const [analyticsPeriodMode, setAnalyticsPeriodMode] = useState<AnalyticsPeriodMode>('month');
   const [analyticsAnchorDate, setAnalyticsAnchorDate] = useState(getCurrentAnchorDate('month'));
+  const [expandedAnalyticsKey, setExpandedAnalyticsKey] = useState<string | null>(null);
+  const [analyticsDetailsByKey, setAnalyticsDetailsByKey] = useState<Record<string, OperationAnalyticsDetailItem[]>>({});
+  const [analyticsDetailsLoadingKey, setAnalyticsDetailsLoadingKey] = useState<string | null>(null);
+  const [analyticsDetailsError, setAnalyticsDetailsError] = useState<string | null>(null);
   const analyticsSwipeRef = useRef<{ startX: number; startY: number } | null>(null);
   const periodSelectRef = useRef<HTMLSelectElement>(null);
 
@@ -1005,6 +1011,14 @@ export default function Operations({
     void loadAnalytics();
   }, [viewMode, analyticsAnchorDate, analyticsPeriodMode, analyticsTypeFilter, analyticsOwnerScope]);
 
+  // Раскрытая категория и кэш её операций привязаны к параметрам периода:
+  // при их смене прошлые данные неактуальны.
+  useEffect(() => {
+    setExpandedAnalyticsKey(null);
+    setAnalyticsDetailsByKey({});
+    setAnalyticsDetailsError(null);
+  }, [analyticsAnchorDate, analyticsPeriodMode, analyticsTypeFilter, analyticsOwnerScope]);
+
   useEffect(() => {
     if (!analyticsHasFamily && analyticsOwnerScope === 'family') {
       setAnalyticsOwnerScope('all');
@@ -1139,6 +1153,51 @@ export default function Operations({
     setAnalyticsPeriodMode(periodMode);
     setAnalyticsAnchorDate(getCurrentAnchorDate(periodMode));
   };
+
+  // «Прочее» агрегирует хвост категорий за пределами топ-5: его операции
+  // запрашиваются сразу по всем этим ключам (endpoint принимает список через запятую).
+  const analyticsOtherEntryKeys = useMemo(() => {
+    const items = analyticsData?.items ?? [];
+    return [...items]
+      .sort((left, right) => right.amount - left.amount)
+      .slice(5)
+      .map((item) => item.entry_key);
+  }, [analyticsData]);
+
+  const toggleAnalyticsDetail = async (entryKey: string) => {
+    if (expandedAnalyticsKey === entryKey) {
+      setExpandedAnalyticsKey(null);
+      return;
+    }
+
+    const requestKey = entryKey === 'other' ? analyticsOtherEntryKeys.join(',') : entryKey;
+    if (!requestKey) return;
+
+    setExpandedAnalyticsKey(entryKey);
+    setAnalyticsDetailsError(null);
+    if (analyticsDetailsByKey[entryKey]) return;
+
+    setAnalyticsDetailsLoadingKey(entryKey);
+    try {
+      const result = await fetchOperationsAnalyticsDetails(
+        requestKey,
+        effectivePeriodStart,
+        effectivePeriodMode,
+        analyticsTypeFilter,
+        analyticsOwnerScope,
+      );
+      setAnalyticsDetailsByKey((prev) => ({ ...prev, [entryKey]: result.items }));
+    } catch (error: unknown) {
+      setAnalyticsDetailsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAnalyticsDetailsLoadingKey((prev) => (prev === entryKey ? null : prev));
+    }
+  };
+
+  const formatAnalyticsDetailDate = (item: OperationAnalyticsDetailItem): string => (
+    new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' })
+      .format(fromIsoDate((item.operated_at ?? item.created_at).slice(0, 10)))
+  );
 
   return (
     <>
@@ -1508,8 +1567,15 @@ export default function Operations({
                         const colorKeys = ['g', 'o', 'b', 'p', 'r', 'v'];
                         const colorKey = colorKeys[index % colorKeys.length];
                         const parsed = parseCategoryIcon(segment.label);
+                        const expanded = expandedAnalyticsKey === segment.entryKey;
+                        const detailItems = analyticsDetailsByKey[segment.entryKey];
+                        const detailsLoading = analyticsDetailsLoadingKey === segment.entryKey;
                         return (
-                          <div className="ana-cat" key={segment.entryKey}>
+                          <div
+                            className="ana-cat ana-cat--expandable"
+                            key={segment.entryKey}
+                            onClick={() => void toggleAnalyticsDetail(segment.entryKey)}
+                          >
                             <div className={`ana-cat__ico ana-cat__ico--${colorKey}`}>
                               {parsed.kind === 'svg' && parsed.icon
                                 ? <CategorySvgIcon code={parsed.icon} />
@@ -1529,6 +1595,29 @@ export default function Operations({
                                 <span>{segment.operationsCount} операций</span>
                                 <span>{formatPercent(segment.share)}</span>
                               </div>
+                              {expanded && (
+                                <div className="ana-cat__ops">
+                                  {detailsLoading ? (
+                                    <span className="ana-cat__ops-note">Загружаем операции...</span>
+                                  ) : analyticsDetailsError && !detailItems ? (
+                                    <span className="ana-cat__ops-note ana-cat__ops-note--error">{analyticsDetailsError}</span>
+                                  ) : detailItems && detailItems.length === 0 ? (
+                                    <span className="ana-cat__ops-note">Операций нет</span>
+                                  ) : detailItems ? (
+                                    detailItems.map((item) => (
+                                      <div className="ana-op" key={item.operation_id}>
+                                        <span className="ana-op__date">{formatAnalyticsDetailDate(item)}</span>
+                                        <span className="ana-op__label">
+                                          {item.comment ?? (item.label ? parseCategoryIcon(item.label).displayName : '—')}
+                                        </span>
+                                        <span className="ana-op__amt">
+                                          {formatAmount(item.amount, analyticsData.base_currency_code)}
+                                        </span>
+                                      </div>
+                                    ))
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

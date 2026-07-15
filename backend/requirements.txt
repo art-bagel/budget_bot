@@ -3,4 +3,6 @@ asyncpg
 python-dotenv
 uvicorn
 httpx
-cryptography
+# cryptography >= 45 SIGILL-ится на linux/arm64 в Docker Desktop (Illegal instruction
+# при импорте cryptography.hazmat.bindings._rust); держим последнюю рабочую версию.
+cryptography==44.0.2

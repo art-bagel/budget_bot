@@ -11,6 +11,7 @@ import type {
   AllocateGroupBudgetRequest,
   AllocateGroupBudgetResponse,
   OperationHistoryResponse,
+  OperationAnalyticsDetailsResponse,
   OperationAnalyticsResponse,
   RecordExpenseRequest,
   RecordExpenseResponse,
@@ -614,6 +615,28 @@ export async function fetchOperationsAnalytics(
   });
 
   return apiFetch<OperationAnalyticsResponse>(`/operations/analytics?${params.toString()}`);
+}
+
+export async function fetchOperationsAnalyticsDetails(
+  entryKey: string,
+  anchorDate: string,
+  periodMode: 'week' | 'month' | 'year',
+  operationType: 'expense' | 'income',
+  ownerScope: 'all' | 'user' | 'family',
+  limit = 200,
+  offset = 0,
+): Promise<OperationAnalyticsDetailsResponse> {
+  const params = new URLSearchParams({
+    entry_key: entryKey,
+    anchor_date: anchorDate,
+    period_mode: periodMode,
+    operation_type: operationType,
+    owner_scope: ownerScope,
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return apiFetch<OperationAnalyticsDetailsResponse>(`/operations/analytics/details?${params.toString()}`);
 }
 
 export async function reverseOperation(data: ReverseOperationRequest): Promise<ReverseOperationResponse> {
