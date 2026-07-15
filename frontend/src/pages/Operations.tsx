@@ -854,7 +854,10 @@ export default function Operations({
   const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
-  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  // Sentinel хранится в state (callback ref): при пустом фильтре элемент
+  // размонтируется, и наблюдатель обязан переподключиться к новому узлу,
+  // когда sentinel появится снова — ref.current этого не отслеживает.
+  const [loadMoreSentinel, setLoadMoreSentinel] = useState<HTMLDivElement | null>(null);
   const historyLoadingRef = useRef(false);
   const historyGenerationRef = useRef(0);
 
@@ -1048,15 +1051,14 @@ export default function Operations({
   // initial-колбэк повторно сработал, пока sentinel остаётся в зоне видимости
   // (например, когда клиентский фильтр скрывает почти все загруженные строки).
   useEffect(() => {
-    const sentinel = loadMoreSentinelRef.current;
-    if (!sentinel) return;
+    if (!loadMoreSentinel) return;
     const observer = new IntersectionObserver(
       (entries) => { if (entries[0].isIntersecting) loadMoreHistoryRef.current(); },
       { threshold: 0.1 },
     );
-    observer.observe(sentinel);
+    observer.observe(loadMoreSentinel);
     return () => observer.disconnect();
-  }, [historyItems.length, historyTotalCount, viewMode, historyScope]);
+  }, [loadMoreSentinel, historyItems.length, historyTotalCount, viewMode, historyScope]);
   const visibleHistoryItems = useMemo(() => {
     let items = historyItems;
 
@@ -1381,7 +1383,7 @@ export default function Operations({
                 </div>
               )}
 
-              {!activeFilterEmpty && <div ref={loadMoreSentinelRef} className="op-sentinel" />}
+              {!activeFilterEmpty && <div ref={setLoadMoreSentinel} className="op-sentinel" />}
               {loadingHistory && <div className="op-loading">...</div>}
             </>
             );
