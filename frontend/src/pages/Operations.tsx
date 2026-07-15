@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { TouchEvent as ReactTouchEvent } from 'react';
 
 import {
@@ -855,6 +855,8 @@ export default function Operations({
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  const historyLoadingRef = useRef(false);
+  const historyGenerationRef = useRef(0);
 
   const [analyticsData, setAnalyticsData] = useState<OperationAnalyticsResponse | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -917,6 +919,13 @@ export default function Operations({
     replace = false,
     operationType = getEffectiveHistoryType(),
   ) => {
+    // Дозагрузка не должна стартовать поверх активного запроса: устаревший
+    // offset из IntersectionObserver приводит к дублям и пропускам страниц.
+    if (historyLoadingRef.current && !replace) return;
+    // replace начинает новое "поколение": ответы старых запросов игнорируются,
+    // иначе смена фильтра вперемешку с дозагрузкой портит список и total_count.
+    const generation = replace ? ++historyGenerationRef.current : historyGenerationRef.current;
+    historyLoadingRef.current = true;
     setLoadingHistory(true);
     setHistoryError(null);
 
@@ -927,12 +936,22 @@ export default function Operations({
         operationType || undefined,
         viewMode === 'investment' ? investmentAssetTypeCode : null,
       );
-      setHistoryItems((prev) => (replace ? result.items : [...prev, ...result.items]));
+      if (generation !== historyGenerationRef.current) return;
+      setHistoryItems((prev) => {
+        if (replace) return result.items;
+        const knownIds = new Set(prev.map((item) => item.operation_id));
+        return [...prev, ...result.items.filter((item) => !knownIds.has(item.operation_id))];
+      });
       setHistoryTotalCount(result.total_count);
     } catch (error: unknown) {
-      setHistoryError(error instanceof Error ? error.message : String(error));
+      if (generation === historyGenerationRef.current) {
+        setHistoryError(error instanceof Error ? error.message : String(error));
+      }
     } finally {
-      setLoadingHistory(false);
+      if (generation === historyGenerationRef.current) {
+        historyLoadingRef.current = false;
+        setLoadingHistory(false);
+      }
     }
   };
 
@@ -1018,20 +1037,26 @@ export default function Operations({
 
   const canLoadMoreHistory = !loadingHistory && historyItems.length < historyTotalCount;
 
-  const loadMoreHistory = useCallback(() => {
-    if (canLoadMoreHistory) loadHistory(historyItems.length);
-  }, [canLoadMoreHistory, historyItems.length, investmentAssetTypeCode]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Колбэк наблюдателя ходит через ref: живой IntersectionObserver всегда видит
+  // актуальные offset и флаги, а не замыкание рендера, в котором был создан.
+  const loadMoreHistoryRef = useRef<() => void>(() => {});
+  loadMoreHistoryRef.current = () => {
+    if (canLoadMoreHistory) void loadHistory(historyItems.length);
+  };
 
+  // Пересоздание наблюдателя после каждой загруженной страницы нужно, чтобы
+  // initial-колбэк повторно сработал, пока sentinel остаётся в зоне видимости
+  // (например, когда клиентский фильтр скрывает почти все загруженные строки).
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) loadMoreHistory(); },
+      (entries) => { if (entries[0].isIntersecting) loadMoreHistoryRef.current(); },
       { threshold: 0.1 },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loadMoreHistory]);
+  }, [historyItems.length, historyTotalCount, viewMode, historyScope]);
   const visibleHistoryItems = useMemo(() => {
     let items = historyItems;
 
