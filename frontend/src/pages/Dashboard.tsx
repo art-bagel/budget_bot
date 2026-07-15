@@ -4,6 +4,8 @@ import SplashScreen from '../components/SplashScreen';
 import {
   fetchBankAccounts,
   fetchBankAccountSnapshot,
+  fetchCryptoLivePrices,
+  fetchCryptoProtocolPositions,
   fetchDashboardOverview,
   fetchGroupMembers,
   fetchPortfolioPositions,
@@ -12,6 +14,8 @@ import {
 } from '../api';
 import type {
   BankAccount,
+  CryptoLivePrice,
+  CryptoProtocolPosition,
   DashboardBankBalance,
   DashboardBudgetCategory,
   DashboardOverview as DashboardOverviewType,
@@ -56,6 +60,8 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
   const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
+  const [cryptoLivePrices, setCryptoLivePrices] = useState<Map<number, CryptoLivePrice>>(new Map());
+  const [cryptoProtocolPositions, setCryptoProtocolPositions] = useState<CryptoProtocolPosition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
@@ -115,12 +121,13 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     setError(null);
 
     try {
-      const [result, loadedInvestmentAccounts, loadedCreditAccounts, loadedPortfolioSummary, loadedPositions] = await Promise.all([
+      const [result, loadedInvestmentAccounts, loadedCreditAccounts, loadedPortfolioSummary, loadedPositions, loadedProtocolPositions] = await Promise.all([
         fetchDashboardOverview(user.bank_account_id),
         fetchBankAccounts('investment'),
         fetchBankAccounts('credit'),
         fetchPortfolioSummary(),
         fetchPortfolioPositions(),
+        fetchCryptoProtocolPositions({ status: 'open' }).catch(() => [] as CryptoProtocolPosition[]),
       ]);
       const [investmentSnapshots, creditSnapshots] = await Promise.all([
         Promise.all(
@@ -137,6 +144,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       setInvestmentAccounts(loadedInvestmentAccounts);
       setPortfolioSummaryItems(loadedPortfolioSummary);
       setOpenPositions(loadedPositions.filter((p) => p.status === 'open'));
+      setCryptoProtocolPositions(loadedProtocolPositions.filter((p) => p.status === 'open'));
       setInvestmentBalancesByAccountId(
         investmentSnapshots.reduce<Record<number, DashboardBankBalance[]>>((acc, item) => {
           acc[item.accountId] = item.balances;
@@ -169,6 +177,26 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       .then((items) => setTinkoffLivePrices(new Map(items.map((item) => [item.position_id, item]))))
       .catch(() => setTinkoffLivePrices(new Map()));
   }, [openPositions]);
+
+  useEffect(() => {
+    const assetIds = new Set<number>();
+    for (const pos of openPositions) {
+      if (pos.asset_type_code !== 'crypto') continue;
+      const id = pos.metadata?.crypto_asset_id;
+      if (typeof id === 'number' && Number.isFinite(id)) assetIds.add(id);
+    }
+    for (const protocol of cryptoProtocolPositions) {
+      if (typeof protocol.crypto_asset_id === 'number') assetIds.add(protocol.crypto_asset_id);
+    }
+    if (assetIds.size === 0) {
+      setCryptoLivePrices(new Map());
+      return;
+    }
+
+    void fetchCryptoLivePrices(Array.from(assetIds), user.base_currency_code)
+      .then((items) => setCryptoLivePrices(new Map(items.map((item) => [item.crypto_asset_id, item]))))
+      .catch(() => setCryptoLivePrices(new Map()));
+  }, [openPositions, cryptoProtocolPositions, user.base_currency_code]);
 
   useEffect(() => {
     const sharesTickers: string[] = [];
@@ -313,6 +341,13 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     return acc;
   }, {});
   const getResolvedPositionValue = (position: PortfolioPosition): number | null => {
+    if (position.asset_type_code === 'crypto') {
+      const cryptoAssetId = position.metadata?.crypto_asset_id;
+      const livePrice = typeof cryptoAssetId === 'number' ? cryptoLivePrices.get(cryptoAssetId) : undefined;
+      // Без живой цены крипта оценивается в 0 (amount_in_currency у крипто-позиций всегда 0).
+      return livePrice && position.quantity ? livePrice.price * position.quantity : null;
+    }
+
     const tinkoffPrice = tinkoffLivePrices.get(position.id);
     if (tinkoffPrice) {
       return tinkoffPrice.current_value;
@@ -334,11 +369,23 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
     investmentBalancesByAccountId[accountId] ?? []
   ).reduce((sum, balance) => sum + balance.historical_cost_in_base, 0);
 
+  // Стоимость DeFi-позиций (стейкинг, лендинг, пулы) по счёту: живая цена ×
+  // количество, иначе зафиксированная оценка в базовой валюте.
+  const getCryptoProtocolsValue = (accountId: number) => cryptoProtocolPositions
+    .filter((protocol) => protocol.investment_account_id === accountId)
+    .reduce((sum, protocol) => {
+      const livePrice = typeof protocol.crypto_asset_id === 'number'
+        ? cryptoLivePrices.get(protocol.crypto_asset_id)
+        : undefined;
+      const quantity = protocol.current_quantity ?? protocol.quantity ?? 0;
+      return sum + (livePrice && quantity > 0 ? livePrice.price * quantity : protocol.current_value_in_base);
+    }, 0);
+
   // Market-adjusted value per account:
   // cash + (for each open position: market value if ticker known, else cost basis)
   const getInvestmentAccountMarketTotal = (accountId: number) => {
     const summary = investmentSummaryByAccountId[accountId];
-    if (!summary) return getInvestmentCashInBase(accountId);
+    if (!summary) return getInvestmentCashInBase(accountId) + getCryptoProtocolsValue(accountId);
 
     const accountPositions = openPositions.filter((p) => p.investment_account_id === accountId);
     let marketValue = 0;
@@ -350,7 +397,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       }
       marketValue += pos.amount_in_currency;
     }
-    return summary.cash_balance_in_base + marketValue;
+    return summary.cash_balance_in_base + marketValue + getCryptoProtocolsValue(accountId);
   };
 
   const investmentBankTotal = investmentAccounts.reduce(
