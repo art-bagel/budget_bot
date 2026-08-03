@@ -4,7 +4,7 @@ Tinkoff Investments sync module.
 Uses the Tinkoff Invest REST API (gRPC-gateway) directly via httpx.
 No third-party SDK required — only httpx (standard package).
 
-REST base: https://invest-public-api.tinkoff.ru/rest
+REST base: https://invest-public-api.tbank.ru/rest
 """
 from __future__ import annotations
 
@@ -12,8 +12,10 @@ import asyncio
 import json
 import logging
 import re
+import ssl
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Optional
 
 import asyncpg
@@ -22,8 +24,19 @@ import httpx
 from storage.secretbox import decrypt_secret
 from storage.tinkoff import TinkoffStorage
 
-TINKOFF_REST_URL = 'https://invest-public-api.tinkoff.ru/rest'
+TINKOFF_REST_URL = 'https://invest-public-api.tbank.ru/rest'
+TINKOFF_CA_CERT = Path(__file__).with_name('certs') / 'RussianTrustedRootCA.pem'
 logger = logging.getLogger(__name__)
+
+
+def _create_tinkoff_ssl_context() -> ssl.SSLContext:
+    """Trust public CAs plus the MinDigital root used by T-Invest API."""
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=TINKOFF_CA_CERT)
+    return context
+
+
+TINKOFF_SSL_CONTEXT = _create_tinkoff_ssl_context()
 
 # Tinkoff operation type → our internal kind
 _OP_TYPE_MAP: dict[str, str] = {
@@ -108,7 +121,7 @@ class TinkoffRestClient:
         }
 
     async def _post(self, path: str, body: dict) -> dict:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, verify=TINKOFF_SSL_CONTEXT) as client:
             resp = await client.post(
                 f'{TINKOFF_REST_URL}/{path}',
                 headers=self._headers,
