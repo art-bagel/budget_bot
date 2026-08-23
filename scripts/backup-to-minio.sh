@@ -133,7 +133,12 @@ mc cp "${BACKUP_FILE}" "${REMOTE_DIR}/${BACKUP_NAME}"
 mc stat "${REMOTE_DIR}/${BACKUP_NAME}" >/dev/null
 
 echo "[${BACKUP_TARGET}] Removing dumps older than the newest ${RETENTION}..."
-mc find "${REMOTE_DIR}" --name 'budget_bot_*.dump' --print '{}' \
+# Завершающий слеш обязателен. Без него mc find сначала делает stat самого
+# пути, а stat "каталога" требует листинга КОРНЯ бакета - которого у нас нет и
+# быть не должно: ключ заперт в своём префиксе. Со слешем mc сразу листит
+# префикс, на что права есть. Раньше это не проявлялось только потому, что
+# ключи для Selectel имеют доступ ко всему бакету.
+mc find "${REMOTE_DIR}/" --name 'budget_bot_*.dump' --print '{}' \
   | LC_ALL=C sort -r \
   | sed -n "$((RETENTION + 1)),\$p" \
   | while IFS= read -r old_backup; do
