@@ -95,12 +95,24 @@ jobs:
             git checkout -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
             git pull --ff-only origin "$DEPLOY_BRANCH"
 
-            printf '%s\n' "APP_ENV=production" "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" "DB_DATABASE=${{ secrets.DB_DATABASE }}" "DB_SCHEMA=${{ secrets.DB_SCHEMA }}" "APP_HOST=0.0.0.0" "APP_PORT=8000" "FRONTEND_ORIGINS=${{ secrets.FRONTEND_ORIGINS }}" "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" "TELEGRAM_INIT_DATA_TTL_SECONDS=${{ secrets.TELEGRAM_INIT_DATA_TTL_SECONDS || '10800' }}" "CREDENTIALS_ENCRYPTION_KEY=${{ secrets.CREDENTIALS_ENCRYPTION_KEY }}" "DB_HOST=db" "DB_PORT=5432" "MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }}" "MINIO_BUCKET=${{ secrets.MINIO_BUCKET }}" "MINIO_PREFIX=${{ secrets.MINIO_PREFIX }}" "MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}" "MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}" "BACKUP_RETENTION=3" > infra/.env
+            printf '%s\n' "APP_ENV=production" "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" "DB_DATABASE=${{ secrets.DB_DATABASE }}" "DB_SCHEMA=${{ secrets.DB_SCHEMA }}" "APP_HOST=0.0.0.0" "APP_PORT=8000" "FRONTEND_ORIGINS=${{ secrets.FRONTEND_ORIGINS }}" "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" "TELEGRAM_INIT_DATA_TTL_SECONDS=${{ secrets.TELEGRAM_INIT_DATA_TTL_SECONDS || '10800' }}" "CREDENTIALS_ENCRYPTION_KEY=${{ secrets.CREDENTIALS_ENCRYPTION_KEY }}" "DB_HOST=db" "DB_PORT=5432" "MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }}" "MINIO_BUCKET=${{ secrets.MINIO_BUCKET }}" "MINIO_PREFIX=${{ secrets.MINIO_PREFIX }}" "MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}" "MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}" "BACKUP_RETENTION=14" "LOCAL_S3_ENDPOINT=${{ secrets.LOCAL_S3_ENDPOINT }}" "LOCAL_S3_BUCKET=${{ secrets.LOCAL_S3_BUCKET }}" "LOCAL_S3_PREFIX=${{ secrets.LOCAL_S3_PREFIX || 'budget-bot' }}" "LOCAL_S3_ACCESS_KEY=${{ secrets.LOCAL_S3_ACCESS_KEY }}" "LOCAL_S3_SECRET_KEY=${{ secrets.LOCAL_S3_SECRET_KEY }}" "LOCAL_BACKUP_RETENTION=48" > infra/.env
             chmod 600 infra/.env
 
             docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build --remove-orphans
             docker image prune -f
 
             chmod +x scripts/backup-to-minio.sh
-            BACKUP_CRON="15 * * * * cd $DEPLOY_PATH && ./scripts/backup-to-minio.sh >> $DEPLOY_PATH/backup-to-minio.log 2>&1 # budget-bot-minio-backup"
-            (crontab -l 2>/dev/null | grep -v '# budget-bot-minio-backup' || true; echo "$BACKUP_CRON") | crontab -
+
+            # Два контура. local - наш MinIO, почасово: дёшево хранить и быстро
+            # восстанавливаться. remote - Selectel, раз в сутки: это offsite-копия,
+            # и только она переживает потерю сервера, на котором стоит MinIO.
+            #
+            # Расписания разведены (:15 и 03:40), хотя замки в скрипте и так свои
+            # на каждый контур - просто чтобы два pg_dump не толкались.
+            #
+            # Маркеры в конце строк - якоря идемпотентности. В список удаляемых
+            # входит и старый budget-bot-minio-backup: иначе прежняя строка
+            # осталась бы и продолжала гонять remote ежечасно.
+            LOCAL_CRON="15 * * * * cd $DEPLOY_PATH && ./scripts/backup-to-minio.sh local >> $DEPLOY_PATH/backup-to-minio.log 2>&1 # budget-bot-backup-local"
+            REMOTE_CRON="40 3 * * * cd $DEPLOY_PATH && ./scripts/backup-to-minio.sh remote >> $DEPLOY_PATH/backup-to-minio.log 2>&1 # budget-bot-backup-remote"
+            (crontab -l 2>/dev/null | grep -vE '# budget-bot-(minio-backup|backup-local|backup-remote)' || true; echo "$LOCAL_CRON"; echo "$REMOTE_CRON") | crontab -

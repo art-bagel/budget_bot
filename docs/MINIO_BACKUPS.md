@@ -1,25 +1,50 @@
-# Ежечасные бэкапы PostgreSQL в MinIO
+# Бэкапы PostgreSQL: два контура
 
-Скрипт `scripts/backup-to-minio.sh` создаёт сжатый дамп PostgreSQL, проверяет его,
-загружает в `s3.mrbagel.ru/budgetbackup/budget-bot/` и оставляет только три
-последних дампа. Другие объекты бакета не затрагиваются.
+`scripts/backup-to-minio.sh` создаёт сжатый дамп PostgreSQL, проверяет его
+`pg_restore --list`, загружает в S3-хранилище и удаляет всё, кроме N последних
+дампов **своего префикса**. Посторонние объекты не затрагиваются.
+
+Контура два, и они не взаимозаменяемы:
+
+| | назначение | хранилище | частота | глубина |
+|---|---|---|---|---|
+| `local` | быстро восстановиться | наш MinIO, `192.168.30.108:9000` | почасово, в `:15` | 48 копий (двое суток) |
+| `remote` | пережить потерю сервера | Selectel | раз в сутки, в `03:40` | 14 копий |
+
+Локальная копия лежит **на том же сервере**, что и сами сервисы, поэтому от
+потери этого сервера спасает только `remote`. Уменьшать его частоту, ссылаясь
+на то, что локальный контур и так есть, — значит не понять смысл разделения.
+
+## Запуск руками
+
+    ./scripts/backup-to-minio.sh          # remote, значение по умолчанию
+    ./scripts/backup-to-minio.sh local
+    ./scripts/backup-to-minio.sh remote
+
+Назначение приходит первым аргументом. У каждого контура свой файл блокировки,
+поэтому почасовой `local` и суточный `remote` не мешают друг другу в те сутки,
+когда их расписания совпадают.
 
 ## Настройка
 
-1. Установите на сервере MinIO Client (`mc`). Docker Compose уже используется
-   проектом. Инструкция: <https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc>.
-2. Добавьте GitHub Actions secrets:
-   - `MINIO_ENDPOINT` = `https://s3.mrbagel.ru`;
-   - `MINIO_BUCKET` = `budgetbackup`;
-   - `MINIO_PREFIX` = `budget-bot`;
-   - `MINIO_ACCESS_KEY` = `budgetbackup-user`;
-   - `MINIO_SECRET_KEY` = secret key пользователя MinIO.
-3. Запустите workflow **Deploy Budget Bot**. Он добавит настройки в `infra/.env`
-   и установит cron на 15-й минуте каждого часа.
+`mc` ставится Ansible-ролью `app-deploy-host` (репозиторий `home_network`),
+руками его класть не нужно — именно из-за ручной установки бэкапы не приехали
+при переезде на новый сервер.
 
-Все пять параметров MinIO берутся workflow из GitHub Secrets. Скрипт также имеет
-значения по умолчанию для endpoint, бакета и префикса, чтобы ручной запуск был
-удобнее. Число хранимых копий (`BACKUP_RETENTION=3`) задаётся workflow.
+GitHub Actions secrets, из которых workflow собирает `infra/.env`:
+
+**remote (Selectel):** `MINIO_ENDPOINT`, `MINIO_BUCKET`, `MINIO_PREFIX`,
+`MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`.
+
+**local (наш MinIO):** `LOCAL_S3_ENDPOINT`, `LOCAL_S3_BUCKET`,
+`LOCAL_S3_ACCESS_KEY`, `LOCAL_S3_SECRET_KEY`. Необязательный
+`LOCAL_S3_PREFIX` — если не задан, берётся `budget-bot`.
+
+Глубину хранения задаёт workflow: `BACKUP_RETENTION=14` и
+`LOCAL_BACKUP_RETENTION=48`.
+
+У адреса и бакета **нет значений по умолчанию**: при неполном окружении скрипт
+откажется стартовать, а не уедет молча не в то хранилище.
 
 ## Права MinIO
 
