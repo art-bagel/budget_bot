@@ -21,27 +21,67 @@ while IFS= read -r env_line || [[ -n "${env_line}" ]]; do
   env_value="${env_value%$'\r'}"
 
   case "${env_key}" in
-    POSTGRES_USER|DB_DATABASE|MINIO_ENDPOINT|MINIO_BUCKET|MINIO_PREFIX|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|BACKUP_RETENTION)
+    POSTGRES_USER|DB_DATABASE|\
+    MINIO_ENDPOINT|MINIO_BUCKET|MINIO_PREFIX|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|BACKUP_RETENTION|\
+    LOCAL_S3_ENDPOINT|LOCAL_S3_BUCKET|LOCAL_S3_PREFIX|LOCAL_S3_ACCESS_KEY|LOCAL_S3_SECRET_KEY|LOCAL_BACKUP_RETENTION)
       printf -v "${env_key}" '%s' "${env_value}"
       export "${env_key}"
       ;;
   esac
 done < "${ENV_FILE}"
 
-: "${MINIO_ENDPOINT:=https://s3.mrbagel.ru}"
-: "${MINIO_BUCKET:=budgetbackup}"
-: "${MINIO_PREFIX:=budget-bot}"
-: "${BACKUP_RETENTION:=3}"
+# Два независимых контура с разной частотой и глубиной хранения:
+#
+#   remote - Selectel, offsite-копия, раз в сутки. Значение по умолчанию,
+#            поэтому вызов без аргумента ведёт себя ровно как раньше.
+#   local  - наш MinIO, почасово: дёшево хранить и быстро восстанавливаться.
+#
+# Разделение не косметическое. Локальная копия лежит на том же сервере, что и
+# сами сервисы, поэтому от потери сервера спасает именно remote - его частоту
+# уменьшать нельзя, сколько бы удобным ни казался локальный контур.
+readonly BACKUP_TARGET="${1:-remote}"
+
+case "${BACKUP_TARGET}" in
+  remote)
+    S3_ENDPOINT="${MINIO_ENDPOINT:-}"
+    S3_BUCKET="${MINIO_BUCKET:-}"
+    S3_PREFIX="${MINIO_PREFIX:-budget-bot}"
+    S3_ACCESS_KEY="${MINIO_ACCESS_KEY:-}"
+    S3_SECRET_KEY="${MINIO_SECRET_KEY:-}"
+    RETENTION="${BACKUP_RETENTION:-14}"
+    ;;
+  local)
+    S3_ENDPOINT="${LOCAL_S3_ENDPOINT:-}"
+    S3_BUCKET="${LOCAL_S3_BUCKET:-}"
+    S3_PREFIX="${LOCAL_S3_PREFIX:-budget-bot}"
+    S3_ACCESS_KEY="${LOCAL_S3_ACCESS_KEY:-}"
+    S3_SECRET_KEY="${LOCAL_S3_SECRET_KEY:-}"
+    RETENTION="${LOCAL_BACKUP_RETENTION:-48}"
+    ;;
+  *)
+    echo "Unknown backup target: ${BACKUP_TARGET} (expected 'remote' or 'local')" >&2
+    exit 1
+    ;;
+esac
+readonly S3_ENDPOINT S3_BUCKET S3_PREFIX S3_ACCESS_KEY S3_SECRET_KEY RETENTION
+
 : "${POSTGRES_USER:=postgres}"
 : "${DB_DATABASE:=budget_bot}"
 
-if [[ -z "${MINIO_ACCESS_KEY:-}" || -z "${MINIO_SECRET_KEY:-}" ]]; then
-  echo "MINIO_ACCESS_KEY and MINIO_SECRET_KEY must be set in ${ENV_FILE}" >&2
+# Бакет и адрес не имеют значений по умолчанию намеренно: молча уехать не в то
+# хранилище хуже, чем не запуститься.
+if [[ -z "${S3_ENDPOINT}" || -z "${S3_BUCKET}" ]]; then
+  echo "Endpoint and bucket for target '${BACKUP_TARGET}' must be set in ${ENV_FILE}" >&2
   exit 1
 fi
 
-if ! [[ "${BACKUP_RETENTION}" =~ ^[1-9][0-9]*$ ]]; then
-  echo "BACKUP_RETENTION must be a positive integer" >&2
+if [[ -z "${S3_ACCESS_KEY}" || -z "${S3_SECRET_KEY}" ]]; then
+  echo "Access and secret key for target '${BACKUP_TARGET}' must be set in ${ENV_FILE}" >&2
+  exit 1
+fi
+
+if ! [[ "${RETENTION}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Retention for target '${BACKUP_TARGET}' must be a positive integer" >&2
   exit 1
 fi
 
@@ -52,7 +92,10 @@ for command_name in docker mc; do
   fi
 done
 
-readonly LOCK_DIR="/tmp/budget-bot-db-backup.lock"
+# Блокировка своя на каждый контур: расписания пересекаются (почасовой
+# локальный и суточный remote совпадают раз в сутки), и общий замок
+# превращал бы это в регулярно пропущенный бэкап.
+readonly LOCK_DIR="/tmp/budget-bot-db-backup.${BACKUP_TARGET}.lock"
 if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
   echo "Another database backup is already running" >&2
   exit 1
@@ -82,19 +125,19 @@ echo "Checking dump integrity..."
 docker compose "${compose_args[@]}" exec -T db pg_restore --list \
   < "${BACKUP_FILE}" >/dev/null
 
-mc alias set backup "${MINIO_ENDPOINT}" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}" >/dev/null
-readonly REMOTE_DIR="backup/${MINIO_BUCKET}/${MINIO_PREFIX}"
+mc alias set backup "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" >/dev/null
+readonly REMOTE_DIR="backup/${S3_BUCKET}/${S3_PREFIX}"
 
-echo "Uploading to ${MINIO_ENDPOINT}/${MINIO_BUCKET}/${MINIO_PREFIX}/${BACKUP_NAME}..."
+echo "[${BACKUP_TARGET}] Uploading to ${S3_ENDPOINT}/${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}..."
 mc cp "${BACKUP_FILE}" "${REMOTE_DIR}/${BACKUP_NAME}"
 mc stat "${REMOTE_DIR}/${BACKUP_NAME}" >/dev/null
 
-echo "Removing dumps older than the newest ${BACKUP_RETENTION}..."
+echo "[${BACKUP_TARGET}] Removing dumps older than the newest ${RETENTION}..."
 mc find "${REMOTE_DIR}" --name 'budget_bot_*.dump' --print '{}' \
   | LC_ALL=C sort -r \
-  | sed -n "$((BACKUP_RETENTION + 1)),\$p" \
+  | sed -n "$((RETENTION + 1)),\$p" \
   | while IFS= read -r old_backup; do
       [[ -n "${old_backup}" ]] && mc rm "${old_backup}"
     done
 
-echo "Backup completed successfully: ${BACKUP_NAME}"
+echo "[${BACKUP_TARGET}] Backup completed successfully: ${BACKUP_NAME}"
