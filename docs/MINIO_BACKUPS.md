@@ -46,11 +46,11 @@ GitHub Actions secrets, из которых workflow собирает `infra/.en
 У адреса и бакета **нет значений по умолчанию**: при неполном окружении скрипт
 откажется стартовать, а не уедет молча не в то хранилище.
 
-## Права MinIO
+## Права в S3-хранилище
 
-Пользователю `budgetbackup-user` нужна следующая политика (если весь бакет
-предназначен только для этого проекта, условие по префиксу всё равно защищает от
-случайного удаления посторонних объектов):
+Пользователь заперт в своём префиксе: компрометация ключей одного сервиса не
+даёт доступа к бэкапам другого. Политика для локального контура (бакет
+`db-backup`), для Selectel — та же по смыслу со своим бакетом:
 
 ```json
 {
@@ -59,12 +59,12 @@ GitHub Actions secrets, из которых workflow собирает `infra/.en
     {
       "Effect": "Allow",
       "Action": ["s3:GetBucketLocation", "s3:ListBucketMultipartUploads"],
-      "Resource": ["arn:aws:s3:::budgetbackup"]
+      "Resource": ["arn:aws:s3:::db-backup"]
     },
     {
       "Effect": "Allow",
       "Action": ["s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::budgetbackup"],
+      "Resource": ["arn:aws:s3:::db-backup"],
       "Condition": {
         "StringLike": {"s3:prefix": ["budget-bot", "budget-bot/*"]}
       }
@@ -75,11 +75,23 @@ GitHub Actions secrets, из которых workflow собирает `infra/.en
         "s3:PutObject", "s3:GetObject", "s3:DeleteObject",
         "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"
       ],
-      "Resource": ["arn:aws:s3:::budgetbackup/budget-bot/*"]
+      "Resource": ["arn:aws:s3:::db-backup/budget-bot/*"]
     }
   ]
 }
 ```
+
+Три блока нужны все, и второй забывают чаще всего.
+
+`s3:ListBucket` — операция **над бакетом**, поэтому в `Resource` стоит бакет
+целиком, а ограничение задаётся условием `s3:prefix`. Обе строки условия нужны:
+`budget-bot` — для запроса самого префикса, `budget-bot/*` — для содержимого.
+
+Без этого блока загрузка проходит, а **ротация молча не работает**: `mc cp`
+обходится объектными правами, а `mc find`, которым скрипт ищет старые дампы,
+требует листинга. Симптом — дампы копятся, ничего не удаляется.
+
+`s3:DeleteObject` в третьем блоке нужен по той же причине: без него ротации нет.
 
 ## Проверка
 
