@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from starlette.responses import FileResponse
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app import storage as app_storage
 from storage.secretbox import decrypt_secret
 from storage.tinkoff_sync import TinkoffConnections, TinkoffSync
@@ -153,7 +153,7 @@ def _handle_tinkoff_error(exc: Exception) -> HTTPException:
 @router.post('/accounts', response_model=List[TinkoffAccount])
 async def get_tinkoff_accounts(
     body: GetAccountsRequest,
-    _user: TelegramUser = Depends(get_telegram_user),
+    _user: CurrentUser = Depends(get_current_user),
 ) -> list:
     """Validate token and return list of Tinkoff broker accounts. Nothing is saved."""
     tc = TinkoffConnections(app_storage.tinkoff)
@@ -166,7 +166,7 @@ async def get_tinkoff_accounts(
 @router.post('/connect', response_model=dict)
 async def connect_tinkoff(
     body: ConnectTinkoffRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """Save token + bind a Tinkoff account to our investment account."""
     tc = TinkoffConnections(app_storage.tinkoff)
@@ -183,7 +183,7 @@ async def connect_tinkoff(
 
 @router.get('/connections', response_model=List[dict])
 async def list_connections(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     tc = TinkoffConnections(app_storage.tinkoff)
     return await tc.list_connections(user.user_id)
@@ -192,7 +192,7 @@ async def list_connections(
 @router.delete('/connections/{connection_id}', response_model=dict)
 async def delete_connection(
     connection_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     tc = TinkoffConnections(app_storage.tinkoff)
     try:
@@ -205,7 +205,7 @@ async def delete_connection(
 @router.get('/preview/{connection_id}', response_model=dict)
 async def preview_tinkoff_sync(
     connection_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """Dry-run: fetch new operations from Tinkoff without writing anything."""
     tc = TinkoffConnections(app_storage.tinkoff)
@@ -238,7 +238,7 @@ async def preview_tinkoff_sync(
 async def apply_tinkoff_sync(
     connection_id: int,
     body: ApplyTinkoffSyncRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """Apply synced operations with user resolutions for deposits."""
     tc = TinkoffConnections(app_storage.tinkoff)
@@ -261,7 +261,7 @@ async def apply_tinkoff_sync(
 
 @router.get('/live-prices', response_model=List[TinkoffLivePrice])
 async def get_tinkoff_live_prices(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     sync = TinkoffSync(app_storage.tinkoff)
     try:

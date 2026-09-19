@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import context, reports
 from backend.app.storage import ledger
 
@@ -58,7 +58,7 @@ class UpsertPatternRequest(BaseModel):
 
 @router.get('', response_model=List[IncomeSourceItem])
 async def get_income_sources(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
     is_active: Optional[bool] = Query(True),
 ) -> list:
     return await reports.get__income_sources(user.user_id, is_active)
@@ -67,7 +67,7 @@ async def get_income_sources(
 @router.post('', response_model=CreateIncomeSourceResponse)
 async def create_income_source(
     body: CreateIncomeSourceRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CreateIncomeSourceResponse:
     income_source_id = await context.put__create_income_source(
         user_id=user.user_id,
@@ -79,7 +79,7 @@ async def create_income_source(
 @router.get('/{income_source_id}/pattern', response_model=Optional[PatternItem])
 async def get_income_source_pattern(
     income_source_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> Optional[dict]:
     result = await ledger.get__income_source_pattern(
         user_id=user.user_id,
@@ -92,7 +92,7 @@ async def get_income_source_pattern(
 async def upsert_income_source_pattern(
     income_source_id: int,
     body: UpsertPatternRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     lines = [{'bank_account_id': line.bank_account_id, 'share': line.share} for line in body.lines]
     return await ledger.put__upsert_income_source_pattern(
@@ -105,7 +105,7 @@ async def upsert_income_source_pattern(
 @router.delete('/{income_source_id}/pattern', response_model=dict)
 async def delete_income_source_pattern(
     income_source_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     deleted = await ledger.put__delete_income_source_pattern(
         user_id=user.user_id,

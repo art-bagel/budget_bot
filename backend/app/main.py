@@ -42,7 +42,7 @@ app.add_middleware(
     allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allow_headers=['Content-Type', 'X-Telegram-Init-Data', 'X-Telegram-User-Id'],
+    allow_headers=['Authorization', 'Content-Type', 'X-Telegram-Init-Data', 'X-Telegram-User-Id'],
 )
 
 app.include_router(auth.router)

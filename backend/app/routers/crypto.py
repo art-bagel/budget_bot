@@ -5,7 +5,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
 
 
@@ -374,7 +374,7 @@ def _coingecko_id_for_asset(asset: dict[str, Any]) -> str | None:
 
 @router.get('/assets', response_model=List[CryptoAssetItem])
 async def get_crypto_assets(
-    _user: TelegramUser = Depends(get_telegram_user),
+    _user: CurrentUser = Depends(get_current_user),
 ) -> List[CryptoAssetItem]:
     items = await reports.get__crypto_assets()
     return [CryptoAssetItem(**item) for item in items]
@@ -384,7 +384,7 @@ async def get_crypto_assets(
 async def get_crypto_prices(
     asset_ids: str = Query(..., min_length=1),
     vs_currency: str = Query('rub', min_length=3, max_length=3),
-    _user: TelegramUser = Depends(get_telegram_user),
+    _user: CurrentUser = Depends(get_current_user),
 ) -> List[CryptoPriceItem]:
     requested_ids = {
         int(part)
@@ -464,7 +464,7 @@ async def get_crypto_prices(
 @router.post('/assets', response_model=CryptoAssetItem)
 async def upsert_crypto_asset(
     body: UpsertCryptoAssetRequest,
-    _user: TelegramUser = Depends(get_telegram_user),
+    _user: CurrentUser = Depends(get_current_user),
 ) -> CryptoAssetItem:
     result = await ledger.put__upsert_crypto_asset(
         symbol=body.symbol,
@@ -483,7 +483,7 @@ async def upsert_crypto_asset(
 )
 async def get_crypto_account_assets(
     investment_account_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> List[CryptoAccountAssetSummary]:
     items = await reports.get__crypto_account_assets(user.user_id, investment_account_id)
     return [CryptoAccountAssetSummary(**item) for item in items]
@@ -496,7 +496,7 @@ async def get_crypto_account_assets(
 async def get_crypto_asset_detail(
     investment_account_id: int,
     crypto_asset_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> Optional[CryptoAssetDetail]:
     item = await reports.get__crypto_asset_detail(
         user.user_id, investment_account_id, crypto_asset_id,
@@ -507,7 +507,7 @@ async def get_crypto_asset_detail(
 @router.post('/transfer-to-investment', response_model=CryptoOperationResponse)
 async def transfer_crypto_to_investment(
     body: TransferCryptoToInvestmentRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
     result = await ledger.put__transfer_crypto_to_investment(
         user_id=user.user_id,
@@ -526,7 +526,7 @@ async def transfer_crypto_to_investment(
 @router.post('/transfer-from-investment', response_model=CryptoOperationResponse)
 async def transfer_crypto_from_investment(
     body: TransferCryptoFromInvestmentRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
     result = await ledger.put__transfer_crypto_from_investment(
         user_id=user.user_id,
@@ -543,7 +543,7 @@ async def transfer_crypto_from_investment(
 @router.post('/transfer-between-investment-accounts', response_model=CryptoOperationResponse)
 async def transfer_crypto_between_investment_accounts(
     body: TransferCryptoBetweenInvestmentAccountsRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
     result = await ledger.put__transfer_crypto_between_investment_accounts(
         user_id=user.user_id,
@@ -559,7 +559,7 @@ async def transfer_crypto_between_investment_accounts(
 @router.post('/swap-investment-asset', response_model=CryptoOperationResponse)
 async def swap_crypto_investment_asset(
     body: SwapCryptoInvestmentAssetRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
     result = await ledger.put__swap_crypto_investment_asset(
         user_id=user.user_id,
@@ -579,7 +579,7 @@ async def swap_crypto_investment_asset(
 async def get_crypto_protocol_positions(
     investment_account_id: Optional[int] = Query(None),
     status: Optional[Literal['open', 'closed']] = Query(None),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> List[CryptoProtocolPositionItem]:
     items = await reports.get__crypto_protocol_positions(
         user_id=user.user_id,
@@ -592,7 +592,7 @@ async def get_crypto_protocol_positions(
 @router.post('/protocol-positions', response_model=CryptoProtocolPositionItem)
 async def create_crypto_protocol_position(
     body: CreateCryptoProtocolPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     result = await ledger.put__create_crypto_protocol_position(
         user_id=user.user_id,
@@ -625,7 +625,7 @@ async def create_crypto_protocol_position(
 async def update_crypto_protocol_position(
     position_id: int,
     body: UpdateCryptoProtocolPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     result = await ledger.set__update_crypto_protocol_position(
         user_id=user.user_id,
@@ -645,7 +645,7 @@ async def update_crypto_protocol_position(
 async def close_crypto_protocol_position(
     position_id: int,
     body: CloseCryptoProtocolPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     result = await ledger.set__close_crypto_protocol_position(
         user_id=user.user_id,
@@ -669,7 +669,7 @@ async def close_crypto_protocol_position(
 async def partial_close_crypto_protocol_position(
     position_id: int,
     body: PartialCloseCryptoProtocolPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     if (
         body.principal_qty == 0
@@ -705,7 +705,7 @@ async def partial_close_crypto_protocol_position(
 async def top_up_crypto_protocol_position(
     position_id: int,
     body: TopUpCryptoProtocolPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     result = await ledger.put__top_up_crypto_protocol_position(
         user_id=user.user_id,
@@ -727,7 +727,7 @@ async def top_up_crypto_protocol_position(
 async def take_lending_debt(
     position_id: int,
     body: TakeLendingDebtRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     result = await ledger.put__lending_take_more_debt(
         user_id=user.user_id,
@@ -748,7 +748,7 @@ async def take_lending_debt(
 async def repay_lending_debt(
     position_id: int,
     body: RepayLendingDebtRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
     result = await ledger.put__lending_repay_debt(
         user_id=user.user_id,
@@ -766,7 +766,7 @@ async def repay_lending_debt(
 async def pay_crypto_fee(
     position_id: int,
     body: PayCryptoFeeRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     return await ledger.put__crypto_pay_fee(
         user_id=user.user_id,

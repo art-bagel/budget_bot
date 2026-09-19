@@ -22,6 +22,8 @@ class Settings:
     frontend_origins: List[str]
     telegram_bot_token: str | None
     telegram_init_data_ttl_seconds: int
+    session_ttl_seconds: int
+    signup_invite_code: str | None
     credentials_encryption_key: str | None
     db_host: str
     db_port: int
@@ -50,6 +52,11 @@ settings = Settings(
     frontend_origins=_get_frontend_origins(),
     telegram_bot_token=os.getenv('TELEGRAM_BOT_TOKEN') or None,
     telegram_init_data_ttl_seconds=int(os.getenv('TELEGRAM_INIT_DATA_TTL_SECONDS', '10800')),
+    # 90 дней: сессия нативного клиента не должна протухать у пользователя в кармане.
+    session_ttl_seconds=int(os.getenv('SESSION_TTL_SECONDS', '7776000')),
+    # Регистрация по email закрыта, пока не задан код-приглашение: иначе
+    # любой, кто знает домен, заводит себе аккаунт в чужом финансовом API.
+    signup_invite_code=os.getenv('SIGNUP_INVITE_CODE') or None,
     credentials_encryption_key=os.getenv('CREDENTIALS_ENCRYPTION_KEY') or None,
     db_host=os.getenv('DB_HOST'),
     db_port=int(os.getenv('DB_PORT')),

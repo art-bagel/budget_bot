@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator, model_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger
 
 
@@ -69,7 +69,7 @@ class CreateScheduledExpenseResponse(BaseModel):
 @router.get('/category/{category_id}/currencies', response_model=List[AccountCurrencyItem])
 async def get_category_account_currencies(
     category_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await ledger.get__category_account_currencies(user.user_id, category_id)
 
@@ -77,7 +77,7 @@ async def get_category_account_currencies(
 @router.get('/', response_model=List[ScheduledExpenseItem])
 async def get_scheduled_expenses(
     category_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await ledger.get__scheduled_expenses_for_category(user.user_id, category_id)
 
@@ -85,7 +85,7 @@ async def get_scheduled_expenses(
 @router.post('/', response_model=CreateScheduledExpenseResponse)
 async def create_scheduled_expense(
     body: CreateScheduledExpenseRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CreateScheduledExpenseResponse:
     result = await ledger.put__create_scheduled_expense(
         user_id=user.user_id,
@@ -103,7 +103,7 @@ async def create_scheduled_expense(
 @router.delete('/{schedule_id}')
 async def delete_scheduled_expense(
     schedule_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     await ledger.put__delete_scheduled_expense(user.user_id, schedule_id)
     return {'status': 'deleted', 'id': schedule_id}

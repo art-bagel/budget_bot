@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import reports
 
 
@@ -54,7 +54,7 @@ class DashboardOverviewResponse(BaseModel):
 @router.get('/overview', response_model=DashboardOverviewResponse)
 async def get_dashboard_overview(
     bank_account_id: int = Query(...),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> DashboardOverviewResponse:
     all_bank_accounts = await reports.get__bank_accounts(user.user_id)
 

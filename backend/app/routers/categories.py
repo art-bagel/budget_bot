@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import context, reports
 
 
@@ -64,7 +64,7 @@ class ParentGroupItem(BaseModel):
 
 @router.get('', response_model=List[CategoryItem])
 async def get_categories(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
     is_active: Optional[bool] = Query(True),
 ) -> list:
     return await reports.get__categories(user.user_id, is_active)
@@ -73,7 +73,7 @@ async def get_categories(
 @router.post('', response_model=CreateCategoryResponse)
 async def create_category(
     body: CreateCategoryRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CreateCategoryResponse:
     category_id = await context.put__create_category(
         user_id=user.user_id,
@@ -88,7 +88,7 @@ async def create_category(
 async def update_category(
     category_id: int,
     body: UpdateCategoryRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CategoryItem:
     result = await context.set__update_category(
         user_id=user.user_id,
@@ -101,7 +101,7 @@ async def update_category(
 @router.post('/{category_id}/archive', response_model=ArchiveCategoryResponse)
 async def archive_category(
     category_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> ArchiveCategoryResponse:
     result = await context.set__archive_category(
         user_id=user.user_id,
@@ -113,6 +113,6 @@ async def archive_category(
 @router.get('/{category_id}/parent-groups', response_model=List[ParentGroupItem])
 async def get_category_parent_groups(
     category_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__category_parent_groups(user.user_id, category_id)

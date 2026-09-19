@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
 
 
@@ -333,7 +333,7 @@ def parse_anchor_date(anchor_date: Optional[str]) -> Optional[date]:
 @router.post('/income', response_model=RecordIncomeResponse)
 async def record_income(
     body: RecordIncomeRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RecordIncomeResponse:
     result = await ledger.put__record_income(
         user_id=user.user_id,
@@ -394,7 +394,7 @@ class RecordIncomeSplitResponse(BaseModel):
 @router.post('/income-split', response_model=RecordIncomeSplitResponse)
 async def record_income_split(
     body: RecordIncomeSplitRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RecordIncomeSplitResponse:
     result = await ledger.put__record_income_split(
         user_id=user.user_id,
@@ -412,7 +412,7 @@ async def record_income_split(
 @router.post('/expense', response_model=RecordExpenseResponse)
 async def record_expense(
     body: RecordExpenseRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RecordExpenseResponse:
     if body.crypto_asset_id is not None:
         result = await ledger.put__record_crypto_expense(
@@ -442,7 +442,7 @@ async def record_expense(
 @router.post('/exchange', response_model=ExchangeCurrencyResponse)
 async def exchange_currency(
     body: ExchangeCurrencyRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> ExchangeCurrencyResponse:
     from_is_crypto = body.from_crypto_asset_id is not None
     to_is_crypto = body.to_crypto_asset_id is not None
@@ -503,7 +503,7 @@ async def exchange_currency(
 @router.post('/allocate', response_model=AllocateBudgetResponse)
 async def allocate_budget(
     body: AllocateBudgetRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> AllocateBudgetResponse:
     operation_id = await ledger.put__allocate_budget(
         user_id=user.user_id,
@@ -518,7 +518,7 @@ async def allocate_budget(
 @router.post('/allocate-group', response_model=AllocateGroupBudgetResponse)
 async def allocate_group_budget(
     body: AllocateGroupBudgetRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> AllocateGroupBudgetResponse:
     result = await ledger.put__allocate_group_budget(
         user_id=user.user_id,
@@ -533,7 +533,7 @@ async def allocate_group_budget(
 @router.post('/account-transfer', response_model=AccountTransferResponse)
 async def transfer_between_accounts(
     body: AccountTransferRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> AccountTransferResponse:
     result = await ledger.put__transfer_between_accounts(
         user_id=user.user_id,
@@ -549,7 +549,7 @@ async def transfer_between_accounts(
 @router.post('/reverse', response_model=ReverseOperationResponse)
 async def reverse_operation(
     body: ReverseOperationRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> ReverseOperationResponse:
     result = await ledger.put__reverse_operation(
         user_id=user.user_id,
@@ -565,7 +565,7 @@ async def get_operations_history(
     offset: int = Query(0, ge=0),
     operation_type: Optional[str] = Query(None),
     investment_asset_type: Optional[str] = Query(None),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> OperationHistoryResponse:
     result = await reports.get__operations_history(
         user_id=user.user_id,
@@ -584,7 +584,7 @@ async def get_operations_analytics(
     operation_type: Literal['expense', 'income'] = Query('expense'),
     owner_scope: Literal['all', 'user', 'family'] = Query('all'),
     periods: int = Query(6, ge=1, le=24),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> OperationAnalyticsResponse:
     parsed_anchor_date = parse_anchor_date(anchor_date)
     result = await reports.get__operations_analytics(
@@ -607,7 +607,7 @@ async def get_operations_analytics_details(
     owner_scope: Literal['all', 'user', 'family'] = Query('all'),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> OperationAnalyticsDetailsResponse:
     parsed_anchor_date = parse_anchor_date(anchor_date)
     result = await reports.get__operations_analytics_details(

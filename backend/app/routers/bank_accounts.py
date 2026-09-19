@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import context, reports
 
 
@@ -457,7 +457,7 @@ def _merge_credit_schedule(history_items: list[dict], planned_items: list[dict])
 
 @router.get('', response_model=List[BankAccountItem])
 async def get_bank_accounts(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
     is_active: Optional[bool] = Query(True),
     account_kind: Optional[Literal['cash', 'investment', 'credit']] = Query('cash'),
 ) -> list:
@@ -467,7 +467,7 @@ async def get_bank_accounts(
 @router.post('', response_model=BankAccountItem)
 async def create_bank_account(
     body: CreateBankAccountRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> BankAccountItem:
     result = await context.put__create_bank_account(
         user_id=user.user_id,
@@ -484,7 +484,7 @@ async def create_bank_account(
 @router.post('/credit', response_model=BankAccountItem)
 async def create_credit_account(
     body: CreateCreditAccountRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> BankAccountItem:
     result = await context.put__create_credit_account(
         user_id=user.user_id,
@@ -508,7 +508,7 @@ async def create_credit_account(
 @router.post('/credit/{bank_account_id}/archive')
 async def archive_credit_account(
     bank_account_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     return await context.set__archive_credit_account(
         user_id=user.user_id,
@@ -519,7 +519,7 @@ async def archive_credit_account(
 @router.delete('/investment/{bank_account_id}', response_model=DeleteInvestmentAccountResponse)
 async def delete_investment_account(
     bank_account_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> DeleteInvestmentAccountResponse:
     result = await context.set__delete_investment_account(
         user_id=user.user_id,
@@ -532,7 +532,7 @@ async def delete_investment_account(
 async def update_credit_account(
     bank_account_id: int,
     body: UpdateCreditAccountRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> BankAccountItem:
     result = await context.set__update_credit_account(
         user_id=user.user_id,
@@ -554,7 +554,7 @@ async def update_credit_account(
 async def get_credit_account_summary(
     bank_account_id: int,
     as_of: Optional[date] = Query(None),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CreditAccountSummaryResponse:
     effective_as_of = as_of or date.today()
     result = await reports.get__credit_account_summary(
@@ -589,7 +589,7 @@ async def get_credit_account_schedule(
     bank_account_id: int,
     as_of: Optional[date] = Query(None),
     limit: Optional[int] = Query(None, ge=1, le=720),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list[dict]:
     effective_as_of = as_of or date.today()
     summary = await reports.get__credit_account_summary(
@@ -612,7 +612,7 @@ async def get_credit_account_schedule(
 async def repay_credit_account(
     bank_account_id: int,
     body: CreditRepaymentRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CreditRepaymentResponse:
     result = await context.put__repay_credit_account(
         user_id=user.user_id,
@@ -631,6 +631,6 @@ async def repay_credit_account(
 @router.get('/{bank_account_id}/snapshot', response_model=List[BankAccountBalanceItem])
 async def get_bank_account_snapshot(
     bank_account_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__bank_snapshot(user.user_id, bank_account_id)

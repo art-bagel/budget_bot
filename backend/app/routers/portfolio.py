@@ -4,7 +4,7 @@ from typing import Any, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.services.deposit_interest import (
     calculate_accrued_interest,
     get_accrual_base_date,
@@ -293,7 +293,7 @@ def _is_term_deposit(position: dict) -> bool:
 
 @router.get('/summary', response_model=List[PortfolioSummaryItem])
 async def get_portfolio_summary(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__portfolio_summary(user.user_id)
 
@@ -302,7 +302,7 @@ async def get_portfolio_summary(
 async def get_portfolio_analytics(
     date_from: date = Query(...),
     date_to: date = Query(...),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     return await reports.get__portfolio_analytics(user.user_id, date_from, date_to)
 
@@ -311,7 +311,7 @@ async def get_portfolio_analytics(
 async def get_portfolio_positions(
     status: Optional[Literal['open', 'closed']] = Query(None),
     investment_account_id: Optional[int] = Query(None),
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     positions = await reports.get__portfolio_positions(
         user.user_id,
@@ -324,7 +324,7 @@ async def get_portfolio_positions(
 @router.post('/positions', response_model=PortfolioPositionItem)
 async def create_portfolio_position(
     body: CreatePortfolioPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     result = await context.put__create_portfolio_position(
         user_id=user.user_id,
@@ -345,7 +345,7 @@ async def create_portfolio_position(
 async def close_portfolio_position(
     position_id: int,
     body: ClosePortfolioPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     # For deposits: accrue interest before closing
     position = await reports.get__portfolio_position(user.user_id, position_id)
@@ -368,7 +368,7 @@ async def close_portfolio_position(
 async def partial_close_portfolio_position(
     position_id: int,
     body: PartialClosePortfolioPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     # Term deposits cannot be partially closed
     position = await reports.get__portfolio_position(user.user_id, position_id)
@@ -396,7 +396,7 @@ async def partial_close_portfolio_position(
 async def top_up_portfolio_position(
     position_id: int,
     body: TopUpPortfolioPositionRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     # Term deposits cannot be topped up
     position = await reports.get__portfolio_position(user.user_id, position_id)
@@ -422,7 +422,7 @@ async def top_up_portfolio_position(
 async def record_portfolio_income(
     position_id: int,
     body: RecordPortfolioIncomeRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RecordPortfolioIncomeResponse:
     result = await ledger.put__record_portfolio_income(
         user_id=user.user_id,
@@ -443,7 +443,7 @@ async def record_portfolio_income(
 async def record_portfolio_fee(
     position_id: int,
     body: RecordPortfolioFeeRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     result = await context.put__record_portfolio_fee(
         user_id=user.user_id,
@@ -459,7 +459,7 @@ async def record_portfolio_fee(
 @router.delete('/positions/{position_id}', response_model=DeletePortfolioPositionResponse)
 async def delete_portfolio_position(
     position_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> DeletePortfolioPositionResponse:
     result = await context.put__delete_portfolio_position(
         user_id=user.user_id,
@@ -472,7 +472,7 @@ async def delete_portfolio_position(
 async def cancel_portfolio_income(
     event_id: int,
     body: CancelPortfolioIncomeRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CancelPortfolioIncomeResponse:
     result = await context.put__cancel_portfolio_income(
         user_id=user.user_id,
@@ -485,7 +485,7 @@ async def cancel_portfolio_income(
 @router.get('/positions/{position_id}/events', response_model=List[PortfolioEventItem])
 async def get_portfolio_events(
     position_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__portfolio_events(user.user_id, position_id)
 
@@ -494,7 +494,7 @@ async def get_portfolio_events(
 async def change_deposit_rate(
     position_id: int,
     body: ChangeDepositRateRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     position = await reports.get__portfolio_position(user.user_id, position_id)
     if not position:

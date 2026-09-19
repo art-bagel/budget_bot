@@ -17,6 +17,7 @@ class Auth(DataBase):
     F_SET__AUTH_LOGIN_RESULT = 'set__auth_login_result'
     F_PUT__SESSION = 'put__session'
     F_GET__SESSION_USER = 'get__session_user'
+    F_GET__USER_AUTH_METHODS = 'get__user_auth_methods'
     F_GET__USER_SESSIONS = 'get__user_sessions'
     F_SET__REVOKE_SESSIONS = 'set__revoke_sessions'
 
@@ -55,6 +56,17 @@ class Auth(DataBase):
             provider,
             provider_uid,
             secret,
+        )
+
+    async def get__user_auth_methods(self, user_id: int) -> list:
+        """
+        Возвращает привязанные к аккаунту способы входа без секретов.
+        :param user_id: Идентификатор аккаунта.
+        :return: Список способов входа.
+        """
+        return await self.call_function(
+            self._fn(self.F_GET__USER_AUTH_METHODS),
+            user_id,
         )
 
     async def set__auth_login_result(

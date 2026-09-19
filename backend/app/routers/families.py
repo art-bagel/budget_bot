@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator
 
-from backend.app.dependencies import TelegramUser, get_telegram_user
+from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import context, reports
 
 
@@ -89,7 +89,7 @@ class DissolveFamilyResponse(BaseModel):
 
 @router.get('/me', response_model=Optional[FamilyInfo])
 async def get_my_family(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> Optional[FamilyInfo]:
     result = await reports.get__my_family(user.user_id)
     return FamilyInfo(**result) if result else None
@@ -98,7 +98,7 @@ async def get_my_family(
 @router.post('', response_model=CreateFamilyResponse)
 async def create_family(
     body: CreateFamilyRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> CreateFamilyResponse:
     result = await context.put__create_family(user.user_id, body.name)
     return CreateFamilyResponse(**result)
@@ -106,14 +106,14 @@ async def create_family(
 
 @router.get('/members', response_model=List[FamilyMemberItem])
 async def get_family_members(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__family_members(user.user_id)
 
 
 @router.get('/invitations', response_model=List[FamilyInvitationItem])
 async def get_family_invitations(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__family_invitations(user.user_id)
 
@@ -121,7 +121,7 @@ async def get_family_invitations(
 @router.post('/invite', response_model=InviteFamilyMemberResponse)
 async def invite_family_member(
     body: InviteFamilyMemberRequest,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> InviteFamilyMemberResponse:
     result = await context.put__invite_family_member(user.user_id, body.username)
     return InviteFamilyMemberResponse(**result)
@@ -130,7 +130,7 @@ async def invite_family_member(
 @router.post('/invitations/{invitation_id}/accept', response_model=RespondFamilyInvitationResponse)
 async def accept_family_invitation(
     invitation_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RespondFamilyInvitationResponse:
     result = await context.set__respond_family_invitation(user.user_id, invitation_id, True)
     return RespondFamilyInvitationResponse(**result)
@@ -139,7 +139,7 @@ async def accept_family_invitation(
 @router.post('/invitations/{invitation_id}/decline', response_model=RespondFamilyInvitationResponse)
 async def decline_family_invitation(
     invitation_id: int,
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> RespondFamilyInvitationResponse:
     result = await context.set__respond_family_invitation(user.user_id, invitation_id, False)
     return RespondFamilyInvitationResponse(**result)
@@ -147,7 +147,7 @@ async def decline_family_invitation(
 
 @router.post('/leave', response_model=LeaveFamilyResponse)
 async def leave_family(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> LeaveFamilyResponse:
     result = await context.set__leave_family(user.user_id)
     return LeaveFamilyResponse(**result)
@@ -155,7 +155,7 @@ async def leave_family(
 
 @router.post('/dissolve', response_model=DissolveFamilyResponse)
 async def dissolve_family(
-    user: TelegramUser = Depends(get_telegram_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> DissolveFamilyResponse:
     result = await context.set__dissolve_family(user.user_id)
     return DissolveFamilyResponse(**result)
