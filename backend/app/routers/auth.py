@@ -213,6 +213,22 @@ async def register(
     return RegisterResponse(**result)
 
 
+@router.get('/context', response_model=RegisterResponse)
+async def get_context(user: CurrentUser = Depends(get_current_user)) -> RegisterResponse:
+    """
+    Стартовый контекст уже существующего аккаунта.
+
+    Для сессионного входа register не подходит: базовую валюту там передавать
+    нечем, а менять ее у существующего аккаунта нельзя.
+    """
+    result = await context.get__user_context(user.user_id)
+
+    if not result:
+        raise HTTPException(status_code=404, detail='Аккаунт не найден')
+
+    return RegisterResponse(**result)
+
+
 @router.post('/signup', response_model=SessionResponse)
 async def sign_up(body: SignUpRequest) -> SessionResponse:
     """

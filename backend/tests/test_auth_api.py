@@ -115,7 +115,15 @@ def main() -> None:
         response = client.post('/api/v1/auth/signup', json={**signup_body, 'invite_code': INVITE})
         assert response.status_code == 409, response.text
 
-        # 3. Сессия пускает, мусорный токен — нет.
+        # 3. Стартовый контекст доступен по сессии и совпадает с аккаунтом.
+        response = client.get('/api/v1/auth/context', headers={'Authorization': 'Bearer ' + token})
+        assert response.status_code == 200, response.text
+        assert response.json()['user_id'] == email_user_id, response.text
+        assert response.json()['base_currency_code'] == 'RUB', response.text
+        assert response.json()['bank_account_id'], 'у нового аккаунта есть основной счет'
+        assert response.json()['unallocated_category_id'], 'и системные категории'
+
+        # 4. Сессия пускает, мусорный токен — нет.
         assert client.get('/api/v1/auth/methods', headers=auth_headers).status_code == 200
         assert client.get('/api/v1/auth/methods').status_code == 401
         assert client.get(
@@ -127,13 +135,13 @@ def main() -> None:
             headers={'Authorization': token},
         ).status_code == 401, 'схема Bearer обязательна'
 
-        # 4. Неизвестный email и неверный пароль отвечают одинаково.
+        # 5. Неизвестный email и неверный пароль отвечают одинаково.
         wrong = client.post('/api/v1/auth/login', json={'email': EMAIL, 'password': 'не тот пароль'})
         unknown = client.post('/api/v1/auth/login', json={'email': 'нет@example.com', 'password': PASSWORD})
         assert wrong.status_code == unknown.status_code == 401, (wrong.text, unknown.text)
         assert wrong.json()['detail'] == unknown.json()['detail'], 'ответы не должны различаться'
 
-        # 5. Серия неудач блокирует перебор — на отдельном аккаунте, чтобы
+        # 6. Серия неудач блокирует перебор — на отдельном аккаунте, чтобы
         #    основной остался пригодным для остального сценария.
         response = client.post(
             '/api/v1/auth/signup',
@@ -156,7 +164,7 @@ def main() -> None:
         assert response.status_code == 200, response.text
         second_token = response.json()['token']
 
-        # 6. Обе сессии видны, текущая помечена.
+        # 7. Обе сессии видны, текущая помечена.
         sessions = client.get('/api/v1/auth/sessions', headers=auth_headers).json()
         assert len(sessions) == 2, sessions
         assert sum(session['is_current'] for session in sessions) == 1, sessions
@@ -171,7 +179,7 @@ def main() -> None:
             headers={'Authorization': 'Bearer ' + second_token},
         ).status_code == 401, 'отозванная сессия не должна пускать'
 
-        # 7. Telegram-регистрация — отдельный аккаунт под своим id.
+        # 8. Telegram-регистрация — отдельный аккаунт под своим id.
         tg_headers = {'X-Telegram-Init-Data': telegram_init_data(TG_USER_ID)}
         response = client.post('/api/v1/auth/register', json={'base_currency_code': 'RUB'}, headers=tg_headers)
         assert response.status_code == 200, response.text
@@ -181,7 +189,7 @@ def main() -> None:
         methods = client.get('/api/v1/auth/methods', headers=tg_headers).json()
         assert [method['provider'] for method in methods] == ['telegram'], methods
 
-        # 8. Telegram-аккаунт добавляет себе вход по паролю.
+        # 9. Telegram-аккаунт добавляет себе вход по паролю.
         response = client.post(
             '/api/v1/auth/password',
             json={'email': 'tg@example.com', 'new_password': PASSWORD},
@@ -201,7 +209,7 @@ def main() -> None:
         )
         assert response.status_code == 403, response.text
 
-        # 9. Главный guard: чужой Telegram нельзя привязать к своему аккаунту.
+        # 10. Главный guard: чужой Telegram нельзя привязать к своему аккаунту.
         response = client.post(
             '/api/v1/auth/telegram/link',
             headers={**auth_headers, 'X-Telegram-Init-Data': telegram_init_data(TG_USER_ID)},
@@ -223,11 +231,11 @@ def main() -> None:
         ).json()
         assert {method['provider'] for method in methods} == {'telegram', 'password'}, methods
 
-        # 10. Выход убивает текущую сессию.
+        # 11. Выход убивает текущую сессию.
         assert client.post('/api/v1/auth/logout', headers=auth_headers).status_code == 200
         assert client.get('/api/v1/auth/methods', headers=auth_headers).status_code == 401
 
-        # 11. Неизвестный Telegram аутентифицирован, но аккаунта не имеет.
+        # 12. Неизвестный Telegram аутентифицирован, но аккаунта не имеет.
         response = client.get(
             '/api/v1/auth/methods',
             headers={'X-Telegram-Init-Data': telegram_init_data(990000000009)},

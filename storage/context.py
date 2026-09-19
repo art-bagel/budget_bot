@@ -6,6 +6,7 @@ from storage.databases import DataBase
 class Context(DataBase):
     SCHEMA = 'budgeting'
 
+    F_GET__USER_CONTEXT = 'get__user_context'
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
     F_PUT__CREATE_FAMILY = 'put__create_family'
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
@@ -34,6 +35,17 @@ class Context(DataBase):
     F_SET__UPDATE_CREDIT_ACCOUNT = 'set__update_credit_account'
     F_SET__UPDATE_DEPOSIT_AFTER_ACCRUAL = 'set__update_deposit_after_accrual'
     F_SET__MERGE_PORTFOLIO_POSITION_METADATA = 'set__merge_portfolio_position_metadata'
+
+    async def get__user_context(self, user_id: int) -> Optional[dict]:
+        """
+        Возвращает стартовый контекст существующего аккаунта, ничего не создавая.
+        :param user_id: Идентификатор пользователя.
+        :return: Словарь со стартовым контекстом или None, если аккаунта нет.
+        """
+        return await self.call_function(
+            self._fn(self.F_GET__USER_CONTEXT),
+            user_id,
+        )
 
     async def put__register_user_context(
         self,
