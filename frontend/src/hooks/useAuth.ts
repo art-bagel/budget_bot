@@ -1,34 +1,59 @@
-import { useEffect, useState } from 'react';
-import { register } from '../api';
+import { useCallback, useEffect, useState } from 'react';
+import { getUserContext, register } from '../api';
+import { hasSession } from '../session';
 import { hasTelegramContext } from '../telegram';
 import type { UserContext } from '../types';
 
 const DEFAULT_BASE_CURRENCY = 'RUB';
+const MIN_SPLASH_MS = 2000;
 
 export function useAuth() {
   const [user, setUser] = useState<UserContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
-  useEffect(() => {
-    if (!hasTelegramContext()) {
-      setError('Нет контекста Telegram WebApp. Открой приложение внутри Telegram или укажи VITE_DEV_TELEGRAM_USER_ID для локальной разработки.');
+  // Тот же самый загрузчик отдаётся наружу как refresh: после входа экран
+  // логина просто просит перечитать контекст.
+  const load = useCallback(() => {
+    // Сессия приоритетнее: пользователь, вошедший по паролю внутри Telegram,
+    // должен попадать в свой аккаунт, а не в привязанный к этому telegram id.
+    const request = hasSession()
+      ? getUserContext()
+      : hasTelegramContext()
+        ? register(DEFAULT_BASE_CURRENCY)
+        : null;
+
+    if (!request) {
+      setNeedsLogin(true);
       setLoading(false);
       return;
     }
 
-    const MIN_SPLASH_MS = 2000;
+    setLoading(true);
+    setNeedsLogin(false);
+    setError(null);
+
     const start = Date.now();
 
-    register(DEFAULT_BASE_CURRENCY)
+    request
       .then(setUser)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => {
+        // Сессия могла протухнуть, пока приложение было закрыто: apiFetch уже
+        // удалил токен, и это не ошибка, а повод показать экран входа.
+        if (!hasSession() && !hasTelegramContext()) {
+          setNeedsLogin(true);
+        } else {
+          setError(e.message);
+        }
+      })
       .finally(() => {
-        const elapsed = Date.now() - start;
-        const remaining = MIN_SPLASH_MS - elapsed;
+        const remaining = MIN_SPLASH_MS - (Date.now() - start);
         setTimeout(() => setLoading(false), Math.max(0, remaining));
       });
   }, []);
 
-  return { user, loading, error };
+  useEffect(load, [load]);
+
+  return { user, loading, error, needsLogin, refresh: load };
 }

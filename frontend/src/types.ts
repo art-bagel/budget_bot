@@ -1111,3 +1111,25 @@ export interface TinkoffLivePrice {
   clean_current_value?: number;
   source: string;
 }
+
+export interface AuthMethod {
+  provider: 'telegram' | 'password';
+  provider_uid: string;
+  has_secret: boolean;
+  created_at: string;
+}
+
+export interface SessionInfo {
+  session_id: string;
+  device: string | null;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  is_current: boolean;
+}
+
+export interface SessionResponse {
+  token: string;
+  user_id: number;
+  expires_at: string;
+}

@@ -40,6 +40,13 @@ BEGIN
         VALUES (_base_currency_code, _username, _first_name, _last_name)
         RETURNING id INTO _user_id;
     ELSE
+        -- Регистрация идемпотентна, но идет через "прочитать - решить - вставить",
+        -- а клиент легко шлет ее дважды подряд (StrictMode, ретрай, два таба).
+        -- Блокировка на id сериализует такие вызовы: без нее оба видят пустоту
+        -- и вторая вставка падает на users_pkey, либо дублируются счет и
+        -- системные категории ниже.
+        PERFORM pg_advisory_xact_lock(_user_id);
+
         SELECT base_currency_code
         INTO _existing_base_currency_code
         FROM users

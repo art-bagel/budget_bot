@@ -84,8 +84,12 @@ import type {
   TakeLendingDebtRequest,
   RepayLendingDebtRequest,
   PayCryptoFeeRequest,
+  AuthMethod,
+  SessionInfo,
+  SessionResponse,
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
+import { getSessionToken, setSessionToken } from './session';
 
 const API_BASE = '/api/v1';
 
@@ -240,12 +244,26 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
   return `Ошибка API: ${status}`;
 }
 
+/** Запрос без аутентификации — вход и регистрация. */
+async function apiFetchPublic<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers as Record<string, string> || {}),
+    },
+  });
+
+  return handleApiResponse<T>(response);
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const sessionToken = getSessionToken();
   const telegramInitData = getTelegramInitData();
   const telegramUserId = getTelegramUserId();
 
-  if (!telegramInitData && !telegramUserId) {
-    throw new Error('Открой приложение внутри Telegram WebApp или укажи VITE_DEV_TELEGRAM_USER_ID для локальной разработки.');
+  if (!sessionToken && !telegramInitData && !telegramUserId) {
+    throw new Error('Нужно войти в приложение.');
   }
 
   const headers: Record<string, string> = {
@@ -253,13 +271,28 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...(init?.headers as Record<string, string> || {}),
   };
 
-  if (telegramInitData) {
+  // Сессия приоритетнее: вне Telegram это единственный способ входа,
+  // а внутри — initData всё ещё работает как раньше.
+  if (sessionToken) {
+    headers.Authorization = `Bearer ${sessionToken}`;
+  } else if (telegramInitData) {
     headers['X-Telegram-Init-Data'] = telegramInitData;
   } else if (telegramUserId) {
     headers['X-Telegram-User-Id'] = telegramUserId;
   }
 
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  // Протухшую сессию выбрасываем сразу, иначе каждый следующий экран
+  // будет падать с 401 и пользователь застрянет.
+  if (response.status === 401 && sessionToken) {
+    setSessionToken(null);
+  }
+
+  return handleApiResponse<T>(response);
+}
+
+async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
     let errorText = text;
@@ -282,6 +315,90 @@ export async function register(baseCurrencyCode: string): Promise<UserContext> {
   return apiFetch<UserContext>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ base_currency_code: baseCurrencyCode }),
+  });
+}
+
+export async function signUp(
+  email: string,
+  password: string,
+  baseCurrencyCode: string,
+  inviteCode: string,
+  device?: string,
+): Promise<SessionResponse> {
+  const result = await apiFetchPublic<SessionResponse>('/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      password,
+      base_currency_code: baseCurrencyCode,
+      invite_code: inviteCode,
+      device,
+    }),
+  });
+  setSessionToken(result.token);
+  return result;
+}
+
+export async function logIn(email: string, password: string, device?: string): Promise<SessionResponse> {
+  const result = await apiFetchPublic<SessionResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, device }),
+  });
+  setSessionToken(result.token);
+  return result;
+}
+
+export async function logOut(): Promise<void> {
+  try {
+    await apiFetch<{ revoked: number }>('/auth/logout', { method: 'POST' });
+  } finally {
+    // Локальный токен убираем в любом случае: если сервер недоступен,
+    // пользователь всё равно должен выйти на этом устройстве.
+    setSessionToken(null);
+  }
+}
+
+export async function getUserContext(): Promise<UserContext> {
+  return apiFetch<UserContext>('/auth/context');
+}
+
+export async function listAuthMethods(): Promise<AuthMethod[]> {
+  return apiFetch<AuthMethod[]>('/auth/methods');
+}
+
+export async function listSessions(): Promise<SessionInfo[]> {
+  return apiFetch<SessionInfo[]>('/auth/sessions');
+}
+
+export async function revokeSession(sessionId: string): Promise<{ revoked: number }> {
+  return apiFetch<{ revoked: number }>(`/auth/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function setPassword(
+  email: string,
+  newPassword: string,
+  currentPassword?: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ email, new_password: newPassword, current_password: currentPassword }),
+  });
+}
+
+export async function linkTelegram(): Promise<{ status: string }> {
+  const initData = getTelegramInitData();
+
+  if (!initData) {
+    throw new Error('Привязка Telegram доступна только внутри Telegram');
+  }
+
+  // Оба доказательства в одном запросе: сессия подтверждает аккаунт,
+  // initData — Telegram. apiFetch добавит Authorization поверх.
+  return apiFetch<{ status: string }>('/auth/telegram/link', {
+    method: 'POST',
+    headers: { 'X-Telegram-Init-Data': initData },
   });
 }
 

@@ -3,6 +3,7 @@ import SplashScreen from './components/SplashScreen';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import LoginScreen from './components/LoginScreen';
 import Credits from './pages/Credits';
 import Dashboard from './pages/Dashboard';
 import Exchange from './pages/Exchange';
@@ -22,7 +23,7 @@ export default function App() {
     dashboard: 0, exchange: 0, portfolio: 0, credits: 0, settings: 0,
   });
   const [familyBadge, setFamilyBadge] = useState(0);
-  const { user, loading, error } = useAuth();
+  const { user, loading, error, needsLogin, refresh } = useAuth();
   const { syncFromServer } = useTheme();
 
   const handleNavigate = (p: Page) => {
@@ -46,6 +47,10 @@ export default function App() {
 
   if (loading) {
     return <SplashScreen />;
+  }
+
+  if (needsLogin) {
+    return <LoginScreen onAuthenticated={refresh} />;
   }
 
   if (error || !user) {
