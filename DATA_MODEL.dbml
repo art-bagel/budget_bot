@@ -19,6 +19,31 @@ Table users {
   created_at timestamptz [not null, default: `now()`]
 }
 
+Table auth_identities {
+  provider varchar(20) [pk, not null, note: "telegram | password"]
+  provider_uid varchar(200) [pk, not null, note: "telegram id или email"]
+  user_id bigint [not null, ref: > users.id]
+  secret text [note: "scrypt-хэш пароля; NULL для telegram"]
+  failed_attempts smallint [not null, default: 0]
+  locked_until timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, provider) [unique]
+  }
+
+  Note: "Способы входа в аккаунт. users.id остается внутренним идентификатором: telegram и пароль — равноправные провайдеры, ведущие в один и тот же аккаунт. Привязка чужого provider_uid запрещена — аккаунты не сливаются."
+}
+
+Table sessions {
+  token_hash bytea [pk, not null, note: "sha256 от токена; сам токен не хранится"]
+  user_id bigint [not null, ref: > users.id]
+  device varchar(100)
+  created_at timestamptz [not null, default: `now()`]
+  last_seen_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz [not null]
+}
+
 Table families {
   id bigint [pk, not null, increment]
   name varchar(100) [not null]
