@@ -7,6 +7,8 @@ DIRECTORY="/Scripts/budgeting/tb"
 FILES=(
     "currencies.sql"
     "users.sql"
+    "auth_identities.sql"
+    "sessions.sql"
     "families.sql"
     "family_members.sql"
     "family_invitations.sql"

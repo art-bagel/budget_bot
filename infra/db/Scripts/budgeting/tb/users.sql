@@ -13,3 +13,14 @@ CREATE TABLE IF NOT EXISTS budgeting.users (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower
     ON budgeting.users (lower(username))
     WHERE username IS NOT NULL;
+
+-- Идентификаторы пользователей, зарегистрированных не через Telegram.
+-- Telegram-id по документации укладываются в 52 бита (< 2^52), поэтому
+-- старт с 2^53 исключает коллизию навсегда и остается далеко внутри bigint.
+CREATE SEQUENCE IF NOT EXISTS budgeting.users_local_id_seq
+    AS bigint
+    START WITH 9007199254740992
+    MINVALUE 9007199254740992;
+
+ALTER TABLE budgeting.users
+    ALTER COLUMN id SET DEFAULT nextval('budgeting.users_local_id_seq');

@@ -1,6 +1,10 @@
 -- Description:
 --   Registers a user in the budgeting model, creates the personal primary bank account
 --   and the required personal system categories.
+--
+--   _user_id = NULL означает регистрацию без внешнего провайдера (email):
+--   идентификатор выдается последовательностью. Непустой _user_id — это
+--   telegram id, как было исторически.
 DROP FUNCTION IF EXISTS budgeting.put__register_user_context;
 CREATE FUNCTION budgeting.put__register_user_context(
     _user_id bigint,
@@ -29,26 +33,34 @@ BEGIN
         RAISE EXCEPTION 'Unknown base currency: %', _base_currency_code;
     END IF;
 
-    SELECT base_currency_code
-    INTO _existing_base_currency_code
-    FROM users
-    WHERE id = _user_id;
-
-    IF _existing_base_currency_code IS NULL THEN
-        INSERT INTO users (id, base_currency_code, username, first_name, last_name)
-        VALUES (_user_id, _base_currency_code, _username, _first_name, _last_name);
+    IF _user_id IS NULL THEN
+        -- Регистрация не через Telegram: идентификатор выдает
+        -- users_local_id_seq, коллизия с telegram id невозможна по диапазону.
+        INSERT INTO users (base_currency_code, username, first_name, last_name)
+        VALUES (_base_currency_code, _username, _first_name, _last_name)
+        RETURNING id INTO _user_id;
     ELSE
-        _status := 'exists';
-
-        IF _existing_base_currency_code <> _base_currency_code THEN
-            RAISE EXCEPTION 'Base currency cannot be changed for user %', _user_id;
-        END IF;
-
-        UPDATE users
-        SET username = COALESCE(_username, username),
-            first_name = COALESCE(_first_name, first_name),
-            last_name = COALESCE(_last_name, last_name)
+        SELECT base_currency_code
+        INTO _existing_base_currency_code
+        FROM users
         WHERE id = _user_id;
+
+        IF _existing_base_currency_code IS NULL THEN
+            INSERT INTO users (id, base_currency_code, username, first_name, last_name)
+            VALUES (_user_id, _base_currency_code, _username, _first_name, _last_name);
+        ELSE
+            _status := 'exists';
+
+            IF _existing_base_currency_code <> _base_currency_code THEN
+                RAISE EXCEPTION 'Base currency cannot be changed for user %', _user_id;
+            END IF;
+
+            UPDATE users
+            SET username = COALESCE(_username, username),
+                first_name = COALESCE(_first_name, first_name),
+                last_name = COALESCE(_last_name, last_name)
+            WHERE id = _user_id;
+        END IF;
     END IF;
 
     SELECT id
