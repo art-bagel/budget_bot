@@ -666,11 +666,11 @@ class Ledger(DataBase):
         )
 
     F_GET__SCHEDULED_EXPENSES_FOR_CATEGORY = 'get__scheduled_expenses_for_category'
-    F_GET__DUE_SCHEDULED_EXPENSES = 'get__due_scheduled_expenses'
+    F_PUT__CLAIM_DUE_SCHEDULED_EXPENSES = 'put__claim_due_scheduled_expenses'
     F_GET__CATEGORY_ACCOUNT_CURRENCIES = 'get__category_account_currencies'
     F_PUT__CREATE_SCHEDULED_EXPENSE = 'put__create_scheduled_expense'
     F_PUT__DELETE_SCHEDULED_EXPENSE = 'put__delete_scheduled_expense'
-    F_PUT__ADVANCE_SCHEDULED_EXPENSE = 'put__advance_scheduled_expense'
+    F_SET__SCHEDULED_EXPENSE_RUN_RESULT = 'set__scheduled_expense_run_result'
 
     async def get__scheduled_expenses_for_category(self, user_id: int, category_id: int) -> list:
         result = await self.call_function(
@@ -688,9 +688,17 @@ class Ledger(DataBase):
         )
         return result if result else []
 
-    async def get__due_scheduled_expenses(self) -> list:
+    async def put__claim_due_scheduled_expenses(self) -> list:
+        """
+        Забирает в работу наступившие запланированные расходы.
+
+        Захват и сдвиг next_run_at происходят одной операцией, поэтому одну и
+        ту же строку нельзя получить дважды — ни параллельным инстансом, ни
+        повторным вызовом после перезапуска.
+        :return: Список захваченных расходов; bank_account_id может быть None.
+        """
         result = await self.call_function(
-            self._fn(self.F_GET__DUE_SCHEDULED_EXPENSES),
+            self._fn(self.F_PUT__CLAIM_DUE_SCHEDULED_EXPENSES),
         )
         return result if result else []
 
@@ -724,9 +732,20 @@ class Ledger(DataBase):
             schedule_id,
         )
 
-    async def put__advance_scheduled_expense(self, schedule_id: int, error: Optional[str] = None) -> str:
+    async def set__scheduled_expense_run_result(
+        self,
+        schedule_id: int,
+        error: Optional[str] = None,
+    ) -> bool:
+        """
+        Записывает итог исполнения: текст ошибки или None при успехе.
+        Дату не трогает — она уже сдвинута при захвате.
+        :param schedule_id: Идентификатор запланированного расхода.
+        :param error: Текст ошибки или None.
+        :return: Была ли найдена строка.
+        """
         return await self.call_function(
-            self._fn(self.F_PUT__ADVANCE_SCHEDULED_EXPENSE),
+            self._fn(self.F_SET__SCHEDULED_EXPENSE_RUN_RESULT),
             schedule_id,
             error,
         )
