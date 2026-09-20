@@ -1,18 +1,23 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import SplashScreen from './components/SplashScreen';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
-import Credits from './pages/Credits';
 import Dashboard from './pages/Dashboard';
-import Exchange from './pages/Exchange';
-import Portfolio from './pages/Portfolio';
-import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
 import type { Theme } from './hooks/useTheme';
 import { bindTelegramBackButton, getTelegramInitData } from './telegram';
+
+// Dashboard — стартовый экран, он нужен сразу и грузится вместе с бандлом.
+// Остальные страницы подгружаются в момент первого перехода на них: без
+// этого один Portfolio (≈6000 строк со всеми крипто-шитами) ехал к каждому,
+// кто открыл приложение и дальше обзора не пошёл.
+const Exchange = lazy(() => import('./pages/Exchange'));
+const Portfolio = lazy(() => import('./pages/Portfolio'));
+const Credits = lazy(() => import('./pages/Credits'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 const PAGE_IDS: Page[] = ['dashboard', 'exchange', 'portfolio', 'credits', 'settings'];
 
@@ -97,18 +102,20 @@ export default function App() {
       {PAGE_IDS.map((id) => visited.has(id) ? (
         <div key={id} className="page-wrap" style={id !== page ? { display: 'none' } : undefined}>
           <ErrorBoundary>
-            {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} refreshToken={refreshKeys[id]} />}
-            {id === 'exchange' && <Exchange user={user} refreshToken={refreshKeys[id]} />}
-            {id === 'portfolio' && <Portfolio user={user} refreshToken={refreshKeys[id]} />}
-            {id === 'credits' && <Credits user={user} refreshToken={refreshKeys[id]} />}
-            {id === 'settings' && (
-              <Settings
-                user={user}
-                onFamilyBadgeUpdate={setFamilyBadge}
-                onSignedOut={refresh}
-                refreshToken={refreshKeys[id]}
-              />
-            )}
+            <Suspense fallback={<SplashScreen />}>
+              {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} refreshToken={refreshKeys[id]} />}
+              {id === 'exchange' && <Exchange user={user} refreshToken={refreshKeys[id]} />}
+              {id === 'portfolio' && <Portfolio user={user} refreshToken={refreshKeys[id]} />}
+              {id === 'credits' && <Credits user={user} refreshToken={refreshKeys[id]} />}
+              {id === 'settings' && (
+                <Settings
+                  user={user}
+                  onFamilyBadgeUpdate={setFamilyBadge}
+                  onSignedOut={refresh}
+                  refreshToken={refreshKeys[id]}
+                />
+              )}
+            </Suspense>
           </ErrorBoundary>
         </div>
       ) : null)}
