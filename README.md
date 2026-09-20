@@ -17,27 +17,27 @@ Telegram-бот для учета бюджета и инвестиций с Fast
 
 ## Основные документы
 
-- [BUSINESS_LOGIC.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/BUSINESS_LOGIC.md) — доменные правила и ограничения.
-- [DATA_MODEL.dbml](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/DATA_MODEL.dbml) — схема данных в DBML.
-- [docs/tinkoff-integration.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/tinkoff-integration.md) — текущее устройство интеграции с T-Bank.
-- [docs/investment-implementation-checklist.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/investment-implementation-checklist.md) — текущий статус investment-модуля и backlog.
-- [docs/crypto-investment-accounts.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/crypto-investment-accounts.md) — дизайн-концепт будущих крипто-счетов и DeFi-операций.
-- [docs/crypto-account-assets-defi-plan.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/crypto-account-assets-defi-plan.md) — implementation plan модели `crypto account -> assets -> DeFi`.
-- [docs/telegram-webapp-safe-area.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/telegram-webapp-safe-area.md) — особенности safe area в Telegram WebApp.
-- [docs/ISSUES.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/ISSUES.md) — актуальный анализ багов и уязвимостей, ранжированный по важности.
-- [docs/IMPROVEMENTS.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/IMPROVEMENTS.md) — предложения по улучшениям вне багфиксов (БД, бэкенд, фронтенд, UX/UI, продукт).
-- [docs/TODO.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/TODO.md) — сводный чеклист всех доработок из ISSUES и IMPROVEMENTS.
-- [docs/IDEAS.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/IDEAS.md) — идеи новых функций и развития имеющихся.
+- [BUSINESS_LOGIC.md](BUSINESS_LOGIC.md) — доменные правила и ограничения.
+- [DATA_MODEL.dbml](DATA_MODEL.dbml) — схема данных в DBML.
+- [docs/tinkoff-integration.md](docs/tinkoff-integration.md) — текущее устройство интеграции с T-Bank.
+- [docs/investment-implementation-checklist.md](docs/investment-implementation-checklist.md) — текущий статус investment-модуля и backlog.
+- [docs/crypto-investment-accounts.md](docs/crypto-investment-accounts.md) — дизайн-концепт будущих крипто-счетов и DeFi-операций.
+- [docs/crypto-account-assets-defi-plan.md](docs/crypto-account-assets-defi-plan.md) — implementation plan модели `crypto account -> assets -> DeFi`.
+- [docs/telegram-webapp-safe-area.md](docs/telegram-webapp-safe-area.md) — особенности safe area в Telegram WebApp.
+- [docs/ISSUES.md](docs/ISSUES.md) — актуальный анализ багов и уязвимостей, ранжированный по важности.
+- [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) — предложения по улучшениям вне багфиксов (БД, бэкенд, фронтенд, UX/UI, продукт).
+- [docs/TODO.md](docs/TODO.md) — сводный чеклист всех доработок из ISSUES и IMPROVEMENTS.
+- [docs/IDEAS.md](docs/IDEAS.md) — идеи новых функций и развития имеющихся.
 
 ## Структура репозитория
 
-- [backend](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend) — FastAPI приложение и HTTP-роутеры.
-- [frontend](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/frontend) — клиент на React + Vite.
-- [storage](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage) — async-обертки над PostgreSQL-функциями и orchestration.
-- [infra](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra) — Docker Compose и инфраструктурные файлы.
-- [infra/db/Scripts/budgeting/tb](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/tb) — базовые таблицы fresh install.
-- [infra/db/Scripts/budgeting/func](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/func) — SQL-функции read/write слоя.
-- [infra/db/Scripts/budgeting/migrations](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations) — точечные миграции для уже существующих БД.
+- [backend](backend) — FastAPI приложение и HTTP-роутеры.
+- [frontend](frontend) — клиент на React + Vite.
+- [storage](storage) — async-обертки над PostgreSQL-функциями и orchestration.
+- [infra](infra) — Docker Compose и инфраструктурные файлы.
+- [infra/db/Scripts/budgeting/tb](infra/db/Scripts/budgeting/tb) — базовые таблицы fresh install.
+- [infra/db/Scripts/budgeting/func](infra/db/Scripts/budgeting/func) — SQL-функции read/write слоя.
+- [infra/db/Scripts/budgeting/migrations](infra/db/Scripts/budgeting/migrations) — точечные миграции для уже существующих БД.
 
 ## Архитектура
 
@@ -105,30 +105,54 @@ docker compose up --build -d
 
 ## Как сейчас живет SQL
 
+Всё применяет один скрипт — [infra/db/Scripts/run_migrations.sh](infra/db/Scripts/run_migrations.sh).
+Он идемпотентен: накатывает недостающие миграции и пересоздаёт SQL-функции,
+а если менять нечего — не делает ничего.
+
+Учёт ведётся в `budgeting.schema_migrations`. Ключ — имя файла, а не номер:
+номера в `migrations/` дублируются (два 019 и два 020). Каждая миграция
+применяется одной транзакцией вместе с отметкой о применении, поэтому обрыв
+посередине не оставляет базу в состоянии «применилось, но не записалось».
+
+Функции учёта не требуют: все файлы в
+[func/](infra/db/Scripts/budgeting/func) начинаются с `DROP FUNCTION IF
+EXISTS`, поэтому пересоздаются на каждом прогоне целиком.
+
+### Деплой
+
+Ничего делать руками не нужно. Пайплайн поднимает БД, снимает дамп в
+`pre-migrate-dumps/` и прогоняет `run_migrations.sh` — и только после этого
+стартует новый API. Порядок важен: иначе свежий код какое-то время ходил бы
+в старые функции.
+
 ### Fresh install
 
-При первом старте контейнера применяются:
+При создании тома [infra/db/init/01-init-budgeting.sh](infra/db/init/01-init-budgeting.sh)
+запускает [run_table_scripts.sh](infra/db/Scripts/run_table_scripts.sh)
+(таблицы из [tb/](infra/db/Scripts/budgeting/tb)), а затем `run_migrations.sh`.
 
-- таблицы через [infra/db/Scripts/run_table_scripts.sh](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/run_table_scripts.sh)
-- SQL-функции через [infra/db/Scripts/run_func_scripts.sh](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/run_func_scripts.sh)
+На пустой базе учёт заводится в режиме baseline: все файлы помечаются
+применёнными **без выполнения**. Так и задумано — `tb/` содержит финальную
+схему, и прогонять по ней старые миграции нельзя: часть из них рассчитана на
+промежуточное состояние и упадёт (например 012 — на уже существующем
+constraint), а 022 это backfill с INSERT, который удвоил бы проводки.
 
-Это вызывается из [infra/db/init/01-init-budgeting.sh](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/init/01-init-budgeting.sh).
+Отсюда следует правило: **новая таблица или колонка добавляется и в
+миграцию, и в `tb/`**. Миграция обновляет существующие базы, `tb/` — свежие.
+CI собирает схему с нуля на каждый push, так что расхождение всплывёт сразу.
+`run_table_scripts.sh` дополнительно падает, если файл положили в `tb/`, но
+забыли вписать в список `FILES` (порядок там значим из-за внешних ключей).
 
-### Existing database
-
-Для уже существующей БД изменения нужно применять в два шага:
-
-1. точечные SQL-миграции из [infra/db/Scripts/budgeting/migrations](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations)
-2. затем актуальный набор SQL-функций через `run_func_scripts.sh`
-
-Пример для локального Docker-окружения:
+### Локальный прогон
 
 ```bash
 cd infra
-docker exec budget_bot_db sh -lc 'export DB_DATABASE="$POSTGRES_DB"; bash /Scripts/run_func_scripts.sh'
+docker compose exec -T db sh -lc 'export DB_DATABASE="$POSTGRES_DB"; bash /Scripts/run_migrations.sh'
 ```
 
-Важно: каталог `migrations/` сейчас не прогоняется автоматически при fresh init контейнера.
+Если база реально отстала (например восстановлена из старого дампа) и
+миграции надо именно выполнить, а не отметить:
+`MIGRATIONS_BASELINE=0 bash /Scripts/run_migrations.sh`.
 
 ## Пересборка БД
 
