@@ -18,6 +18,30 @@ jobs:
     name: Verify Project
     runs-on: ubuntu-latest
 
+    # Версия совпадает с продом (infra/docker-compose.yml), иначе проверка
+    # схемы доказывала бы работоспособность на другом Postgres.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: budget_ci
+          POSTGRES_PASSWORD: budget_ci
+          POSTGRES_DB: budget_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U budget_ci -d budget_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGPASSWORD: budget_ci
+      POSTGRES_USER: budget_ci
+      DB_DATABASE: budget_ci
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -32,21 +56,77 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+          # Совпадает с infra/api.Dockerfile.
           python-version: "3.10"
 
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
 
+      # tsc -b входит в build, поэтому отдельного typecheck не нужно.
       - name: Build frontend
         working-directory: frontend
         run: npm run build
 
-      - name: Validate backend modules
-        run: python -m py_compile backend/app/config.py backend/app/main.py backend/app/dependencies.py
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
 
-      - name: Validate backup script
-        run: bash -n scripts/backup-to-minio.sh
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r requirements-dev.txt
+          # httpx нужен starlette.testclient, в рантайме приложения его нет.
+          pip install httpx
+
+      - name: Lint backend
+        run: ruff check backend storage
+
+      - name: Validate backend modules
+        run: |
+          find backend storage -name '*.py' -not -path '*/.cache/*' -print0 \
+            | xargs -0 -r python -m py_compile
+
+      - name: Validate shell scripts
+        run: |
+          find . -name '*.sh' \
+            -not -path './venv/*' -not -path './node_modules/*' \
+            -not -path './crypto-task/*' -not -path './.git/*' \
+            -print0 | xargs -0 -r -n1 bash -n
+
+      # Схема собирается с нуля ровно так же, как на свежей установке.
+      # Именно этот шаг ловит расхождение tb/ с миграциями: без него таблица
+      # могла месяцами существовать только в миграции, и узнавали об этом
+      # при попытке поднять БД заново.
+      - name: Build database schema from scratch
+        # client_min_messages: иначе лог тонет в NOTICE от каждого
+        # CREATE ... IF NOT EXISTS и читать его невозможно.
+        env:
+          PGOPTIONS: -c client_min_messages=warning
+        run: |
+          psql -U budget_ci -d budget_ci -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS budgeting'
+          bash infra/db/Scripts/run_table_scripts.sh
+          bash infra/db/Scripts/run_migrations.sh
+
+      - name: Run SQL tests
+        run: |
+          for test_file in infra/db/Scripts/budgeting/tests/*.sql; do
+            echo "── $test_file"
+            psql -v ON_ERROR_STOP=1 -q -U budget_ci -d budget_ci -f "$test_file"
+          done
+
+      - name: Run backend API tests
+        env:
+          APP_ENV: development
+          APP_HOST: 127.0.0.1
+          APP_PORT: 8000
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_SCHEMA: budgeting
+          POSTGRES_PASSWORD: budget_ci
+          TELEGRAM_BOT_TOKEN: ci-test-bot-token
+          SIGNUP_INVITE_CODE: ci-test-invite-code
+        run: python -m backend.tests.test_auth_api
 
       - name: Validate docker compose
         env:
