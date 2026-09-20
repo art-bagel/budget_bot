@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { linkTelegram, logIn, register, signUp } from '../api';
+import logo from '../assets/logo.png';
 import { getTelegramInitData, hasTelegramContext } from '../telegram';
 
 interface Props {
@@ -41,7 +42,10 @@ export default function LoginScreen({ initialMode, onAuthenticated }: Props) {
     }
   };
 
-  const handleCreateWithTelegram = () => run(() => register(DEFAULT_BASE_CURRENCY));
+  const switchTo = (next: Mode) => {
+    setMode(next);
+    setError(null);
+  };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,105 +78,131 @@ export default function LoginScreen({ initialMode, onAuthenticated }: Props) {
     });
   };
 
+  const brand = (
+    <div className="auth__brand">
+      <img src={logo} alt="" className="auth__logo" />
+      <div className="auth__name">Budget Bot</div>
+    </div>
+  );
+
   if (mode === 'choice') {
     return (
-      <div className="status-screen">
-        <h1>Budget</h1>
-        <p>Аккаунта за этим Telegram ещё нет.</p>
+      <div className="auth">
+        {brand}
 
-        {error && <p className="form-error">{error}</p>}
+        <div className="auth__card">
+          <h1 className="auth__title">Аккаунта ещё нет</h1>
+          <p className="auth__sub">За этим Telegram аккаунт не заведён.</p>
 
-        <div className="field field--col">
-          <button
-            className="btn btn--primary"
-            type="button"
-            onClick={handleCreateWithTelegram}
-            disabled={busy}
-          >
-            {busy ? 'Создаём…' : 'Создать новый аккаунт'}
-          </button>
-          <button
-            className="btn"
-            type="button"
-            onClick={() => { setMode('login'); setError(null); }}
-            disabled={busy}
-          >
-            У меня уже есть аккаунт
-          </button>
+          {error && <div className="apf-error">{error}</div>}
+
+          <div className="auth__actions">
+            <button
+              className="apf-submit"
+              type="button"
+              onClick={() => run(() => register(DEFAULT_BASE_CURRENCY))}
+              disabled={busy}
+            >
+              {busy ? 'Создаём…' : 'Создать новый аккаунт'}
+            </button>
+            <button
+              className="auth__secondary"
+              type="button"
+              onClick={() => switchTo('login')}
+              disabled={busy}
+            >
+              У меня уже есть аккаунт
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="status-screen">
-      <h1>{isSignup ? 'Регистрация' : 'Вход'}</h1>
+    <div className="auth">
+      {brand}
 
-      {initialMode === 'choice' && !isSignup && (
-        <p>После входа этот Telegram будет привязан к вашему аккаунту.</p>
-      )}
+      <div className="auth__card">
+        <h1 className="auth__title">{isSignup ? 'Регистрация' : 'Вход'}</h1>
 
-      <form className="field field--col" onSubmit={handleSubmit}>
-        <input
-          className="input"
-          type="email"
-          inputMode="email"
-          autoComplete="username"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          className="input"
-          type="password"
-          autoComplete={isSignup ? 'new-password' : 'current-password'}
-          placeholder={isSignup ? `Пароль, минимум ${MIN_PASSWORD_LENGTH} символов` : 'Пароль'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {isSignup && (
-          <input
-            className="input"
-            type="text"
-            autoComplete="off"
-            placeholder="Код приглашения"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-          />
+        {initialMode === 'choice' && !isSignup && (
+          <p className="auth__sub">После входа этот Telegram будет привязан к вашему аккаунту.</p>
         )}
 
-        {error && <p className="form-error">{error}</p>}
+        <form className="auth__form" onSubmit={handleSubmit}>
+          <div className="apf-field">
+            <label className="apf-label" htmlFor="auth-email">Email</label>
+            <input
+              id="auth-email"
+              className="apf-input"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
 
-        <button className="btn btn--primary" type="submit" disabled={busy}>
-          {busy ? 'Подождите…' : isSignup ? 'Создать аккаунт' : 'Войти'}
-        </button>
-      </form>
+          <div className="apf-field">
+            <label className="apf-label" htmlFor="auth-password">Пароль</label>
+            <input
+              id="auth-password"
+              className="apf-input"
+              type="password"
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+              placeholder={isSignup ? `Минимум ${MIN_PASSWORD_LENGTH} символов` : '••••••••'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
 
-      {initialMode === 'choice' ? (
-        <button
-          className="btn"
-          type="button"
-          onClick={() => { setMode('choice'); setError(null); }}
-          disabled={busy}
-        >
-          Назад
-        </button>
-      ) : (
-        // Внутри Telegram аккаунт заводится без кода приглашения — эта кнопка
-        // нужна только тем, кто пришёл не из Telegram.
-        !inTelegram && (
+          {isSignup && (
+            <div className="apf-field">
+              <label className="apf-label" htmlFor="auth-invite">Код приглашения</label>
+              <input
+                id="auth-invite"
+                className="apf-input"
+                type="text"
+                autoComplete="off"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+              />
+            </div>
+          )}
+
+          {error && <div className="apf-error">{error}</div>}
+
+          <button className="apf-submit" type="submit" disabled={busy}>
+            {busy ? 'Подождите…' : isSignup ? 'Создать аккаунт' : 'Войти'}
+          </button>
+        </form>
+
+        {initialMode === 'choice' ? (
           <button
-            className="btn"
+            className="auth__secondary"
             type="button"
-            onClick={() => { setMode(isSignup ? 'login' : 'signup'); setError(null); }}
+            onClick={() => switchTo('choice')}
             disabled={busy}
           >
-            {isSignup ? 'У меня уже есть аккаунт' : 'Создать аккаунт по приглашению'}
+            Назад
           </button>
-        )
-      )}
+        ) : (
+          // Внутри Telegram аккаунт заводится без кода приглашения — эта кнопка
+          // нужна только тем, кто пришёл не из Telegram.
+          !inTelegram && (
+            <button
+              className="auth__secondary"
+              type="button"
+              onClick={() => switchTo(isSignup ? 'login' : 'signup')}
+              disabled={busy}
+            >
+              {isSignup ? 'У меня уже есть аккаунт' : 'Создать аккаунт по приглашению'}
+            </button>
+          )
+        )}
+      </div>
     </div>
   );
 }

@@ -12185,3 +12185,96 @@ select.dlg-row__ghost option {
   flex-shrink: 0;
   margin-top: 2px;
 }
+
+/* ── Auth screen ─────────────────────────────────────── */
+/* Первый экран до входа. Держит тот же язык, что диалоги приложения:
+   брендинг из сплэша, поля и кнопки — те же apf-*, жёлтый акцент. */
+.auth {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  overflow-y: auto;
+  background: var(--bg-root);
+  padding:
+    calc(24px + var(--tg-safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px
+    calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+.auth__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth__logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: block;
+}
+
+.auth__name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  color: var(--text-primary);
+}
+
+.auth__card {
+  width: 100%;
+  max-width: 340px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.auth__sub {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: -10px;
+}
+
+.auth__form,
+.auth__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth__secondary {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--text-secondary);
+  padding: 2px;
+  cursor: pointer;
+  transition: color .15s;
+}
+
+.auth__secondary:hover { color: var(--text-primary); }
+.auth__secondary:disabled { opacity: .45; cursor: not-allowed; }
