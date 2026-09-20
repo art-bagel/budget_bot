@@ -36,12 +36,14 @@ class AuthPrincipal:
 
 @dataclass
 class CurrentUser:
-    """Аутентифицированный владелец существующего аккаунта."""
+    """
+    Аутентифицированный владелец существующего аккаунта.
+
+    Имя и username сюда не переносятся: они есть в users и нужны только при
+    регистрации, где берутся из AuthPrincipal.
+    """
 
     user_id: int
-    username: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
     # Нужен, чтобы отозвать все сессии кроме текущей и отметить ее в списке.
     session_token_hash: Optional[bytes] = None
 
@@ -228,8 +230,5 @@ async def get_current_user(
 
     return CurrentUser(
         user_id=user_id,
-        username=principal.username,
-        first_name=principal.first_name,
-        last_name=principal.last_name,
         session_token_hash=principal.session_token_hash,
     )

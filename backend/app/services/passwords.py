@@ -18,18 +18,12 @@ _R = 8
 _P = 3
 _SALT_BYTES = 16
 _KEY_BYTES = 32
-# hashlib.scrypt без maxmem упирается в лимит OpenSSL в 32 МиБ и падает.
-_MAXMEM = 128 * _N * _R * 2
 
 MIN_PASSWORD_LENGTH = 10
 
-# Хэш заведомо недостижимого пароля. Нужен, чтобы проверка несуществующего
-# аккаунта занимала столько же времени, сколько существующего: иначе по
-# времени ответа можно перебрать, какие email зарегистрированы.
-_DUMMY_PASSWORD = secrets.token_urlsafe(32)
-
 
 def _derive(password: str, salt: bytes, n: int, r: int, p: int) -> bytes:
+    # hashlib.scrypt без maxmem упирается в лимит OpenSSL в 32 МиБ и падает.
     return hashlib.scrypt(
         password.encode('utf-8'),
         salt=salt,
@@ -66,7 +60,8 @@ def verify_password(password: str, stored: str | None) -> bool:
     :return: True, если пароль подходит.
     """
     if not stored:
-        # Аккаунта нет — но время ответа должно быть таким же, как у существующего.
+        # Аккаунта нет, но время ответа должно быть как у существующего:
+        # иначе по задержке перебираются зарегистрированные email.
         _derive(password, b'timing-equalizer', _N, _R, _P)
         return False
 

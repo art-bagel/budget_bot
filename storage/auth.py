@@ -74,17 +74,14 @@ class Auth(DataBase):
         provider: str,
         provider_uid: str,
         success: bool,
-        max_attempts: int = 5,
-        lock_seconds: int = 900,
     ) -> Optional[dict]:
         """
         Фиксирует итог попытки входа: успех обнуляет счетчик, серия неудач
-        блокирует способ входа на время.
+        блокирует способ входа на время. Порог и длительность блокировки
+        заданы дефолтами самой SQL-функции.
         :param provider: Провайдер входа.
         :param provider_uid: Telegram id или email.
         :param success: Были ли учетные данные верными.
-        :param max_attempts: Число неудач до блокировки.
-        :param lock_seconds: Длительность блокировки в секундах.
         :return: Словарь со счетчиком и состоянием блокировки, либо None.
         """
         return await self.call_function(
@@ -92,8 +89,6 @@ class Auth(DataBase):
             provider,
             provider_uid,
             success,
-            max_attempts,
-            lock_seconds,
         )
 
     async def put__session(

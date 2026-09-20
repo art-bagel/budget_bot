@@ -1115,7 +1115,6 @@ export interface TinkoffLivePrice {
 export interface AuthMethod {
   provider: 'telegram' | 'password';
   provider_uid: string;
-  has_secret: boolean;
   created_at: string;
 }
 

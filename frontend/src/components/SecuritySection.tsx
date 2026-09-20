@@ -63,7 +63,7 @@ export default function SecuritySection({ onSignedOut }: Props) {
     void load();
   }, [load]);
 
-  const run = async (action: () => Promise<void>, successNotice: string) => {
+  const run = async (action: () => Promise<unknown>, successNotice: string) => {
     if (busy) {
       return;
     }
@@ -90,13 +90,10 @@ export default function SecuritySection({ onSignedOut }: Props) {
     setCurrentPassword('');
   }, passwordMethod ? 'Пароль изменён, остальные устройства отключены' : 'Вход по email добавлен');
 
-  const handleLinkTelegram = () => run(
-    () => linkTelegram().then(() => undefined),
-    'Telegram привязан к аккаунту',
-  );
+  const handleLinkTelegram = () => run(linkTelegram, 'Telegram привязан к аккаунту');
 
   const handleRevoke = (sessionId: string) => run(
-    () => revokeSession(sessionId).then(() => undefined),
+    () => revokeSession(sessionId),
     'Устройство отключено',
   );
 
