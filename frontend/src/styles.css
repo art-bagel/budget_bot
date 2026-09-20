@@ -429,7 +429,10 @@ input { font: inherit; color: inherit; }
 .bottom-nav__item::after {
   content: '';
   position: absolute;
-  bottom: calc(env(safe-area-inset-bottom) + 2px);
+  /* Отступ под home indicator уже заложен в padding-bottom у .bottom-nav.
+     Здесь он был бы учтён второй раз и поднимал бы метку к иконкам —
+     в Telegram env() равен нулю, поэтому это годами не проявлялось. */
+  bottom: 2px;
   left: 50%;
   width: 18px;
   height: 3px;
@@ -10164,6 +10167,10 @@ select.dlg-row__ghost option {
 .settings-page .st-tabs__ind {
   position: absolute;
   bottom: 0;
+  /* Без left позиция отсчитывалась бы от content-box, то есть уже за
+     padding-left: 16px, а JS в Settings.tsx считает смещение от border-box.
+     Padding попадал в расчёт дважды и линия уезжала вправо. */
+  left: 0;
   height: 3px;
   background: var(--yellow);
   border-radius: 2px 2px 0 0;
