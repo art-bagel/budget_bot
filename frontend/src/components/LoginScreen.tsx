@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { linkTelegram, logIn, register, signUp } from '../api';
-import logo from '../assets/logo.png';
+import logo from '../assets/logo.webp';
 import { getTelegramInitData, hasTelegramContext } from '../telegram';
 
 interface Props {
