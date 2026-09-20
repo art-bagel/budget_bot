@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
+import RefreshBar from '../components/RefreshBar';
 import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown } from 'lucide-react';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
@@ -679,7 +680,7 @@ function getEventLabel(item: PortfolioEvent): string {
 }
 
 
-export default function Portfolio({ user }: { user: UserContext }) {
+export default function Portfolio({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -692,6 +693,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [addSheetTypeCode, setAddSheetTypeCode] = useState<string | null>(null);
   const [addCryptoMode, setAddCryptoMode] = useState<'pick' | 'asset' | 'defi'>('pick');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [submittingCloseId, setSubmittingCloseId] = useState<number | null>(null);
   const [submittingIncomeId, setSubmittingIncomeId] = useState<number | null>(null);
   const [submittingTopUpId, setSubmittingTopUpId] = useState<number | null>(null);
@@ -773,7 +775,7 @@ export default function Portfolio({ user }: { user: UserContext }) {
   const [createAccountError, setCreateAccountError] = useState<string | null>(null);
 
   const loadPortfolio = async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
 
     try {
@@ -804,12 +806,13 @@ export default function Portfolio({ user }: { user: UserContext }) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     void loadPortfolio();
-  }, [user.user_id]);
+  }, [user.user_id, refreshToken]);
 
   useEffect(() => {
     const cryptoAccountIds = accounts
@@ -2867,8 +2870,12 @@ export default function Portfolio({ user }: { user: UserContext }) {
     return <SplashScreen />;
   }
 
+  // Дальше страница рендерится всегда: обновление данных показывается
+  // полосой сверху, а не подменой всего экрана сплэшем.
+
   return (
     <>
+      <RefreshBar active={refreshing} />
       {error && (
         <p style={{ color: 'var(--neg, #f04)', fontSize: '0.85rem', marginBottom: 12 }}>
           {error}

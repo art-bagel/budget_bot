@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
+import RefreshBar from '../components/RefreshBar';
 
 import {
   exchangeCurrency,
@@ -16,10 +17,11 @@ import { formatAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
-export default function Exchange({ user }: { user: UserContext }) {
+export default function Exchange({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [fromCurrencyCode, setFromCurrencyCode] = useState(user.base_currency_code);
@@ -35,7 +37,7 @@ export default function Exchange({ user }: { user: UserContext }) {
   } | null>(null);
 
   const loadExchangeContext = async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
 
     try {
@@ -57,12 +59,13 @@ export default function Exchange({ user }: { user: UserContext }) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     void loadExchangeContext();
-  }, [user.bank_account_id]);
+  }, [user.bank_account_id, refreshToken]);
 
   useEffect(() => {
     if (!currencies.some((item) => item.code === toCurrencyCode && item.code !== fromCurrencyCode)) {
@@ -116,8 +119,12 @@ export default function Exchange({ user }: { user: UserContext }) {
     return <SplashScreen />;
   }
 
+  // Дальше страница рендерится всегда: обновление данных показывается
+  // полосой сверху, а не подменой всего экрана сплэшем.
+
   return (
     <>
+      <RefreshBar active={refreshing} />
       <h1 className="page-title">Обмен валют</h1>
 
       <section className="section">

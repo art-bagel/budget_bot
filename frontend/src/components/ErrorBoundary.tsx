@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { Component, Fragment } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
@@ -7,12 +7,17 @@ interface Props {
 
 interface State {
   error: Error | null;
+  // Счётчик ремонтов. Раньше поддерево пересоздавал внешний key из App, и
+  // «Попробовать снова» работало за счёт него. Теперь ремонт нужен свой,
+  // иначе кнопка вернула бы то же самое упавшее дерево с его состоянием
+  // и оно упало бы снова на первом же рендере.
+  resetCount: number;
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, resetCount: 0 };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Pick<State, 'error'> {
     return { error };
   }
 
@@ -29,7 +34,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <button
             className="btn btn--primary"
             style={{ marginTop: 16 }}
-            onClick={() => this.setState({ error: null })}
+            onClick={() => this.setState((prev) => ({ error: null, resetCount: prev.resetCount + 1 }))}
           >
             Попробовать снова
           </button>
@@ -37,6 +42,6 @@ export default class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return <Fragment key={this.state.resetCount}>{this.props.children}</Fragment>;
   }
 }

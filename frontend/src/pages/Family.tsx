@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { UserContext, FamilyInfo, FamilyMember, FamilyInvitation } from '../types';
+import RefreshBar from '../components/RefreshBar';
 import {
   fetchMyFamily,
   createFamily,
@@ -26,6 +27,7 @@ function memberDisplayName(m: FamilyMember): string {
 
 export default function Family({ user, onBadgeUpdate, embedded = false, onFamilyChange }: Props) {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [invitations, setInvitations] = useState<FamilyInvitation[]>([]);
@@ -42,7 +44,7 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
   const [respondingId, setRespondingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
       const [familyData, invitationsData] = await Promise.all([
@@ -64,6 +66,7 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [onBadgeUpdate, onFamilyChange]);
 
@@ -141,6 +144,7 @@ export default function Family({ user, onBadgeUpdate, embedded = false, onFamily
 
   return (
     <>
+      <RefreshBar active={refreshing} />
       {!embedded ? <h1 className="page-title">Семья</h1> : null}
 
       {error && (

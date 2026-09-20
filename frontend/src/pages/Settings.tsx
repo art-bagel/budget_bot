@@ -107,10 +107,12 @@ export default function Settings({
   user,
   onFamilyBadgeUpdate,
   onSignedOut,
+  refreshToken,
 }: {
   user: UserContext;
   onFamilyBadgeUpdate: (count: number) => void;
   onSignedOut: () => void;
+  refreshToken: number;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const { theme, setTheme } = useTheme();
@@ -194,8 +196,8 @@ export default function Settings({
     }
   };
 
-  useEffect(() => { void loadFamily(); }, []);
-  useEffect(() => { void loadAccounts(); }, []);
+  useEffect(() => { void loadFamily(); }, [refreshToken]);
+  useEffect(() => { void loadAccounts(); }, [refreshToken]);
   useEffect(() => {
     if (activeTab === 'integrations') void loadConnections();
   }, [activeTab]);

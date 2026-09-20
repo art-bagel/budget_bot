@@ -26,6 +26,11 @@ export default function App() {
   const { user, loading, error, needsLogin, needsAccount, refresh } = useAuth();
   const { syncFromServer } = useTheme();
 
+  // refreshKeys — это больше не ключ ремонта, а токен обновления данных.
+  // Раньше он стоял в key у ErrorBoundary, и любое переключение вкладки
+  // пересоздавало страницу целиком: терялся скролл и открытые шиты, а
+  // соседняя механика visited + display:none, которая ровно для того и
+  // существует, чтобы страницу сохранять, становилась бессмысленной.
   const handleNavigate = (p: Page) => {
     setVisited(prev => new Set(prev).add(p));
     setPage(p);
@@ -91,12 +96,19 @@ export default function App() {
     <Layout page={page} onNavigate={handleNavigate} onRefresh={handleRefresh} badges={{ settings: familyBadge }}>
       {PAGE_IDS.map((id) => visited.has(id) ? (
         <div key={id} className="page-wrap" style={id !== page ? { display: 'none' } : undefined}>
-          <ErrorBoundary key={refreshKeys[id]}>
-            {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} />}
-            {id === 'exchange' && <Exchange user={user} />}
-            {id === 'portfolio' && <Portfolio user={user} />}
-            {id === 'credits' && <Credits user={user} />}
-            {id === 'settings' && <Settings user={user} onFamilyBadgeUpdate={setFamilyBadge} onSignedOut={refresh} />}
+          <ErrorBoundary>
+            {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} refreshToken={refreshKeys[id]} />}
+            {id === 'exchange' && <Exchange user={user} refreshToken={refreshKeys[id]} />}
+            {id === 'portfolio' && <Portfolio user={user} refreshToken={refreshKeys[id]} />}
+            {id === 'credits' && <Credits user={user} refreshToken={refreshKeys[id]} />}
+            {id === 'settings' && (
+              <Settings
+                user={user}
+                onFamilyBadgeUpdate={setFamilyBadge}
+                onSignedOut={refresh}
+                refreshToken={refreshKeys[id]}
+              />
+            )}
           </ErrorBoundary>
         </div>
       ) : null)}

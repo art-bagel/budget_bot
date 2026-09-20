@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
+import RefreshBar from '../components/RefreshBar';
 
 import {
   fetchBankAccounts,
@@ -51,7 +52,7 @@ import { hapticRigid } from '../telegram';
 
 type DashboardViewTab = 'budget' | 'operations' | 'analytics';
 
-export default function Dashboard({ user, onNavigate }: { user: UserContext; onNavigate?: (page: 'exchange' | 'portfolio' | 'credits') => void }) {
+export default function Dashboard({ user, onNavigate, refreshToken }: { user: UserContext; onNavigate?: (page: 'exchange' | 'portfolio' | 'credits') => void; refreshToken: number }) {
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
@@ -63,6 +64,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   const [cryptoLivePrices, setCryptoLivePrices] = useState<Map<number, CryptoLivePrice>>(new Map());
   const [cryptoProtocolPositions, setCryptoProtocolPositions] = useState<CryptoProtocolPosition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { hintsEnabled } = useHints();
   const [includeCredits, setIncludeCredits] = useState<boolean>(() => {
@@ -117,7 +119,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   /* ── data loading ───────────────────────────────── */
 
   const loadOverview = async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
 
     try {
@@ -160,12 +162,13 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     void loadOverview();
-  }, [user.bank_account_id]);
+  }, [user.bank_account_id, refreshToken]);
 
   useEffect(() => {
     if (openPositions.length === 0) {
@@ -316,6 +319,9 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   if (loading) {
     return <SplashScreen />;
   }
+
+  // Дальше страница рендерится всегда: обновление данных показывается
+  // полосой сверху, а не подменой всего экрана сплэшем.
 
   if (error || !overview) {
     return (
@@ -517,6 +523,7 @@ export default function Dashboard({ user, onNavigate }: { user: UserContext; onN
   };
   return (
     <>
+      <RefreshBar active={refreshing} />
       {/* Hero — yellow capital card */}
       <article className="hero">
         <div className="hero__head">

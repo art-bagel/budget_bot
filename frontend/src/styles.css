@@ -384,6 +384,43 @@ input { font: inherit; color: inherit; }
   touch-action: pan-y;
 }
 
+/* Индикатор фонового обновления данных: раньше эту роль играл сплэш,
+   который подменял собой весь экран после каждого действия. */
+.refresh-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 60;
+  overflow: hidden;
+  background: var(--line-soft);
+  pointer-events: none;
+}
+
+.refresh-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 3px;
+  background: var(--yellow-deep);
+  animation: refresh-bar-slide 1s ease-in-out infinite;
+}
+
+@keyframes refresh-bar-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-bar::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
 /* page wrapper — flex column so inner sections get proper gaps */
 .page-wrap {
   display: flex;

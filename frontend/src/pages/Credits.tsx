@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
+import RefreshBar from '../components/RefreshBar';
 import { ChevronDown, House, Landmark, CreditCard, Pencil, Trash2, ArrowDownLeft, ArrowRight, CalendarDays } from 'lucide-react';
 import BottomSheet from '../components/BottomSheet';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
@@ -274,11 +275,12 @@ function availableCreditLimit(credit: CreditWithBalances, currencyCode: string):
 type ViewTab = 'credits' | 'ops' | 'analytics';
 type FilterTab = 'all' | 'mortgage' | 'loan' | 'credit_card';
 
-export default function Credits({ user }: { user: UserContext }) {
+export default function Credits({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
   const [credits, setCredits] = useState<CreditWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // View state
@@ -368,7 +370,7 @@ export default function Credits({ user }: { user: UserContext }) {
   };
 
   const load = async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
       const [loadedCredits, loadedCash, loadedCurrencies] = await Promise.all([
@@ -389,10 +391,11 @@ export default function Credits({ user }: { user: UserContext }) {
       setError(err instanceof Error ? err.message : 'Ошибка загрузки');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [refreshToken]);
 
   // Fetch accrued interest for all term credits in the background
   useEffect(() => {
@@ -816,8 +819,12 @@ export default function Credits({ user }: { user: UserContext }) {
     return <SplashScreen />;
   }
 
+  // Дальше страница рендерится всегда: обновление данных показывается
+  // полосой сверху, а не подменой всего экрана сплэшем.
+
   return (
     <>
+      <RefreshBar active={refreshing} />
       {/* ── Hero ── */}
       <article className="hero hero--ink">
         <div className="hero__head">
