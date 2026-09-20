@@ -66,7 +66,41 @@ declare global {
 
 const EXPLICIT_DEV_TELEGRAM_USER_ID = import.meta.env.VITE_DEV_TELEGRAM_USER_ID?.trim() || '';
 
+const DEV_NO_TELEGRAM_KEY = 'budget_dev_no_telegram';
+
+/**
+ * Локально Telegram-контекст подставляется автоматически, и из-за этого
+ * невозможно посмотреть, как приложение ведёт себя без него: вход по паролю,
+ * экран логина, системный жест "назад".
+ *
+ * `?telegram=off` выключает подстановку и запоминает выбор, `?telegram=on`
+ * возвращает. Работает только в dev-сборке — в прод не попадает.
+ */
+function isDevTelegramDisabled(): boolean {
+  if (!import.meta.env.DEV) {
+    return false;
+  }
+
+  const requested = new URLSearchParams(window.location.search).get('telegram');
+
+  try {
+    if (requested === 'off') {
+      localStorage.setItem(DEV_NO_TELEGRAM_KEY, '1');
+    } else if (requested === 'on') {
+      localStorage.removeItem(DEV_NO_TELEGRAM_KEY);
+    }
+
+    return localStorage.getItem(DEV_NO_TELEGRAM_KEY) === '1';
+  } catch {
+    return requested === 'off';
+  }
+}
+
 function getImplicitDevTelegramUserId(): string {
+  if (isDevTelegramDisabled()) {
+    return '';
+  }
+
   if (import.meta.env.DEV) {
     return '478559604';
   }
