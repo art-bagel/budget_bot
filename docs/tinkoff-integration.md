@@ -22,9 +22,9 @@
 
 ### Backend
 
-- REST-клиент T-Bank реализован в [storage/tinkoff_sync.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff_sync.py)
-- HTTP-роуты находятся в [backend/app/routers/tinkoff.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/backend/app/routers/tinkoff.py)
-- SQL read/write-path для T-Bank вынесен в [storage/tinkoff.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff.py)
+- REST-клиент T-Bank реализован в [storage/tinkoff_sync.py](../storage/tinkoff_sync.py)
+- HTTP-роуты находятся в [backend/app/routers/tinkoff.py](../backend/app/routers/tinkoff.py)
+- SQL read/write-path для T-Bank вынесен в [storage/tinkoff.py](../storage/tinkoff.py)
 
 Интеграция использует T-Bank REST API напрямую через `httpx`. Официальный Python SDK сейчас не используется.
 
@@ -255,23 +255,11 @@ Bank ledger инвестиционного счета и cash-счетов, св
 - `external_id`
 - `import_source`
 
-### Debug-таблицы
-
-Опциональные таблицы для raw-дампа T-Bank API:
-
-- `budgeting.tinkoff_api_debug_snapshots`
-- `budgeting.tinkoff_api_debug_items`
-
-Они создаются миграцией [019_tinkoff_api_debug_dump.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql).
-
-Используются только для расследования проблем импорта и не участвуют в обычном runtime.
-
 ### Поддерживающие миграции
 
-Для уже существующих БД, кроме базового [018_external_connections.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/018_external_connections.sql), важны ещё:
+Для уже существующих БД, кроме базового [018_external_connections.sql](../infra/db/Scripts/budgeting/migrations/018_external_connections.sql), важны ещё:
 
-- [019_ensure_broker_op_types.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql) — гарантирует `broker_input/broker_output` и idempotency columns;
-- [019_tinkoff_api_debug_dump.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql) — создаёт debug-таблицы raw API dumps.
+- [019_ensure_broker_op_types.sql](../infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql) — гарантирует `broker_input/broker_output` и idempotency columns;
 
 ## Эндпоинты
 
@@ -288,31 +276,16 @@ Bank ledger инвестиционного счета и cash-счетов, св
 
 ## Debug / диагностика
 
-Для записи сырых ответов API есть скрипт:
+Отдельной утилиты дампа сырых ответов API больше нет: таблицы
+`tinkoff_api_debug_*` на проде так и не появились (миграция туда не
+накатывалась), и к 2026-09-21 и они, и скрипт удалены как неиспользуемые.
 
-- [storage/tinkoff_api_debug_dump.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff_api_debug_dump.py)
-
-Он:
-
-- обеспечивает наличие debug-таблиц;
-- читает активные `external_connections`;
-- сохраняет raw payload по `GetAccounts`, `GetPositions`, `GetPortfolio`, `GetOperationsByCursor`, `GetInstrumentBy`.
-
-Пример запуска:
-
-```bash
-venv/bin/python storage/tinkoff_api_debug_dump.py \
-  --db-host 127.0.0.1 \
-  --db-port 5432 \
-  --db-name budget \
-  --db-user alex \
-  --db-password secret
-```
+Если разбор расхождений снова понадобится — искать в истории git по именам
+`019_tinkoff_api_debug_dump.sql` и `storage/tinkoff_api_debug_dump.py`.
 
 ## Известные ограничения
 
 - синк запускается только вручную;
 - account summary T-Bank намеренно не используется как source of truth для наших totals;
 - часть корпоративных действий восстанавливается через reconciliation, а не через полноценные domain events;
-- fresh init контейнера не прогоняет миграции из `migrations/` автоматически, только базовые таблицы и SQL-функции;
 - для уже импортированных данных некоторые исправления требуют переимпорта или targeted backfill.

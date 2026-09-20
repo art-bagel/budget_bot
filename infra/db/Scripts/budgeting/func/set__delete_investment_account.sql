@@ -91,18 +91,6 @@ BEGIN
           AND NOT is_active;
     END IF;
 
-    IF to_regclass('budgeting.tinkoff_api_debug_snapshots') IS NOT NULL THEN
-        UPDATE tinkoff_api_debug_snapshots
-        SET linked_account_id = NULL
-        WHERE linked_account_id = _bank_account_id;
-    END IF;
-
-    IF to_regclass('budgeting.tinkoff_api_debug_items') IS NOT NULL THEN
-        UPDATE tinkoff_api_debug_items
-        SET linked_account_id = NULL
-        WHERE linked_account_id = _bank_account_id;
-    END IF;
-
     DELETE FROM bank_accounts
     WHERE id = _bank_account_id;
 

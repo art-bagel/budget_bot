@@ -13,15 +13,14 @@
 - [x] таблица `external_connections`
 - [x] идемпотентность импорта через `bank_entries.external_id/import_source`
 - [x] идемпотентность импорта через `portfolio_events.external_id/import_source`
-- [x] debug-таблицы `tinkoff_api_debug_snapshots` и `tinkoff_api_debug_items`
 
 ### SQL / storage
 
 - [x] write-path портфеля через SQL-функции
 - [x] read-path портфеля через SQL-функции
 - [x] T-Bank connection CRUD через SQL-функции
-- [x] T-Bank read-side storage wrapper в [storage/tinkoff.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff.py)
-- [x] T-Bank write-side orchestration в [storage/tinkoff_sync.py](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/storage/tinkoff_sync.py)
+- [x] T-Bank read-side storage wrapper в [storage/tinkoff.py](../storage/tinkoff.py)
+- [x] T-Bank write-side orchestration в [storage/tinkoff_sync.py](../storage/tinkoff_sync.py)
 
 ### Портфель
 
@@ -86,16 +85,15 @@
 
 ### Таблицы
 
-- [infra/db/Scripts/budgeting/tb/bank_accounts.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/tb/bank_accounts.sql)
-- [infra/db/Scripts/budgeting/tb/portfolio_positions.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/tb/portfolio_positions.sql)
-- [infra/db/Scripts/budgeting/tb/portfolio_events.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/tb/portfolio_events.sql)
-- [infra/db/Scripts/budgeting/migrations/018_external_connections.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/018_external_connections.sql)
-- [infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql)
-- [infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/infra/db/Scripts/budgeting/migrations/019_tinkoff_api_debug_dump.sql)
+- [infra/db/Scripts/budgeting/tb/bank_accounts.sql](../infra/db/Scripts/budgeting/tb/bank_accounts.sql)
+- [infra/db/Scripts/budgeting/tb/portfolio_positions.sql](../infra/db/Scripts/budgeting/tb/portfolio_positions.sql)
+- [infra/db/Scripts/budgeting/tb/portfolio_events.sql](../infra/db/Scripts/budgeting/tb/portfolio_events.sql)
+- [infra/db/Scripts/budgeting/migrations/018_external_connections.sql](../infra/db/Scripts/budgeting/migrations/018_external_connections.sql)
+- [infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql](../infra/db/Scripts/budgeting/migrations/019_ensure_broker_op_types.sql)
 
 ### Документация
 
-- [README.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/README.md)
-- [docs/tinkoff-integration.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/docs/tinkoff-integration.md)
-- [BUSINESS_LOGIC.md](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/BUSINESS_LOGIC.md)
-- [DATA_MODEL.dbml](/Users/aleksandrkostenko/Desktop/Dev/budget_bot/DATA_MODEL.dbml)
+- [README.md](../README.md)
+- [docs/tinkoff-integration.md](../docs/tinkoff-integration.md)
+- [BUSINESS_LOGIC.md](../BUSINESS_LOGIC.md)
+- [DATA_MODEL.dbml](../DATA_MODEL.dbml)
