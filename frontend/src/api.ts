@@ -358,8 +358,19 @@ export async function logOut(): Promise<void> {
   }
 }
 
+/** Признак того, что вход валиден, но аккаунта за ним ещё нет. */
+export class NoAccountError extends Error {}
+
 export async function getUserContext(): Promise<UserContext> {
-  return apiFetch<UserContext>('/auth/context');
+  try {
+    return await apiFetch<UserContext>('/auth/context');
+  } catch (e) {
+    // Бэкенд отвечает 404, когда аутентификация прошла, а аккаунта нет.
+    if ((e as Error).message.includes('Аккаунт не найден')) {
+      throw new NoAccountError((e as Error).message);
+    }
+    throw e;
+  }
 }
 
 export async function listAuthMethods(): Promise<AuthMethod[]> {

@@ -8,6 +8,7 @@ class Context(DataBase):
 
     F_GET__USER_CONTEXT = 'get__user_context'
     F_PUT__REGISTER_USER_CONTEXT = 'put__register_user_context'
+    F_PUT__REGISTER_TELEGRAM_USER = 'put__register_telegram_user'
     F_PUT__CREATE_FAMILY = 'put__create_family'
     F_PUT__CREATE_BANK_ACCOUNT = 'put__create_bank_account'
     F_PUT__CREATE_CREDIT_ACCOUNT = 'put__create_credit_account'
@@ -67,6 +68,32 @@ class Context(DataBase):
         return await self.call_function(
             self._fn(self.F_PUT__REGISTER_USER_CONTEXT),
             user_id,
+            base_currency_code,
+            username,
+            first_name,
+            last_name,
+        )
+
+    async def put__register_telegram_user(
+        self,
+        telegram_id: int,
+        base_currency_code: str,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+    ) -> dict:
+        """
+        Находит аккаунт за telegram-входом или заводит новый.
+        :param telegram_id: Идентификатор пользователя Telegram.
+        :param base_currency_code: Базовая валюта для нового аккаунта.
+        :param username: Username в Telegram.
+        :param first_name: Имя в Telegram.
+        :param last_name: Фамилия в Telegram.
+        :return: Стартовый контекст аккаунта.
+        """
+        return await self.call_function(
+            self._fn(self.F_PUT__REGISTER_TELEGRAM_USER),
+            telegram_id,
             base_currency_code,
             username,
             first_name,

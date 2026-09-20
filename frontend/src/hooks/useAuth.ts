@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getUserContext, register } from '../api';
+import { NoAccountError, getUserContext } from '../api';
 import { hasSession } from '../session';
 import { hasTelegramContext } from '../telegram';
 import type { UserContext } from '../types';
 
-const DEFAULT_BASE_CURRENCY = 'RUB';
 const MIN_SPLASH_MS = 2000;
 
 export function useAuth() {
@@ -12,40 +11,45 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [needsAccount, setNeedsAccount] = useState(false);
 
-  // Тот же самый загрузчик отдаётся наружу как refresh: после входа экран
-  // логина просто просит перечитать контекст.
+  // Тот же загрузчик отдаётся наружу как refresh: после входа или создания
+  // аккаунта экран авторизации просто просит перечитать контекст.
   const load = useCallback(() => {
-    // Сессия приоритетнее: пользователь, вошедший по паролю внутри Telegram,
-    // должен попадать в свой аккаунт, а не в привязанный к этому telegram id.
-    const request = hasSession()
-      ? getUserContext()
-      : hasTelegramContext()
-        ? register(DEFAULT_BASE_CURRENCY)
-        : null;
-
-    if (!request) {
+    if (!hasSession() && !hasTelegramContext()) {
       setNeedsLogin(true);
+      setNeedsAccount(false);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     setNeedsLogin(false);
+    setNeedsAccount(false);
     setError(null);
 
     const start = Date.now();
 
-    request
+    getUserContext()
       .then(setUser)
       .catch((e: Error) => {
+        // Вход валиден, но аккаунта за ним нет — это не ошибка, а развилка:
+        // завести новый аккаунт или войти в уже существующий. Раньше здесь
+        // молча вызывалась регистрация, из-за чего у пользователя с
+        // email-аккаунтом появлялся второй, пустой.
+        if (e instanceof NoAccountError) {
+          setNeedsAccount(true);
+          return;
+        }
+
         // Сессия могла протухнуть, пока приложение было закрыто: apiFetch уже
-        // удалил токен, и это не ошибка, а повод показать экран входа.
+        // удалил токен, и это повод показать экран входа, а не ошибку.
         if (!hasSession() && !hasTelegramContext()) {
           setNeedsLogin(true);
-        } else {
-          setError(e.message);
+          return;
         }
+
+        setError(e.message);
       })
       .finally(() => {
         const remaining = MIN_SPLASH_MS - (Date.now() - start);
@@ -55,5 +59,5 @@ export function useAuth() {
 
   useEffect(load, [load]);
 
-  return { user, loading, error, needsLogin, refresh: load };
+  return { user, loading, error, needsLogin, needsAccount, refresh: load };
 }

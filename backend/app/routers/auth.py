@@ -192,23 +192,21 @@ async def register(
     principal: AuthPrincipal = Depends(get_auth_principal),
 ) -> RegisterResponse:
     """
-    Регистрация из Telegram WebApp: аккаунт заводится под telegram id и сразу
-    получает telegram как способ входа.
+    Явное создание аккаунта из Telegram WebApp.
+
+    Идентификатор аккаунта больше не равен telegram id: новый аккаунт получает
+    свой id, а Telegram привязывается к нему как обычный способ входа. Вызов
+    идемпотентен — если аккаунт за этим Telegram уже есть, возвращается он.
     """
     if principal.telegram_id is None:
         raise HTTPException(status_code=400, detail='Регистрация доступна только из Telegram')
 
-    result = await context.put__register_user_context(
-        user_id=principal.telegram_id,
+    result = await context.put__register_telegram_user(
+        telegram_id=principal.telegram_id,
         base_currency_code=body.base_currency_code,
         username=principal.username,
         first_name=principal.first_name,
         last_name=principal.last_name,
-    )
-    await auth.put__auth_identity(
-        user_id=int(result['user_id']),
-        provider=PROVIDER_TELEGRAM,
-        provider_uid=str(principal.telegram_id),
     )
     return RegisterResponse(**result)
 

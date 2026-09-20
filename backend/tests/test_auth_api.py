@@ -28,6 +28,7 @@ from backend.app.main import app  # noqa: E402
 
 TG_USER_ID = 990000000002
 TG_OTHER_ID = 990000000003
+TG_FRESH_ID = 990000000004
 EMAIL = 'e2e@example.com'
 LOCK_EMAIL = 'e2e-lock@example.com'
 PASSWORD = 'correct horse battery'
@@ -75,7 +76,7 @@ def cleanup(client: TestClient) -> None:
     Удаляет аккаунты, созданные тестом, чтобы повторный прогон был чистым.
     :param client: HTTP-клиент приложения.
     """
-    for user_id in (TG_USER_ID, TG_OTHER_ID):
+    for user_id in (TG_USER_ID, TG_OTHER_ID, TG_FRESH_ID):
         delete_account(client, {'X-Telegram-Init-Data': telegram_init_data(user_id)})
 
     for email in (EMAIL, LOCK_EMAIL, 'tg@example.com'):
@@ -179,12 +180,24 @@ def main() -> None:
             headers={'Authorization': 'Bearer ' + second_token},
         ).status_code == 401, 'отозванная сессия не должна пускать'
 
-        # 8. Telegram-регистрация — отдельный аккаунт под своим id.
+        # 8. Telegram без аккаунта: контекст отдаёт 404, а не 401 — клиент по
+        #    этому отличает "нужно завести аккаунт" от "вход невалиден" и
+        #    показывает выбор вместо молчаливой регистрации.
         tg_headers = {'X-Telegram-Init-Data': telegram_init_data(TG_USER_ID)}
+        assert client.get('/api/v1/auth/methods', headers=tg_headers).status_code == 404
+
+        # Явное создание аккаунта. users.id больше не равен telegram id:
+        # Telegram — обычный способ входа, а не ключ аккаунта.
         response = client.post('/api/v1/auth/register', json={'base_currency_code': 'RUB'}, headers=tg_headers)
         assert response.status_code == 200, response.text
         tg_user_id = response.json()['user_id']
-        assert tg_user_id == TG_USER_ID
+        assert tg_user_id != TG_USER_ID, 'telegram id не должен становиться идентификатором аккаунта'
+        assert tg_user_id >= 9007199254740992, 'аккаунт получает id из последовательности'
+
+        # Повторный вызов не плодит аккаунты.
+        again = client.post('/api/v1/auth/register', json={'base_currency_code': 'RUB'}, headers=tg_headers)
+        assert again.json()['user_id'] == tg_user_id, 'регистрация должна быть идемпотентной'
+        assert again.json()['status'] == 'exists', again.text
 
         methods = client.get('/api/v1/auth/methods', headers=tg_headers).json()
         assert [method['provider'] for method in methods] == ['telegram'], methods
@@ -231,21 +244,49 @@ def main() -> None:
         ).json()
         assert {method['provider'] for method in methods} == {'telegram', 'password'}, methods
 
+        # 10a. Главный сценарий, который раньше ломался: пользователь с
+        #      email-аккаунтом открывает Mini App. Раньше фронт молча
+        #      регистрировал второй аккаунт и привязка становилась невозможна.
+        #      Теперь Telegram свободен, вход по паролю ведёт в свой аккаунт,
+        #      и этот Telegram к нему привязывается.
+        fresh_tg = telegram_init_data(TG_FRESH_ID)
+        assert client.get('/api/v1/auth/methods', headers={'X-Telegram-Init-Data': fresh_tg}).status_code == 404
+
+        login = client.post('/api/v1/auth/login', json={'email': EMAIL, 'password': PASSWORD})
+        assert login.status_code == 200, login.text
+        linked_headers = {'Authorization': 'Bearer ' + login.json()['token']}
+
+        response = client.post(
+            '/api/v1/auth/telegram/link',
+            headers={**linked_headers, 'X-Telegram-Init-Data': fresh_tg},
+        )
+        assert response.status_code == 200, response.text
+
+        # Теперь этот Telegram ведёт в email-аккаунт, а не заводит новый.
+        context = client.get('/api/v1/auth/context', headers={'X-Telegram-Init-Data': fresh_tg})
+        assert context.status_code == 200, context.text
+        assert context.json()['user_id'] == email_user_id, 'Telegram должен открывать тот же аккаунт'
+
         # 11. Выход убивает текущую сессию.
         assert client.post('/api/v1/auth/logout', headers=auth_headers).status_code == 200
         assert client.get('/api/v1/auth/methods', headers=auth_headers).status_code == 401
 
-        # 12. Неизвестный Telegram аутентифицирован, но аккаунта не имеет.
+        # 12. Неизвестный Telegram аутентифицирован, но аккаунта не имеет —
+        #     404, и это принципиально отличается от 401 ниже: подпись верна,
+        #     просто аккаунта ещё нет.
         response = client.get(
             '/api/v1/auth/methods',
             headers={'X-Telegram-Init-Data': telegram_init_data(990000000009)},
         )
-        assert response.status_code == 401, response.text
+        assert response.status_code == 404, response.text
 
-        # Подделанная подпись не проходит.
+        # Подделанная подпись не проходит — вот это именно 401.
+        # Портим хэш вставкой символа: замена последнего на '0' ничего не
+        # меняла бы в одном случае из шестнадцати, когда он и так '0'.
+        tampered = telegram_init_data(TG_USER_ID).replace('hash=', 'hash=0')
         assert client.get(
             '/api/v1/auth/methods',
-            headers={'X-Telegram-Init-Data': telegram_init_data(TG_USER_ID)[:-1] + '0'},
+            headers={'X-Telegram-Init-Data': tampered},
         ).status_code == 401
 
         cleanup(client)

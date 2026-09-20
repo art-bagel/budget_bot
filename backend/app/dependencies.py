@@ -221,7 +221,10 @@ async def get_current_user(
     user_id = await resolve_user_id(principal)
 
     if user_id is None:
-        raise HTTPException(status_code=401, detail='Аккаунт не найден, требуется регистрация')
+        # Не 401: аутентификация прошла, просто аккаунта за этим входом ещё
+        # нет. Клиенту нужно различать эти случаи — на 401 он сбрасывает
+        # сессию, а здесь надо предложить создать аккаунт или войти в свой.
+        raise HTTPException(status_code=404, detail='Аккаунт не найден, требуется регистрация')
 
     return CurrentUser(
         user_id=user_id,

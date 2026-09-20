@@ -23,7 +23,7 @@ export default function App() {
     dashboard: 0, exchange: 0, portfolio: 0, credits: 0, settings: 0,
   });
   const [familyBadge, setFamilyBadge] = useState(0);
-  const { user, loading, error, needsLogin, refresh } = useAuth();
+  const { user, loading, error, needsLogin, needsAccount, refresh } = useAuth();
   const { syncFromServer } = useTheme();
 
   const handleNavigate = (p: Page) => {
@@ -69,8 +69,13 @@ export default function App() {
     return <SplashScreen />;
   }
 
-  if (needsLogin) {
-    return <LoginScreen onAuthenticated={refresh} />;
+  if (needsLogin || needsAccount) {
+    return (
+      <LoginScreen
+        initialMode={needsAccount ? 'choice' : 'login'}
+        onAuthenticated={refresh}
+      />
+    );
   }
 
   if (error || !user) {
