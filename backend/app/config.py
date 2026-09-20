@@ -11,6 +11,8 @@ from storage.databases import ConnectData
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
+MIN_SIGNUP_INVITE_CODE_LENGTH = 16
+
 load_dotenv(BACKEND_ROOT / '.env')
 
 
@@ -82,6 +84,16 @@ def _validate_production_settings(current: Settings) -> None:
         raise RuntimeError(
             'APP_ENV=production, but required settings are missing: '
             + ', '.join(missing)
+        )
+
+    # Пустой код — это выключенная регистрация, и так и задумано. А вот
+    # короткий код хуже отсутствующего: он выглядит как защита, но
+    # подбирается, и тогда аккаунт в чужом финансовом API заводит любой.
+    if current.signup_invite_code is not None and len(current.signup_invite_code) < MIN_SIGNUP_INVITE_CODE_LENGTH:
+        raise RuntimeError(
+            'SIGNUP_INVITE_CODE is too short for production: '
+            f'minimum {MIN_SIGNUP_INVITE_CODE_LENGTH} characters, '
+            'or leave it empty to disable email signup entirely'
         )
 
 

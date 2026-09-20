@@ -62,11 +62,22 @@ docker exec budget_bot_db sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d
 docker exec budget_bot_db sh -lc 'export DB_DATABASE="$POSTGRES_DB"; bash /Scripts/run_func_scripts.sh'
 ```
 
-Новые переменные окружения:
+Новые переменные окружения (заведены в GitHub Secrets, CI подставляет их в
+`infra/.env` при деплое, как остальные):
 
 - `SESSION_TTL_SECONDS` — срок жизни сессии, по умолчанию 90 дней.
-- `SIGNUP_INVITE_CODE` — **обязателен**, иначе регистрация по email
-  полностью выключена (fail closed).
+- `SIGNUP_INVITE_CODE` — код приглашения. Пока не задан, регистрация по email
+  выключена полностью (намеренный fail closed).
+
+Обе переменные добавлены в трёх местах, и все три обязательны: блок
+`environment` в `infra/docker-compose.yml` (это явный allowlist — без записи
+там переменная в контейнер не попадёт вообще), строка сборки `infra/.env` в
+`.github/workflows/budget_bot_ci_cd.yml` и `infra/.env.example` для локальной
+разработки.
+
+В production API не стартует с `SIGNUP_INVITE_CODE` короче 16 символов:
+короткий код хуже отсутствующего, потому что выглядит как защита, но
+подбирается.
 
 ## Что найдено в процессе
 
@@ -136,7 +147,8 @@ docker exec budget_bot_db sh -lc 'export DB_DATABASE="$POSTGRES_DB"; bash /Scrip
    одноразовый, не истекает и не привязан к адресу. Для двух пользователей
    приемлемо; при появлении третьего нужны одноразовые приглашения. Пока
    `SIGNUP_INVITE_CODE` не задан, регистрация выключена целиком — это
-   намеренный fail closed.
+   намеренный fail closed, а слишком короткий код в production роняет API
+   на старте.
 
 2. **Пароль не восстанавливается.** Нет ни подтверждения email, ни сброса
    пароля. Забытый пароль сейчас лечится только правкой в базе. Подтверждение
