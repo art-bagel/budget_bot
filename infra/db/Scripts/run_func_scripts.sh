@@ -36,7 +36,7 @@ is_priority_file() {
 
 for file_name in "${PRIORITY_FILES[@]}"; do
     if [ -f "$DIRECTORY/$file_name" ]; then
-        psql -v ON_ERROR_STOP=1 -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
+        psql -v ON_ERROR_STOP=1 -q -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
     fi
 done
 
@@ -45,5 +45,5 @@ while IFS= read -r file_path; do
     if is_priority_file "$file_name"; then
         continue
     fi
-    psql -v ON_ERROR_STOP=1 -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
+    psql -v ON_ERROR_STOP=1 -q -U "$USERNAME" -d "$DATABASE" -f "$DIRECTORY/$file_name"
 done < <(find "$DIRECTORY" -maxdepth 1 -type f -name '*.sql' | sort)

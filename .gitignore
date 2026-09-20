@@ -204,3 +204,7 @@ node_modules/
 /ios/Budget.xcodeproj/
 /ios/Budget/Info.plist
 /ios/DerivedData/
+
+# Дампы, которые деплой снимает прямо перед накатом миграций.
+# Полная выгрузка финансовой базы — в репозиторий ей нельзя.
+/pre-migrate-dumps/

@@ -4,4 +4,10 @@ set -eu
 export DB_DATABASE="${POSTGRES_DB}"
 
 bash /Scripts/run_table_scripts.sh
-bash /Scripts/run_func_scripts.sh
+
+# run_migrations.sh сам пересоздаёт функции, поэтому run_func_scripts.sh
+# отдельно здесь не нужен. На пустой базе он заводит учёт миграций и
+# помечает все существующие файлы как применённые: tb/ содержит финальную
+# схему, и повторно прогонять по ней старые миграции нельзя — часть из них
+# рассчитана на промежуточное состояние и упадёт (проверено на 012).
+bash /Scripts/run_migrations.sh

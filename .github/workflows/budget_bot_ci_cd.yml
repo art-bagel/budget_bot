@@ -101,7 +101,40 @@ jobs:
             printf '%s\n' "APP_ENV=production" "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" "DB_DATABASE=${{ secrets.DB_DATABASE }}" "DB_SCHEMA=${{ secrets.DB_SCHEMA }}" "APP_HOST=0.0.0.0" "APP_PORT=8000" "FRONTEND_ORIGINS=${{ secrets.FRONTEND_ORIGINS }}" "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" "TELEGRAM_INIT_DATA_TTL_SECONDS=${{ secrets.TELEGRAM_INIT_DATA_TTL_SECONDS || '10800' }}" "CREDENTIALS_ENCRYPTION_KEY=${{ secrets.CREDENTIALS_ENCRYPTION_KEY }}" "SESSION_TTL_SECONDS=${{ secrets.SESSION_TTL_SECONDS || '7776000' }}" "SIGNUP_INVITE_CODE=${{ secrets.SIGNUP_INVITE_CODE }}" "DB_HOST=db" "DB_PORT=5432" "MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }}" "MINIO_BUCKET=${{ secrets.MINIO_BUCKET }}" "MINIO_PREFIX=${{ secrets.MINIO_PREFIX }}" "MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}" "MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}" "BACKUP_RETENTION=14" "LOCAL_S3_ENDPOINT=${{ secrets.LOCAL_S3_ENDPOINT }}" "LOCAL_S3_BUCKET=${{ secrets.LOCAL_S3_BUCKET }}" "LOCAL_S3_PREFIX=${{ secrets.LOCAL_S3_PREFIX || 'budget-bot' }}" "LOCAL_S3_ACCESS_KEY=${{ secrets.LOCAL_S3_ACCESS_KEY }}" "LOCAL_S3_SECRET_KEY=${{ secrets.LOCAL_S3_SECRET_KEY }}" "LOCAL_BACKUP_RETENTION=48" > infra/.env
             chmod 600 infra/.env
 
-            docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build --remove-orphans
+            COMPOSE="docker compose -f infra/docker-compose.yml --env-file infra/.env"
+
+            # Сначала только БД: миграции должны примениться до того, как новый
+            # API начнёт обслуживать запросы. Иначе между стартом контейнера и
+            # накатом схемы живёт окно, в котором свежий код ходит в старые
+            # функции.
+            $COMPOSE up -d --build db
+
+            echo "Ожидаю готовности БД..."
+            for _ in $(seq 1 60); do
+              if $COMPOSE exec -T db sh -lc 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+            $COMPOSE exec -T db sh -lc 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+            # Дамп прямо перед миграциями. Регулярные бэкапы почасовые, а
+            # неудачная миграция финансового реестра — это ровно тот случай,
+            # когда откатываться нужно на минуту назад, а не на час. Локальный
+            # файл, без зависимости от доступности MinIO.
+            mkdir -p "$DEPLOY_PATH/pre-migrate-dumps"
+            chmod 700 "$DEPLOY_PATH/pre-migrate-dumps"
+            DUMP_FILE="$DEPLOY_PATH/pre-migrate-dumps/$(date -u +%Y%m%dT%H%M%SZ).dump"
+            $COMPOSE exec -T db sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$DUMP_FILE"
+            chmod 600 "$DUMP_FILE"
+            echo "Дамп перед миграциями: $DUMP_FILE ($(du -h "$DUMP_FILE" | cut -f1))"
+            ls -1t "$DEPLOY_PATH/pre-migrate-dumps"/*.dump | tail -n +6 | xargs -r rm -f
+
+            # Накат недостающих миграций и пересоздание SQL-функций.
+            # Идемпотентно: если менять было нечего, шаг ничего не делает.
+            $COMPOSE exec -T db sh -lc 'export DB_DATABASE="$POSTGRES_DB"; bash /Scripts/run_migrations.sh'
+
+            $COMPOSE up -d --build --remove-orphans
             docker image prune -f
 
             chmod +x scripts/backup-to-minio.sh
