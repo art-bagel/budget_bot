@@ -13,23 +13,45 @@
 
 Нужен полный Xcode (Command Line Tools не хватит — нет iOS SDK и симулятора).
 
-1. Впишите адрес приложения в [`Budget/Config.swift`](Budget/Config.swift).
-   Только `https://` — ослаблять App Transport Security под `http` не нужно.
-2. Сгенерируйте проект:
+Адрес приложения задан в [`Budget/Config.swift`](Budget/Config.swift) —
+`https://budget.mrbagel.ru`. Только `https://`: ослаблять App Transport
+Security под `http` не нужно.
+
+Если `xcodebuild` ругается на Command Line Tools или на лицензию, это
+делается один раз и требует пароля:
+
+```
+sudo xcode-select -s /Applications/Xcode.app
+sudo xcodebuild -license
+```
+
+1. Сгенерируйте проект:
    ```
    cd ios && xcodegen generate
    ```
    `.xcodeproj` не хранится в git: `pbxproj` нечитаемо конфликтует при слиянии.
    После правки `project.yml` команду нужно повторить.
-3. Откройте `ios/Budget.xcodeproj`.
-4. Xcode → Settings → Accounts → добавьте свой Apple ID (личная команда,
+2. Откройте `ios/Budget.xcodeproj`.
+3. Xcode → Settings → Accounts → добавьте свой Apple ID (личная команда,
    без $99).
-5. Target `Budget` → Signing & Capabilities → Team = ваша личная команда.
+4. Target `Budget` → Signing & Capabilities → Team = ваша личная команда.
    Если бесплатная учётка ругается на занятый bundle id — поменяйте
    `PRODUCT_BUNDLE_IDENTIFIER` в `project.yml` и перегенерируйте.
-6. Подключите iPhone кабелем, выберите его в списке устройств, Run.
-7. На телефоне: Настройки → Основные → VPN и управление устройством →
+5. Подключите iPhone кабелем, выберите его в списке устройств, Run.
+6. На телефоне: Настройки → Основные → VPN и управление устройством →
    доверять разработчику.
+
+## Проверка без телефона
+
+Симулятору подпись не нужна — сборка и запуск идут без Apple ID:
+
+```
+xcodebuild -project Budget.xcodeproj -scheme Budget -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -derivedDataPath DerivedData build
+xcrun simctl install booted DerivedData/Build/Products/Debug-iphonesimulator/Budget.app
+xcrun simctl launch booted ru.mrbagel.budget
+```
 
 ## Ограничения бесплатной подписи
 

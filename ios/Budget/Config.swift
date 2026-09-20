@@ -6,7 +6,7 @@ import Foundation
 /// обязана быть https: App Transport Security блокирует http, и ослаблять
 /// её ради удобства не нужно — прод и так под TLS.
 enum Config {
-    static let appURLString = "https://REPLACE-ME"
+    static let appURLString = "https://budget.mrbagel.ru"
 
     /// nil, пока адрес не подставлен — тогда приложение покажет понятный
     /// экран вместо падения на старте.
