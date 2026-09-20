@@ -64,55 +64,14 @@ declare global {
   }
 }
 
-const EXPLICIT_DEV_TELEGRAM_USER_ID = import.meta.env.VITE_DEV_TELEGRAM_USER_ID?.trim() || '';
-
-const DEV_NO_TELEGRAM_KEY = 'budget_dev_no_telegram';
-
 /**
- * Локально Telegram-контекст подставляется автоматически, и из-за этого
- * невозможно посмотреть, как приложение ведёт себя без него: вход по паролю,
- * экран логина, системный жест "назад".
+ * Единственный способ подставить Telegram-пользователя локально.
  *
- * `?telegram=off` выключает подстановку и запоминает выбор, `?telegram=on`
- * возвращает. Работает только в dev-сборке — в прод не попадает.
+ * Раньше id ещё и угадывался по hostname, из-за чего прод-сборка, открытая
+ * на localhost, молча входила в захардкоженный аккаунт, а константа уезжала
+ * в бандл. Вход по паролю доступен всем, так что подмена больше не нужна.
  */
-function isDevTelegramDisabled(): boolean {
-  if (!import.meta.env.DEV) {
-    return false;
-  }
-
-  const requested = new URLSearchParams(window.location.search).get('telegram');
-
-  try {
-    if (requested === 'off') {
-      localStorage.setItem(DEV_NO_TELEGRAM_KEY, '1');
-    } else if (requested === 'on') {
-      localStorage.removeItem(DEV_NO_TELEGRAM_KEY);
-    }
-
-    return localStorage.getItem(DEV_NO_TELEGRAM_KEY) === '1';
-  } catch {
-    return requested === 'off';
-  }
-}
-
-function getImplicitDevTelegramUserId(): string {
-  if (isDevTelegramDisabled()) {
-    return '';
-  }
-
-  if (import.meta.env.DEV) {
-    return '478559604';
-  }
-
-  const hostname = window.location.hostname;
-
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
-    return '478559604';
-  }
-
-  return '';
-}
+const EXPLICIT_DEV_TELEGRAM_USER_ID = import.meta.env.VITE_DEV_TELEGRAM_USER_ID?.trim() || '';
 
 export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp || null;
@@ -191,7 +150,7 @@ export function getTelegramInitData(): string | null {
 }
 
 export function getTelegramUserId(): string | null {
-  const devTelegramUserId = EXPLICIT_DEV_TELEGRAM_USER_ID || getImplicitDevTelegramUserId();
+  const devTelegramUserId = EXPLICIT_DEV_TELEGRAM_USER_ID;
   const webAppUserId = getTelegramWebApp()?.initDataUnsafe?.user?.id;
 
   if (typeof webAppUserId === 'number') {
