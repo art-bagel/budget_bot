@@ -199,3 +199,8 @@ node_modules/
 # Симлинки на общий кэш зависимостей: правило node_modules/ выше ловит
 # каталоги, но не симлинки, поэтому нужен вариант без косой черты.
 /crypto-task/**/node_modules
+
+# iOS: проект генерируется из ios/project.yml командой xcodegen generate
+/ios/Budget.xcodeproj/
+/ios/Budget/Info.plist
+/ios/DerivedData/

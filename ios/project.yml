@@ -1,0 +1,36 @@
+# Проект для Xcode генерируется из этого файла: xcodegen generate (в каталоге ios/).
+# Сам .xcodeproj не коммитится — pbxproj нечитаемо конфликтует при слиянии.
+name: Budget
+
+options:
+  bundleIdPrefix: ru.mrbagel
+  # 16.4 — минимум ради webView.isInspectable для отладки через Safari.
+  deploymentTarget:
+    iOS: "16.4"
+  createIntermediateGroups: true
+
+targets:
+  Budget:
+    type: application
+    platform: iOS
+    sources:
+      - path: Budget
+    info:
+      path: Budget/Info.plist
+      properties:
+        CFBundleDisplayName: Бюджет
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.mrbagel.budget
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        # Подпись выставляется в Xcode вручную: бесплатная учётка — личная,
+        # её Team ID не место в репозитории.
+        CODE_SIGN_STYLE: Automatic
