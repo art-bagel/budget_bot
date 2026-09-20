@@ -31,6 +31,12 @@ sudo xcodebuild -license
    ```
    `.xcodeproj` не хранится в git: `pbxproj` нечитаемо конфликтует при слиянии.
    После правки `project.yml` команду нужно повторить.
+
+   Побочный эффект: выбранная в Xcode Team записывается в сгенерированный
+   проект, то есть `xcodegen generate` её стирает и выбирать придётся заново.
+   Если надоест — впишите `DEVELOPMENT_TEAM: <ID>` в `settings.base`
+   в `project.yml`. Team ID не секрет (он есть в каждом собранном приложении),
+   но привязан к личному Apple ID, поэтому по умолчанию его здесь нет.
 2. Откройте `ios/Budget.xcodeproj`.
 3. Xcode → Settings → Accounts → добавьте свой Apple ID (личная команда,
    без $99).
