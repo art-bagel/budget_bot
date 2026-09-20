@@ -25,9 +25,17 @@ async def lifespan(application: FastAPI):
         await scheduler_task
     except asyncio.CancelledError:
         pass
-    await app_storage.context.close()
-    await app_storage.ledger.close()
-    await app_storage.reports.close()
+    # Закрываются все пять пулов, а не три: auth и tinkoff заводят свои
+    # соединения наравне с остальными, и до этого утекали при каждом
+    # завершении процесса.
+    for storage in (
+        app_storage.auth,
+        app_storage.context,
+        app_storage.ledger,
+        app_storage.reports,
+        app_storage.tinkoff,
+    ):
+        await storage.close()
 
 
 app = FastAPI(

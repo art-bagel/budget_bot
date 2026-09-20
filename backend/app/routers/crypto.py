@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional
 
@@ -8,6 +9,8 @@ from pydantic import BaseModel, Field, field_validator
 from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api/v1/crypto', tags=['crypto'])
 
@@ -435,9 +438,15 @@ async def get_crypto_prices(
                 raw_price = (payload.get(coingecko_id) or {}).get(normalized_vs)
                 if isinstance(raw_price, (int, float)) and raw_price > 0:
                     _PRICE_CACHE[(coingecko_id, normalized_vs)] = (now, float(raw_price))
-        except httpx.HTTPError:
-            # Keep whatever is in cache; below we'll surface it as stale.
-            pass
+        except httpx.HTTPError as exc:
+            # Цены не пропадают — ниже отдадим из кэша с пометкой stale. Но
+            # молчать нельзя: публичный CoinGecko режет примерно на 5-15
+            # запросов в минуту, и 429 выглядел бы как «цены просто старые»
+            # без единой строки в логах.
+            logger.warning(
+                'CoinGecko request failed for %d id(s) (%s): %s',
+                len(stale_ids), normalized_vs, exc,
+            )
 
     result: list[CryptoPriceItem] = []
     for coingecko_id, mapped_assets in id_to_assets.items():

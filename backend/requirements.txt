@@ -1,8 +1,40 @@
-fastapi
-asyncpg
-python-dotenv
-uvicorn
-httpx
-# cryptography >= 45 SIGILL-ится на linux/arm64 в Docker Desktop (Illegal instruction
-# при импорте cryptography.hazmat.bindings._rust); держим последнюю рабочую версию.
+# Версии зафиксированы целиком, включая транзитивные.
+#
+# Раньше здесь были голые имена, и при каждом `docker compose up --build` в
+# прод мог приехать мажор любой зависимости. Пиновка только прямых пакетов от
+# этого не спасает: fastapi допускает диапазон pydantic и starlette, а ломают
+# обычно как раз они.
+#
+# Набор разрешён под Python 3.10 — ту же версию ставит infra/api.Dockerfile и
+# использует CI. Как обновлять:
+#   pip install --dry-run --report r.json --python-version 3.10
+#       --only-binary=:all: --target /tmp/x fastapi asyncpg python-dotenv uvicorn httpx
+#   затем перенести версии сюда и дождаться зелёного CI.
+
+# ── Прямые зависимости ──────────────────────────────────────────────
+fastapi==0.141.1
+asyncpg==0.31.0
+python-dotenv==1.2.3
+uvicorn==0.53.0
+httpx==0.28.1
+# cryptography >= 45 SIGILL-ится на linux/arm64 в Docker Desktop (Illegal
+# instruction при импорте cryptography.hazmat.bindings._rust); держим
+# последнюю рабочую версию.
 cryptography==44.0.2
+
+# ── Транзитивные ────────────────────────────────────────────────────
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+cffi==2.1.1
+click==8.5.0
+h11==0.16.0
+httpcore==1.0.9
+idna==3.20
+pycparser==3.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+starlette==1.6.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
