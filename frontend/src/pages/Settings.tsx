@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import SecuritySection from '../components/SecuritySection';
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { useHints } from '../hooks/useHints';
@@ -105,9 +106,11 @@ function getTelegramIdentity(): { name: string; handle: string | null; initial: 
 export default function Settings({
   user,
   onFamilyBadgeUpdate,
+  onSignedOut,
 }: {
   user: UserContext;
   onFamilyBadgeUpdate: (count: number) => void;
+  onSignedOut: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const { theme, setTheme } = useTheme();
@@ -547,6 +550,8 @@ export default function Settings({
               </li>
             </ul>
           </section>
+
+          <SecuritySection onSignedOut={onSignedOut} />
 
           <h2 className="danger-title">
             <span className="danger-title__bullet" />

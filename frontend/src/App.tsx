@@ -12,7 +12,7 @@ import Settings from './pages/Settings';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
 import type { Theme } from './hooks/useTheme';
-import { bindTelegramBackButton } from './telegram';
+import { bindTelegramBackButton, getTelegramInitData } from './telegram';
 
 const PAGE_IDS: Page[] = ['dashboard', 'exchange', 'portfolio', 'credits', 'settings'];
 
@@ -37,6 +37,26 @@ export default function App() {
   };
 
   useEffect(() => bindTelegramBackButton(page !== 'dashboard', () => handleNavigate('dashboard')), [page]);
+
+  // Вне Telegram кнопки "назад" нет, а её роль играет системный жест. Без
+  // записи в history свайп назад уводил бы из приложения целиком — на
+  // домашнем экране и в нативной обёртке это выглядит как вылет.
+  useEffect(() => {
+    if (getTelegramInitData() || page === 'dashboard') {
+      return;
+    }
+
+    // Одна запись на весь заход вглубь: иначе каждая вкладка добавляла бы
+    // свою и до выхода пришлось бы жать "назад" столько же раз.
+    if (!(window.history.state as { budgetDeep?: boolean } | null)?.budgetDeep) {
+      window.history.pushState({ budgetDeep: true }, '');
+    }
+
+    const handlePopState = () => setPage('dashboard');
+    window.addEventListener('popstate', handlePopState);
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [page]);
 
   useEffect(() => {
     if (user) {
@@ -71,7 +91,7 @@ export default function App() {
             {id === 'exchange' && <Exchange user={user} />}
             {id === 'portfolio' && <Portfolio user={user} />}
             {id === 'credits' && <Credits user={user} />}
-            {id === 'settings' && <Settings user={user} onFamilyBadgeUpdate={setFamilyBadge} />}
+            {id === 'settings' && <Settings user={user} onFamilyBadgeUpdate={setFamilyBadge} onSignedOut={refresh} />}
           </ErrorBoundary>
         </div>
       ) : null)}
