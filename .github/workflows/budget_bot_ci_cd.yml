@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      # iOS-клиент не деплоится этим пайплайном — он собирается локально в Xcode.
+      - 'ios/**'
   workflow_dispatch:
 
 concurrency:
