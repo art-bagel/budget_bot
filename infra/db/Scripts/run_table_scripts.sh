@@ -45,7 +45,6 @@ FILES=(
     "crypto_protocol_positions.sql"
     "credit_payment_events.sql"
     "external_connections.sql"
-    "tinkoff_api_debug.sql"
 )
 
 # Порядок здесь значим — таблицы ссылаются друг на друга внешними ключами,
