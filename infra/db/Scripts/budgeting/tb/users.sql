@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS budgeting.users (
     first_name varchar(100),
     last_name varchar(100),
     hints_enabled boolean NOT NULL DEFAULT true,
+    -- Перенесено из миграции 002: в tb/ колонку забыли, и свежая
+    -- установка падала на get__user_context.
+    theme varchar(10) NOT NULL DEFAULT 'system'
+        CHECK (theme IN ('light', 'dark', 'system')),
     created_at timestamptz NOT NULL DEFAULT current_timestamp
 );
 

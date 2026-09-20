@@ -21,3 +21,12 @@ CREATE INDEX IF NOT EXISTS idx_portfolio_events_position_created
 CREATE INDEX IF NOT EXISTS idx_portfolio_events_linked_operation
     ON budgeting.portfolio_events (linked_operation_id)
     WHERE linked_operation_id IS NOT NULL;
+
+-- Колонки импорта из внешних источников (перенесено из миграции 018).
+ALTER TABLE budgeting.portfolio_events
+    ADD COLUMN IF NOT EXISTS external_id   text,
+    ADD COLUMN IF NOT EXISTS import_source varchar(30);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_events_external
+    ON budgeting.portfolio_events (import_source, external_id)
+    WHERE external_id IS NOT NULL;

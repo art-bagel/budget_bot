@@ -47,3 +47,14 @@ CREATE INDEX IF NOT EXISTS idx_portfolio_positions_family_status_created
 
 CREATE INDEX IF NOT EXISTS idx_portfolio_positions_account_status
     ON budgeting.portfolio_positions (investment_account_id, status, opened_at DESC, id DESC);
+
+-- Перенесено из миграции 029: крипто-позиции одного актива на счёте
+-- схлопываются в одну, и повторное открытие второй запрещено на уровне БД.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_portfolio_open_crypto_asset_per_account
+    ON budgeting.portfolio_positions (
+        investment_account_id,
+        ((metadata ->> 'crypto_asset_id')::bigint)
+    )
+    WHERE asset_type_code = 'crypto'
+      AND status = 'open'
+      AND metadata ->> 'crypto_asset_id' ~ '^[0-9]+$';

@@ -13,3 +13,13 @@ CREATE INDEX IF NOT EXISTS idx_bank_entries_operation_id
 
 CREATE INDEX IF NOT EXISTS idx_bank_entries_account_currency
     ON budgeting.bank_entries (bank_account_id, currency_code);
+
+-- Колонки импорта из внешних источников (перенесено из миграции 018):
+-- по ним брокерская синхронизация узнаёт уже загруженные проводки.
+ALTER TABLE budgeting.bank_entries
+    ADD COLUMN IF NOT EXISTS external_id   text,
+    ADD COLUMN IF NOT EXISTS import_source varchar(30);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bank_entries_external
+    ON budgeting.bank_entries (import_source, external_id)
+    WHERE external_id IS NOT NULL;

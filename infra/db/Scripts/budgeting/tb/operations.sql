@@ -27,7 +27,13 @@ ALTER TABLE budgeting.operations
 
 ALTER TABLE budgeting.operations
     ADD CONSTRAINT chk_operations_type
-    CHECK (type IN ('income', 'allocate', 'group_allocate', 'exchange', 'expense', 'account_transfer', 'investment_trade', 'investment_income', 'investment_adjustment', 'reversal', 'credit_taken'));
+    CHECK (type IN (
+        'income', 'allocate', 'group_allocate', 'exchange', 'expense',
+        'account_transfer', 'investment_trade', 'investment_income',
+        'investment_adjustment', 'reversal', 'credit_taken',
+        -- broker_input / broker_output перенесены из миграций 018 и 019.
+        'broker_input', 'broker_output'
+    ));
 
 CREATE INDEX IF NOT EXISTS idx_operations_actor_created_at_id
     ON budgeting.operations (actor_user_id, operated_on DESC, created_at DESC, id DESC);

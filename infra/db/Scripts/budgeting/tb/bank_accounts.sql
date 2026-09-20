@@ -80,3 +80,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_bank_accounts_user_primary
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bank_accounts_family_primary
     ON budgeting.bank_accounts (owner_family_id)
     WHERE owner_type = 'family' AND is_primary = true;
+
+-- Перенесено из миграции 026.
+ALTER TABLE budgeting.bank_accounts
+    ADD COLUMN IF NOT EXISTS badge_color varchar(8) DEFAULT NULL;
