@@ -183,3 +183,19 @@ node_modules/
 /skrin_shot/
 *.xlsx
 /infra/db/.env.prod
+
+# Локальные данные крипто-разбора — выгрузки кошельков, архивы, результаты.
+# В git их нет ни в одной ветке, восстановить из репозитория нельзя.
+# Правила дублируют crypto-task/.gitignore: сам он лежит в ветке crypto,
+# поэтому на main его нет и эти каталоги оставались беззащитны перед
+# git clean. Каталоги перечислены поимённо, а не /crypto-task/ целиком,
+# чтобы в ветке crypto не скрывать новые файлы разбора.
+/crypto-task/local-data/
+/crypto-task/archive/
+/crypto-task/results/
+/crypto-task/outputs/
+/crypto-task/ton-wallet-report/
+/crypto-task/crypto-reconciliation/baseline-2026-09-12/
+# Симлинки на общий кэш зависимостей: правило node_modules/ выше ловит
+# каталоги, но не симлинки, поэтому нужен вариант без косой черты.
+/crypto-task/**/node_modules
