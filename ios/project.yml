@@ -31,6 +31,9 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: NO
-        # Подпись выставляется в Xcode вручную: бесплатная учётка — личная,
-        # её Team ID не место в репозитории.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
+        # Личная команда бесплатной учётки. Не секрет — этот идентификатор
+        # есть в каждом собранном приложении, — но привязан к Apple ID.
+        # Записан здесь, чтобы xcodegen generate не стирал подпись каждый раз.
+        DEVELOPMENT_TEAM: 38WCY33GFF

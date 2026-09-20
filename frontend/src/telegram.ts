@@ -73,6 +73,39 @@ declare global {
  */
 const EXPLICIT_DEV_TELEGRAM_USER_ID = import.meta.env.VITE_DEV_TELEGRAM_USER_ID?.trim() || '';
 
+/**
+ * Telegram-SDK грузится только тогда, когда мы действительно внутри Telegram.
+ *
+ * Раньше скрипт стоял в index.html безусловно, и нативная оболочка на старте
+ * ждала ответа от telegram.org — то есть ровно от домена, из-за блокировок
+ * которого приложение и появилось.
+ */
+const TELEGRAM_SDK_URL = 'https://telegram.org/js/telegram-web-app.js';
+
+function hasTelegramHost(): boolean {
+  // Открывая Mini App, Telegram дописывает свои параметры в hash;
+  // нативные клиенты дополнительно кладут в окно свой мост,
+  // а веб-версия открывает приложение во фрейме.
+  return window.location.hash.includes('tgWebApp')
+    || 'TelegramWebviewProxy' in window
+    || window.parent !== window;
+}
+
+export function loadTelegramWebApp(): Promise<void> {
+  if (!hasTelegramHost()) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = TELEGRAM_SDK_URL;
+    // Не достучались — работаем как обычный сайт, вход по паролю никуда не делся.
+    script.onload = () => resolve();
+    script.onerror = () => resolve();
+    document.head.appendChild(script);
+  });
+}
+
 export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp || null;
 }
