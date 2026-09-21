@@ -56,7 +56,7 @@ class CryptoPriceItem(BaseModel):
     stale_age_seconds: Optional[int] = None
 
 
-class UpsertCryptoAssetRequest(BaseModel):
+class EnsureCryptoAssetRequest(BaseModel):
     symbol: str
     name: Optional[str] = None
     network_code: str = 'manual'
@@ -471,11 +471,20 @@ async def get_crypto_prices(
 
 
 @router.post('/assets', response_model=CryptoAssetItem)
-async def upsert_crypto_asset(
-    body: UpsertCryptoAssetRequest,
+async def ensure_crypto_asset(
+    body: EnsureCryptoAssetRequest,
     _user: CurrentUser = Depends(get_current_user),
 ) -> CryptoAssetItem:
-    result = await ledger.put__upsert_crypto_asset(
+    """
+    Заводит актив в справочнике, если его там ещё нет.
+
+    Существующий актив не переписывается. crypto_assets общая на всех
+    пользователей, а эндпоинт доступен любому аутентифицированному: раньше
+    достаточно было отправить symbol=BTC с metadata {"coingecko_id": ...},
+    чтобы подменить источник цены биткоина сразу всем. Ошибки при этом не
+    возникало — просто у всех портфелей менялась оценка.
+    """
+    result = await ledger.put__ensure_crypto_asset(
         symbol=body.symbol,
         name=body.name,
         network_code=body.network_code,

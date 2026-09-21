@@ -1,3 +1,25 @@
+-- Description:
+--   Заводит или ОБНОВЛЯЕТ крипто-актив в общем справочнике.
+--
+--   ВНИМАНИЕ: только для доверенного вызова напрямую из базы — скрипты
+--   ручного импорта в budgeting/manual/. Из API её вызывать нельзя.
+--
+--   crypto_assets общая на всех пользователей, а ветка DO UPDATE переписывает
+--   name, decimals и мержит metadata, включая coingecko_id — то есть источник
+--   цены. Когда эта функция стояла за публичным POST /api/v1/crypto/assets,
+--   любой аутентифицированный пользователь мог отправить symbol=BTC с чужим
+--   coingecko_id и поменять оценку биткоина у всех сразу, не вызвав ни одной
+--   ошибки. Публичный путь теперь ведёт в put__ensure_crypto_asset, который
+--   существующую строку не трогает.
+-- Parameters:
+--   _symbol text - Тикер актива.
+--   _name text - Человекочитаемое имя.
+--   _network_code text - Сеть, по умолчанию 'manual'.
+--   _contract_address text - Адрес контракта.
+--   _decimals smallint - Знаков после запятой, 0..30.
+--   _metadata jsonb - Мержится поверх существующей metadata.
+-- Returns:
+--   jsonb - Запись актива после вставки или обновления.
 DROP FUNCTION IF EXISTS budgeting.put__upsert_crypto_asset;
 CREATE FUNCTION budgeting.put__upsert_crypto_asset(
     _symbol text,

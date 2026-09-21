@@ -14,7 +14,7 @@ class Ledger(DataBase):
     F_PUT__ALLOCATE_GROUP_BUDGET = 'put__allocate_group_budget'
     F_PUT__EXCHANGE_CURRENCY = 'put__exchange_currency'
     F_PUT__RECORD_EXPENSE = 'put__record_expense'
-    F_PUT__UPSERT_CRYPTO_ASSET = 'put__upsert_crypto_asset'
+    F_PUT__ENSURE_CRYPTO_ASSET = 'put__ensure_crypto_asset'
     F_PUT__BUY_CRYPTO_ASSET = 'put__buy_crypto_asset'
     F_PUT__SELL_CRYPTO_ASSET = 'put__sell_crypto_asset'
     F_PUT__RECORD_CRYPTO_EXPENSE = 'put__record_crypto_expense'
@@ -240,7 +240,7 @@ class Ledger(DataBase):
             operated_at,
         )
 
-    async def put__upsert_crypto_asset(
+    async def put__ensure_crypto_asset(
         self,
         symbol: str,
         name: Optional[str] = None,
@@ -249,8 +249,16 @@ class Ledger(DataBase):
         decimals: int = 8,
         metadata: Optional[dict] = None,
     ) -> dict:
+        """
+        Заводит актив в общем справочнике, если его там нет.
+
+        Существующую запись не меняет: справочник общий на всех, и право
+        переписать чужую строку через публичный API недопустимо. Обновление
+        осталось у put__upsert_crypto_asset для скриптов ручного импорта.
+        :return: Запись актива — созданная либо уже существовавшая.
+        """
         return await self.call_function(
-            self._fn(self.F_PUT__UPSERT_CRYPTO_ASSET),
+            self._fn(self.F_PUT__ENSURE_CRYPTO_ASSET),
             symbol,
             name,
             network_code,

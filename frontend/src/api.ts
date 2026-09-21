@@ -69,7 +69,6 @@ import type {
   CryptoLivePrice,
   CryptoAccountAssetSummary,
   CryptoAssetDetail,
-  UpsertCryptoAssetRequest,
   CryptoOperationResponse,
   TransferCryptoToInvestmentRequest,
   TransferCryptoFromInvestmentRequest,
@@ -462,13 +461,6 @@ export async function fetchCryptoLivePrices(
     vs_currency: vsCurrency,
   });
   return apiFetch<CryptoLivePrice[]>(`/crypto/prices?${query.toString()}`);
-}
-
-export async function upsertCryptoAsset(data: UpsertCryptoAssetRequest): Promise<CryptoAsset> {
-  return apiFetch<CryptoAsset>('/crypto/assets', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
 }
 
 export async function transferCryptoToInvestment(

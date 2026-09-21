@@ -222,15 +222,6 @@ export interface CryptoAssetDetail extends CryptoAccountAssetSummary {
   entries: CryptoAssetEntry[];
 }
 
-export interface UpsertCryptoAssetRequest {
-  symbol: string;
-  name?: string;
-  network_code?: string;
-  contract_address?: string;
-  decimals?: number;
-  metadata?: Record<string, unknown>;
-}
-
 export interface CryptoOperationResponse {
   operation_id: number;
   position_id?: number | null;
