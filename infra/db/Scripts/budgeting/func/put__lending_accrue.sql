@@ -31,8 +31,7 @@ BEGIN
         OR NULLIF(btrim(_external_id),'') IS NULL OR _operated_at IS NULL THEN
         RAISE EXCEPTION 'Accrual requires a positive increment, existing collateral, date and source';
     END IF;
-    IF (_interest_qty>0 AND _interest_value_in_base IS NULL)
-        OR (_interest_qty=0 AND COALESCE(_interest_value_in_base,0)<>0)
+    IF (_interest_qty=0 AND COALESCE(_interest_value_in_base,0)<>0)
         OR (_interest_value_in_base IS NOT NULL AND (_interest_value_in_base<0
             OR _interest_value_in_base::text IN ('NaN','Infinity','-Infinity')
             OR _interest_value_in_base<>round(_interest_value_in_base,2))) THEN
@@ -67,21 +66,6 @@ BEGIN
     IF EXISTS(SELECT 1 FROM crypto_liability_events WHERE protocol_position_id=_position_id
         AND external_id=_interest_external) THEN
         RAISE EXCEPTION 'Accrual interest source is already used outside this event';
-    END IF;
-    IF _interest_qty>0 THEN
-        FOREACH _n IN ARRAY ARRAY[
-            (_p.metadata->>'debt_cost_basis_in_base')::numeric,
-            COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0),
-            COALESCE((_p.metadata->>'debt_interest_basis_in_base')::numeric,0)] LOOP
-            IF _n IS NULL OR _n<0 OR _n::text IN ('NaN','Infinity','-Infinity') THEN
-                RAISE EXCEPTION 'Invalid historical debt state';
-            END IF;
-        END LOOP;
-        IF COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0)>_debt_before
-            OR COALESCE((_p.metadata->>'debt_interest_basis_in_base')::numeric,0)>
-                (_p.metadata->>'debt_cost_basis_in_base')::numeric THEN
-            RAISE EXCEPTION 'Invalid historical interest state';
-        END IF;
     END IF;
     IF _interest_qty>0 THEN
         PERFORM budgeting.put__lending_accrue_interest(_user_id,_position_id,

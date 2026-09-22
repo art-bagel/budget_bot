@@ -32,12 +32,14 @@ files = [DB / 'tb' / (n + '.sql') for n in
          ['crypto_assets', 'portfolio_positions', 'portfolio_events', 'crypto_protocol_positions', 'crypto_liability_events', 'crypto_protocol_accrual_events']]
 files += [DB / 'func' / (n + '.sql') for n in [
     'get__crypto_position_entry_summary', 'get__crypto_position_known_entry_summary',
+    'get__crypto_position_movable_entry_summary', 'check__crypto_lending_state',
     'get__crypto_account_assets', 'get__crypto_asset_detail', 'put__crypto_pay_fee', 'get__crypto_protocol_positions',
     'put__create_crypto_protocol_position', 'put__lending_take_more_debt',
     'put__lending_repay_debt', 'set__close_crypto_protocol_position',
     'put__record_portfolio_income', 'put__swap_crypto_investment_asset',
     'set__update_crypto_protocol_position', 'put__lending_accrue_interest', 'put__lending_liquidate',
-    'put__lending_accrue', 'put__transfer_crypto_between_investment_accounts']]
+    'put__lending_accrue', 'put__transfer_crypto_between_investment_accounts',
+    'put__top_up_crypto_protocol_position', 'put__partial_close_crypto_protocol_position']]
 for p in files:
     sql(p.read_text())
 
@@ -115,7 +117,7 @@ seed(); protocol=deposit()
 sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},1,10000,_borrowed_crypto_asset_id=>4)")
 eth = int(sql("SELECT id FROM budgeting.portfolio_positions WHERE metadata->>'crypto_asset_id'='4' AND status='open'"))
 record('new_asset_borrow_has_acquisition_cost',state(eth)['remaining_cost_basis'],10000)
-sql(f"SELECT budgeting.put__swap_crypto_investment_asset(1,{eth},1,2,120,_value_in_base=>12000)")
+sql(f"SELECT budgeting.put__swap_crypto_investment_asset(1,{eth},1,2,120,_value_in_base=>12000,_operated_at=>'2025-01-01',_valuation_source=>'synthetic trade')")
 record('borrowed_asset_swap_carries_trade_value',state(2)['remaining_cost_basis'],22000)
 record('borrowed_asset_swap_realizes_gain',float(sql("SELECT (metadata->>'realized_in_base')::numeric FROM budgeting.portfolio_events WHERE event_type='swap_out' ORDER BY id DESC LIMIT 1")),2000)
 try:
@@ -137,12 +139,9 @@ record('initial_borrow_round_trip_cost',state(2)['remaining_cost_basis'],10000)
 record('initial_borrow_journal_balances',json.loads(sql("SELECT json_build_array(sum(quantity),sum(debt_basis_change_in_base),count(*)) FROM budgeting.crypto_liability_events")),[0,0,2])
 
 seed(); protocol=deposit()
-try:
- sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,_borrowed_crypto_asset_id=>2)")
- rejected=False
-except RuntimeError:
- rejected=True
-record('unknown_loan_valuation_rejected_atomically',[rejected,state(2)['quantity_now']],[True,100])
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,_borrowed_crypto_asset_id=>2)")
+record('unknown_loan_keeps_quantity_and_unknown_basis',[state(2)['quantity_now'],state(2)['remaining_cost_basis']],[200,None])
+seed(); protocol=deposit()
 sql(f"UPDATE budgeting.crypto_protocol_positions SET metadata=metadata || '{{\"borrowed_quantity\":100,\"borrowed_crypto_asset_id\":2}}'::jsonb WHERE id={protocol}")
 try:
  sql(f"SELECT budgeting.put__lending_repay_debt(1,{protocol},2,50)")
@@ -213,12 +212,9 @@ record('unknown_summary_quality',state(2)['basis_quality'],'unknown')
 unknown = json.loads(sql('SELECT budgeting.get__crypto_account_assets(1,1)'))
 u=next(x for x in unknown if x['position_id']==2)
 record('unknown_read_API_preserves_null',[u['remaining_cost_basis'],u['avg_cost_per_unit'],u['realized_pnl_lifetime_in_base']],[None,None,None])
-try:
- sql("SELECT budgeting.put__swap_crypto_investment_asset(1,2,10,1,1,_value_in_base=>1000)")
- rejected=False
-except RuntimeError:
- rejected=True
-record('unknown_swap_blocked_without_mutation',[rejected,state(2)['quantity_now']],[True,100])
+sql("SELECT budgeting.put__swap_crypto_investment_asset(1,2,10,1,1,_value_in_base=>1000,_operated_at=>'2025-01-01',_valuation_source=>'synthetic trade')")
+record('unknown_source_swap_known_trade_prices_destination',[state(2)['quantity_now'],state(1)['remaining_cost_basis']],[90,21000])
+seed()
 sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":0}' WHERE position_id=2")
 record('explicit_zero_is_not_unknown',[state(2)['remaining_cost_basis'],state(2)['basis_quality']],[0,'confirmed_zero'])
 sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":1000,\"basis_quality\":\"estimated\"}' WHERE position_id=2")
@@ -283,7 +279,6 @@ record('accrual_interest_once',json.loads(sql("SELECT jsonb_build_array(count(*)
 for label,statement in [
     ('conflict',accrue.replace('10,5,500','11,5,500')),
     ('wrong_opening',accrue.replace("'yield-1'","'wrong'")),
-    ('missing_interest_value',accrue.replace('10,5,500','10,5,NULL').replace("'yield-1'","'missing'")),
     ('no_access',accrue.replace('accrue(1,','accrue(2,')),
     ('manual_quantity',f"SELECT budgeting.set__update_crypto_protocol_position(1,{protocol},_quantity=>111)"),
 ]:
@@ -407,6 +402,126 @@ for event in json.loads(history_path.read_text())['events']:
     release=(Decimal(100000)*Decimal(event['debt_removed'])/debt).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
     record(f"historical_{event['event']}_synthetic_basis_result",Decimal(str(out['realized_in_base']))==release-cost,True)
     record(f"historical_{event['event']}_spot_unchanged",[state(1),state(2)],before_spot)
+
+# Historical swap value is independent of source cost and never falls back.
+seed()
+sql("SELECT budgeting.put__swap_crypto_investment_asset(1,1,50,2,20)")
+record('swap_without_quote_keeps_source_cost_and_unknown_destination',
+       [state(1)['remaining_cost_basis'],state(2)['remaining_cost_basis']],[15000,None])
+a=next(x for x in json.loads(sql('SELECT budgeting.get__crypto_account_assets(1,1)')) if x['position_id']==1)
+detail=json.loads(sql('SELECT budgeting.get__crypto_asset_detail(1,1,1)'))
+record('unknown_swap_realized_not_hidden_by_SUM',[a['realized_pnl_lifetime_in_base'],detail['realized_pnl_lifetime_in_base']],[None,None])
+seed()
+for label,suffix in [('no_source',"_value_in_base=>1234,_operated_at=>'2025-01-01'"),
+                     ('no_date',"_value_in_base=>1234,_valuation_source=>'receipt'"),
+                     ('nan',"_value_in_base=>'NaN',_operated_at=>'2025-01-01',_valuation_source=>'receipt'")]:
+    rejected=False
+    try: sql(f'SELECT budgeting.put__swap_crypto_investment_asset(1,1,1,2,1,{suffix})')
+    except RuntimeError: rejected=True
+    record('swap_rejects_'+label,[rejected,state(1)['quantity_now']],[True,200])
+sql("SELECT budgeting.put__swap_crypto_investment_asset(1,1,200,2,20,_value_in_base=>22000,_operated_at=>'2025-01-01',_valuation_source=>'receipt')")
+record('full_swap_closes_source_and_records_gain',[state(1)['quantity_now'],state(2)['remaining_cost_basis']],[0,32000])
+record('swap_price_provenance_stored',json.loads(sql("SELECT jsonb_build_array(metadata->>'valuation_source',metadata->>'valuation_date',metadata->'realized_in_base') FROM budgeting.portfolio_events WHERE event_type='swap_out'")),['receipt','2025-01-01',2000])
+
+# Unknown collateral travels through deposit, additional supply and both returns.
+seed()
+sql("UPDATE budgeting.portfolio_events SET metadata=jsonb_build_object('entry_value_in_base',NULL) WHERE position_id=1")
+protocol=deposit()
+def proto():
+    return json.loads(sql(f"SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id={protocol}"))
+record('unknown_collateral_is_SQL_null',[proto()['cost_basis_in_base'],proto()['metadata']['basis_quality']],[None,'unknown'])
+sql(f"SELECT budgeting.put__top_up_crypto_protocol_position(1,{protocol},1,10)")
+record('unknown_top_up_does_not_reset_cost',[proto()['quantity'],proto()['cost_basis_in_base']],[110,None])
+sql(f"SELECT budgeting.put__partial_close_crypto_protocol_position(1,{protocol},_principal_qty=>50)")
+record('unknown_partial_return_preserves_quantities',[proto()['quantity'],state(1)['quantity_now'],state(1)['remaining_cost_basis']],[60,140,None])
+sql(f"SELECT budgeting.set__close_crypto_protocol_position(1,{protocol},_return_quantity=>60)")
+record('unknown_collateral_round_trip',[state(1)['quantity_now'],state(1)['remaining_cost_basis']],[200,None])
+seed(); protocol=deposit()
+sql("UPDATE budgeting.portfolio_events SET metadata=jsonb_build_object('entry_value_in_base',NULL) WHERE position_id=1 AND event_type='open'")
+sql(f"SELECT budgeting.put__top_up_crypto_protocol_position(1,{protocol},1,10)")
+record('known_collateral_plus_unknown_becomes_unknown',proto()['cost_basis_in_base'],None)
+
+# Loan and interest with missing valuation keep quantity, not fabricated RUB.
+seed(); protocol=deposit()
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,_borrowed_crypto_asset_id=>2)")
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},50,5000)")
+record('unknown_debt_not_overwritten_by_known_topup',[proto()['metadata']['borrowed_quantity'],proto()['metadata']['debt_cost_basis_in_base'],state(2)['remaining_cost_basis']],[150,None,None])
+sql(f"SELECT budgeting.put__lending_accrue_interest(1,{protocol},10,NULL,'unknown-interest','2025-01-01')")
+sql(f"SELECT budgeting.put__lending_accrue_interest(1,{protocol},10,NULL,'unknown-interest','2025-01-01')")
+record('unknown_interest_exact_retry_once',int(sql("SELECT count(*) FROM budgeting.crypto_liability_events WHERE event_kind='interest_accrual'")),1)
+rejected=False
+try: sql(f"SELECT budgeting.put__lending_accrue_interest(1,{protocol},10,1000,'unknown-interest','2025-01-01')")
+except RuntimeError: rejected=True
+record('unknown_interest_cannot_be_silently_revalued_on_retry',rejected,True)
+sql(f"SELECT budgeting.put__lending_repay_debt(1,{protocol},2,80,_interest_qty=>5)")
+record('unknown_partial_debt_repayment',[proto()['metadata']['borrowed_quantity'],proto()['metadata']['debt_cost_basis_in_base']],[80,None])
+sql(f"SELECT budgeting.put__lending_repay_debt(1,{protocol},2,80,_interest_qty=>5)")
+record('unknown_debt_full_closure_known_zero_residual',
+       [proto()['metadata'][k] for k in ['borrowed_quantity','debt_cost_basis_in_base','debt_interest_quantity','debt_interest_basis_in_base']],[0,0,0,0])
+record('unknown_debt_disposals_do_not_fabricate_realized',int(sql("SELECT count(*) FROM budgeting.crypto_liability_events WHERE event_kind='repayment' AND realized_in_base IS NULL")),2)
+sql(f"SELECT budgeting.set__close_crypto_protocol_position(1,{protocol},_return_quantity=>100)")
+record('unknown_loan_does_not_destroy_known_collateral',[state(1)['quantity_now'],state(1)['remaining_cost_basis']],[200,20000])
+
+seed(); protocol=deposit()
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,10000,_borrowed_crypto_asset_id=>2)")
+sql(f"SELECT budgeting.put__lending_accrue(1,{protocol},1,2,NULL,100,100,'unknown-accrual','2025-01-01')")
+record('unknown_interest_in_atomic_accrual',
+       [proto()['quantity'],proto()['cost_basis_in_base'],proto()['metadata']['borrowed_quantity'],proto()['metadata']['debt_cost_basis_in_base']],[101,10000,102,None])
+
+# Either leg may be unknown; liquidation still changes exact quantities atomically.
+for unknown_collateral,unknown_debt in [(True,False),(False,True),(True,True)]:
+    seed()
+    if unknown_collateral:
+        sql("UPDATE budgeting.portfolio_events SET metadata=jsonb_build_object('entry_value_in_base',NULL) WHERE position_id=1")
+    protocol=deposit()
+    price='NULL' if unknown_debt else '10000'
+    sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,{price},_borrowed_crypto_asset_id=>2)")
+    out=json.loads(sql(f"SELECT budgeting.put__lending_liquidate(1,{protocol},100,100,'unknown-liquidation','2025-01-01')"))
+    record(f'unknown_liquidation_{unknown_collateral}_{unknown_debt}',
+           [proto()['quantity'],proto()['cost_basis_in_base'],proto()['metadata']['borrowed_quantity'],proto()['metadata']['debt_cost_basis_in_base'],out['realized_in_base']], [0,0,0,0,None])
+# Shared create+borrow path uses the same nullable liability logic.
+seed()
+protocol=json.loads(sql("""SELECT budgeting.put__create_crypto_protocol_position(
+    _user_id=>1,_investment_account_id=>1,_protocol_name=>'Unknown initial loan',
+    _position_type=>'lending',_asset_symbol=>'TON',_quantity=>100,_source_position_id=>1,
+    _borrowed_crypto_asset_id=>2,_borrowed_quantity=>100)"""))['id']
+record('initial_unknown_borrow_recorded_once',
+       [state(2)['quantity_now'],proto()['metadata']['debt_cost_basis_in_base'],int(sql("SELECT count(*) FROM budgeting.crypto_liability_events"))],[200,None,1])
+# Bad ledger values remain blocked and never turn into ordinary unknowns.
+sql(f"UPDATE budgeting.crypto_protocol_positions SET metadata=metadata || '{{\"debt_cost_basis_in_base\":-1}}' WHERE id={protocol}")
+rejected=False
+try: sql(f"SELECT budgeting.put__lending_repay_debt(1,{protocol},2,10)")
+except RuntimeError: rejected=True
+record('negative_debt_basis_still_rejected',rejected,True)
+
+seed(); protocol=deposit()
+for name, statement in [
+    ('create_collateral_asset_mismatch_rejected', "SELECT budgeting.put__create_crypto_protocol_position(_user_id=>1,_investment_account_id=>1,_protocol_name=>'audit',_position_type=>'lending',_asset_symbol=>'USDT',_quantity=>10,_source_position_id=>1,_crypto_asset_id=>2)"),
+    ('top_up_collateral_asset_mismatch_rejected', f"SELECT budgeting.put__top_up_crypto_protocol_position(1,{protocol},2,10)")]:
+    before=state(1),state(2),proto()
+    rejected=False
+    try: sql(statement)
+    except RuntimeError: rejected=True
+    record(name,[rejected,(state(1),state(2),proto())==before],[True,True])
+
+seed(); protocol=deposit()
+for name, statement in [
+    ('partial_close_nonfinite_rejected', f"SELECT budgeting.put__partial_close_crypto_protocol_position(1,{protocol},'NaN'::numeric)"),
+    ('full_close_excess_precision_rejected', f"SELECT budgeting.set__close_crypto_protocol_position(1,{protocol},_return_quantity=>1.0000000000000000001)"),
+    ('borrow_excess_precision_rejected', f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},1.0000000000000000001,_borrowed_crypto_asset_id=>2)")]:
+    rejected=False
+    try: sql(statement)
+    except RuntimeError: rejected=True
+    record(name,rejected,True)
+sql(f"UPDATE budgeting.crypto_protocol_positions SET cost_basis_in_base=-1 WHERE id={protocol}")
+for name, statement in [
+    ('negative_collateral_topup_rejected', f"SELECT budgeting.put__top_up_crypto_protocol_position(1,{protocol},1,1)"),
+    ('negative_collateral_partial_return_rejected', f"SELECT budgeting.put__partial_close_crypto_protocol_position(1,{protocol},1)"),
+    ('negative_collateral_return_rejected', f"SELECT budgeting.set__close_crypto_protocol_position(1,{protocol},_return_quantity=>100)")]:
+    rejected=False
+    try: sql(statement)
+    except RuntimeError: rejected=True
+    record(name,rejected,True)
 
 # Concurrent retries must serialize on the protocol lock and write only once.
 seed(); protocol=deposit()

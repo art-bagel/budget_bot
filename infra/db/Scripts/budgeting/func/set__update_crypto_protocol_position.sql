@@ -40,7 +40,7 @@ BEGIN
        AND COALESCE(_metadata, '{}'::jsonb) ?| ARRAY[
            'borrowed_quantity', 'borrowed_value_in_base', 'debt_cost_basis_in_base',
            'debt_interest_quantity', 'debt_interest_basis_in_base',
-           'debt_accounting_version', 'borrowed_crypto_asset_id', 'borrowed_position_id'] THEN
+           'debt_accounting_version', 'borrowed_crypto_asset_id', 'borrowed_position_id', 'debt_basis_quality'] THEN
         RAISE EXCEPTION 'Version-2 debt must be changed through lending events';
     END IF;
 

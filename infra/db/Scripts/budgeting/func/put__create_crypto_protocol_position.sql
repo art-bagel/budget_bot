@@ -6,7 +6,7 @@ CREATE FUNCTION budgeting.put__create_crypto_protocol_position(
     _position_type text,
     _asset_symbol text,
     _quantity numeric DEFAULT NULL,
-    _cost_basis_in_base numeric DEFAULT 0,
+    _cost_basis_in_base numeric DEFAULT NULL,
     _current_quantity numeric DEFAULT NULL,
     _current_value_in_base numeric DEFAULT 0,
     _rewards_claimed_in_base numeric DEFAULT 0,
@@ -51,12 +51,6 @@ DECLARE
     _secondary_remaining_basis numeric(20, 2);
     _secondary_consumed_cost_basis numeric(20, 2);
     _secondary_source_quantity numeric(50, 18);
-    _borrow_asset record;
-    _borrow_position_id bigint;
-    _borrow_existing record;
-    _borrow_asset_metadata jsonb;
-    _borrow_value_in_base numeric(20, 2);
-    _borrow_event_id bigint;
     _base_currency_code char(3);
 BEGIN
     SET search_path TO budgeting;
@@ -100,6 +94,18 @@ BEGIN
         RAISE EXCEPTION 'Borrow params are only allowed for lending positions';
     END IF;
 
+    IF COALESCE(_metadata,'{}'::jsonb) ?| ARRAY['borrowed_quantity','borrowed_value_in_base',
+        'debt_cost_basis_in_base','debt_interest_quantity','debt_interest_basis_in_base',
+        'debt_accounting_version','borrowed_crypto_asset_id','borrowed_position_id','debt_basis_quality'] THEN
+        RAISE EXCEPTION 'Debt metadata must be created through loan events';
+    END IF;
+    IF (_borrowed_crypto_asset_id IS NULL) <> (_borrowed_quantity IS NULL) THEN
+        RAISE EXCEPTION 'Borrow asset and quantity must be provided together';
+    END IF;
+    IF _source_position_id IS NULL AND _cost_basis_in_base IS NOT NULL AND
+        (_cost_basis_in_base<0 OR _cost_basis_in_base::text IN ('NaN','Infinity','-Infinity')) THEN
+        RAISE EXCEPTION 'Invalid collateral cost';
+    END IF;
     IF _source_position_id IS NOT NULL THEN
         SELECT *
         INTO _source_position
@@ -117,7 +123,7 @@ BEGIN
             RAISE EXCEPTION 'Source position must be an open crypto asset on the same account';
         END IF;
 
-        IF _quantity IS NULL OR _quantity <= 0 THEN
+        IF _quantity IS NULL OR _quantity <= 0 OR _quantity::text IN ('NaN','Infinity','-Infinity') OR _quantity<>round(_quantity,18) THEN
             RAISE EXCEPTION 'Protocol source quantity must be positive';
         END IF;
 
@@ -131,13 +137,16 @@ BEGIN
         _remaining_quantity := round(_source_quantity - _quantity, 18);
 
         -- Compute weighted-average cost basis to carry into DeFi.
-        _entry_summary := budgeting.get__crypto_position_known_entry_summary(_source_position_id);
-        _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+        _entry_summary := budgeting.get__crypto_position_movable_entry_summary(_source_position_id);
+        _remaining_basis := (_entry_summary ->> 'remaining_cost_basis')::numeric;
         _consumed_cost_basis := CASE
             WHEN _source_quantity > 0
                 THEN round(_remaining_basis * _quantity / _source_quantity, 2)
             ELSE 0
         END;
+        IF _crypto_asset_id IS NOT NULL AND _crypto_asset_id IS DISTINCT FROM (_source_position.metadata->>'crypto_asset_id')::bigint THEN
+            RAISE EXCEPTION 'Collateral asset must match source asset';
+        END IF;
         _crypto_asset_id := COALESCE(_crypto_asset_id, (_source_position.metadata ->> 'crypto_asset_id')::bigint);
         _network_code := COALESCE(NULLIF(btrim(_network_code), ''), NULLIF(btrim(_source_position.metadata ->> 'network_code'), ''));
         _asset_symbol_resolved := COALESCE(
@@ -172,7 +181,8 @@ BEGIN
             'source_position_id', _source_position_id,
             'source_asset_symbol', _asset_symbol_resolved,
             'source_network_code', _network_code,
-            'cost_basis_carried', _consumed_cost_basis
+            'cost_basis_carried', _consumed_cost_basis,
+            'basis_quality', _entry_summary->>'basis_quality'
         );
         _asset_symbol := _asset_symbol_resolved;
 
@@ -220,6 +230,7 @@ BEGIN
                 'protocol_quantity', _quantity,
                 'value_in_base', _consumed_cost_basis,
                 'consumed_cost_basis', _consumed_cost_basis,
+            'basis_quality', _entry_summary->>'basis_quality',
                 'realized_in_base', 0,
                 'target_kind', 'defi',
                 'token_role', 'token_a'
@@ -230,6 +241,11 @@ BEGIN
         IF NULLIF(btrim(_asset_symbol), '') IS NULL THEN
             RAISE EXCEPTION 'Asset symbol is required';
         END IF;
+    END IF;
+
+    IF _position_type='liquidity_pool' AND (_cost_basis_in_base IS NULL
+        OR _metadata->>'basis_quality' IN ('unknown','invalid','estimated')) THEN
+        RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
     END IF;
 
     -- Token B (only for liquidity_pool): same locking + decrement + transfer_out + cost-basis carry.
@@ -357,136 +373,6 @@ BEGIN
         );
     END IF;
 
-    -- Borrow (lending only): credit borrowed crypto asset to the same account.
-    -- Asset acquisition and debt receive the same historical valuation.
-    -- Own funding remains zero; debt is recorded separately.
-    IF _position_type = 'lending'
-       AND _borrowed_crypto_asset_id IS NOT NULL
-       AND _borrowed_quantity IS NOT NULL
-       AND _borrowed_quantity > 0
-    THEN
-        _borrowed_quantity := round(_borrowed_quantity, 18);
-        IF _borrowed_quantity <= 0 OR _borrowed_quantity::text IN ('NaN', 'Infinity', '-Infinity') THEN
-            RAISE EXCEPTION 'Borrowed quantity must be finite and positive';
-        END IF;
-        IF _borrowed_value_in_base IS NULL OR _borrowed_value_in_base <= 0
-           OR _borrowed_value_in_base::text IN ('NaN', 'Infinity', '-Infinity') THEN
-            RAISE EXCEPTION 'Для займа нужна положительная историческая оценка в базовой валюте';
-        END IF;
-        _borrow_value_in_base := round(_borrowed_value_in_base, 2);
-        _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
-
-        SELECT *
-        INTO _borrow_asset
-        FROM crypto_assets
-        WHERE id = _borrowed_crypto_asset_id;
-
-        IF _borrow_asset.id IS NULL THEN
-            RAISE EXCEPTION 'Unknown borrowed crypto asset %', _borrowed_crypto_asset_id;
-        END IF;
-
-        _borrow_asset_metadata := jsonb_build_object(
-            'crypto_kind', 'spot',
-            'crypto_asset_id', _borrow_asset.id,
-            'asset_symbol', _borrow_asset.symbol,
-            'asset_name', _borrow_asset.name,
-            'network_code', _borrow_asset.network_code,
-            'contract_address', _borrow_asset.contract_address
-        );
-
-        SELECT *
-        INTO _borrow_existing
-        FROM portfolio_positions
-        WHERE investment_account_id = _investment_account_id
-          AND asset_type_code = 'crypto'
-          AND status = 'open'
-          AND COALESCE((metadata ->> 'crypto_asset_id')::bigint, 0) = _borrow_asset.id
-        ORDER BY opened_at ASC, id ASC
-        LIMIT 1
-        FOR UPDATE;
-
-        IF _borrow_existing.id IS NOT NULL THEN
-            UPDATE portfolio_positions
-            SET quantity = COALESCE(quantity, 0) + _borrowed_quantity,
-                amount_in_currency = 0,
-                metadata = metadata || _borrow_asset_metadata
-            WHERE id = _borrow_existing.id;
-            _borrow_position_id := _borrow_existing.id;
-
-            INSERT INTO portfolio_events (
-                position_id, event_type, event_at, quantity, amount, currency_code,
-                linked_operation_id, comment, metadata, created_by_user_id
-            )
-            VALUES (
-                _borrow_position_id,
-                'top_up',
-                COALESCE(_deposited_at, current_date),
-                _borrowed_quantity,
-                NULL, NULL, NULL,
-                COALESCE(NULLIF(btrim(_comment), ''), 'Получено в долг (лендинг)'),
-                _borrow_asset_metadata || jsonb_build_object(
-                    'action', 'lending_borrow',
-                    'protocol_name', btrim(_protocol_name),
-                    'entry_value_in_base', _borrow_value_in_base,
-                    'own_funding_in_base', 0,
-                    'debt_accounting_version', 2,
-                    'source_kind', 'lending_borrow',
-                    'value_in_base', _borrow_value_in_base
-                ),
-                _user_id
-            ) RETURNING id INTO _borrow_event_id;
-        ELSE
-            INSERT INTO portfolio_positions (
-                owner_type, owner_user_id, owner_family_id, investment_account_id,
-                asset_type_code, title, quantity, amount_in_currency, currency_code,
-                opened_at, comment, metadata, created_by_user_id
-            )
-            VALUES (
-                _owner_type, _owner_user_id, _owner_family_id, _investment_account_id,
-                'crypto', _borrow_asset.symbol, _borrowed_quantity, 0, _base_currency_code,
-                COALESCE(_deposited_at, current_date),
-                COALESCE(NULLIF(btrim(_comment), ''), 'Получено в долг (лендинг)'),
-                _borrow_asset_metadata,
-                _user_id
-            )
-            RETURNING id INTO _borrow_position_id;
-
-            INSERT INTO portfolio_events (
-                position_id, event_type, event_at, quantity, amount, currency_code,
-                linked_operation_id, comment, metadata, created_by_user_id
-            )
-            VALUES (
-                _borrow_position_id,
-                'open',
-                COALESCE(_deposited_at, current_date),
-                _borrowed_quantity,
-                NULL, NULL, NULL,
-                COALESCE(NULLIF(btrim(_comment), ''), 'Получено в долг (лендинг)'),
-                _borrow_asset_metadata || jsonb_build_object(
-                    'action', 'lending_borrow',
-                    'protocol_name', btrim(_protocol_name),
-                    'entry_value_in_base', _borrow_value_in_base,
-                    'own_funding_in_base', 0,
-                    'debt_accounting_version', 2,
-                    'source_kind', 'lending_borrow',
-                    'value_in_base', _borrow_value_in_base
-                ),
-                _user_id
-            ) RETURNING id INTO _borrow_event_id;
-        END IF;
-
-        _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
-            'borrowed_crypto_asset_id', _borrow_asset.id,
-            'borrowed_asset', _borrow_asset.symbol,
-            'borrowed_asset_symbol', _borrow_asset.symbol,
-            'borrowed_quantity', _borrowed_quantity,
-            'borrowed_position_id', _borrow_position_id,
-            'borrowed_value_in_base', _borrow_value_in_base,
-            'debt_cost_basis_in_base', _borrow_value_in_base,
-            'debt_accounting_version', 2
-        );
-    END IF;
-
     INSERT INTO crypto_protocol_positions (
         owner_type,
         owner_user_id,
@@ -519,25 +405,24 @@ BEGIN
         NULLIF(btrim(_network_code), ''),
         btrim(_asset_symbol),
         _quantity,
-        COALESCE(_cost_basis_in_base, 0),
+        _cost_basis_in_base,
         COALESCE(_current_quantity, _quantity),
         COALESCE(_current_value_in_base, _cost_basis_in_base, 0),
         COALESCE(_rewards_claimed_in_base, 0),
         COALESCE(_rewards_unclaimed_in_base, 0),
         COALESCE(_deposited_at, current_date),
         NULLIF(btrim(_comment), ''),
-        COALESCE(_metadata, '{}'::jsonb),
+        COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object('basis_quality',
+            CASE WHEN _cost_basis_in_base IS NULL THEN 'unknown'
+                WHEN _metadata->>'basis_quality'='estimated' THEN 'estimated'
+                WHEN _cost_basis_in_base=0 THEN 'confirmed_zero' ELSE 'known' END),
         _user_id
     )
     RETURNING id INTO _position_id;
 
-    IF _borrow_event_id IS NOT NULL THEN
-        INSERT INTO crypto_liability_events(protocol_position_id, portfolio_event_id,
-            crypto_asset_id, event_kind, event_at, quantity, debt_basis_change_in_base,
-            settlement_value_in_base, created_by_user_id)
-        VALUES (_position_id, _borrow_event_id, _borrow_asset.id, 'borrow',
-            COALESCE(_deposited_at, current_date), _borrowed_quantity,
-            _borrow_value_in_base, _borrow_value_in_base, _user_id);
+    IF _borrowed_crypto_asset_id IS NOT NULL THEN
+        RETURN budgeting.put__lending_take_more_debt(_user_id,_position_id,
+            _borrowed_quantity,_borrowed_value_in_base,_comment,_deposited_at,_borrowed_crypto_asset_id);
     END IF;
 
     RETURN (

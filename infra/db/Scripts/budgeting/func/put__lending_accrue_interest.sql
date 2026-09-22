@@ -17,7 +17,8 @@ BEGIN
     IF NOT budgeting.has__owner_access(_user_id,_p.owner_type,_p.owner_user_id,_p.owner_family_id)
         THEN RAISE EXCEPTION 'Access denied'; END IF;
     IF _quantity IS NULL OR _quantity <= 0 OR _quantity::text IN ('NaN','Infinity','-Infinity')
-        OR _value_in_base IS NULL OR _value_in_base < 0
+        OR _quantity<>round(_quantity,18)
+        OR _value_in_base < 0
         OR _value_in_base::text IN ('NaN','Infinity','-Infinity')
         OR NULLIF(btrim(_external_id),'') IS NULL THEN
         RAISE EXCEPTION 'Interest requires a positive quantity, valuation and external id';
@@ -28,7 +29,7 @@ BEGIN
         WHERE protocol_position_id=_position_id AND external_id=_external_id;
     IF _prior.id IS NOT NULL THEN
         IF _prior.event_kind <> 'interest_accrual' OR _prior.quantity <> _q
-            OR _prior.debt_basis_change_in_base <> _v OR _prior.event_at <> _date THEN
+            OR _prior.debt_basis_change_in_base IS DISTINCT FROM _v OR _prior.event_at <> _date THEN
             RAISE EXCEPTION 'Conflicting interest event with the same external id';
         END IF;
     ELSE
@@ -37,6 +38,7 @@ BEGIN
             OR COALESCE((_p.metadata->>'borrowed_quantity')::numeric,0) <= 0 THEN
             RAISE EXCEPTION 'Interest requires an open version-2 loan';
         END IF;
+        PERFORM budgeting.check__crypto_lending_state(_p.metadata);
         INSERT INTO crypto_liability_events(protocol_position_id,crypto_asset_id,
             event_kind,event_at,external_id,quantity,debt_basis_change_in_base,
             settlement_value_in_base,interest_quantity,interest_basis_change_in_base,
@@ -48,7 +50,8 @@ BEGIN
             'debt_cost_basis_in_base',(_p.metadata->>'debt_cost_basis_in_base')::numeric+_v,
             'borrowed_value_in_base',(_p.metadata->>'debt_cost_basis_in_base')::numeric+_v,
             'debt_interest_quantity',COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0)+_q,
-            'debt_interest_basis_in_base',COALESCE((_p.metadata->>'debt_interest_basis_in_base')::numeric,0)+_v
+            'debt_interest_basis_in_base',CASE WHEN COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0)=0 THEN _v ELSE (_p.metadata->>'debt_interest_basis_in_base')::numeric+_v END,
+            'debt_basis_quality',CASE WHEN (_p.metadata->>'debt_cost_basis_in_base')::numeric+_v IS NULL THEN 'unknown' ELSE 'known' END
         ), updated_at=current_timestamp WHERE id=_position_id;
     END IF;
     RETURN (SELECT item FROM jsonb_array_elements(

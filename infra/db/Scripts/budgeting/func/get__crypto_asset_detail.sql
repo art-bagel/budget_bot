@@ -58,7 +58,8 @@ BEGIN
     _summary := budgeting.get__crypto_position_entry_summary(_position.id);
 
     SELECT
-        COALESCE(SUM((pe.metadata ->> 'realized_in_base')::numeric), 0),
+        CASE WHEN bool_or(pe.metadata ? 'realized_in_base' AND pe.metadata->>'realized_in_base' IS NULL) THEN NULL
+            ELSE COALESCE(SUM((pe.metadata ->> 'realized_in_base')::numeric), 0) END,
         MAX(pe.event_at)
     INTO _realized_total, _last_event_at
     FROM portfolio_events pe

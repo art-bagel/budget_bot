@@ -8,7 +8,8 @@ CREATE FUNCTION budgeting.put__swap_crypto_investment_asset(
     _target_investment_account_id bigint DEFAULT NULL,
     _comment text DEFAULT NULL,
     _operated_at date DEFAULT NULL,
-    _value_in_base numeric DEFAULT NULL
+    _value_in_base numeric DEFAULT NULL,
+    _valuation_source text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -19,8 +20,8 @@ DECLARE
     _from_asset record;
     _to_asset record;
     _from_crypto_asset_id bigint;
-    _source_quantity numeric(30, 12);
-    _remaining_quantity numeric(30, 12);
+    _source_quantity numeric(50, 18);
+    _remaining_quantity numeric(50, 18);
     _resolved_target_account_id bigint;
     _target_position_id bigint;
     _operation_id bigint;
@@ -32,11 +33,18 @@ DECLARE
 BEGIN
     SET search_path TO budgeting;
 
-    IF _from_amount <= 0 OR _to_amount <= 0 THEN
-        RAISE EXCEPTION 'Amounts must be positive';
+    IF _from_amount IS NULL OR _to_amount IS NULL OR _from_amount<=0 OR _to_amount<=0
+        OR _from_amount::text IN ('NaN','Infinity','-Infinity')
+        OR _to_amount::text IN ('NaN','Infinity','-Infinity')
+        OR _from_amount<>round(_from_amount,18) OR _to_amount<>round(_to_amount,18) THEN
+        RAISE EXCEPTION 'Swap quantities must be finite and positive with at most 18 decimals';
     END IF;
-    _from_amount := round(_from_amount, 12);
-    _to_amount := round(_to_amount, 12);
+    IF _value_in_base IS NOT NULL AND (_value_in_base<0
+        OR _value_in_base::text IN ('NaN','Infinity','-Infinity')
+        OR _value_in_base<>round(_value_in_base,2)
+        OR NULLIF(btrim(_valuation_source),'') IS NULL OR _operated_at IS NULL) THEN
+        RAISE EXCEPTION 'Swap valuation requires a finite non-negative amount, date and source';
+    END IF;
 
     SELECT *
     INTO _source
@@ -109,17 +117,17 @@ BEGIN
     END IF;
 
     -- Compute weighted-average consumed cost basis for the FROM side.
-    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_position_id);
-    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _entry_summary := budgeting.get__crypto_position_movable_entry_summary(_position_id);
+    _remaining_basis := (_entry_summary ->> 'remaining_cost_basis')::numeric;
     _consumed_cost_basis := CASE
         WHEN _source_quantity > 0
             THEN round(_remaining_basis * _from_amount / _source_quantity, 2)
         ELSE 0
     END;
 
-    -- value_in_base for the swap: caller-provided live × from_amount, or fall
-    -- back to consumed_cost_basis (zero realized P&L for legacy callers).
-    _resolved_value_in_base := COALESCE(round(_value_in_base, 2), _consumed_cost_basis);
+    -- Historical trade valuation is independent of acquisition cost. Missing
+    -- price leaves the new asset cost and realized result unknown.
+    _resolved_value_in_base := _value_in_base;
 
     INSERT INTO operations (
         actor_user_id,
@@ -154,7 +162,9 @@ BEGIN
         'to_network_code', _to_asset.network_code,
         'to_contract_address', _to_asset.contract_address,
         'to_amount', _to_amount,
-        'value_at_swap_in_base', _resolved_value_in_base
+        'value_at_swap_in_base', _resolved_value_in_base,
+        'valuation_source', NULLIF(btrim(_valuation_source),''),
+        'valuation_date', _operated_at
     );
 
     SELECT id
@@ -209,6 +219,7 @@ BEGIN
         )
         RETURNING id INTO _target_position_id;
     ELSE
+        PERFORM budgeting.get__crypto_position_movable_entry_summary(_target_position_id);
         UPDATE portfolio_positions
         SET quantity = COALESCE(quantity, 0) + _to_amount,
             amount_in_currency = 0,
@@ -249,6 +260,7 @@ BEGIN
             'target_position_id', _target_position_id,
             'value_in_base', _resolved_value_in_base,
             'consumed_cost_basis', _consumed_cost_basis,
+            'basis_quality', _entry_summary->>'basis_quality',
             'realized_in_base', _resolved_value_in_base - _consumed_cost_basis,
             'target_kind', 'swap'
         ),
@@ -266,6 +278,7 @@ BEGIN
         _metadata || jsonb_build_object(
             'target_position_id', _target_position_id,
             'entry_value_in_base', _resolved_value_in_base,
+            'basis_quality', CASE WHEN _resolved_value_in_base IS NULL THEN 'unknown' WHEN _resolved_value_in_base=0 THEN 'confirmed_zero' ELSE 'known' END,
             'source_kind', 'swap',
             'source_position_id', _position_id
         ),
@@ -275,6 +288,7 @@ BEGIN
     IF _from_amount = _source_quantity THEN
         UPDATE portfolio_positions
         SET status = 'closed',
+            quantity = 0,
             closed_at = COALESCE(_operated_at, current_date),
             close_amount_in_currency = 0,
             close_currency_code = currency_code

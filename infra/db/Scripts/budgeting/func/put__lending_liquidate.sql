@@ -63,20 +63,25 @@ BEGIN
         OR (_p.metadata->>'debt_accounting_version') IS DISTINCT FROM '2' THEN
         RAISE EXCEPTION 'Liquidation requires an open version-2 loan';
     END IF;
-    IF (_p.metadata->>'basis_quality') IN ('unknown','estimated','invalid')
+    IF (_p.metadata->>'basis_quality') IN ('estimated','invalid')
         OR _p.quantity IS NULL OR _p.current_quantity IS NULL
         OR _p.quantity<>_p.current_quantity THEN
         RAISE EXCEPTION 'Reconcile collateral quantity and cost before liquidation';
     END IF;
+    PERFORM budgeting.check__crypto_lending_state(_p.metadata);
+    IF _p.metadata->>'basis_quality'='unknown' THEN _p.cost_basis_in_base:=NULL; END IF;
     _debt := (_p.metadata->>'borrowed_quantity')::numeric;
     _debt_basis := (_p.metadata->>'debt_cost_basis_in_base')::numeric;
     _interest := COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0);
-    _interest_basis := COALESCE((_p.metadata->>'debt_interest_basis_in_base')::numeric,0);
-    FOREACH _n IN ARRAY ARRAY[_debt,_debt_basis,_interest,_interest_basis,_p.quantity,_p.cost_basis_in_base] LOOP
+    _interest_basis := CASE WHEN _interest=0 THEN 0 ELSE (_p.metadata->>'debt_interest_basis_in_base')::numeric END;
+    FOREACH _n IN ARRAY ARRAY[_debt,_interest,_p.quantity] LOOP
         IF _n IS NULL OR _n<0 OR _n::text IN ('NaN','Infinity','-Infinity') THEN
             RAISE EXCEPTION 'Invalid collateral or historical debt state';
         END IF;
     END LOOP;
+    IF _p.cost_basis_in_base<0 OR _p.cost_basis_in_base::text IN ('NaN','Infinity','-Infinity') THEN
+        RAISE EXCEPTION 'Invalid collateral basis';
+    END IF;
     _principal := _debt-_interest;
     IF _interest>_debt OR _interest_basis>_debt_basis OR _debt_qty>_debt
         OR _interest_qty>_interest OR _debt_qty-_interest_qty>_principal
@@ -91,7 +96,7 @@ BEGIN
         ELSE round((_debt_basis-_interest_basis)*(_debt_qty-_interest_qty)/_principal,2) END;
     _collateral_consumed := CASE WHEN _collateral_qty=_p.quantity THEN _p.cost_basis_in_base
         ELSE round(_p.cost_basis_in_base*_collateral_qty/_p.quantity,2) END;
-    _fee_basis := round(_collateral_consumed*_collateral_fee_qty/_collateral_qty,2);
+    _fee_basis := CASE WHEN _collateral_fee_qty=0 THEN 0 ELSE round(_collateral_consumed*_collateral_fee_qty/_collateral_qty,2) END;
     _result := jsonb_build_object('protocol_position_id',_position_id,
         'collateral_asset_id',_p.crypto_asset_id,
         'debt_asset_id',(_p.metadata->>'borrowed_crypto_asset_id')::bigint,
@@ -108,15 +113,16 @@ BEGIN
     -- is NOT another expense. Fee is a breakdown of total, not an extra debit.
     UPDATE crypto_protocol_positions SET
         quantity=quantity-_collateral_qty, current_quantity=current_quantity-_collateral_qty,
-        cost_basis_in_base=cost_basis_in_base-_collateral_consumed,
+        cost_basis_in_base=CASE WHEN quantity=_collateral_qty THEN 0 ELSE _p.cost_basis_in_base-_collateral_consumed END,
         current_value_in_base=CASE WHEN _collateral_qty=quantity THEN 0
             ELSE round(current_value_in_base*(quantity-_collateral_qty)/quantity,2) END,
         metadata=metadata || jsonb_build_object(
             'borrowed_quantity',_debt-_debt_qty,
-            'borrowed_value_in_base',_debt_basis-_debt_consumed,
-            'debt_cost_basis_in_base',_debt_basis-_debt_consumed,
+            'borrowed_value_in_base',CASE WHEN _debt=_debt_qty THEN 0 ELSE _debt_basis-_debt_consumed END,
+            'debt_cost_basis_in_base',CASE WHEN _debt=_debt_qty THEN 0 ELSE _debt_basis-_debt_consumed END,
             'debt_interest_quantity',_interest-_interest_qty,
-            'debt_interest_basis_in_base',_interest_basis-_interest_consumed),
+            'debt_interest_basis_in_base',CASE WHEN _interest=_interest_qty THEN 0 ELSE _interest_basis-_interest_consumed END,
+            'debt_basis_quality',CASE WHEN _debt=_debt_qty OR _debt_basis-_debt_consumed IS NOT NULL THEN 'known' ELSE 'unknown' END),
         updated_at=current_timestamp
     WHERE id=_position_id;
     -- No spot portfolio_event: collateral has already left the wallet at deposit.

@@ -29,12 +29,12 @@ BEGIN
     SET search_path TO budgeting;
 
     IF _debt_qty IS NULL OR _debt_qty <= 0
-       OR _debt_qty::text IN ('NaN', 'Infinity', '-Infinity') THEN
+       OR _debt_qty::text IN ('NaN', 'Infinity', '-Infinity') OR _debt_qty<>round(_debt_qty,18) THEN
         RAISE EXCEPTION 'Debt quantity must be positive';
     END IF;
     _debt_qty := round(_debt_qty, 18);
-    IF _debt_qty <= 0 OR _value_in_base IS NULL OR _value_in_base <= 0
-       OR _value_in_base::text IN ('NaN', 'Infinity', '-Infinity') THEN
+    IF _debt_qty <= 0 OR (_value_in_base IS NOT NULL AND (_value_in_base < 0
+       OR _value_in_base::text IN ('NaN', 'Infinity', '-Infinity'))) THEN
         RAISE EXCEPTION 'Для займа нужна положительная историческая оценка в базовой валюте';
     END IF;
 
@@ -106,7 +106,10 @@ BEGIN
     LIMIT 1
     FOR UPDATE;
 
-    _resolved_value := round(COALESCE(_value_in_base, 0), 2);
+    IF COALESCE((_existing.metadata->>'borrowed_quantity')::numeric,0)>0 THEN
+        PERFORM budgeting.check__crypto_lending_state(_existing.metadata);
+    END IF;
+    _resolved_value := round(_value_in_base, 2);
 
     IF _borrow_position.id IS NOT NULL THEN
         UPDATE portfolio_positions
@@ -132,6 +135,7 @@ BEGIN
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
                 'entry_value_in_base', _resolved_value,
+                'basis_quality', CASE WHEN _resolved_value IS NULL THEN 'unknown' WHEN _resolved_value=0 THEN 'confirmed_zero' ELSE 'known' END,
                 'own_funding_in_base', 0,
                 'debt_accounting_version', 2,
                 'source_kind', 'lending_borrow',
@@ -172,6 +176,7 @@ BEGIN
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
                 'entry_value_in_base', _resolved_value,
+                'basis_quality', CASE WHEN _resolved_value IS NULL THEN 'unknown' WHEN _resolved_value=0 THEN 'confirmed_zero' ELSE 'known' END,
                 'own_funding_in_base', 0,
                 'debt_accounting_version', 2,
                 'source_kind', 'lending_borrow',
@@ -183,7 +188,7 @@ BEGIN
 
     _current_borrowed := COALESCE(NULLIF(_existing.metadata ->> 'borrowed_quantity', ''), '0')::numeric;
     _new_borrowed := round(_current_borrowed + _debt_qty, 18);
-    _existing_value := COALESCE(NULLIF(_existing.metadata ->> 'debt_cost_basis_in_base', ''), '0')::numeric;
+    _existing_value := CASE WHEN _current_borrowed=0 THEN 0 ELSE (_existing.metadata ->> 'debt_cost_basis_in_base')::numeric END;
     _new_value := round(_existing_value + _resolved_value, 2);
 
     UPDATE crypto_protocol_positions
@@ -195,6 +200,7 @@ BEGIN
             'borrowed_position_id', _target_position_id,
             'borrowed_value_in_base', _new_value,
             'debt_cost_basis_in_base', _new_value,
+            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' ELSE 'known' END,
             'debt_accounting_version', 2
         ),
         updated_at = current_timestamp

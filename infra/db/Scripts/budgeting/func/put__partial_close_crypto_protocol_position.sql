@@ -17,6 +17,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _input_qty numeric;
     _existing record;
     _asset record;
     _target_position_id bigint;
@@ -25,15 +26,15 @@ DECLARE
     _asset_name text;
     _asset_network_code text;
     _asset_contract_address text;
-    _principal_qty_in numeric(30, 12);
-    _rewards_qty_in numeric(30, 12);
-    _total_return_qty numeric(30, 12);
+    _principal_qty_in numeric(50, 18);
+    _rewards_qty_in numeric(50, 18);
+    _total_return_qty numeric(50, 18);
     _principal_value numeric(20, 2);
     _rewards_value numeric(20, 2);
-    _principal_remaining numeric(30, 12);
-    _new_quantity numeric(30, 12);
+    _principal_remaining numeric(50, 18);
+    _new_quantity numeric(50, 18);
     _new_cost_basis numeric(20, 2);
-    _new_current_quantity numeric(30, 12);
+    _new_current_quantity numeric(50, 18);
     _new_current_value numeric(20, 2);
     _new_rewards_claimed numeric(20, 2);
     _new_rewards_unclaimed numeric(20, 2);
@@ -41,19 +42,25 @@ DECLARE
     _principal_event_type text;
     _operated_on date;
     _comment_clean text;
-    _secondary_qty_in numeric(30, 12);
+    _secondary_qty_in numeric(50, 18);
     _secondary_position_id bigint;
     _secondary_symbol text;
-    _secondary_remaining_qty numeric(30, 12);
+    _secondary_remaining_qty numeric(50, 18);
     _secondary_existing_basis numeric(20, 2);
     _secondary_consumed_basis numeric(20, 2);
     _secondary_target_position_id bigint;
     _secondary_value numeric(20, 2);
     _secondary_event_type text;
-    _secondary_rewards_qty_in numeric(30, 12);
+    _secondary_rewards_qty_in numeric(50, 18);
     _secondary_rewards_value numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
+    FOREACH _input_qty IN ARRAY ARRAY[_principal_qty,_rewards_qty,_secondary_principal_qty,_secondary_rewards_qty] LOOP
+        IF _input_qty IS NOT NULL AND (_input_qty < 0 OR _input_qty::text IN ('NaN','Infinity','-Infinity') OR _input_qty<>round(_input_qty,18)) THEN
+            RAISE EXCEPTION 'Quantity must be finite, nonnegative and have at most 18 decimal places';
+        END IF;
+    END LOOP;
+
 
     SELECT *
     INTO _existing
@@ -69,19 +76,30 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
-    IF (_existing.metadata->>'basis_quality') IN ('unknown','invalid','estimated') THEN
+    IF (_existing.metadata->>'basis_quality')='invalid' THEN
         RAISE EXCEPTION 'Себестоимость протокольной позиции не подтверждена';
     END IF;
 
+
+    IF _existing.cost_basis_in_base < 0 OR _existing.cost_basis_in_base::text IN ('NaN','Infinity','-Infinity') THEN
+        RAISE EXCEPTION 'Invalid collateral cost basis';
+    END IF;
+    IF _existing.metadata->>'basis_quality'='unknown' THEN
+        _existing.cost_basis_in_base := NULL;
+    END IF;
+    IF _existing.position_type='liquidity_pool' AND (_existing.cost_basis_in_base IS NULL
+        OR _existing.metadata->>'basis_quality'='estimated') THEN
+        RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
+    END IF;
 
     IF _existing.status <> 'open' THEN
         RAISE EXCEPTION 'Closed protocol position cannot be partially closed';
     END IF;
 
-    _principal_qty_in := round(COALESCE(_principal_qty, 0), 12);
-    _rewards_qty_in := round(COALESCE(_rewards_qty, 0), 12);
-    _secondary_qty_in := round(COALESCE(_secondary_principal_qty, 0), 12);
-    _secondary_rewards_qty_in := round(COALESCE(_secondary_rewards_qty, 0), 12);
+    _principal_qty_in := round(COALESCE(_principal_qty, 0), 18);
+    _rewards_qty_in := round(COALESCE(_rewards_qty, 0), 18);
+    _secondary_qty_in := round(COALESCE(_secondary_principal_qty, 0), 18);
+    _secondary_rewards_qty_in := round(COALESCE(_secondary_rewards_qty, 0), 18);
 
     IF _principal_qty_in < 0 OR _rewards_qty_in < 0 OR _secondary_qty_in < 0 OR _secondary_rewards_qty_in < 0 THEN
         RAISE EXCEPTION 'Quantities must be non-negative';
@@ -285,6 +303,7 @@ BEGIN
             COALESCE(_comment_clean, 'Частичный возврат принципала из DeFi'),
             jsonb_build_object(
                 'action', 'partial_return_from_protocol',
+                'basis_quality', CASE WHEN _existing.cost_basis_in_base IS NULL THEN 'unknown' ELSE COALESCE(_existing.metadata->>'basis_quality','known') END,
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
                 'entry_value_in_base',
@@ -424,6 +443,7 @@ BEGIN
                 COALESCE(_comment_clean, 'Частичный возврат token B из DeFi'),
                 jsonb_build_object(
                     'action', 'partial_return_from_protocol',
+                'basis_quality', CASE WHEN _existing.cost_basis_in_base IS NULL THEN 'unknown' ELSE COALESCE(_existing.metadata->>'basis_quality','known') END,
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _secondary_consumed_basis,

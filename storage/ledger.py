@@ -410,6 +410,7 @@ class Ledger(DataBase):
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
         value_in_base: Optional[float] = None,
+        valuation_source: Optional[str] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__SWAP_CRYPTO_INVESTMENT_ASSET),
@@ -422,6 +423,7 @@ class Ledger(DataBase):
             comment,
             operated_at,
             value_in_base,
+            valuation_source,
         )
 
     async def put__create_crypto_protocol_position(

@@ -86,8 +86,9 @@ BEGIN
         RAISE EXCEPTION 'Legacy loan must be reconstructed before repayment';
     END IF;
 
+    PERFORM budgeting.check__crypto_lending_state(_existing.metadata);
     _interest_remaining := COALESCE((_existing.metadata ->> 'debt_interest_quantity')::numeric, 0);
-    _interest_basis := COALESCE((_existing.metadata ->> 'debt_interest_basis_in_base')::numeric, 0);
+    _interest_basis := CASE WHEN _interest_remaining=0 THEN 0 ELSE (_existing.metadata ->> 'debt_interest_basis_in_base')::numeric END;
     IF _interest_qty IS NULL OR _interest_qty < 0 OR _interest_qty > _repay_qty
        OR _interest_qty > _interest_remaining
        OR _interest_qty::text IN ('NaN', 'Infinity', '-Infinity') THEN
@@ -132,8 +133,8 @@ BEGIN
     _remaining_quantity := round(_source_quantity - _repay_qty, 18);
 
     -- Compute consumed cost basis (so cost basis on remaining position stays consistent).
-    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_source_position_id);
-    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _entry_summary := budgeting.get__crypto_position_movable_entry_summary(_source_position_id);
+    _remaining_basis := (_entry_summary ->> 'remaining_cost_basis')::numeric;
     _consumed_basis := CASE
         WHEN _source_quantity > 0
             THEN round(_remaining_basis * _repay_qty / _source_quantity, 2)
@@ -185,6 +186,7 @@ BEGIN
             'protocol_name', _existing.protocol_name,
             'value_in_base', _resolved_value,
             'consumed_cost_basis', _consumed_basis,
+            'basis_quality', _entry_summary->>'basis_quality',
             'realized_in_base', _debt_basis_consumed - _consumed_basis,
             'asset_realized_in_base', _resolved_value - _consumed_basis,
             'liability_realized_in_base', _debt_basis_consumed - _resolved_value,
@@ -199,15 +201,16 @@ BEGIN
     ) RETURNING id INTO _event_id;
 
     _new_borrowed := round(_current_borrowed - _repay_qty, 18);
-    _new_value := _existing_value - _debt_basis_consumed;
+    _new_value := CASE WHEN _new_borrowed=0 THEN 0 ELSE _existing_value - _debt_basis_consumed END;
 
     UPDATE crypto_protocol_positions
     SET metadata = metadata || jsonb_build_object(
             'borrowed_quantity', _new_borrowed,
             'borrowed_value_in_base', _new_value,
             'debt_cost_basis_in_base', _new_value,
+            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' ELSE 'known' END,
             'debt_interest_quantity', _interest_remaining - _interest_qty,
-            'debt_interest_basis_in_base', _interest_basis - _interest_basis_consumed
+            'debt_interest_basis_in_base', CASE WHEN _interest_remaining=_interest_qty THEN 0 ELSE _interest_basis - _interest_basis_consumed END
         ),
         updated_at = current_timestamp
     WHERE id = _position_id;

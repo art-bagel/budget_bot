@@ -136,28 +136,14 @@ class TransferCryptoBetweenInvestmentAccountsRequest(BaseModel):
 
 class SwapCryptoInvestmentAssetRequest(BaseModel):
     position_id: int
-    from_amount: float
+    from_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     to_crypto_asset_id: int
-    to_amount: float
+    to_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     target_investment_account_id: Optional[int] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
-    value_in_base: Optional[float] = None
-
-    @field_validator('from_amount', 'to_amount')
-    @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError('Сумма должна быть положительной')
-        return v
-
-    @field_validator('value_in_base')
-    @classmethod
-    def value_must_be_positive_if_provided(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and v <= 0:
-            raise ValueError('Стоимость должна быть положительной')
-        return v
-
+    value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False)
+    valuation_source: Optional[str] = None
 
 class CryptoAccountAssetSummary(BaseModel):
     crypto_asset_id: int
@@ -216,7 +202,7 @@ class CryptoProtocolPositionItem(BaseModel):
     network_code: Optional[str] = None
     asset_symbol: str
     quantity: Optional[float] = None
-    cost_basis_in_base: float
+    cost_basis_in_base: Optional[float]
     current_quantity: Optional[float] = None
     current_value_in_base: float
     rewards_claimed_in_base: float
@@ -235,9 +221,9 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     protocol_name: str
     position_type: Literal['staking', 'lending', 'liquidity_pool', 'vault', 'other']
     asset_symbol: str
-    quantity: Optional[float] = None
-    cost_basis_in_base: float = 0
-    current_quantity: Optional[float] = None
+    quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    cost_basis_in_base: Optional[Decimal] = Field(default=None, ge=0, allow_inf_nan=False)
+    current_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     current_value_in_base: float = 0
     rewards_claimed_in_base: float = 0
     rewards_unclaimed_in_base: float = 0
@@ -248,7 +234,7 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     source_position_id: Optional[int] = None
     secondary_source_position_id: Optional[int] = None
-    secondary_quantity: Optional[float] = None
+    secondary_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     borrowed_crypto_asset_id: Optional[int] = None
     borrowed_quantity: Optional[Decimal] = None
     borrowed_value_in_base: Optional[float] = None
@@ -287,7 +273,7 @@ class RepayLendingDebtRequest(BaseModel):
 
 class AccrueLendingInterestRequest(BaseModel):
     quantity: Decimal = Field(gt=0, allow_inf_nan=False)
-    value_in_base: Decimal = Field(ge=0, allow_inf_nan=False)
+    value_in_base: Optional[Decimal] = Field(default=None, ge=0, allow_inf_nan=False)
     external_id: str = Field(min_length=1)
     operated_at: Optional[date] = None
 
@@ -353,11 +339,11 @@ class UpdateCryptoProtocolPositionRequest(BaseModel):
 
 class CloseCryptoProtocolPositionRequest(BaseModel):
     withdrawn_at: Optional[date] = None
-    current_quantity: Optional[float] = None
+    current_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     current_value_in_base: Optional[float] = None
-    return_quantity: Optional[float] = None
+    return_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     return_value_in_base: Optional[float] = None
-    secondary_return_quantity: Optional[float] = None
+    secondary_return_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     secondary_return_value_in_base: Optional[float] = None
     comment: Optional[str] = None
 
@@ -370,13 +356,13 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
 
 
 class PartialCloseCryptoProtocolPositionRequest(BaseModel):
-    principal_qty: float = 0
-    rewards_qty: float = 0
+    principal_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    rewards_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     principal_value_in_base: Optional[float] = None
     rewards_value_in_base: Optional[float] = None
-    secondary_principal_qty: float = 0
+    secondary_principal_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     secondary_value_in_base: Optional[float] = None
-    secondary_rewards_qty: float = 0
+    secondary_rewards_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     secondary_rewards_value_in_base: Optional[float] = None
     returned_at: Optional[date] = None
     comment: Optional[str] = None
@@ -398,9 +384,9 @@ class PartialCloseCryptoProtocolPositionRequest(BaseModel):
 
 class TopUpCryptoProtocolPositionRequest(BaseModel):
     source_position_id: int
-    quantity: float
+    quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     secondary_source_position_id: Optional[int] = None
-    secondary_quantity: Optional[float] = None
+    secondary_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     operated_at: Optional[date] = None
     comment: Optional[str] = None
 
@@ -634,6 +620,7 @@ async def swap_crypto_investment_asset(
         comment=body.comment,
         operated_at=body.operated_at,
         value_in_base=body.value_in_base,
+        valuation_source=body.valuation_source,
     )
     return CryptoOperationResponse(**result)
 

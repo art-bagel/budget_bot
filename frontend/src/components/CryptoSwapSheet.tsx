@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, Repeat } from 'lucide-react';
+import { AlertCircle, ArrowDown } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -41,7 +41,6 @@ export default function CryptoSwapSheet({
   position,
   cryptoAssets,
   accounts,
-  livePrice,
   baseCurrencyCode,
   onClose,
   onSuccess,
@@ -81,6 +80,7 @@ export default function CryptoSwapSheet({
   );
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [tradeValue, setTradeValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,11 +90,10 @@ export default function CryptoSwapSheet({
   const toAccount = targetAccounts.find((a) => String(a.id) === targetInvestmentAccountId);
 
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(fromNum) && fromNum > sourceQuantity;
-  const valueInBase = livePrice && livePrice.price > 0 && Number.isFinite(fromNum) && fromNum > 0
-    ? Number((livePrice.price * fromNum).toFixed(2))
-    : null;
+  const hasTradeValue = tradeValue.trim() !== '';
+  const validTradeValue = !hasTradeValue || (Number.isFinite(Number(tradeValue)) && Number(tradeValue) >= 0);
 
-  const canSubmit = !submitting
+  const canSubmit = !submitting && validTradeValue && !!operatedAt
     && !exceedsBalance
     && Number.isFinite(fromNum) && fromNum > 0
     && Number.isFinite(toNum) && toNum > 0
@@ -109,13 +108,14 @@ export default function CryptoSwapSheet({
     try {
       await swapCryptoInvestmentAsset({
         position_id: position.id,
-        from_amount: fromNum,
+        from_amount: fromAmount,
         to_crypto_asset_id: Number(toCryptoAssetId),
-        to_amount: toNum,
+        to_amount: toAmount,
         target_investment_account_id: Number(targetInvestmentAccountId),
         comment: comment.trim() || undefined,
         operated_at: operatedAt || undefined,
-        value_in_base: valueInBase ?? undefined,
+        value_in_base: hasTradeValue ? tradeValue : undefined,
+        valuation_source: hasTradeValue ? 'user_confirmed_trade_value' : undefined,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -248,15 +248,21 @@ export default function CryptoSwapSheet({
         </div>
       </div>
 
-      {valueInBase !== null && (
-        <div className="cs-sheet__hint">
-          <Repeat size={14} strokeWidth={2.2} />
-          <span>
-            Снимок курса: {formatNumericAmount(valueInBase)} {currencySymbol(baseCurrencyCode)}{' '}
-            <em>(live × количество)</em>
-          </span>
-        </div>
-      )}
+      <div className="field">
+        <span className="fl">Стоимость сделки, {currencySymbol(baseCurrencyCode)}</span>
+        <input
+          className="picker-v2"
+          type="text"
+          inputMode="decimal"
+          value={tradeValue}
+          onChange={(event) => setTradeValue(sanitizeDecimalInput(event.target.value))}
+          placeholder="Если известна"
+          disabled={submitting}
+        />
+        <span className="cs-sheet__hint">
+          Укажите стоимость на дату обмена. Если оставить поле пустым, стоимость полученных монет и результат обмена останутся неизвестными.
+        </span>
+      </div>
 
       {exceedsBalance && (
         <div className="tk-error">

@@ -49,7 +49,7 @@ BEGIN
             'basis_quality', s.summary ->> 'basis_quality',
         'remaining_cost_basis', (s.summary ->> 'remaining_cost_basis')::numeric,
             'avg_cost_per_unit', (s.summary ->> 'avg_cost_per_unit')::numeric,
-            'realized_pnl_lifetime_in_base', CASE WHEN s.summary->>'basis_quality' IN ('unknown','invalid','estimated') THEN NULL ELSE COALESCE(realized.total, 0) END,
+            'realized_pnl_lifetime_in_base', CASE WHEN s.summary->>'basis_quality' IN ('unknown','invalid','estimated') OR realized.has_unknown THEN NULL ELSE COALESCE(realized.total, 0) END,
             'last_event_at', last_event.event_at
         ) AS item
         FROM portfolio_positions pp
@@ -59,7 +59,8 @@ BEGIN
             SELECT budgeting.get__crypto_position_entry_summary(pp.id) AS summary
         ) AS s
         LEFT JOIN LATERAL (
-            SELECT SUM((pe.metadata ->> 'realized_in_base')::numeric) AS total
+            SELECT SUM((pe.metadata ->> 'realized_in_base')::numeric) AS total,
+                bool_or(pe.metadata->>'realized_in_base' IS NULL) AS has_unknown
             FROM portfolio_events pe
             WHERE pe.position_id = pp.id
               AND pe.metadata ? 'realized_in_base'

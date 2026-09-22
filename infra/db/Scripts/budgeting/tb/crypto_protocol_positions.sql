@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS budgeting.crypto_protocol_positions (
     network_code varchar(50),
     asset_symbol varchar(80) NOT NULL,
     quantity numeric(50, 18),
-    cost_basis_in_base numeric(20, 2) NOT NULL DEFAULT 0,
+    cost_basis_in_base numeric(20, 2),
     current_quantity numeric(50, 18),
     current_value_in_base numeric(20, 2) NOT NULL DEFAULT 0,
     rewards_claimed_in_base numeric(20, 2) NOT NULL DEFAULT 0,

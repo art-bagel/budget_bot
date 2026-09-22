@@ -15,6 +15,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _input_qty numeric;
     _existing record;
     _asset record;
     _target_position_id bigint;
@@ -41,6 +42,12 @@ DECLARE
     _comment_clean text;
 BEGIN
     SET search_path TO budgeting;
+    FOREACH _input_qty IN ARRAY ARRAY[_current_quantity,_return_quantity,_secondary_return_quantity] LOOP
+        IF _input_qty IS NOT NULL AND (_input_qty < 0 OR _input_qty::text IN ('NaN','Infinity','-Infinity') OR _input_qty<>round(_input_qty,18)) THEN
+            RAISE EXCEPTION 'Quantity must be finite, nonnegative and have at most 18 decimal places';
+        END IF;
+    END LOOP;
+
 
     SELECT *
     INTO _existing
@@ -56,13 +63,24 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
-    IF (_existing.metadata->>'basis_quality') IN ('unknown','invalid','estimated') THEN
+    IF (_existing.metadata->>'basis_quality')='invalid' THEN
         RAISE EXCEPTION 'Себестоимость протокольной позиции не подтверждена';
     END IF;
 
 
     -- The row lock above also serializes concurrent close requests. A retry
     -- must never credit collateral or its cost basis a second time.
+    IF _existing.cost_basis_in_base < 0 OR _existing.cost_basis_in_base::text IN ('NaN','Infinity','-Infinity') THEN
+        RAISE EXCEPTION 'Invalid collateral cost basis';
+    END IF;
+    IF _existing.metadata->>'basis_quality'='unknown' THEN
+        _existing.cost_basis_in_base := NULL;
+    END IF;
+    IF _existing.position_type='liquidity_pool' AND (_existing.cost_basis_in_base IS NULL
+        OR _existing.metadata->>'basis_quality'='estimated') THEN
+        RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
+    END IF;
+
     IF _existing.status <> 'open' THEN
         RAISE EXCEPTION 'Closed protocol position cannot be closed again';
     END IF;
@@ -109,7 +127,7 @@ BEGIN
 
         -- Split returned quantity into principal (carries cost basis) and rewards (zero cost).
         _original_quantity := COALESCE(_existing.quantity, 0);
-        _carried_cost := COALESCE(_existing.cost_basis_in_base, 0);
+        _carried_cost := _existing.cost_basis_in_base;
         _principal_qty := LEAST(_resolved_return_quantity, _original_quantity);
         _rewards_qty := GREATEST(_resolved_return_quantity - _original_quantity, 0);
         _principal_entry_value := CASE
@@ -196,6 +214,7 @@ BEGIN
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _principal_entry_value,
+                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE COALESCE(_existing.metadata->>'basis_quality','known') END,
                     'source_kind', 'defi_return',
                     'source_protocol_position_id', _position_id
                 ),
@@ -234,6 +253,7 @@ BEGIN
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _principal_entry_value,
+                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE COALESCE(_existing.metadata->>'basis_quality','known') END,
                     'source_kind', 'defi_return',
                     'source_protocol_position_id', _position_id
                 ),

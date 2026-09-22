@@ -260,13 +260,14 @@ export interface TransferCryptoBetweenInvestmentAccountsRequest {
 
 export interface SwapCryptoInvestmentAssetRequest {
   position_id: number;
-  from_amount: number;
+  from_amount: number | string;
   to_crypto_asset_id: number;
-  to_amount: number;
+  to_amount: number | string;
   target_investment_account_id?: number;
   comment?: string;
   operated_at?: string;
-  value_in_base?: number;
+  value_in_base?: number | string;
+  valuation_source?: string;
 }
 
 export interface CryptoProtocolPosition {
@@ -281,7 +282,7 @@ export interface CryptoProtocolPosition {
   network_code?: string | null;
   asset_symbol: string;
   quantity?: number | null;
-  cost_basis_in_base: number;
+  cost_basis_in_base: number | null;
   current_quantity?: number | null;
   current_value_in_base: number;
   rewards_claimed_in_base: number;
