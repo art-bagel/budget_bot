@@ -261,3 +261,36 @@ Table current_budget_balances {
     (category_id, currency_code) [pk]
   }
 }
+
+// Crypto input journal. Owner scope is derived from anchor account by the posting function.
+Table crypto_source_events {
+  id bigint [pk, increment]
+  owner_key text [not null]
+  anchor_account_id bigint [not null, ref: > bank_accounts.id]
+  source_namespace text [not null]
+  source_id text [not null]
+  occurred_at timestamptz [not null]
+  order_in_timestamp bigint [not null]
+  accounting_date date [not null]
+  commands jsonb [not null]
+  evidence jsonb [not null]
+  result jsonb
+  created_by_user_id bigint [not null, ref: > users.id]
+  created_at timestamptz [not null]
+  indexes {
+    (owner_key, source_namespace, source_id) [unique]
+    (owner_key, occurred_at, order_in_timestamp) [unique]
+  }
+}
+
+Table crypto_source_event_links {
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  command_index integer [not null]
+  ledger_table text [not null]
+  ledger_id bigint [not null]
+  indexes {
+    (ledger_table, ledger_id) [pk]
+    (source_event_id, command_index)
+  }
+  Note: "Links to operations/portfolio_events/liability/accrual ledgers captured atomically by insertion triggers; no amounts duplicated here."
+}

@@ -5,7 +5,7 @@ from typing import Any, List, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
@@ -14,6 +14,60 @@ from backend.app.storage import ledger, reports
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api/v1/crypto', tags=['crypto'])
+
+class CryptoSourceCommand(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
+                  'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
+                  'accrue', 'accrue_interest', 'liquidate']
+    payload: dict[str, Any]
+
+    @field_validator('payload')
+    @classmethod
+    def exact_numbers(cls, value: dict[str, Any]) -> dict[str, Any]:
+        # JSON fractional numbers have already passed through binary float.
+        # Importers must send decimal strings so quantities remain exact.
+        if any(isinstance(item, float) for item in value.values()):
+            raise ValueError('Дробные количества и суммы передавайте десятичными строками')
+        return value
+
+
+class CryptoSourceEventRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    anchor_account_id: int = Field(gt=0)
+    source_namespace: str = Field(min_length=1, max_length=100)
+    source_id: str = Field(min_length=1, max_length=1000)
+    occurred_at: AwareDatetime
+    order_in_timestamp: int = Field(ge=0, le=9223372036854775807)
+    accounting_date: date
+    commands: list[CryptoSourceCommand] = Field(min_length=1, max_length=100)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator('source_namespace', 'source_id')
+    @classmethod
+    def nonblank_source(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('Нужен непустой идентификатор источника')
+        return value
+
+
+@router.post('/source-events')
+async def post_crypto_source_event(body: CryptoSourceEventRequest,
+                                   user: CurrentUser = Depends(get_current_user)) -> dict:
+    return await ledger.put__crypto_source_event(
+        user.user_id, body.anchor_account_id, body.source_namespace, body.source_id,
+        body.occurred_at, body.order_in_timestamp, body.accounting_date,
+        [command.model_dump(mode='json') for command in body.commands], body.evidence,
+    )
+
+
+@router.get('/source-events')
+async def get_crypto_source_events(anchor_account_id: int = Query(gt=0),
+                                    limit: int = Query(50, ge=1, le=200),
+                                    offset: int = Query(0, ge=0),
+                                    user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    return await ledger.get__crypto_source_events(user.user_id, anchor_account_id, limit, offset)
+
 
 COINGECKO_IDS_BY_SYMBOL = {
     'BTC': 'bitcoin',

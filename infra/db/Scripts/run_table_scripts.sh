@@ -47,6 +47,7 @@ FILES=(
     "external_connections.sql"
     "crypto_liability_events.sql"
     "crypto_protocol_accrual_events.sql"
+    "crypto_source_events.sql"
 )
 
 # Порядок здесь значим — таблицы ссылаются друг на друга внешними ключами,
