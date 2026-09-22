@@ -844,6 +844,336 @@
       "passed": true
     },
     {
+      "name": "historical_February-2025_exact_quantity_remainders",
+      "actual": [
+        "1051.985516169",
+        "2796.090211"
+      ],
+      "expected": [
+        "1051.985516169",
+        "2796.090211"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_February-2025_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_February-2025_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 3032.626398,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 36.27218970082974,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 3032.626398,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 36.27218970082974,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_740_exact_quantity_remainders",
+      "actual": [
+        "520.808821137",
+        "849.708977"
+      ],
+      "expected": [
+        "520.808821137",
+        "849.708977"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_740_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_740_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 952.48067,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 115.48790801182348,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 952.48067,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 115.48790801182348,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_741_exact_quantity_remainders",
+      "actual": [
+        "678.257870828",
+        "1574.332244"
+      ],
+      "expected": [
+        "678.257870828",
+        "1574.332244"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_741_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_741_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 2278.438927,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 48.27866952959587,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 2278.438927,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 48.27866952959587,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_742_exact_quantity_remainders",
+      "actual": [
+        "452.864321581",
+        "1150.623444"
+      ],
+      "expected": [
+        "452.864321581",
+        "1150.623444"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_742_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_742_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1674.332708,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 65.69781470219,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1674.332708,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 65.69781470219,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_743_exact_quantity_remainders",
+      "actual": [
+        "302.371873298",
+        "873.123783"
+      ],
+      "expected": [
+        "302.371873298",
+        "873.123783"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_743_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_743_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1250.624175,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 87.9560800110073,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1250.624175,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 87.9560800110073,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
       "name": "liquidation_concurrent_retry_once",
       "actual": [
         true,
@@ -871,13 +1201,13 @@
     },
     {
       "name": "liquidation_migration_preserves_ledger",
-      "actual": "[{\"id\": 1, \"event_at\": \"2026-09-23\", \"metadata\": {}, \"quantity\": 100.000000000000000000, \"created_at\": \"2026-09-23T01:34:03.189255+03:00\", \"event_kind\": \"borrow\", \"external_id\": null, \"crypto_asset_id\": 2, \"realized_in_base\": null, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": 4, \"protocol_position_id\": 1, \"settlement_value_in_base\": 8000.00, \"debt_basis_change_in_base\": 8000.00, \"asset_cost_consumed_in_base\": null, \"interest_basis_change_in_base\": 0.00}, {\"id\": 2, \"event_at\": \"2025-01-02\", \"metadata\": {\"result\": {\"debt_asset_id\": 2, \"debt_quantity\": 50, \"fee_cost_in_base\": 0.00, \"realized_in_base\": 0.00, \"collateral_asset_id\": 1, \"collateral_quantity\": 40, \"protocol_position_id\": 1, \"liability_realized_in_base\": null, \"debt_basis_released_in_base\": 4000.00, \"realized_before_fee_in_base\": 0.00, \"interest_basis_released_in_base\": 0, \"collateral_cost_consumed_in_base\": 4000.00, \"asset_realized_before_fee_in_base\": null}, \"request\": {\"comment\": null, \"operated_at\": \"2025-01-02\", \"debt_quantity\": 50, \"interest_quantity\": 0, \"collateral_quantity\": 40, \"collateral_fee_quantity\": 0, \"settlement_value_in_base\": null}}, \"quantity\": -50.000000000000000000, \"created_at\": \"2026-09-23T01:34:03.220121+03:00\", \"event_kind\": \"liquidation\", \"external_id\": \"concurrent\", \"crypto_asset_id\": 2, \"realized_in_base\": 0.00, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": null, \"protocol_position_id\": 1, \"settlement_value_in_base\": null, \"debt_basis_change_in_base\": -4000.00, \"asset_cost_consumed_in_base\": 4000.00, \"interest_basis_change_in_base\": 0.00}]",
-      "expected": "[{\"id\": 1, \"event_at\": \"2026-09-23\", \"metadata\": {}, \"quantity\": 100.000000000000000000, \"created_at\": \"2026-09-23T01:34:03.189255+03:00\", \"event_kind\": \"borrow\", \"external_id\": null, \"crypto_asset_id\": 2, \"realized_in_base\": null, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": 4, \"protocol_position_id\": 1, \"settlement_value_in_base\": 8000.00, \"debt_basis_change_in_base\": 8000.00, \"asset_cost_consumed_in_base\": null, \"interest_basis_change_in_base\": 0.00}, {\"id\": 2, \"event_at\": \"2025-01-02\", \"metadata\": {\"result\": {\"debt_asset_id\": 2, \"debt_quantity\": 50, \"fee_cost_in_base\": 0.00, \"realized_in_base\": 0.00, \"collateral_asset_id\": 1, \"collateral_quantity\": 40, \"protocol_position_id\": 1, \"liability_realized_in_base\": null, \"debt_basis_released_in_base\": 4000.00, \"realized_before_fee_in_base\": 0.00, \"interest_basis_released_in_base\": 0, \"collateral_cost_consumed_in_base\": 4000.00, \"asset_realized_before_fee_in_base\": null}, \"request\": {\"comment\": null, \"operated_at\": \"2025-01-02\", \"debt_quantity\": 50, \"interest_quantity\": 0, \"collateral_quantity\": 40, \"collateral_fee_quantity\": 0, \"settlement_value_in_base\": null}}, \"quantity\": -50.000000000000000000, \"created_at\": \"2026-09-23T01:34:03.220121+03:00\", \"event_kind\": \"liquidation\", \"external_id\": \"concurrent\", \"crypto_asset_id\": 2, \"realized_in_base\": 0.00, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": null, \"protocol_position_id\": 1, \"settlement_value_in_base\": null, \"debt_basis_change_in_base\": -4000.00, \"asset_cost_consumed_in_base\": 4000.00, \"interest_basis_change_in_base\": 0.00}]",
+      "actual": "[{\"id\": 1, \"event_at\": \"2026-09-23\", \"metadata\": {}, \"quantity\": 100.000000000000000000, \"created_at\": \"2026-09-23T01:51:05.956005+03:00\", \"event_kind\": \"borrow\", \"external_id\": null, \"crypto_asset_id\": 2, \"realized_in_base\": null, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": 4, \"protocol_position_id\": 1, \"settlement_value_in_base\": 8000.00, \"debt_basis_change_in_base\": 8000.00, \"asset_cost_consumed_in_base\": null, \"interest_basis_change_in_base\": 0.00}, {\"id\": 2, \"event_at\": \"2025-01-02\", \"metadata\": {\"result\": {\"debt_asset_id\": 2, \"debt_quantity\": 50, \"fee_cost_in_base\": 0.00, \"realized_in_base\": 0.00, \"collateral_asset_id\": 1, \"collateral_quantity\": 40, \"protocol_position_id\": 1, \"liability_realized_in_base\": null, \"debt_basis_released_in_base\": 4000.00, \"realized_before_fee_in_base\": 0.00, \"interest_basis_released_in_base\": 0, \"collateral_cost_consumed_in_base\": 4000.00, \"asset_realized_before_fee_in_base\": null}, \"request\": {\"comment\": null, \"operated_at\": \"2025-01-02\", \"debt_quantity\": 50, \"interest_quantity\": 0, \"collateral_quantity\": 40, \"collateral_fee_quantity\": 0, \"settlement_value_in_base\": null}}, \"quantity\": -50.000000000000000000, \"created_at\": \"2026-09-23T01:51:06.005772+03:00\", \"event_kind\": \"liquidation\", \"external_id\": \"concurrent\", \"crypto_asset_id\": 2, \"realized_in_base\": 0.00, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": null, \"protocol_position_id\": 1, \"settlement_value_in_base\": null, \"debt_basis_change_in_base\": -4000.00, \"asset_cost_consumed_in_base\": 4000.00, \"interest_basis_change_in_base\": 0.00}]",
+      "expected": "[{\"id\": 1, \"event_at\": \"2026-09-23\", \"metadata\": {}, \"quantity\": 100.000000000000000000, \"created_at\": \"2026-09-23T01:51:05.956005+03:00\", \"event_kind\": \"borrow\", \"external_id\": null, \"crypto_asset_id\": 2, \"realized_in_base\": null, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": 4, \"protocol_position_id\": 1, \"settlement_value_in_base\": 8000.00, \"debt_basis_change_in_base\": 8000.00, \"asset_cost_consumed_in_base\": null, \"interest_basis_change_in_base\": 0.00}, {\"id\": 2, \"event_at\": \"2025-01-02\", \"metadata\": {\"result\": {\"debt_asset_id\": 2, \"debt_quantity\": 50, \"fee_cost_in_base\": 0.00, \"realized_in_base\": 0.00, \"collateral_asset_id\": 1, \"collateral_quantity\": 40, \"protocol_position_id\": 1, \"liability_realized_in_base\": null, \"debt_basis_released_in_base\": 4000.00, \"realized_before_fee_in_base\": 0.00, \"interest_basis_released_in_base\": 0, \"collateral_cost_consumed_in_base\": 4000.00, \"asset_realized_before_fee_in_base\": null}, \"request\": {\"comment\": null, \"operated_at\": \"2025-01-02\", \"debt_quantity\": 50, \"interest_quantity\": 0, \"collateral_quantity\": 40, \"collateral_fee_quantity\": 0, \"settlement_value_in_base\": null}}, \"quantity\": -50.000000000000000000, \"created_at\": \"2026-09-23T01:51:06.005772+03:00\", \"event_kind\": \"liquidation\", \"external_id\": \"concurrent\", \"crypto_asset_id\": 2, \"realized_in_base\": 0.00, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": null, \"protocol_position_id\": 1, \"settlement_value_in_base\": null, \"debt_basis_change_in_base\": -4000.00, \"asset_cost_consumed_in_base\": 4000.00, \"interest_basis_change_in_base\": 0.00}]",
       "passed": true
     }
   ],
-  "passed": 61,
-  "total": 61,
+  "passed": 76,
+  "total": 76,
   "source_sha256": {
     "infra/db/Scripts/budgeting/tb/crypto_assets.sql": "f56cffb759916312de1d19919428065dfe6d4017c563b2378dcffec388ce5ede",
     "infra/db/Scripts/budgeting/tb/portfolio_positions.sql": "322479fec836f36579b6e39ffddf636611137b8af91f4caf6122dbe8b90e8605",
@@ -899,6 +1229,7 @@
     "infra/db/Scripts/budgeting/func/set__update_crypto_protocol_position.sql": "d8a12831cf62fb42c959e83123e032f0756639e7d52f7b844c24a68941bc0259",
     "infra/db/Scripts/budgeting/func/put__lending_accrue_interest.sql": "93a3d438899697c9a491348709f5cf4ba8478c15b378c01326244f28f6caad14",
     "infra/db/Scripts/budgeting/func/put__lending_liquidate.sql": "536cfeea21b5a14f7c1fcbb49b641735b9d08411e644842b0d613589b2a84266",
+    "infra/db/Scripts/budgeting/tests/crypto_accounting/evaa-liquidation-quantities.json": "e8f98a052cb982dae59571e11f44e913bb1cfbc2399d60c0a44ba21ece2270fa",
     "infra/db/Scripts/budgeting/migrations/038_crypto_liquidations.sql": "ffd8438ee7752a309b490ad6c7e3b359f61c3956ab8334a00aef0fdfcb515add"
   }
 }

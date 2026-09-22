@@ -285,6 +285,35 @@ sql(f'SELECT budgeting.set__close_crypto_protocol_position(1,{protocol},_return_
 record('retry_after_close',json.loads(sql(call)),liquidation)
 record('close_after_full_liquidation_does_not_mint', [state(1),state(2)],spot_before)
 
+# Historical quantities with EXPLICITLY SYNTHETIC RUB opening costs.
+# This proves API-input amounts/remainders, not the owner's historical result.
+from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime, timezone
+history_path=HERE/'evaa-liquidation-quantities.json'
+files.append(history_path)
+for event in json.loads(history_path.read_text())['events']:
+    seed()
+    collateral=Decimal(event['collateral_before']); debt=Decimal(event['debt_before'])
+    sql(f"UPDATE budgeting.portfolio_positions SET quantity={collateral} WHERE id=1")
+    sql(f"UPDATE budgeting.portfolio_events SET quantity={collateral},metadata='{{\"entry_value_in_base\":100000}}' WHERE position_id=1")
+    protocol=json.loads(sql(f"""SELECT budgeting.put__create_crypto_protocol_position(
+        _user_id=>1,_investment_account_id=>1,_protocol_name=>'Historical quantities / synthetic RUB',
+        _position_type=>'lending',_asset_symbol=>'TON',_quantity=>{collateral},
+        _source_position_id=>1)"""))['id']
+    sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},{debt},100000,_borrowed_crypto_asset_id=>2)")
+    # The fixture's collateral asset uses a test id, including the TON-SLP case.
+    before_spot=[state(1),state(2)]
+    event_date=datetime.fromtimestamp(event['timestamp'],timezone.utc).date().isoformat()
+    out=json.loads(sql(f"SELECT budgeting.put__lending_liquidate(1,{protocol},{event['collateral_removed']},{event['debt_removed']},'historical-{event['event']}','{event_date}')"))
+    remaining=json.loads(sql(f"SELECT jsonb_build_array(quantity::text,metadata->>'borrowed_quantity') FROM budgeting.crypto_protocol_positions WHERE id={protocol}"))
+    record(f"historical_{event['event']}_exact_quantity_remainders",
+           [str(Decimal(remaining[0]).normalize()),str(Decimal(remaining[1]).normalize())],
+           [str(Decimal(event['collateral_after']).normalize()),str(Decimal(event['debt_after']).normalize())])
+    cost=(Decimal(100000)*Decimal(event['collateral_removed'])/collateral).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
+    release=(Decimal(100000)*Decimal(event['debt_removed'])/debt).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
+    record(f"historical_{event['event']}_synthetic_basis_result",Decimal(str(out['realized_in_base']))==release-cost,True)
+    record(f"historical_{event['event']}_spot_unchanged",[state(1),state(2)],before_spot)
+
 # Concurrent retries must serialize on the protocol lock and write only once.
 seed(); protocol=deposit()
 sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,8000,_borrowed_crypto_asset_id=>2)")
