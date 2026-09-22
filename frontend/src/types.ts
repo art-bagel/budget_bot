@@ -189,11 +189,12 @@ export interface CryptoAccountAssetSummary {
   position_id: number;
   quantity: number;
   opened_at?: string | null;
-  total_entry_value_in_base: number;
-  total_consumed_cost_basis: number;
-  remaining_cost_basis: number;
-  avg_cost_per_unit: number;
-  realized_pnl_lifetime_in_base: number;
+  total_entry_value_in_base: number | null;
+  total_consumed_cost_basis: number | null;
+  basis_quality: 'known' | 'confirmed_zero' | 'estimated' | 'unknown' | 'invalid';
+  remaining_cost_basis: number | null;
+  avg_cost_per_unit: number | null;
+  realized_pnl_lifetime_in_base: number | null;
   last_event_at?: string | null;
 }
 

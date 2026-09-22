@@ -34,15 +34,15 @@ DECLARE
     _investment_asset_type text;
     _position_id bigint;
     _source_position record;
-    _remaining_quantity numeric(30, 12);
+    _remaining_quantity numeric(50, 18);
     _asset record;
     _asset_symbol_resolved text;
     _entry_summary jsonb;
     _remaining_basis numeric(20, 2);
     _consumed_cost_basis numeric(20, 2);
-    _source_quantity numeric(30, 12);
+    _source_quantity numeric(50, 18);
     _secondary_position record;
-    _secondary_remaining_quantity numeric(30, 12);
+    _secondary_remaining_quantity numeric(50, 18);
     _secondary_asset record;
     _secondary_asset_symbol_resolved text;
     _secondary_network_code text;
@@ -50,12 +50,13 @@ DECLARE
     _secondary_entry_summary jsonb;
     _secondary_remaining_basis numeric(20, 2);
     _secondary_consumed_cost_basis numeric(20, 2);
-    _secondary_source_quantity numeric(30, 12);
+    _secondary_source_quantity numeric(50, 18);
     _borrow_asset record;
     _borrow_position_id bigint;
     _borrow_existing record;
     _borrow_asset_metadata jsonb;
     _borrow_value_in_base numeric(20, 2);
+    _borrow_event_id bigint;
     _base_currency_code char(3);
 BEGIN
     SET search_path TO budgeting;
@@ -120,17 +121,17 @@ BEGIN
             RAISE EXCEPTION 'Protocol source quantity must be positive';
         END IF;
 
-        _quantity := round(_quantity, 12);
+        _quantity := round(_quantity, 18);
         _source_quantity := COALESCE(_source_position.quantity, 0);
 
         IF _source_quantity < _quantity THEN
             RAISE EXCEPTION 'Сумма превышает остаток';
         END IF;
 
-        _remaining_quantity := round(_source_quantity - _quantity, 12);
+        _remaining_quantity := round(_source_quantity - _quantity, 18);
 
         -- Compute weighted-average cost basis to carry into DeFi.
-        _entry_summary := budgeting.get__crypto_position_entry_summary(_source_position_id);
+        _entry_summary := budgeting.get__crypto_position_known_entry_summary(_source_position_id);
         _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
         _consumed_cost_basis := CASE
             WHEN _source_quantity > 0
@@ -253,16 +254,16 @@ BEGIN
             RAISE EXCEPTION 'Secondary source position must be an open crypto asset on the same account';
         END IF;
 
-        _secondary_quantity := round(_secondary_quantity, 12);
+        _secondary_quantity := round(_secondary_quantity, 18);
         _secondary_source_quantity := COALESCE(_secondary_position.quantity, 0);
 
         IF _secondary_source_quantity < _secondary_quantity THEN
             RAISE EXCEPTION 'Сумма превышает остаток (token B)';
         END IF;
 
-        _secondary_remaining_quantity := round(_secondary_source_quantity - _secondary_quantity, 12);
+        _secondary_remaining_quantity := round(_secondary_source_quantity - _secondary_quantity, 18);
 
-        _secondary_entry_summary := budgeting.get__crypto_position_entry_summary(_secondary_source_position_id);
+        _secondary_entry_summary := budgeting.get__crypto_position_known_entry_summary(_secondary_source_position_id);
         _secondary_remaining_basis := COALESCE((_secondary_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
         _secondary_consumed_cost_basis := CASE
             WHEN _secondary_source_quantity > 0
@@ -357,14 +358,22 @@ BEGIN
     END IF;
 
     -- Borrow (lending only): credit borrowed crypto asset to the same account.
-    -- Cost basis = 0 — borrowed funds are debt, not user equity.
+    -- Asset acquisition and debt receive the same historical valuation.
+    -- Own funding remains zero; debt is recorded separately.
     IF _position_type = 'lending'
        AND _borrowed_crypto_asset_id IS NOT NULL
        AND _borrowed_quantity IS NOT NULL
        AND _borrowed_quantity > 0
     THEN
-        _borrowed_quantity := round(_borrowed_quantity, 12);
-        _borrow_value_in_base := round(COALESCE(_borrowed_value_in_base, 0), 2);
+        _borrowed_quantity := round(_borrowed_quantity, 18);
+        IF _borrowed_quantity <= 0 OR _borrowed_quantity::text IN ('NaN', 'Infinity', '-Infinity') THEN
+            RAISE EXCEPTION 'Borrowed quantity must be finite and positive';
+        END IF;
+        IF _borrowed_value_in_base IS NULL OR _borrowed_value_in_base <= 0
+           OR _borrowed_value_in_base::text IN ('NaN', 'Infinity', '-Infinity') THEN
+            RAISE EXCEPTION 'Для займа нужна положительная историческая оценка в базовой валюте';
+        END IF;
+        _borrow_value_in_base := round(_borrowed_value_in_base, 2);
         _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
         SELECT *
@@ -418,12 +427,14 @@ BEGIN
                 _borrow_asset_metadata || jsonb_build_object(
                     'action', 'lending_borrow',
                     'protocol_name', btrim(_protocol_name),
-                    'entry_value_in_base', 0,
+                    'entry_value_in_base', _borrow_value_in_base,
+                    'own_funding_in_base', 0,
+                    'debt_accounting_version', 2,
                     'source_kind', 'lending_borrow',
                     'value_in_base', _borrow_value_in_base
                 ),
                 _user_id
-            );
+            ) RETURNING id INTO _borrow_event_id;
         ELSE
             INSERT INTO portfolio_positions (
                 owner_type, owner_user_id, owner_family_id, investment_account_id,
@@ -454,12 +465,14 @@ BEGIN
                 _borrow_asset_metadata || jsonb_build_object(
                     'action', 'lending_borrow',
                     'protocol_name', btrim(_protocol_name),
-                    'entry_value_in_base', 0,
+                    'entry_value_in_base', _borrow_value_in_base,
+                    'own_funding_in_base', 0,
+                    'debt_accounting_version', 2,
                     'source_kind', 'lending_borrow',
                     'value_in_base', _borrow_value_in_base
                 ),
                 _user_id
-            );
+            ) RETURNING id INTO _borrow_event_id;
         END IF;
 
         _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
@@ -468,7 +481,9 @@ BEGIN
             'borrowed_asset_symbol', _borrow_asset.symbol,
             'borrowed_quantity', _borrowed_quantity,
             'borrowed_position_id', _borrow_position_id,
-            'borrowed_value_in_base', _borrow_value_in_base
+            'borrowed_value_in_base', _borrow_value_in_base,
+            'debt_cost_basis_in_base', _borrow_value_in_base,
+            'debt_accounting_version', 2
         );
     END IF;
 
@@ -515,6 +530,15 @@ BEGIN
         _user_id
     )
     RETURNING id INTO _position_id;
+
+    IF _borrow_event_id IS NOT NULL THEN
+        INSERT INTO crypto_liability_events(protocol_position_id, portfolio_event_id,
+            crypto_asset_id, event_kind, event_at, quantity, debt_basis_change_in_base,
+            settlement_value_in_base, created_by_user_id)
+        VALUES (_position_id, _borrow_event_id, _borrow_asset.id, 'borrow',
+            COALESCE(_deposited_at, current_date), _borrowed_quantity,
+            _borrow_value_in_base, _borrow_value_in_base, _user_id);
+    END IF;
 
     RETURN (
         SELECT item

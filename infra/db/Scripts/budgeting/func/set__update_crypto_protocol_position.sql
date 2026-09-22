@@ -36,6 +36,14 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF (_existing.metadata ->> 'debt_accounting_version') = '2'
+       AND COALESCE(_metadata, '{}'::jsonb) ?| ARRAY[
+           'borrowed_quantity', 'borrowed_value_in_base', 'debt_cost_basis_in_base',
+           'debt_interest_quantity', 'debt_interest_basis_in_base',
+           'debt_accounting_version', 'borrowed_crypto_asset_id', 'borrowed_position_id'] THEN
+        RAISE EXCEPTION 'Version-2 debt must be changed through lending events';
+    END IF;
+
     UPDATE crypto_protocol_positions
     SET quantity = COALESCE(_quantity, quantity),
         current_quantity = COALESCE(_current_quantity, current_quantity),

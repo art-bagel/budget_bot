@@ -18,22 +18,22 @@ DECLARE
     _existing record;
     _asset record;
     _target_position_id bigint;
-    _resolved_return_quantity numeric(30, 12);
+    _resolved_return_quantity numeric(50, 18);
     _base_currency_code char(3);
     _asset_symbol text;
     _asset_name text;
     _asset_network_code text;
     _asset_contract_address text;
-    _original_quantity numeric(30, 12);
+    _original_quantity numeric(50, 18);
     _carried_cost numeric(20, 2);
-    _principal_qty numeric(30, 12);
-    _rewards_qty numeric(30, 12);
+    _principal_qty numeric(50, 18);
+    _rewards_qty numeric(50, 18);
     _principal_entry_value numeric(20, 2);
-    _secondary_qty numeric(30, 12);
+    _secondary_qty numeric(50, 18);
     _secondary_value numeric(20, 2);
     _secondary_position_id bigint;
     _secondary_symbol text;
-    _secondary_existing_qty numeric(30, 12);
+    _secondary_existing_qty numeric(50, 18);
     _secondary_existing_basis numeric(20, 2);
     _secondary_target_position_id bigint;
     _secondary_event_type text;
@@ -56,13 +56,24 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF (_existing.metadata->>'basis_quality') IN ('unknown','invalid','estimated') THEN
+        RAISE EXCEPTION 'Себестоимость протокольной позиции не подтверждена';
+    END IF;
+
+
+    -- The row lock above also serializes concurrent close requests. A retry
+    -- must never credit collateral or its cost basis a second time.
+    IF _existing.status <> 'open' THEN
+        RAISE EXCEPTION 'Closed protocol position cannot be closed again';
+    END IF;
+
     IF _existing.position_type = 'lending'
        AND COALESCE(NULLIF(_existing.metadata ->> 'borrowed_quantity', ''), '0')::numeric > 0
     THEN
         RAISE EXCEPTION 'Нельзя закрыть лендинг, пока долг не погашен';
     END IF;
 
-    _resolved_return_quantity := round(COALESCE(_return_quantity, _current_quantity, _existing.current_quantity, 0), 12);
+    _resolved_return_quantity := round(COALESCE(_return_quantity, _current_quantity, _existing.current_quantity, 0), 18);
     _base_currency_code := budgeting.get__owner_base_currency(_existing.owner_type, _existing.owner_user_id, _existing.owner_family_id);
 
     UPDATE crypto_protocol_positions
@@ -277,7 +288,7 @@ BEGIN
     END IF;
 
     -- Token B return (LP only).
-    _secondary_qty := round(COALESCE(_secondary_return_quantity, 0), 12);
+    _secondary_qty := round(COALESCE(_secondary_return_quantity, 0), 18);
     IF _secondary_qty > 0 THEN
         IF _existing.position_type <> 'liquidity_pool' THEN
             RAISE EXCEPTION 'Secondary return is only allowed for liquidity_pool positions';

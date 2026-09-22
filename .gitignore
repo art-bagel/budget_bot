@@ -208,3 +208,7 @@ node_modules/
 # Дампы, которые деплой снимает прямо перед накатом миграций.
 # Полная выгрузка финансовой базы — в репозиторий ей нельзя.
 /pre-migrate-dumps/
+
+# Local dependency symlinks used by isolated worktrees (also match symlinks).
+/frontend/node_modules
+/venv

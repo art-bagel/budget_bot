@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional
 
@@ -169,11 +170,12 @@ class CryptoAccountAssetSummary(BaseModel):
     position_id: int
     quantity: float
     opened_at: Optional[date] = None
-    total_entry_value_in_base: float
-    total_consumed_cost_basis: float
-    remaining_cost_basis: float
-    avg_cost_per_unit: float
-    realized_pnl_lifetime_in_base: float
+    total_entry_value_in_base: Optional[float]
+    total_consumed_cost_basis: Optional[float]
+    basis_quality: Literal['known', 'confirmed_zero', 'estimated', 'unknown', 'invalid']
+    remaining_cost_basis: Optional[float]
+    avg_cost_per_unit: Optional[float]
+    realized_pnl_lifetime_in_base: Optional[float]
     last_event_at: Optional[date] = None
 
 
@@ -248,12 +250,12 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     secondary_source_position_id: Optional[int] = None
     secondary_quantity: Optional[float] = None
     borrowed_crypto_asset_id: Optional[int] = None
-    borrowed_quantity: Optional[float] = None
+    borrowed_quantity: Optional[Decimal] = None
     borrowed_value_in_base: Optional[float] = None
 
 
 class TakeLendingDebtRequest(BaseModel):
-    debt_qty: float
+    debt_qty: Decimal
     value_in_base: Optional[float] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
@@ -261,25 +263,33 @@ class TakeLendingDebtRequest(BaseModel):
 
     @field_validator('debt_qty')
     @classmethod
-    def positive(cls, v: float) -> float:
-        if v <= 0:
+    def positive(cls, v: Decimal) -> Decimal:
+        if not v.is_finite() or v <= 0:
             raise ValueError('Сумма заёма должна быть положительной')
         return v
 
 
 class RepayLendingDebtRequest(BaseModel):
     source_position_id: int
-    repay_qty: float
+    repay_qty: Decimal
+    interest_qty: Decimal = Field(default=Decimal('0'), ge=0, allow_inf_nan=False)
     value_in_base: Optional[float] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
 
     @field_validator('repay_qty')
     @classmethod
-    def positive(cls, v: float) -> float:
-        if v <= 0:
+    def positive(cls, v: Decimal) -> Decimal:
+        if not v.is_finite() or v <= 0:
             raise ValueError('Сумма погашения должна быть положительной')
         return v
+
+
+class AccrueLendingInterestRequest(BaseModel):
+    quantity: Decimal = Field(gt=0, allow_inf_nan=False)
+    value_in_base: Decimal = Field(ge=0, allow_inf_nan=False)
+    external_id: str = Field(min_length=1)
+    operated_at: Optional[date] = None
 
 
 class PayCryptoFeeRequest(BaseModel):
@@ -773,8 +783,22 @@ async def repay_lending_debt(
         position_id=position_id,
         source_position_id=body.source_position_id,
         repay_qty=body.repay_qty,
+        interest_qty=body.interest_qty,
         value_in_base=body.value_in_base,
         comment=body.comment,
+        operated_at=body.operated_at,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
+@router.post('/protocol-positions/{position_id}/accrue-interest', response_model=CryptoProtocolPositionItem)
+async def accrue_lending_interest(
+    position_id: int, body: AccrueLendingInterestRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> CryptoProtocolPositionItem:
+    result = await ledger.put__lending_accrue_interest(
+        user_id=user.user_id, position_id=position_id, quantity=body.quantity,
+        value_in_base=body.value_in_base, external_id=body.external_id,
         operated_at=body.operated_at,
     )
     return CryptoProtocolPositionItem(**result)

@@ -19,18 +19,24 @@ DECLARE
     _target_position_id bigint;
     _base_currency_code char(3);
     _asset_metadata jsonb;
-    _current_borrowed numeric(30, 12);
-    _new_borrowed numeric(30, 12);
+    _current_borrowed numeric(50, 18);
+    _new_borrowed numeric(50, 18);
     _existing_value numeric(20, 2);
     _new_value numeric(20, 2);
     _resolved_value numeric(20, 2);
+    _event_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    IF _debt_qty IS NULL OR _debt_qty <= 0 THEN
+    IF _debt_qty IS NULL OR _debt_qty <= 0
+       OR _debt_qty::text IN ('NaN', 'Infinity', '-Infinity') THEN
         RAISE EXCEPTION 'Debt quantity must be positive';
     END IF;
-    _debt_qty := round(_debt_qty, 12);
+    _debt_qty := round(_debt_qty, 18);
+    IF _debt_qty <= 0 OR _value_in_base IS NULL OR _value_in_base <= 0
+       OR _value_in_base::text IN ('NaN', 'Infinity', '-Infinity') THEN
+        RAISE EXCEPTION 'Для займа нужна положительная историческая оценка в базовой валюте';
+    END IF;
 
     SELECT *
     INTO _existing
@@ -52,6 +58,11 @@ BEGIN
 
     IF NOT budgeting.has__owner_access(_user_id, _existing.owner_type, _existing.owner_user_id, _existing.owner_family_id) THEN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
+    END IF;
+
+    IF COALESCE((_existing.metadata ->> 'borrowed_quantity')::numeric, 0) > 0
+       AND (_existing.metadata ->> 'debt_accounting_version') IS DISTINCT FROM '2' THEN
+        RAISE EXCEPTION 'Legacy loan must be reconstructed before changing its debt';
     END IF;
 
     _borrow_asset_id := NULLIF((_existing.metadata ->> 'borrowed_crypto_asset_id'), '')::bigint;
@@ -120,12 +131,14 @@ BEGIN
                 'action', 'lending_take_more_debt',
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
-                'entry_value_in_base', 0,
+                'entry_value_in_base', _resolved_value,
+                'own_funding_in_base', 0,
+                'debt_accounting_version', 2,
                 'source_kind', 'lending_borrow',
                 'value_in_base', _resolved_value
             ),
             _user_id
-        );
+        ) RETURNING id INTO _event_id;
     ELSE
         INSERT INTO portfolio_positions (
             owner_type, owner_user_id, owner_family_id, investment_account_id,
@@ -158,17 +171,19 @@ BEGIN
                 'action', 'lending_take_more_debt',
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
-                'entry_value_in_base', 0,
+                'entry_value_in_base', _resolved_value,
+                'own_funding_in_base', 0,
+                'debt_accounting_version', 2,
                 'source_kind', 'lending_borrow',
                 'value_in_base', _resolved_value
             ),
             _user_id
-        );
+        ) RETURNING id INTO _event_id;
     END IF;
 
     _current_borrowed := COALESCE(NULLIF(_existing.metadata ->> 'borrowed_quantity', ''), '0')::numeric;
-    _new_borrowed := round(_current_borrowed + _debt_qty, 12);
-    _existing_value := COALESCE(NULLIF(_existing.metadata ->> 'borrowed_value_in_base', ''), '0')::numeric;
+    _new_borrowed := round(_current_borrowed + _debt_qty, 18);
+    _existing_value := COALESCE(NULLIF(_existing.metadata ->> 'debt_cost_basis_in_base', ''), '0')::numeric;
     _new_value := round(_existing_value + _resolved_value, 2);
 
     UPDATE crypto_protocol_positions
@@ -178,10 +193,19 @@ BEGIN
             'borrowed_asset_symbol', _borrow_asset.symbol,
             'borrowed_quantity', _new_borrowed,
             'borrowed_position_id', _target_position_id,
-            'borrowed_value_in_base', _new_value
+            'borrowed_value_in_base', _new_value,
+            'debt_cost_basis_in_base', _new_value,
+            'debt_accounting_version', 2
         ),
         updated_at = current_timestamp
     WHERE id = _position_id;
+
+    INSERT INTO crypto_liability_events(protocol_position_id, portfolio_event_id,
+        crypto_asset_id, event_kind, event_at, quantity, debt_basis_change_in_base,
+        settlement_value_in_base, created_by_user_id)
+    VALUES (_position_id, _event_id, _borrow_asset.id, 'borrow',
+        COALESCE(_operated_at, current_date), _debt_qty, _resolved_value,
+        _resolved_value, _user_id);
 
     RETURN (
         SELECT item

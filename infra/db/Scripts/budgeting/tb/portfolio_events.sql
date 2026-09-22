@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS budgeting.portfolio_events (
     position_id bigint NOT NULL REFERENCES budgeting.portfolio_positions(id) ON DELETE CASCADE,
     event_type varchar(30) NOT NULL CHECK (event_type IN ('open', 'top_up', 'partial_close', 'close', 'income', 'fee', 'adjustment', 'transfer_in', 'transfer_out', 'swap_in', 'swap_out')),
     event_at date NOT NULL DEFAULT CURRENT_DATE,
-    quantity numeric(20, 8),
+    quantity numeric(50, 18),
     amount numeric(20, 8),
     currency_code char(3) REFERENCES budgeting.currencies(code),
     linked_operation_id bigint REFERENCES budgeting.operations(id),

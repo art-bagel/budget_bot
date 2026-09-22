@@ -88,7 +88,7 @@ BEGIN
 
     _remaining_quantity := round(_source_quantity - _quantity, 12);
 
-    _entry_summary := budgeting.get__crypto_position_entry_summary(_source_position_id);
+    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_source_position_id);
     _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
     _consumed_cost_basis := CASE
         WHEN _source_quantity > 0
@@ -168,7 +168,7 @@ BEGIN
 
         _secondary_remaining_quantity := round(_secondary_source_quantity - _secondary_quantity, 12);
 
-        _secondary_entry_summary := budgeting.get__crypto_position_entry_summary(_secondary_source_position_id);
+        _secondary_entry_summary := budgeting.get__crypto_position_known_entry_summary(_secondary_source_position_id);
         _secondary_remaining_basis := COALESCE((_secondary_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
         _secondary_consumed_cost_basis := CASE
             WHEN _secondary_source_quantity > 0

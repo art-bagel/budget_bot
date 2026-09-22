@@ -505,6 +505,7 @@ class Ledger(DataBase):
         value_in_base: Optional[float] = None,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
+        interest_qty: float = 0,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__LENDING_REPAY_DEBT),
@@ -515,6 +516,16 @@ class Ledger(DataBase):
             value_in_base,
             comment,
             operated_at,
+            interest_qty,
+        )
+
+    async def put__lending_accrue_interest(
+        self, user_id: int, position_id: int, quantity, value_in_base,
+        external_id: str, operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('put__lending_accrue_interest'), user_id, position_id,
+            quantity, value_in_base, external_id, operated_at,
         )
 
     async def put__crypto_pay_fee(

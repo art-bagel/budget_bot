@@ -69,6 +69,11 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF (_existing.metadata->>'basis_quality') IN ('unknown','invalid','estimated') THEN
+        RAISE EXCEPTION 'Себестоимость протокольной позиции не подтверждена';
+    END IF;
+
+
     IF _existing.status <> 'open' THEN
         RAISE EXCEPTION 'Closed protocol position cannot be partially closed';
     END IF;

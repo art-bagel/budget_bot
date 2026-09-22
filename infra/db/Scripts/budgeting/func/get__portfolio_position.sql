@@ -31,7 +31,8 @@ BEGIN
         'close_amount_in_currency', pp.close_amount_in_currency,
         'close_currency_code', pp.close_currency_code,
         'comment', pp.comment,
-        'metadata', pp.metadata,
+        'metadata', CASE WHEN pp.asset_type_code='crypto' THEN pp.metadata || jsonb_build_object(
+                    'basis_quality',budgeting.get__crypto_position_entry_summary(pp.id)->>'basis_quality') ELSE pp.metadata END,
         'created_by_user_id', pp.created_by_user_id,
         'created_at', pp.created_at
     )

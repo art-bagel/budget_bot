@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS budgeting.portfolio_positions (
     asset_type_code varchar(30) NOT NULL,
     title varchar(150) NOT NULL,
     status varchar(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
-    quantity numeric(20, 8),
+    quantity numeric(50, 18),
     amount_in_currency numeric(20, 8) NOT NULL,
     currency_code char(3) NOT NULL REFERENCES budgeting.currencies(code),
     opened_at date NOT NULL DEFAULT CURRENT_DATE,

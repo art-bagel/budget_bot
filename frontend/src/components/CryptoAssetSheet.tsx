@@ -133,14 +133,17 @@ export default function CryptoAssetSheet({
   }, [open, investmentAccountId, cryptoAssetId]);
 
   const baseSym = currencySymbol(baseCurrencyCode);
+  const basisQuality = detail?.basis_quality ?? detail?.asset_metadata.reconstruction_basis_quality;
+  const basisUnknown = basisQuality === 'unknown' || basisQuality === 'invalid' || detail?.remaining_cost_basis == null;
+  const basisEstimated = basisQuality === 'estimated';
 
   const currentValue = detail && livePrice && livePrice.price > 0
     ? detail.quantity * livePrice.price
     : null;
-  const unrealized = currentValue !== null && detail
+  const unrealized = currentValue !== null && detail && !basisUnknown && detail.remaining_cost_basis !== null
     ? currentValue - detail.remaining_cost_basis
     : null;
-  const unrealizedPct = unrealized !== null && detail && detail.remaining_cost_basis > 0
+  const unrealizedPct = unrealized !== null && detail && detail.remaining_cost_basis !== null && detail.remaining_cost_basis > 0
     ? (unrealized / detail.remaining_cost_basis) * 100
     : null;
 
@@ -187,7 +190,8 @@ export default function CryptoAssetSheet({
             <div className="ca-sheet__hero-value">
               {currentValue !== null
                 ? `${formatNumericAmount(currentValue)} ${baseSym}`
-                : `≈ ${formatNumericAmount(detail.remaining_cost_basis)} ${baseSym} (по себестоимости)`}
+                : basisUnknown ? 'Оценка стоимости недоступна'
+                  : `≈ ${formatNumericAmount(detail.remaining_cost_basis ?? 0)} ${baseSym} (по себестоимости)`}
             </div>
             {livePrice && (
               <div className="ca-sheet__hero-price">
@@ -205,10 +209,10 @@ export default function CryptoAssetSheet({
             <div className="ca-sheet__stat">
               <span className="ca-sheet__stat-label">Cost basis</span>
               <span className="ca-sheet__stat-val">
-                {formatNumericAmount(detail.remaining_cost_basis)} {baseSym}
+                {basisUnknown ? '—' : `${basisEstimated ? '≈ ' : ''}${formatNumericAmount(detail.remaining_cost_basis ?? 0)} ${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">
-                avg {formatNumericAmount(detail.avg_cost_per_unit, 4)}
+                {basisUnknown ? 'неизвестна' : `avg ${formatNumericAmount(detail.avg_cost_per_unit ?? 0, 4)}`}
               </span>
             </div>
             <div className="ca-sheet__stat">
@@ -233,8 +237,8 @@ export default function CryptoAssetSheet({
             </div>
             <div className="ca-sheet__stat">
               <span className="ca-sheet__stat-label">Realized</span>
-              <span className={`ca-sheet__stat-val ${detail.realized_pnl_lifetime_in_base >= 0 ? 'ca-sheet__stat-val--pos' : detail.realized_pnl_lifetime_in_base < 0 ? 'ca-sheet__stat-val--neg' : 'ca-sheet__stat-val--mute'}`}>
-                {detail.realized_pnl_lifetime_in_base > 0 ? '+' : ''}{formatNumericAmount(detail.realized_pnl_lifetime_in_base)} {baseSym}
+              <span className={`ca-sheet__stat-val ${detail.realized_pnl_lifetime_in_base !== null && detail.realized_pnl_lifetime_in_base >= 0 ? 'ca-sheet__stat-val--pos' : detail.realized_pnl_lifetime_in_base !== null && detail.realized_pnl_lifetime_in_base < 0 ? 'ca-sheet__stat-val--neg' : 'ca-sheet__stat-val--mute'}`}>
+                {basisUnknown || basisEstimated || detail.realized_pnl_lifetime_in_base === null ? '—' : `${detail.realized_pnl_lifetime_in_base > 0 ? '+' : ''}${formatNumericAmount(detail.realized_pnl_lifetime_in_base)} ${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">lifetime</span>
             </div>

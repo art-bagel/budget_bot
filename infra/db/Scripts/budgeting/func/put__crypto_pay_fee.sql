@@ -51,7 +51,7 @@ BEGIN
 
     _remaining_quantity := round(_source_quantity - _quantity, 12);
 
-    _entry_summary := budgeting.get__crypto_position_entry_summary(_source_position_id);
+    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_source_position_id);
     _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
     _consumed_cost_basis := CASE
         WHEN _source_quantity > 0

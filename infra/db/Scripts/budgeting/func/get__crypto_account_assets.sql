@@ -46,9 +46,10 @@ BEGIN
             'opened_at', pp.opened_at,
             'total_entry_value_in_base', (s.summary ->> 'total_entry_value_in_base')::numeric,
             'total_consumed_cost_basis', (s.summary ->> 'total_consumed_cost_basis')::numeric,
-            'remaining_cost_basis', (s.summary ->> 'remaining_cost_basis')::numeric,
+            'basis_quality', s.summary ->> 'basis_quality',
+        'remaining_cost_basis', (s.summary ->> 'remaining_cost_basis')::numeric,
             'avg_cost_per_unit', (s.summary ->> 'avg_cost_per_unit')::numeric,
-            'realized_pnl_lifetime_in_base', COALESCE(realized.total, 0),
+            'realized_pnl_lifetime_in_base', CASE WHEN s.summary->>'basis_quality' IN ('unknown','invalid','estimated') THEN NULL ELSE COALESCE(realized.total, 0) END,
             'last_event_at', last_event.event_at
         ) AS item
         FROM portfolio_positions pp
