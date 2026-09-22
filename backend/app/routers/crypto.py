@@ -292,6 +292,24 @@ class AccrueLendingInterestRequest(BaseModel):
     operated_at: Optional[date] = None
 
 
+class LiquidateLendingRequest(BaseModel):
+    collateral_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    debt_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    interest_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    collateral_fee_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    settlement_value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False)
+    external_id: str = Field(min_length=1)
+    operated_at: date
+    comment: Optional[str] = None
+
+    @field_validator('external_id')
+    @classmethod
+    def nonempty_source(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('Нужен идентификатор источника')
+        return v
+
+
 class PayCryptoFeeRequest(BaseModel):
     quantity: float
     comment: Optional[str] = None
@@ -802,6 +820,16 @@ async def accrue_lending_interest(
         operated_at=body.operated_at,
     )
     return CryptoProtocolPositionItem(**result)
+
+
+@router.post('/protocol-positions/{position_id}/liquidate')
+async def liquidate_lending(
+    position_id: int, body: LiquidateLendingRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return await ledger.put__lending_liquidate(
+        user_id=user.user_id, position_id=position_id, **body.model_dump(),
+    )
 
 
 @router.post('/asset-positions/{position_id}/pay-fee')

@@ -36,7 +36,7 @@ files += [DB / 'func' / (n + '.sql') for n in [
     'put__create_crypto_protocol_position', 'put__lending_take_more_debt',
     'put__lending_repay_debt', 'set__close_crypto_protocol_position',
     'put__record_portfolio_income', 'put__swap_crypto_investment_asset',
-    'set__update_crypto_protocol_position', 'put__lending_accrue_interest']]
+    'set__update_crypto_protocol_position', 'put__lending_accrue_interest', 'put__lending_liquidate']]
 for p in files:
     sql(p.read_text())
 
@@ -235,6 +235,73 @@ record('positive_balance_without_entries_is_unknown',state(2)['basis_quality'],'
 seed()
 sql("SELECT budgeting.put__crypto_pay_fee(1,1,1)")
 record('network_fee_reduces_remaining_basis',[state(1)['quantity_now'],state(1)['remaining_cost_basis']],[199,19900])
+
+# Liquidation is protocol-only: no second consumption from the spot wallet.
+seed(); protocol = deposit()
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,8000,_borrowed_crypto_asset_id=>2)")
+sql(f"SELECT budgeting.put__lending_accrue_interest(1,{protocol},10,1000,'interest','2025-01-01')")
+spot_before = [state(1), state(2)]
+call = f"SELECT budgeting.put__lending_liquidate(1,{protocol},40,55,'liq-1','2025-01-02',5,2,5000)"
+liquidation = json.loads(sql(call))
+record('liquidation_cost_debt_fee_and_result',
+       [liquidation[k] for k in ['collateral_cost_consumed_in_base','debt_basis_released_in_base',
+        'interest_basis_released_in_base','fee_cost_in_base','realized_before_fee_in_base',
+        'realized_in_base','asset_realized_before_fee_in_base','liability_realized_in_base']],
+       [4000,4500,500,200,700,500,1200,-500])
+record('liquidation_does_not_touch_spot', [state(1),state(2)], spot_before)
+record('liquidation_exact_retry', json.loads(sql(call)), liquidation)
+def protocol_state():
+    return json.loads(sql(f"SELECT jsonb_build_array(quantity,cost_basis_in_base,metadata->'borrowed_quantity',metadata->'debt_cost_basis_in_base',metadata->'debt_interest_quantity') FROM budgeting.crypto_protocol_positions WHERE id={protocol}"))
+record('partial_liquidation_remaining', protocol_state(), [60,6000,55,4500,5])
+for label, statement in [
+    ('conflicting_retry',call.replace('40,55','41,55')),
+    ('access_denied',call.replace('liquidate(1,','liquidate(2,')),
+    ('excess_collateral',call.replace("40,55,'liq-1'","61,55,'bad'")),
+    ('excess_principal',call.replace("40,55,'liq-1','2025-01-02',5", "40,55,'bad','2025-01-02',0")),
+    ('nan',call.replace("40,55,'liq-1'","'NaN',55,'bad'")),
+    ('precision',call.replace("40,55,'liq-1'","0.0000000000000000001,55,'bad'")),
+]:
+    before=protocol_state(); rejected=False
+    try: sql(statement)
+    except RuntimeError: rejected=True
+    record('liquidation_'+label, [rejected,protocol_state()], [True,before])
+# Force an error AFTER the projection UPDATE to prove statement rollback.
+sql("""CREATE FUNCTION budgeting.fail_liquidation_test() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'Injected ledger failure'; END $$;
+CREATE TRIGGER fail_liquidation_test BEFORE INSERT ON budgeting.crypto_liability_events
+FOR EACH ROW EXECUTE FUNCTION budgeting.fail_liquidation_test();""")
+before=protocol_state(); rejected=False
+try: sql(call.replace("'liq-1'", "'fail'"))
+except RuntimeError: rejected=True
+record('liquidation_rolls_back_projection_on_ledger_failure',[rejected,protocol_state()],[True,before])
+sql('DROP TRIGGER fail_liquidation_test ON budgeting.crypto_liability_events')
+last=json.loads(sql(f"SELECT budgeting.put__lending_liquidate(1,{protocol},60,55,'liq-2','2025-01-03',5)"))
+record('full_liquidation_zero_residual',protocol_state(),[0,0,0,0,0])
+record('unknown_settlement_does_not_invent_components',
+       [last['realized_in_base'],last['asset_realized_before_fee_in_base'],last['liability_realized_in_base']],[-1500,None,None])
+record('liquidation_total_includes_interest_once', json.loads(sql(
+    f"SELECT jsonb_build_array(sum(realized_in_base),sum(asset_cost_consumed_in_base),sum(debt_basis_change_in_base)) FROM budgeting.crypto_liability_events WHERE protocol_position_id={protocol}")),[-2000,10000,0])
+sql(f'SELECT budgeting.set__close_crypto_protocol_position(1,{protocol},_return_quantity=>0)')
+record('retry_after_close',json.loads(sql(call)),liquidation)
+record('close_after_full_liquidation_does_not_mint', [state(1),state(2)],spot_before)
+
+# Concurrent retries must serialize on the protocol lock and write only once.
+seed(); protocol=deposit()
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,8000,_borrowed_crypto_asset_id=>2)")
+concurrent_call=f"SELECT budgeting.put__lending_liquidate(1,{protocol},40,50,'concurrent','2025-01-02')"
+from concurrent.futures import ThreadPoolExecutor
+with ThreadPoolExecutor(max_workers=2) as executor:
+    responses=list(executor.map(sql,[concurrent_call,concurrent_call]))
+record('liquidation_concurrent_retry_once',
+       [responses[0]==responses[1],protocol_state(),int(sql("SELECT count(*) FROM budgeting.crypto_liability_events WHERE event_kind='liquidation'"))],
+       [True,[60,6000,50,4000,0],1])
+# The upgrade preserves existing ledger data and installs the same rules as tb/.
+migration=DB/'migrations/038_crypto_liquidations.sql'
+files.append(migration)
+before=sql('SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM budgeting.crypto_liability_events e')
+sql(migration.read_text()); sql(migration.read_text())
+record('liquidation_migration_preserves_ledger',
+       sql('SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM budgeting.crypto_liability_events e'),before)
 
 result = {'scope':'Isolated actual SQL functions; simplified identity/bank fixture; no production access',
           'checks':results,'passed':sum(x['passed'] for x in results),'total':len(results),

@@ -528,6 +528,18 @@ class Ledger(DataBase):
             quantity, value_in_base, external_id, operated_at,
         )
 
+    async def put__lending_liquidate(
+        self, user_id: int, position_id: int, collateral_qty, debt_qty,
+        external_id: str, operated_at: date, interest_qty=0,
+        collateral_fee_qty=0, settlement_value_in_base=None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('put__lending_liquidate'), user_id, position_id,
+            collateral_qty, debt_qty, external_id, operated_at, interest_qty,
+            collateral_fee_qty, settlement_value_in_base, comment,
+        )
+
     async def put__crypto_pay_fee(
         self,
         user_id: int,
