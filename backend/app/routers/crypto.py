@@ -122,14 +122,14 @@ class TransferCryptoFromInvestmentRequest(BaseModel):
 class TransferCryptoBetweenInvestmentAccountsRequest(BaseModel):
     position_id: int
     target_investment_account_id: int
-    amount: float
+    amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     comment: Optional[str] = None
     operated_at: Optional[date] = None
 
     @field_validator('amount')
     @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
+        if not v.is_finite() or v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
 
@@ -292,6 +292,23 @@ class AccrueLendingInterestRequest(BaseModel):
     operated_at: Optional[date] = None
 
 
+class AccrueLendingRequest(BaseModel):
+    collateral_qty: Decimal = Field(ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    interest_qty: Decimal = Field(ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    interest_value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False)
+    collateral_before: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    debt_before: Decimal = Field(ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    external_id: str = Field(min_length=1)
+    operated_at: date
+
+    @field_validator('external_id')
+    @classmethod
+    def nonempty_source(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('Нужен идентификатор источника')
+        return v
+
+
 class LiquidateLendingRequest(BaseModel):
     collateral_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     debt_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
@@ -311,15 +328,15 @@ class LiquidateLendingRequest(BaseModel):
 
 
 class PayCryptoFeeRequest(BaseModel):
-    quantity: float
+    quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     comment: Optional[str] = None
     operated_at: Optional[date] = None
     link_protocol_position_id: Optional[int] = None
 
     @field_validator('quantity')
     @classmethod
-    def positive(cls, v: float) -> float:
-        if v <= 0:
+    def positive(cls, v: Decimal) -> Decimal:
+        if not v.is_finite() or v <= 0:
             raise ValueError('Сумма комиссии должна быть положительной')
         return v
 
@@ -820,6 +837,16 @@ async def accrue_lending_interest(
         operated_at=body.operated_at,
     )
     return CryptoProtocolPositionItem(**result)
+
+
+@router.post('/protocol-positions/{position_id}/accrue')
+async def accrue_lending(
+    position_id: int, body: AccrueLendingRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return await ledger.put__lending_accrue(
+        user_id=user.user_id, position_id=position_id, **body.model_dump(),
+    )
 
 
 @router.post('/protocol-positions/{position_id}/liquidate')

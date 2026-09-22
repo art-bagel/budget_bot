@@ -44,6 +44,13 @@ BEGIN
         RAISE EXCEPTION 'Version-2 debt must be changed through lending events';
     END IF;
 
+    IF ((_existing.metadata->>'debt_accounting_version')='2'
+        OR EXISTS(SELECT 1 FROM crypto_protocol_accrual_events WHERE protocol_position_id=_position_id))
+       AND ((_quantity IS NOT NULL AND _quantity IS DISTINCT FROM _existing.quantity)
+         OR (_current_quantity IS NOT NULL AND _current_quantity IS DISTINCT FROM _existing.current_quantity)) THEN
+        RAISE EXCEPTION 'Lending quantities must be changed through protocol events';
+    END IF;
+
     UPDATE crypto_protocol_positions
     SET quantity = COALESCE(_quantity, quantity),
         current_quantity = COALESCE(_current_quantity, current_quantity),

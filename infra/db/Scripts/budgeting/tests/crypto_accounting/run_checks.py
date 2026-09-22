@@ -29,14 +29,15 @@ def sql(statement):
 assert sql("SELECT count(*) FROM pg_namespace WHERE nspname='budgeting'") == '0', 'Requires empty disposable database'
 sql((HERE / 'fixture.sql').read_text())
 files = [DB / 'tb' / (n + '.sql') for n in
-         ['crypto_assets', 'portfolio_positions', 'portfolio_events', 'crypto_protocol_positions', 'crypto_liability_events']]
+         ['crypto_assets', 'portfolio_positions', 'portfolio_events', 'crypto_protocol_positions', 'crypto_liability_events', 'crypto_protocol_accrual_events']]
 files += [DB / 'func' / (n + '.sql') for n in [
     'get__crypto_position_entry_summary', 'get__crypto_position_known_entry_summary',
     'get__crypto_account_assets', 'get__crypto_asset_detail', 'put__crypto_pay_fee', 'get__crypto_protocol_positions',
     'put__create_crypto_protocol_position', 'put__lending_take_more_debt',
     'put__lending_repay_debt', 'set__close_crypto_protocol_position',
     'put__record_portfolio_income', 'put__swap_crypto_investment_asset',
-    'set__update_crypto_protocol_position', 'put__lending_accrue_interest', 'put__lending_liquidate']]
+    'set__update_crypto_protocol_position', 'put__lending_accrue_interest', 'put__lending_liquidate',
+    'put__lending_accrue', 'put__transfer_crypto_between_investment_accounts']]
 for p in files:
     sql(p.read_text())
 
@@ -235,6 +236,99 @@ record('positive_balance_without_entries_is_unknown',state(2)['basis_quality'],'
 seed()
 sql("SELECT budgeting.put__crypto_pay_fee(1,1,1)")
 record('network_fee_reduces_remaining_basis',[state(1)['quantity_now'],state(1)['remaining_cost_basis']],[199,19900])
+
+# Unknown/estimated basis travels with transfers and fees; corrupt ledgers do not.
+sql("INSERT INTO budgeting.bank_accounts VALUES(2,'Second test','user',1,NULL,'investment','crypto',true),(3,'Third test','user',1,NULL,'investment','crypto',true)")
+seed()
+sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":null}' WHERE position_id=1")
+a=json.loads(sql("SELECT budgeting.put__transfer_crypto_between_investment_accounts(1,1,2,50)"))['position_id']
+b=json.loads(sql(f"SELECT budgeting.put__transfer_crypto_between_investment_accounts(1,{a},3,20)"))['position_id']
+fee=json.loads(sql(f"SELECT budgeting.put__crypto_pay_fee(1,{b},1)"))
+record('unknown_basis_survives_two_transfers_and_fee',
+       [[state(p)['quantity_now'],state(p)['basis_quality'],state(p)['remaining_cost_basis']] for p in [1,a,b]],
+       [[150,'unknown',None],[30,'unknown',None],[19,'unknown',None]])
+record('unknown_fee_cost_and_result_not_zero',
+       [fee['consumed_cost_basis'],json.loads(sql(f"SELECT metadata FROM budgeting.portfolio_events WHERE position_id={b} AND event_type='fee'"))['realized_in_base']], [None,None])
+sql(f"SELECT budgeting.put__transfer_crypto_between_investment_accounts(1,{b},1,19)")
+record('unknown_full_transfer_closes_quantity',state(b)['quantity_now'],0)
+seed()
+sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":20000,\"basis_quality\":\"estimated\"}' WHERE position_id=1")
+a=json.loads(sql("SELECT budgeting.put__transfer_crypto_between_investment_accounts(1,1,2,50)"))['position_id']
+record('estimated_transfer_preserves_label_and_cost',[state(a)['basis_quality'],state(a)['remaining_cost_basis']],['estimated',5000])
+seed()
+sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":0}' WHERE position_id=1")
+a=json.loads(sql("SELECT budgeting.put__transfer_crypto_between_investment_accounts(1,1,2,50)"))['position_id']
+record('zero_transfer_stays_confirmed_zero',[state(a)['basis_quality'],state(a)['remaining_cost_basis']],['confirmed_zero',0])
+seed()
+sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":\"NaN\"}' WHERE position_id=1")
+for label,statement in [('transfer',"SELECT budgeting.put__transfer_crypto_between_investment_accounts(1,1,2,1)"),('fee',"SELECT budgeting.put__crypto_pay_fee(1,1,1)")]:
+    rejected=False
+    try: sql(statement)
+    except RuntimeError: rejected=True
+    record('invalid_basis_still_blocks_'+label,[rejected,state(1)['quantity_now']],[True,200])
+seed()
+sql("SELECT budgeting.put__crypto_pay_fee(1,1,0.000000000000000001)")
+record('fee_keeps_18_decimal_quantity',sql("SELECT quantity::text FROM budgeting.portfolio_positions WHERE id=1"),'199.999999999999999999')
+
+# Accrual preserves acquisition basis and writes interest exactly once.
+seed(); protocol=deposit()
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,10000,_borrowed_crypto_asset_id=>2)")
+spot=[state(1),state(2)]
+accrue=f"SELECT budgeting.put__lending_accrue(1,{protocol},10,5,500,100,100,'yield-1','2025-01-01')"
+first=json.loads(sql(accrue))
+record('accrual_exact_repeat',json.loads(sql(accrue)),first)
+record('accrual_collateral_basis_preserved',json.loads(sql(f"SELECT jsonb_build_array(quantity,current_quantity,cost_basis_in_base,metadata->'borrowed_quantity',metadata->'debt_cost_basis_in_base') FROM budgeting.crypto_protocol_positions WHERE id={protocol}")),[110,110,10000,105,10500])
+record('accrual_spot_untouched',[state(1),state(2)],spot)
+record('accrual_interest_once',json.loads(sql("SELECT jsonb_build_array(count(*),sum(realized_in_base)) FROM budgeting.crypto_liability_events WHERE event_kind='interest_accrual'")),[1,-500])
+for label,statement in [
+    ('conflict',accrue.replace('10,5,500','11,5,500')),
+    ('wrong_opening',accrue.replace("'yield-1'","'wrong'")),
+    ('missing_interest_value',accrue.replace('10,5,500','10,5,NULL').replace("'yield-1'","'missing'")),
+    ('no_access',accrue.replace('accrue(1,','accrue(2,')),
+    ('manual_quantity',f"SELECT budgeting.set__update_crypto_protocol_position(1,{protocol},_quantity=>111)"),
+]:
+    rejected=False
+    try: sql(statement)
+    except RuntimeError: rejected=True
+    record('accrual_rejects_'+label,rejected,True)
+# Inject failure after both projections and liability event have been written.
+sql("""CREATE FUNCTION budgeting.fail_accrual_test() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'Injected accrual failure'; END $$;
+CREATE TRIGGER fail_accrual_test BEFORE INSERT ON budgeting.crypto_protocol_accrual_events
+FOR EACH ROW EXECUTE FUNCTION budgeting.fail_accrual_test();""")
+before=sql(f"SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id={protocol}");rejected=False
+try: sql(f"SELECT budgeting.put__lending_accrue(1,{protocol},1,1,100,110,105,'fail','2025-01-02')")
+except RuntimeError: rejected=True
+record('accrual_both_legs_rollback',[rejected,sql(f"SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id={protocol}")],[True,before])
+record('accrual_failed_interest_not_recorded',int(sql("SELECT count(*) FROM budgeting.crypto_liability_events WHERE external_id='protocol-accrual:fail'")),0)
+sql('DROP TRIGGER fail_accrual_test ON budgeting.crypto_protocol_accrual_events')
+liquidated=json.loads(sql(f"SELECT budgeting.put__lending_liquidate(1,{protocol},55,52.5,'after-accrual','2025-01-02',2.5)"))
+record('liquidation_after_accrual_uses_diluted_basis',
+       [liquidated['collateral_cost_consumed_in_base'],liquidated['debt_basis_released_in_base'],liquidated['realized_in_base']], [5000,5250,250])
+# Unknown collateral value is preserved; free unit growth adds no acquisition cost.
+seed(); protocol=deposit()
+sql(f"UPDATE budgeting.crypto_protocol_positions SET metadata=metadata || '{{\"basis_quality\":\"unknown\"}}' WHERE id={protocol}")
+free=f"SELECT budgeting.put__lending_accrue(1,{protocol},1,0,NULL,100,0,'free','2025-01-01')"
+free_result=json.loads(sql(free))
+record('collateral_only_accrual_does_not_invent_known_basis',
+       json.loads(sql(f"SELECT jsonb_build_array(quantity,cost_basis_in_base,metadata->>'basis_quality') FROM budgeting.crypto_protocol_positions WHERE id={protocol}")),[101,10000,'unknown'])
+record('collateral_only_accrual_has_no_interest_expense',[free_result['interest_expense_in_base'],free_result['liability_event_id']],[0,None])
+# A simultaneous exact retry must not double either leg.
+from concurrent.futures import ThreadPoolExecutor
+seed(); protocol=deposit()
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},100,10000,_borrowed_crypto_asset_id=>2)")
+concurrent_accrual=f"SELECT budgeting.put__lending_accrue(1,{protocol},1,1,100,100,100,'concurrent-accrual','2025-01-01')"
+with ThreadPoolExecutor(max_workers=2) as executor:
+    replies=list(executor.map(sql,[concurrent_accrual,concurrent_accrual]))
+record('concurrent_accrual_once',
+       [replies[0]==replies[1],json.loads(sql(f"SELECT jsonb_build_array(quantity,metadata->'borrowed_quantity') FROM budgeting.crypto_protocol_positions WHERE id={protocol}"))], [True,[101,101]])
+
+# Actual index increment between historical 741 and 742, with synthetic basis.
+seed(); protocol=deposit()
+sql(f"UPDATE budgeting.crypto_protocol_positions SET quantity=678.257870828,current_quantity=678.257870828 WHERE id={protocol}")
+sql(f"SELECT budgeting.put__lending_take_more_debt(1,{protocol},1574.332244,100000,_borrowed_crypto_asset_id=>2)")
+sql(f"SELECT budgeting.put__lending_accrue(1,{protocol},0.000021275,0.000464,0.05,678.257870828,1574.332244,'before-742','2025-10-10')")
+record('historical_742_accrual_exact_opening',json.loads(sql(f"SELECT jsonb_build_array(quantity,metadata->'borrowed_quantity',cost_basis_in_base) FROM budgeting.crypto_protocol_positions WHERE id={protocol}")),[678.257892103,1574.332708,10000])
 
 # Liquidation is protocol-only: no second consumption from the spot wallet.
 seed(); protocol = deposit()

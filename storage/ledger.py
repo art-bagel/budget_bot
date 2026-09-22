@@ -528,6 +528,17 @@ class Ledger(DataBase):
             quantity, value_in_base, external_id, operated_at,
         )
 
+    async def put__lending_accrue(
+        self, user_id: int, position_id: int, collateral_qty, interest_qty,
+        interest_value_in_base, collateral_before, debt_before,
+        external_id: str, operated_at: date,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('put__lending_accrue'), user_id, position_id,
+            collateral_qty, interest_qty, interest_value_in_base,
+            collateral_before, debt_before, external_id, operated_at,
+        )
+
     async def put__lending_liquidate(
         self, user_id: int, position_id: int, collateral_qty, debt_qty,
         external_id: str, operated_at: date, interest_qty=0,

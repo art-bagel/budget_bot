@@ -12,18 +12,19 @@ LANGUAGE plpgsql
 AS $function$
 DECLARE
     _source_position record;
-    _source_quantity numeric(30, 12);
-    _remaining_quantity numeric(30, 12);
+    _source_quantity numeric(50, 18);
+    _remaining_quantity numeric(50, 18);
     _entry_summary jsonb;
     _remaining_basis numeric(20, 2);
     _consumed_cost_basis numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
-    IF _quantity IS NULL OR _quantity <= 0 THEN
-        RAISE EXCEPTION 'Fee quantity must be positive';
+    IF _quantity IS NULL OR _quantity <= 0
+        OR _quantity::text IN ('NaN','Infinity','-Infinity')
+        OR _quantity <> round(_quantity,18) THEN
+        RAISE EXCEPTION 'Quantity must be finite, positive, with at most 18 decimals';
     END IF;
-    _quantity := round(_quantity, 12);
 
     SELECT *
     INTO _source_position
@@ -49,10 +50,14 @@ BEGIN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
-    _remaining_quantity := round(_source_quantity - _quantity, 12);
+    _remaining_quantity := round(_source_quantity - _quantity, 18);
 
-    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_source_position_id);
-    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _entry_summary := budgeting.get__crypto_position_entry_summary(_source_position_id);
+    IF (_entry_summary->>'basis_quality') = 'invalid' THEN
+        RAISE EXCEPTION 'Invalid source cost ledger; reconstruct it before consumption';
+    END IF;
+    -- Unknown is a valid missing valuation, never a zero-price acquisition.
+    _remaining_basis := (_entry_summary ->> 'remaining_cost_basis')::numeric;
     _consumed_cost_basis := CASE
         WHEN _source_quantity > 0
             THEN round(_remaining_basis * _quantity / _source_quantity, 2)
@@ -88,6 +93,7 @@ BEGIN
         jsonb_build_object(
             'action', 'defi_gas_fee',
             'consumed_cost_basis', _consumed_cost_basis,
+            'basis_quality', _entry_summary->>'basis_quality',
             'value_in_base', _consumed_cost_basis,
             'realized_in_base', -_consumed_cost_basis,
             'protocol_position_id', _link_protocol_position_id
@@ -98,7 +104,8 @@ BEGIN
     RETURN jsonb_build_object(
         'position_id', _source_position_id,
         'remaining_quantity', _remaining_quantity,
-        'consumed_cost_basis', _consumed_cost_basis
+        'consumed_cost_basis', _consumed_cost_basis,
+        'basis_quality', _entry_summary->>'basis_quality'
     );
 END
 $function$;
