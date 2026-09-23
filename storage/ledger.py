@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from storage.databases import DataBase
@@ -354,7 +355,7 @@ class Ledger(DataBase):
         bank_account_id: int,
         investment_account_id: int,
         crypto_asset_id: int,
-        amount: float,
+        amount: Decimal,
         position_id: Optional[int] = None,
         title: Optional[str] = None,
         comment: Optional[str] = None,
@@ -378,8 +379,8 @@ class Ledger(DataBase):
         user_id: int,
         position_id: int,
         bank_account_id: int,
-        amount: float,
-        value_in_base: float,
+        amount: Decimal,
+        value_in_base: Optional[Decimal] = None,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
     ) -> dict:

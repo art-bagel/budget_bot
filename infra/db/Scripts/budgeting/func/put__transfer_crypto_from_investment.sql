@@ -4,7 +4,7 @@ CREATE FUNCTION budgeting.put__transfer_crypto_from_investment(
     _position_id bigint,
     _bank_account_id bigint,
     _amount numeric,
-    _value_in_base numeric,
+    _value_in_base numeric DEFAULT NULL,
     _comment text DEFAULT NULL,
     _operated_at date DEFAULT NULL
 )
@@ -20,21 +20,25 @@ DECLARE
     _base_currency_code char(3);
     _to_unallocated_id bigint;
     _crypto_asset_id bigint;
-    _position_quantity numeric(30, 12);
+    _position_quantity numeric(50, 18);
     _operation_id bigint;
     _event_type text;
-    _remaining_quantity numeric(30, 12);
+    _remaining_quantity numeric(50, 18);
     _entry_summary jsonb;
     _remaining_basis numeric(20, 2);
     _consumed_cost_basis numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
 
-    IF _amount <= 0 OR _value_in_base <= 0 THEN
-        RAISE EXCEPTION 'Amounts must be positive';
+    IF _amount IS NULL OR _amount::text IN ('NaN','Infinity','-Infinity')
+       OR _amount <= 0 OR _amount <> round(_amount,18) THEN
+        RAISE EXCEPTION 'Crypto transfer amount must be positive with at most 18 decimals';
     END IF;
-    _amount := round(_amount, 12);
-    _value_in_base := round(_value_in_base, 2);
+    -- Kept for old clients as an optional observation, never as transfer cost.
+    IF _value_in_base IS NOT NULL AND
+       (_value_in_base::text IN ('NaN','Infinity','-Infinity') OR _value_in_base < 0) THEN
+        RAISE EXCEPTION 'Observed value must be finite and non-negative';
+    END IF;
 
     SELECT *
     INTO _position
@@ -94,6 +98,15 @@ BEGIN
         RAISE EXCEPTION 'Unallocated category missing for target account %', _bank_account_id;
     END IF;
 
+    -- Compute weighted-average consumed cost basis for this exit.
+    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_position_id);
+    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    _consumed_cost_basis := CASE
+        WHEN _position_quantity > 0
+            THEN round(_remaining_basis * _amount / _position_quantity, 2)
+        ELSE 0
+    END;
+
     INSERT INTO operations (
         actor_user_id,
         owner_type,
@@ -118,7 +131,7 @@ BEGIN
     VALUES (_operation_id, _bank_account_id, _crypto_asset_id, _amount);
 
     INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-    VALUES (_operation_id, _to_unallocated_id, _base_currency_code, round(_value_in_base, 2));
+    VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _consumed_cost_basis);
 
     INSERT INTO crypto_lots (
         bank_account_id,
@@ -135,22 +148,13 @@ BEGIN
         _crypto_asset_id,
         _amount,
         _amount,
-        round(_value_in_base, 2),
-        round(_value_in_base, 2),
+        _consumed_cost_basis,
+        _consumed_cost_basis,
         _operation_id,
         jsonb_build_object('source', 'investment_withdrawal', 'position_id', _position_id)
     );
 
-    _event_type := CASE WHEN _amount = _position_quantity THEN 'close' ELSE 'partial_close' END;
-
-    -- Compute weighted-average consumed cost basis for this exit.
-    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_position_id);
-    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
-    _consumed_cost_basis := CASE
-        WHEN _position_quantity > 0
-            THEN round(_remaining_basis * _amount / _position_quantity, 2)
-        ELSE 0
-    END;
+    _event_type := 'transfer_out';
 
     INSERT INTO portfolio_events (
         position_id,
@@ -169,15 +173,17 @@ BEGIN
         _event_type,
         COALESCE(_operated_at, current_date),
         _amount,
-        round(_value_in_base, 2),
+        _consumed_cost_basis,
         _base_currency_code,
         _operation_id,
         NULLIF(btrim(_comment), ''),
         jsonb_build_object(
-            'amount_in_base', round(_value_in_base, 2),
-            'value_in_base', round(_value_in_base, 2),
+            'amount_in_base', _consumed_cost_basis,
+            'value_in_base', _consumed_cost_basis,
             'consumed_cost_basis', _consumed_cost_basis,
-            'realized_in_base', round(_value_in_base, 2) - _consumed_cost_basis,
+            'realized_in_base', 0,
+            'basis_quality', _entry_summary->>'basis_quality',
+            'observed_value_in_base', _value_in_base,
             'crypto_asset_id', _crypto_asset_id,
             'action', 'transfer_to_banking',
             'target_kind', 'bank',
@@ -189,11 +195,13 @@ BEGIN
     IF _amount = _position_quantity THEN
         UPDATE portfolio_positions
         SET status = 'closed',
+            quantity = 0,
+            amount_in_currency = 0,
             closed_at = COALESCE(_operated_at, current_date),
-            close_amount_in_currency = round(_value_in_base, 2),
+            close_amount_in_currency = _consumed_cost_basis,
             close_currency_code = _base_currency_code,
             metadata = metadata || jsonb_build_object(
-                'close_value_in_base', round(_value_in_base, 2)
+                'close_value_in_base', _consumed_cost_basis
             )
         WHERE id = _position_id;
     ELSE
@@ -209,19 +217,19 @@ BEGIN
         _bank_account_id,
         _crypto_asset_id,
         _amount,
-        round(_value_in_base, 2)
+        _consumed_cost_basis
     );
 
     PERFORM budgeting.put__apply_current_budget_delta(
         _to_unallocated_id,
         _base_currency_code,
-        round(_value_in_base, 2)
+        _consumed_cost_basis
     );
 
     RETURN jsonb_build_object(
         'operation_id', _operation_id,
         'position_id', _position_id,
-        'amount_in_base', round(_value_in_base, 2),
+        'amount_in_base', _consumed_cost_basis,
         'base_currency_code', _base_currency_code
     );
 END

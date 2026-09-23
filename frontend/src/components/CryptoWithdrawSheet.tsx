@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertCircle, Wallet } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { transferCryptoFromInvestment } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
-import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import {
   formatDraftDecimal,
@@ -36,8 +36,6 @@ export default function CryptoWithdrawSheet({
   open,
   position,
   cashAccounts,
-  livePrice,
-  baseCurrencyCode,
   defaultBankAccountId,
   onClose,
   onSuccess,
@@ -54,36 +52,18 @@ export default function CryptoWithdrawSheet({
 
   const defaultBank = targets.find((a) => a.id === defaultBankAccountId) ?? targets[0];
   const defaultAmount = sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 8) : '';
-  const computeValueInBase = (amountText: string): string => {
-    const amount = Number(amountText);
-    if (!livePrice || !Number.isFinite(amount) || amount <= 0) return '';
-    return String(Number((livePrice.price * amount).toFixed(2)));
-  };
-
   const [bankAccountId, setBankAccountId] = useState<string>(defaultBank ? String(defaultBank.id) : '');
   const [amount, setAmount] = useState(defaultAmount);
-  const [valueInBase, setValueInBase] = useState(computeValueInBase(defaultAmount));
   const [withdrawnAt, setWithdrawnAt] = useState(todayIso());
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [valueTouched, setValueTouched] = useState(false);
-
-  // Refresh suggested value when amount changes (only if user hasn't manually edited it).
-  useEffect(() => {
-    if (valueTouched) return;
-    setValueInBase(computeValueInBase(amount));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amount, livePrice?.price]);
-
   const amountNum = Number(amount);
-  const valueNum = Number(valueInBase);
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(amountNum) && amountNum > sourceQuantity;
   const canSubmit = !submitting
     && !exceedsBalance
     && !!bankAccountId
-    && Number.isFinite(amountNum) && amountNum > 0
-    && Number.isFinite(valueNum) && valueNum > 0;
+    && Number.isFinite(amountNum) && amountNum > 0;
 
   const targetBank = targets.find((a) => String(a.id) === bankAccountId);
 
@@ -95,8 +75,7 @@ export default function CryptoWithdrawSheet({
       await transferCryptoFromInvestment({
         position_id: position.id,
         bank_account_id: Number(bankAccountId),
-        amount: amountNum,
-        value_in_base: valueNum,
+        amount,
         comment: comment.trim() || undefined,
         operated_at: withdrawnAt || undefined,
       });
@@ -109,7 +88,6 @@ export default function CryptoWithdrawSheet({
   };
 
   const iconUrl = getCryptoIconUrl(symbol, position.metadata);
-  const baseSym = currencySymbol(baseCurrencyCode);
 
   return (
     <BottomSheet
@@ -178,31 +156,6 @@ export default function CryptoWithdrawSheet({
       </div>
 
       <div className="field">
-        <span className="fl">Оценка в {baseCurrencyCode}</span>
-        <div className="amt">
-          <input
-            className="amt__inp"
-            type="text"
-            inputMode="decimal"
-            placeholder="0"
-            value={valueInBase}
-            onChange={(event) => {
-              setValueTouched(true);
-              setValueInBase(sanitizeDecimalInput(event.target.value));
-            }}
-            disabled={submitting}
-          />
-          <span className="amt__cur">{baseSym}</span>
-        </div>
-        {livePrice && (
-          <span className="amt__hint">
-            Live: 1 {symbol} ≈ {formatNumericAmount(livePrice.price, 6)} {currencySymbol(livePrice.vs_currency)}.
-            {valueTouched ? ' Значение редактировано вручную.' : ' Подставлено автоматически.'}
-          </span>
-        )}
-      </div>
-
-      <div className="field">
         <span className="fl">Дата</span>
         <input
           className="picker-v2"
@@ -224,7 +177,7 @@ export default function CryptoWithdrawSheet({
         <div className="cs-sheet__hint">
           <Wallet size={14} strokeWidth={2.2} />
           <span>
-            На счёте «{targetBank.name}» появится новый crypto-лот {symbol} с cost basis = указанная оценка.
+            На счёт «{targetBank.name}» перейдут {symbol} с сохранением стоимости приобретения.
           </span>
         </div>
       )}

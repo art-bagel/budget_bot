@@ -138,39 +138,24 @@ class CryptoOperationResponse(BaseModel):
     position_id: Optional[int] = None
     base_currency_code: str
 
-
 class TransferCryptoToInvestmentRequest(BaseModel):
     bank_account_id: int
     investment_account_id: int
     crypto_asset_id: int
-    amount: float
+    amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     position_id: Optional[int] = None
     title: Optional[str] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
 
-    @field_validator('amount')
-    @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError('Сумма должна быть положительной')
-        return v
-
 
 class TransferCryptoFromInvestmentRequest(BaseModel):
     position_id: int
     bank_account_id: int
-    amount: float
-    value_in_base: float
+    amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False, description="Deprecated observation; transfer cost is computed from acquisition history")
     comment: Optional[str] = None
     operated_at: Optional[date] = None
-
-    @field_validator('amount', 'value_in_base')
-    @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError('Сумма должна быть положительной')
-        return v
 
 
 class TransferCryptoBetweenInvestmentAccountsRequest(BaseModel):

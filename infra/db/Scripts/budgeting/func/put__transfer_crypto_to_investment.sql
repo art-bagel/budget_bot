@@ -25,14 +25,14 @@ DECLARE
     _investment_asset_type text;
     _base_currency_code char(3);
     _from_unallocated_id bigint;
-    _crypto_balance numeric(30, 12);
-    _remaining_to_consume numeric(30, 12);
+    _crypto_balance numeric(50, 18);
+    _remaining_to_consume numeric(50, 18);
     _consumed_cost_base numeric(20, 2) := 0;
     _lot_ids bigint[] := '{}';
     _lot_amounts numeric[] := '{}';
     _lot_costs numeric[] := '{}';
     _lot_idx integer;
-    _consume_amount numeric(30, 12);
+    _consume_amount numeric(50, 18);
     _consume_cost numeric(20, 2);
     _lot record;
     _asset record;
@@ -43,10 +43,10 @@ DECLARE
 BEGIN
     SET search_path TO budgeting;
 
-    IF _amount <= 0 THEN
+    IF _amount IS NULL OR _amount::text IN ('NaN','Infinity','-Infinity')
+       OR _amount <= 0 OR _amount <> round(_amount,18) THEN
         RAISE EXCEPTION 'Crypto transfer amount must be positive';
     END IF;
-    _amount := round(_amount, 12);
 
     SELECT owner_type, owner_user_id, owner_family_id, account_kind
     INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind

@@ -244,8 +244,8 @@ export interface TransferCryptoToInvestmentRequest {
 export interface TransferCryptoFromInvestmentRequest {
   position_id: number;
   bank_account_id: number;
-  amount: number;
-  value_in_base: number;
+  amount: number | string;
+  value_in_base?: number;
   comment?: string;
   operated_at?: string;
 }
