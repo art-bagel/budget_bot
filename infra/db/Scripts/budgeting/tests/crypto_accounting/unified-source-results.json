@@ -1,0 +1,50 @@
+{
+  "source_commit": "7b2663b7ea2f1bc4256eb83dffede384f488e8b6",
+  "journal_records": 1933,
+  "source_claims": 4871,
+  "main_events": 1049,
+  "main_movements": 2653,
+  "telegram_rows": 132,
+  "bybit_rows": 1017,
+  "verified_cross_source_links": 31,
+  "kind_counts": {
+    "buy_fiat": 138,
+    "telegram_unresolved": 40,
+    "chain_event": 1049,
+    "swap": 82,
+    "internal_transfer": 82,
+    "wallet_link_required": 65,
+    "reward": 389,
+    "card_conversion_pending_expense": 23,
+    "earn_placement": 32,
+    "unresolved": 4,
+    "earn_redemption": 26,
+    "own_transfer_leg": 2,
+    "owner_loan_decision_required": 1
+  },
+  "checkpoints": 11,
+  "interleaved_event_resumptions": 11,
+  "unresolved_records": 1851,
+  "blocker_counts": {
+    "resolve_accounts_assets_cash_origin_and_time_order": 138,
+    "resolve_telegram_semantics_and_accounts": 40,
+    "resolve_timestamp_and_order": 40,
+    "map_economic_commands_and_related_accounts": 1049,
+    "resolve_accounts_assets_and_order": 4,
+    "historical_rub_value_unknown": 82,
+    "resolve_document_precision_without_invented_fee": 12,
+    "resolve_source_semantics_accounts_and_timestamp_order": 519,
+    "verify_trade_order_and_fee": 78,
+    "resolve_assets_accounts_and_timestamp_order": 23,
+    "load_linked_cold_wallet_event_not_main": 3
+  },
+  "status": "normalized_source_journal_not_executable",
+  "display_order_is_not_posting_order": true,
+  "legacy_basis_imported": false,
+  "accepted_evidence_documents": 25,
+  "tests_passed": 8,
+  "code_sha256": {
+    "scripts/crypto/build_unified_journal.py": "94e69692c489abb2a5e811f742826501a879596e89893f6eff1df04287ecbc6d",
+    "scripts/crypto/test_unified_journal.py": "4ac191906a1693895da9f8bf1a87b477ccd18868dbe02ecdc896dfb969d586b6"
+  }
+}
