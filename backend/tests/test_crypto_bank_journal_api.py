@@ -127,6 +127,138 @@ async def main():
             response = await client.post('/api/v1/crypto/source-events',json=event(6,[back]))
             assert response.status_code == 200, response.text
             assert (await sql(protocol_query,protocol_id))['metadata']['lp_receipt']==receipt
+            # A full LP exit may return fewer A and more B. Neither leg loses
+            # capital and a composition change is not a free staking reward.
+            a2 = await sql("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ('LPA','LPA','testnet',$1,9) RETURNING id", 'a'+str(uid))
+            b2 = await sql("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ('LPB','LPB','testnet',$1,9) RETURNING id", 'b'+str(uid))
+            c2 = await sql("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ('LPC','LPC','testnet',$1,9) RETURNING id", 'c'+str(uid))
+            commands = []
+            for token, cost in [(a2,'10'),(b2,'20')]:
+                commands += [dict(kind='bank_buy',payload=dict(bank_account_id=bank,crypto_asset_id=token,quantity='10',fiat_currency_code='RUB',fiat_amount=cost)),
+                    dict(kind='bank_to_portfolio',payload=dict(bank_account_id=bank,investment_account_id=inv,crypto_asset_id=token,quantity='10'))]
+            response = await client.post('/api/v1/crypto/source-events',json=event(7,commands))
+            assert response.status_code == 200, response.text
+            pa,pb = response.json()['results'][1]['position_id'],response.json()['results'][3]['position_id']
+            make_lp = dict(kind='create_protocol',payload=dict(investment_account_id=inv,protocol_name='Two leg LP',position_type='liquidity_pool',asset_symbol='LPA',
+                quantity='10',source_position_id=pa,crypto_asset_id=a2,secondary_source_position_id=pb,secondary_quantity='10'))
+            response = await client.post('/api/v1/crypto/source-events',json=event(8,[make_lp]))
+            assert response.status_code == 200, response.text
+            lp = response.json()['results'][0]['id']
+            close = dict(kind='close_protocol',payload=dict(position_id=lp,return_quantity='5',secondary_return_quantity='20'))
+            for patch in [dict(return_value_in_base='30',secondary_return_value_in_base='20'),dict(return_quantity='0')]:
+                bad = await client.post('/api/v1/crypto/source-events',json=event(9,[dict(kind='close_protocol',payload={**close['payload'],**patch})]))
+                assert bad.status_code == 400, bad.text
+                assert (await sql(protocol_query,lp))['status']=='open'
+            response = await client.post('/api/v1/crypto/source-events',json=event(9,[close]))
+            assert response.status_code == 200, response.text
+            positions = await sql("SELECT jsonb_object_agg(metadata->>'crypto_asset_id',id) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND status='open'",inv)
+            pa,pb=positions[str(a2)],positions[str(b2)]
+            for position,qty,cost in [(pa,5,10),(pb,20,20)]:
+                summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',position)
+                assert summary['quantity_now']==qty and summary['remaining_cost_basis']==cost,summary
+            assert await sql("SELECT count(*) FROM budgeting.portfolio_events WHERE position_id=ANY($1::bigint[]) AND event_type='income'",[pa,pb])==0
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(9,[close]))
+            assert repeat.json()==response.json()
+            swap=dict(kind='swap',payload=dict(position_id=pa,from_amount='1',to_crypto_asset_id=c2,to_amount='2'))
+            response=await client.post('/api/v1/crypto/source-events',json=event(10,[swap]))
+            assert response.status_code==200,response.text
+            pc=await sql("SELECT id FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2 AND status='open'",inv,str(c2))
+            make_unknown=dict(kind='create_protocol',payload={**make_lp['payload'],'source_position_id':pa,'quantity':'2','secondary_source_position_id':pc,'secondary_quantity':'2'})
+            response=await client.post('/api/v1/crypto/source-events',json=event(11,[make_unknown]))
+            assert response.status_code==200,response.text
+            lp=response.json()['results'][0]['id']
+            raw=await sql(protocol_query,lp)
+            assert raw['cost_basis_in_base'] is None and raw['metadata']['token1_basis_quality']=='unknown'
+            close_unknown=dict(kind='close_protocol',payload=dict(position_id=lp,return_quantity='1',secondary_return_quantity='3'))
+            bad=await client.post('/api/v1/crypto/source-events',json=event(12,[dict(kind='close_protocol',payload={**close_unknown['payload'],'return_value_in_base':'4','secondary_return_value_in_base':'0'})]))
+            assert bad.status_code==400,bad.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(12,[close_unknown]))
+            assert response.status_code==200,response.text
+            pa=await sql("SELECT id FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2 AND status='open'",inv,str(a2))
+            pc=await sql("SELECT id FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2 AND status='open'",inv,str(c2))
+            sa=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',pa)
+            sc=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',pc)
+            assert sa['remaining_cost_basis']==8 and sa['quantity_now']==3,sa
+            assert sc['remaining_cost_basis'] is None and sc['basis_quality']=='unknown' and sc['quantity_now']==3,sc
+            ton=await sql("SELECT id FROM budgeting.crypto_assets WHERE network_code='ton' AND COALESCE(contract_address,'')='' LIMIT 1")
+            st=await sql("SELECT id FROM budgeting.crypto_assets WHERE network_code='ton' AND contract_address='0:cd872fa7c5816052acdf5332260443faec9aacc8c21cca4d92e7f47034d11892' LIMIT 1")
+            if st is None:
+                st=await sql("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ('stTON','bemo receipt','ton','0:cd872fa7c5816052acdf5332260443faec9aacc8c21cca4d92e7f47034d11892',9) RETURNING id")
+            response=await client.post('/api/v1/crypto/source-events',json=event(13,[
+                dict(kind='bank_buy',payload=dict(bank_account_id=bank,crypto_asset_id=ton,quantity='10',fiat_currency_code='RUB',fiat_amount='10')),
+                dict(kind='bank_to_portfolio',payload=dict(bank_account_id=bank,investment_account_id=inv,crypto_asset_id=ton,quantity='10'))]))
+            assert response.status_code==200,response.text
+            pt=response.json()['results'][1]['position_id']
+            convert=dict(kind='staking_convert',payload=dict(position_id=pt,from_amount='5',to_crypto_asset_id=st,to_amount='4.8'))
+            for patch in [dict(to_crypto_asset_id=c2),dict(value_in_base='999'),dict(from_amount='11')]:
+                bad=await client.post('/api/v1/crypto/source-events',json=event(14,[dict(kind='staking_convert',payload={**convert['payload'],**patch})]))
+                assert bad.status_code in (400,422),bad.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(14,[convert]))
+            assert response.status_code==200,response.text
+            ps=response.json()['results'][0]['position_id']
+            assert response.json()['results'][0]['carried_cost_basis']==5
+            response=await client.post('/api/v1/crypto/source-events',json=event(15,[dict(kind='staking_convert',payload=dict(position_id=ps,from_amount='4.8',to_crypto_asset_id=ton,to_amount='5.1'))]))
+            assert response.status_code==200,response.text
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',pt)
+            assert summary['remaining_cost_basis']==10 and str(summary['quantity_now'])=='10.1',summary
+            unknown=dict(kind='receive_unknown',payload=dict(investment_account_id=inv,crypto_asset_id=ton,quantity='0.0000018',comment='Unclassified incoming quantity, not a zero-cost reward'))
+            response=await client.post('/api/v1/crypto/source-events',json=event(16,[unknown]))
+            assert response.status_code==200,response.text
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',pt)
+            assert summary['remaining_cost_basis'] is None and summary['basis_quality']=='unknown',summary
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(16,[unknown]))
+            assert repeat.json()==response.json()
+            response=await client.post('/api/v1/crypto/source-events',json=event(17,[convert]))
+            assert response.status_code==200,response.text
+            ps=response.json()['results'][0]['position_id']
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',ps)
+            assert summary['remaining_cost_basis'] is None and summary['basis_quality']=='unknown',summary
+            response=await client.post('/api/v1/crypto/source-events',json=event(18,[dict(kind='fee',payload=dict(source_position_id=pa,quantity='1'))]))
+            assert response.status_code==200,response.text
+            refund=dict(kind='fee_refund',payload=dict(investment_account_id=inv,crypto_asset_id=a2,quantity='0.5'))
+            response=await client.post('/api/v1/crypto/source-events',json=event(19,[refund]))
+            assert response.status_code==200,response.text
+            assert response.json()['results'][0]['entry_value_in_base']==1.34,response.text
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(19,[refund]))
+            assert repeat.json()==response.json()
+            response=await client.post('/api/v1/crypto/source-events',json=event(20,[refund]))
+            assert response.status_code==200,response.text
+            assert response.json()['results'][0]['entry_value_in_base']==1.33,response.text
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',pa)
+            assert summary['remaining_cost_basis']==8 and summary['quantity_now']==3,summary
+            bad=await client.post('/api/v1/crypto/source-events',json=event(21,[refund]))
+            assert bad.status_code==400,bad.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(21,[dict(kind='fee',payload=dict(source_position_id=pt,quantity='1'))]))
+            assert response.status_code==200,response.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(22,[dict(kind='fee_refund',payload=dict(investment_account_id=inv,crypto_asset_id=ton,quantity='1'))]))
+            assert response.status_code==200,response.text
+            assert response.json()['results'][0]['entry_value_in_base'] is None,response.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(23,[dict(kind='create_protocol',payload={**make_lp['payload'],'source_position_id':pa,'quantity':'1','secondary_source_position_id':pb,'secondary_quantity':'2'})]))
+            assert response.status_code==200,response.text
+            lp=response.json()['results'][0]['id']
+            equal=dict(kind='close_protocol',payload=dict(position_id=lp,return_quantity='1',secondary_return_quantity='2',allocation_policy='equal'))
+            bad=await client.post('/api/v1/crypto/source-events',json=event(24,[dict(kind='close_protocol',payload={**equal['payload'],'return_value_in_base':'2.67','secondary_return_value_in_base':'2'})]))
+            assert bad.status_code==400,bad.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(24,[equal]))
+            assert response.status_code==200,response.text
+            for position,cost in [(pa,Decimal('7.67')),(pb,Decimal('20.33'))]:
+                summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',position)
+                assert Decimal(str(summary['remaining_cost_basis']))==cost and summary['basis_quality']=='estimated',summary
+            assert (await sql(protocol_query,lp))['metadata']['return_basis_allocation_policy']=='equal'
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(24,[equal]))
+            assert repeat.json()==response.json()
+            response=await client.post('/api/v1/crypto/source-events',json=event(25,[dict(kind='create_protocol',payload={**make_lp['payload'],'source_position_id':pa,'quantity':'1','secondary_source_position_id':pc,'secondary_quantity':'1'})]))
+            assert response.status_code==200,response.text
+            lp=response.json()['results'][0]['id']
+            response=await client.post('/api/v1/crypto/source-events',json=event(26,[dict(kind='close_protocol',payload={**equal['payload'],'position_id':lp,'secondary_return_quantity':'1'})]))
+            assert response.status_code==200,response.text
+            for position in (pa,pc):
+                summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',position)
+                assert summary['remaining_cost_basis'] is None and summary['basis_quality']=='unknown',summary
+        print('equal LP allocation: odd-cent conservation, conflicting values rejected, idempotence and unknown total propagation passed')
+        print('fee refunds: historical cost, cent remainder, repeat, pool exhaustion and unknown-cost propagation passed')
+        print('staking conversion: round-trip basis, source/target guards, unknown propagation; unclassified receipt not a free reward passed')
+        print('lp_full_exit: shrunk/grown legs preserve cost, identity survives reopening, unknown stays unknown, false allocation rejected, repeat passed')
         print('lp_custody: cost preservation, whole receipt guards, rollback, retry, stale source and return passed')
         print('bank_journal_api: bank-only exchange, exact 18 decimals, cost-preserving transfer, atomic rollback, 7 invalid cases and idempotent batch passed')
     finally:

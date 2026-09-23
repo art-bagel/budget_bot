@@ -9,7 +9,8 @@ CREATE FUNCTION budgeting.set__close_crypto_protocol_position(
     _return_quantity numeric DEFAULT NULL,
     _return_value_in_base numeric DEFAULT NULL,
     _secondary_return_quantity numeric DEFAULT NULL,
-    _secondary_return_value_in_base numeric DEFAULT NULL
+    _secondary_return_value_in_base numeric DEFAULT NULL,
+    _allocation_policy text DEFAULT 'per_leg'
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -40,8 +41,14 @@ DECLARE
     _secondary_event_type text;
     _operated_on date;
     _comment_clean text;
+    _primary_quality text;
+    _secondary_quality text;
+    _secondary_asset_id bigint;
 BEGIN
     SET search_path TO budgeting;
+    IF _allocation_policy IS NULL OR _allocation_policy NOT IN ('per_leg','equal') THEN
+        RAISE EXCEPTION 'Unknown LP cost allocation policy';
+    END IF;
     FOREACH _input_qty IN ARRAY ARRAY[_current_quantity,_return_quantity,_secondary_return_quantity] LOOP
         IF _input_qty IS NOT NULL AND (_input_qty < 0 OR _input_qty::text IN ('NaN','Infinity','-Infinity') OR _input_qty<>round(_input_qty,18)) THEN
             RAISE EXCEPTION 'Quantity must be finite, nonnegative and have at most 18 decimal places';
@@ -76,10 +83,7 @@ BEGIN
     IF _existing.metadata->>'basis_quality'='unknown' THEN
         _existing.cost_basis_in_base := NULL;
     END IF;
-    IF _existing.position_type='liquidity_pool' AND (_existing.cost_basis_in_base IS NULL
-        OR _existing.metadata->>'basis_quality'='estimated') THEN
-        RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
-    END IF;
+
 
     IF _existing.status <> 'open' THEN
         RAISE EXCEPTION 'Closed protocol position cannot be closed again';
@@ -93,6 +97,35 @@ BEGIN
 
     _resolved_return_quantity := round(COALESCE(_return_quantity, _current_quantity, _existing.current_quantity, 0), 18);
     _base_currency_code := budgeting.get__owner_base_currency(_existing.owner_type, _existing.owner_user_id, _existing.owner_family_id);
+    _primary_quality := COALESCE(_existing.metadata->>'token0_basis_quality',_existing.metadata->>'basis_quality','known');
+    _secondary_quality := COALESCE(_existing.metadata->>'token1_basis_quality','known');
+    IF _allocation_policy='equal' AND _existing.position_type<>'liquidity_pool' THEN
+        RAISE EXCEPTION 'Equal allocation applies only to LP';
+    END IF;
+    IF _existing.position_type='liquidity_pool' THEN
+        IF _resolved_return_quantity<=0 OR COALESCE(_secondary_return_quantity,0)<=0
+            OR _existing.metadata->>'token1_crypto_asset_id' IS NULL THEN
+            RAISE EXCEPTION 'Full LP close requires both identified returned assets';
+        END IF;
+        IF _return_value_in_base IS NOT NULL OR _secondary_return_value_in_base IS NOT NULL THEN
+            IF _existing.cost_basis_in_base IS NULL OR _return_value_in_base IS NULL
+                OR _secondary_return_value_in_base IS NULL
+                OR _return_value_in_base<0 OR _secondary_return_value_in_base<0
+                OR _return_value_in_base::text IN ('NaN','Infinity','-Infinity')
+                OR _secondary_return_value_in_base::text IN ('NaN','Infinity','-Infinity')
+                OR _return_value_in_base<>round(_return_value_in_base,2)
+                OR _secondary_return_value_in_base<>round(_secondary_return_value_in_base,2)
+                OR _return_value_in_base+_secondary_return_value_in_base<>_existing.cost_basis_in_base THEN
+                RAISE EXCEPTION 'LP allocation must preserve the full known carried cost';
+            END IF;
+            IF _allocation_policy='equal' AND (_return_value_in_base<>round(_existing.cost_basis_in_base/2,2)
+                OR _secondary_return_value_in_base<>_existing.cost_basis_in_base-round(_existing.cost_basis_in_base/2,2)) THEN
+                RAISE EXCEPTION 'Explicit values conflict with equal LP allocation';
+            END IF;
+            _primary_quality := _existing.metadata->>'basis_quality';
+            _secondary_quality := _primary_quality;
+        END IF;
+    END IF;
 
     UPDATE crypto_protocol_positions
     SET status = 'closed',
@@ -101,7 +134,8 @@ BEGIN
         current_value_in_base = COALESCE(_current_value_in_base, current_value_in_base),
         comment = COALESCE(NULLIF(btrim(_comment), ''), comment),
         metadata = metadata || jsonb_build_object(
-            'return_quantity', _resolved_return_quantity
+            'return_quantity', _resolved_return_quantity,
+            'return_basis_allocation_policy', _allocation_policy
         ),
         updated_at = current_timestamp
     WHERE id = _position_id;
@@ -135,6 +169,24 @@ BEGIN
                 THEN round(_carried_cost * _principal_qty / _original_quantity, 2)
             ELSE 0
         END;
+
+        IF _existing.position_type='liquidity_pool' THEN
+            -- Changes in pool composition are not zero-cost staking rewards.
+            -- Full redemption returns ALL capital even if a leg shrank.
+            _principal_qty := _resolved_return_quantity;
+            _rewards_qty := 0;
+            _principal_entry_value := COALESCE(_return_value_in_base,
+                CASE WHEN _existing.cost_basis_in_base IS NOT NULL THEN
+                    _existing.cost_basis_in_base-(_existing.metadata->>'token1_cost_basis_carried')::numeric
+                ELSE (_existing.metadata->>'cost_basis_carried')::numeric END);
+            IF _primary_quality='unknown' THEN _principal_entry_value:=NULL; END IF;
+            IF _allocation_policy='equal' THEN
+                _principal_entry_value:=round(_existing.cost_basis_in_base/2,2);
+                _primary_quality:=CASE WHEN _existing.cost_basis_in_base IS NULL THEN 'unknown'
+                    WHEN _existing.cost_basis_in_base=0 THEN 'confirmed_zero' ELSE 'estimated' END;
+                _secondary_quality:=_primary_quality;
+            END IF;
+        END IF;
 
         SELECT id
         INTO _target_position_id
@@ -214,7 +266,7 @@ BEGIN
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _principal_entry_value,
-                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE COALESCE(_existing.metadata->>'basis_quality','known') END,
+                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE _primary_quality END,
                     'source_kind', 'defi_return',
                     'source_protocol_position_id', _position_id
                 ),
@@ -253,7 +305,7 @@ BEGIN
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _principal_entry_value,
-                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE COALESCE(_existing.metadata->>'basis_quality','known') END,
+                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE _primary_quality END,
                     'source_kind', 'defi_return',
                     'source_protocol_position_id', _position_id
                 ),
@@ -321,7 +373,8 @@ BEGIN
         _secondary_position_id := (_existing.metadata ->> 'token1_position_id')::bigint;
         _secondary_symbol := COALESCE(NULLIF(btrim(_existing.metadata ->> 'token1_symbol'), ''), 'TOKEN_B');
         _secondary_existing_qty := COALESCE((_existing.metadata ->> 'token1_quantity')::numeric, 0);
-        _secondary_existing_basis := COALESCE((_existing.metadata ->> 'token1_cost_basis_carried')::numeric, 0);
+        _secondary_existing_basis := (_existing.metadata ->> 'token1_cost_basis_carried')::numeric;
+        _secondary_asset_id := (_existing.metadata->>'token1_crypto_asset_id')::bigint;
 
         IF _secondary_return_value_in_base IS NULL THEN
             _secondary_value := _secondary_existing_basis;
@@ -329,6 +382,9 @@ BEGIN
             _secondary_value := round(_secondary_return_value_in_base, 2);
         END IF;
 
+        IF _allocation_policy='equal' THEN
+            _secondary_value:=_existing.cost_basis_in_base-_principal_entry_value;
+        END IF;
         SELECT id
         INTO _secondary_target_position_id
         FROM portfolio_positions
@@ -343,7 +399,7 @@ BEGIN
             WHERE investment_account_id = _existing.investment_account_id
               AND status = 'open'
               AND asset_type_code = 'crypto'
-              AND COALESCE(NULLIF(btrim(metadata ->> 'asset_symbol'), ''), title) = _secondary_symbol
+              AND (metadata->>'crypto_asset_id')::bigint = _secondary_asset_id
             ORDER BY id
             LIMIT 1
             FOR UPDATE;
@@ -363,7 +419,10 @@ BEGIN
                 COALESCE(_comment_clean, 'Возврат token B из DeFi-протокола'),
                 jsonb_build_object(
                     'crypto_kind', 'spot',
-                    'asset_symbol', _secondary_symbol
+                    'asset_symbol', _secondary_symbol,
+                    'crypto_asset_id', _secondary_asset_id,
+                    'network_code', (SELECT network_code FROM crypto_assets WHERE id=_secondary_asset_id),
+                    'contract_address', (SELECT contract_address FROM crypto_assets WHERE id=_secondary_asset_id)
                 ),
                 _user_id
             )
@@ -393,6 +452,7 @@ BEGIN
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
                 'entry_value_in_base', _secondary_value,
+                'basis_quality', CASE WHEN _secondary_value IS NULL THEN 'unknown' ELSE _secondary_quality END,
                 'source_kind', 'defi_return',
                 'source_protocol_position_id', _position_id,
                 'token_role', 'token_b'

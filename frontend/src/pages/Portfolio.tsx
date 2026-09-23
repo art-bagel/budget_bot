@@ -2626,6 +2626,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
   const activeScopeNkdValue = activeScopeDisplayMetrics.nkdValue;
   const activeScopeBasisLabel = 'Вложено';
+  // Crypto entry summaries and DeFi basis are not aggregated here yet.
+  // The legacy zero must not be presented as invested capital or profit.
+  const activeScopeHasCrypto = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
+    .some((position) => position.asset_type_code === 'crypto')
+    || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
     ? Landmark
     : activeAssetTypeCode === 'crypto'
@@ -3056,7 +3061,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
-                  {activeScopeBaseValue > 0 && (() => {
+                  {!activeScopeHasCrypto && activeScopeBaseValue > 0 && (() => {
                     const rv = activeScopeResultValue;
                     const pct = activeScopeResultPct;
                     const isPos = rv >= 0;
@@ -3075,15 +3080,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <div className="pf-tsum__cell">
                   <div className="pf-tsum__cell-label">{activeScopeBasisLabel}</div>
                   <div className="pf-tsum__cell-value">
-                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
+                    {activeScopeHasCrypto ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                 </div>
                 <div className="pf-tsum__cell pf-tsum__cell--mid">
                   <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
                   <div className={`pf-tsum__cell-value${activeScopeResultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
-                    {activeScopeResultValue >= 0 ? '+' : ''}
-                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeResultValue)}
+                    {!activeScopeHasCrypto && (activeScopeResultValue >= 0 ? '+' : '')}
+                    {activeScopeHasCrypto ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeResultValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                   {activeAssetTypeCode === 'security' && activeScopeNkdValue > 0 ? (
@@ -3091,7 +3096,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       НКД +{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeNkdValue)}
                       <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </div>
-                  ) : activeScopeBaseValue > 0 && (
+                  ) : !activeScopeHasCrypto && activeScopeBaseValue > 0 && (
                     <div className="pf-tsum__cell-note">
                       {activeScopeResultValue >= 0 ? '+' : ''}
                       {activeScopeResultPct.toFixed(1)}%
@@ -3153,17 +3158,17 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <div className="pf-alloc__totals">
                   <div className="pf-alloc__t-cell">
                     <span>{activeScopeBasisLabel}</span>
-                    <strong>{fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+                    <strong>{activeScopeHasCrypto ? '—' : fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
                     <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
                   </div>
                   <span className="pf-alloc__t-sep" />
                   <div className="pf-alloc__t-cell">
                     <span>Доход</span>
                     <strong className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                      {incomeIsPos ? '+' : ''}{fmt(income)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                      {activeScopeHasCrypto ? '—' : `${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </strong>
                     <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                      {incomeIsPos ? '+' : ''}{incomePct.toFixed(1)}%
+                      {activeScopeHasCrypto ? 'Себестоимость — в карточках активов' : `${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
                     </em>
                   </div>
                 </div>

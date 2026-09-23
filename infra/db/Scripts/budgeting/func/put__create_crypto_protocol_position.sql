@@ -243,10 +243,7 @@ BEGIN
         END IF;
     END IF;
 
-    IF _position_type='liquidity_pool' AND (_cost_basis_in_base IS NULL
-        OR _metadata->>'basis_quality' IN ('unknown','invalid','estimated')) THEN
-        RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
-    END IF;
+    -- Keep the two leg costs independently, including null (unknown).
 
     -- Token B (only for liquidity_pool): same locking + decrement + transfer_out + cost-basis carry.
     IF _secondary_source_position_id IS NOT NULL THEN
@@ -279,8 +276,8 @@ BEGIN
 
         _secondary_remaining_quantity := round(_secondary_source_quantity - _secondary_quantity, 18);
 
-        _secondary_entry_summary := budgeting.get__crypto_position_known_entry_summary(_secondary_source_position_id);
-        _secondary_remaining_basis := COALESCE((_secondary_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+        _secondary_entry_summary := budgeting.get__crypto_position_movable_entry_summary(_secondary_source_position_id);
+        _secondary_remaining_basis := (_secondary_entry_summary ->> 'remaining_cost_basis')::numeric;
         _secondary_consumed_cost_basis := CASE
             WHEN _secondary_source_quantity > 0
                 THEN round(_secondary_remaining_basis * _secondary_quantity / _secondary_source_quantity, 2)
@@ -310,10 +307,12 @@ BEGIN
         END IF;
 
         -- Aggregate cost basis: protocol position carries A + B.
-        _cost_basis_in_base := COALESCE(_cost_basis_in_base, 0) + _secondary_consumed_cost_basis;
+        _cost_basis_in_base := _cost_basis_in_base + _secondary_consumed_cost_basis;
         _current_value_in_base := COALESCE(_current_value_in_base, 0) + _secondary_consumed_cost_basis;
 
         _metadata := COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object(
+            'token0_basis_quality', _entry_summary->>'basis_quality',
+            'token1_basis_quality', _secondary_entry_summary->>'basis_quality',
             'token1_position_id', _secondary_source_position_id,
             'token1_symbol', _secondary_asset_symbol_resolved,
             'token1_quantity', _secondary_quantity,
@@ -367,7 +366,8 @@ BEGIN
                 'consumed_cost_basis', _secondary_consumed_cost_basis,
                 'realized_in_base', 0,
                 'target_kind', 'defi',
-                'token_role', 'token_b'
+                'token_role', 'token_b',
+                'basis_quality', _secondary_entry_summary->>'basis_quality'
             ),
             _user_id
         );
@@ -414,7 +414,7 @@ BEGIN
         NULLIF(btrim(_comment), ''),
         COALESCE(_metadata, '{}'::jsonb) || jsonb_build_object('basis_quality',
             CASE WHEN _cost_basis_in_base IS NULL THEN 'unknown'
-                WHEN _metadata->>'basis_quality'='estimated' THEN 'estimated'
+                WHEN _metadata->>'basis_quality'='estimated' OR _secondary_entry_summary->>'basis_quality'='estimated' THEN 'estimated'
                 WHEN _cost_basis_in_base=0 THEN 'confirmed_zero' ELSE 'known' END),
         _user_id
     )

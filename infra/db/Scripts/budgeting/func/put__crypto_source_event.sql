@@ -21,6 +21,12 @@ DECLARE
     _resource_account bigint;
     _resource record;
     _numeric numeric;
+    _summary jsonb;
+    _refund_basis numeric;
+    _refund_unknown boolean;
+    _refund_estimated boolean;
+    _conversion_source record;
+    _conversion_target record;
     _old_source text := current_setting('budgeting.crypto_source_event_id',true);
     _old_index text := current_setting('budgeting.crypto_source_command_index',true);
 BEGIN
@@ -81,7 +87,7 @@ BEGIN
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer')) THEN
+            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -205,17 +211,77 @@ BEGIN
             _result:=budgeting.put__settle_crypto_fiat_sale(_user_id,_anchor_account_id,
                 (_payload->>'sale_event_id')::bigint,(_payload->>'category_id')::bigint,
                 _payload->>'comment',_accounting_date);
-        WHEN 'reward' THEN
+        WHEN 'staking_convert' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
+                'position_id','from_amount','to_crypto_asset_id','to_amount','comment','target_investment_account_id']::text[])))
+                OR NOT(_payload ?& ARRAY['position_id','from_amount','to_crypto_asset_id','to_amount']) THEN
+                RAISE EXCEPTION 'Invalid staking conversion arguments';
+            END IF;
+            SELECT p.*,a.network_code AS source_network,a.contract_address AS source_contract
+                INTO _conversion_source FROM portfolio_positions p
+                JOIN crypto_assets a ON a.id=(p.metadata->>'crypto_asset_id')::bigint
+                WHERE p.id=(_payload->>'position_id')::bigint FOR UPDATE OF p;
+            SELECT * INTO _conversion_target FROM crypto_assets WHERE id=(_payload->>'to_crypto_asset_id')::bigint;
+            IF _conversion_source.source_network IS DISTINCT FROM 'ton' OR _conversion_target.network_code IS DISTINCT FROM 'ton'
+                OR NOT((COALESCE(_conversion_source.source_contract,'')='' AND _conversion_target.contract_address='0:cd872fa7c5816052acdf5332260443faec9aacc8c21cca4d92e7f47034d11892')
+                    OR (_conversion_source.source_contract='0:cd872fa7c5816052acdf5332260443faec9aacc8c21cca4d92e7f47034d11892' AND COALESCE(_conversion_target.contract_address,'')='')) THEN
+                RAISE EXCEPTION 'Only the identified TON/bemo receipt conversion is supported';
+            END IF;
+            _summary:=budgeting.get__crypto_position_movable_entry_summary(_conversion_source.id);
+            _numeric:=round((_summary->>'remaining_cost_basis')::numeric * (_payload->>'from_amount')::numeric / NULLIF(_conversion_source.quantity,0),2);
+            _result:=budgeting.put__swap_crypto_investment_asset(_user_id,_conversion_source.id,
+                (_payload->>'from_amount')::numeric,_conversion_target.id,(_payload->>'to_amount')::numeric,
+                (_payload->>'target_investment_account_id')::bigint,_payload->>'comment',_accounting_date,_numeric,'staking carried basis, not market valuation');
+            UPDATE portfolio_events SET metadata=(metadata-'valuation_source'-'valuation_date'-'value_at_swap_in_base') ||
+                jsonb_build_object('source_kind','staking_conversion','target_kind','staking_conversion',
+                    'basis_quality',_summary->>'basis_quality','realized_in_base',0,'economic_kind','staking_conversion')
+                WHERE linked_operation_id=(_result->>'operation_id')::bigint;
+            _result:=_result || jsonb_build_object('economic_kind','staking_conversion','carried_cost_basis',_numeric,'basis_quality',_summary->>'basis_quality');
+        WHEN 'reward', 'receive_unknown', 'fee_refund' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['investment_account_id','crypto_asset_id','quantity','comment']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for reward';
             END IF;
             IF _payload->>'investment_account_id' IS NULL OR _payload->>'crypto_asset_id' IS NULL OR _payload->>'quantity' IS NULL THEN
                 RAISE EXCEPTION 'Missing required argument for reward';
             END IF;
+            IF _kind='fee_refund' THEN
+                PERFORM 1 FROM bank_accounts WHERE id=(_payload->>'investment_account_id')::bigint FOR UPDATE;
+                SELECT COALESCE(sum(CASE WHEN e.event_type='fee' THEN e.quantity ELSE -e.quantity END),0),
+                    COALESCE(sum(CASE WHEN e.event_type='fee' THEN (e.metadata->>'consumed_cost_basis')::numeric
+                        ELSE -(e.metadata->>'entry_value_in_base')::numeric END),0),
+                    COALESCE(bool_or(CASE WHEN e.event_type='fee' THEN e.metadata->>'consumed_cost_basis' IS NULL
+                        ELSE e.metadata->>'entry_value_in_base' IS NULL END),false),
+                    COALESCE(bool_or(e.metadata->>'basis_quality'='estimated'),false)
+                    INTO _numeric,_refund_basis,_refund_unknown,_refund_estimated
+                    FROM portfolio_events e JOIN portfolio_positions p ON p.id=e.position_id
+                    WHERE p.investment_account_id=(_payload->>'investment_account_id')::bigint
+                        AND p.metadata->>'crypto_asset_id'=_payload->>'crypto_asset_id'
+                        AND (e.event_type='fee' OR e.metadata->>'source_kind'='fee_refund');
+                IF (_payload->>'quantity')::numeric<=0 OR (_payload->>'quantity')::numeric>_numeric THEN
+                    RAISE EXCEPTION 'Technical refund exceeds the prior unrecovered fee pool';
+                END IF;
+                _refund_basis:=CASE WHEN _refund_unknown THEN NULL
+                    ELSE round(_refund_basis*(_payload->>'quantity')::numeric/_numeric,2) END;
+            END IF;
             _result := budgeting.put__crypto_receive_reward(_user_id,
                 (_payload->>'investment_account_id')::bigint,
                 (_payload->>'crypto_asset_id')::bigint,
                 (_payload->>'quantity')::numeric, _payload->>'comment', _accounting_date);
+            IF _kind='fee_refund' THEN
+                UPDATE portfolio_events SET event_type='top_up',metadata=(metadata-'income_kind') ||
+                    jsonb_build_object('entry_value_in_base',_refund_basis,
+                        'basis_quality',CASE WHEN _refund_basis IS NULL THEN 'unknown' WHEN _refund_estimated THEN 'estimated' WHEN _refund_basis=0 THEN 'confirmed_zero' ELSE 'known' END,
+                        'source_kind','fee_refund','fee_pool_quantity_before',_numeric,'allocation_policy','pooled_historical_fee_cost')
+                    WHERE id=(_result->>'event_id')::bigint;
+                _result:=_result || jsonb_build_object('entry_value_in_base',_refund_basis,
+                    'basis_quality',CASE WHEN _refund_basis IS NULL THEN 'unknown' WHEN _refund_estimated THEN 'estimated' WHEN _refund_basis=0 THEN 'confirmed_zero' ELSE 'known' END);
+            END IF;
+            IF _kind='receive_unknown' THEN
+                UPDATE portfolio_events SET event_type='top_up',metadata=(metadata-'income_kind') ||
+                    jsonb_build_object('entry_value_in_base',NULL,'basis_quality','unknown','source_kind','unclassified_receipt')
+                    WHERE id=(_result->>'event_id')::bigint;
+                _result:=_result || jsonb_build_object('entry_value_in_base',NULL,'basis_quality','unknown');
+            END IF;
         WHEN 'expense' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['source_position_id','quantity','comment']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for expense';
@@ -345,7 +411,7 @@ BEGIN
                 _secondary_rewards_value_in_base => CASE WHEN _payload ? 'secondary_rewards_value_in_base' THEN (_payload->>'secondary_rewards_value_in_base')::numeric ELSE NULL END
             );
         WHEN 'close_protocol' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','current_quantity','current_value_in_base','comment','return_quantity','return_value_in_base','secondary_return_quantity','secondary_return_value_in_base']::text[]))) THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','current_quantity','current_value_in_base','comment','return_quantity','return_value_in_base','secondary_return_quantity','secondary_return_value_in_base','allocation_policy']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for close_protocol';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb THEN
@@ -361,7 +427,8 @@ BEGIN
                 _return_quantity => CASE WHEN _payload ? 'return_quantity' THEN (_payload->>'return_quantity')::numeric ELSE NULL END,
                 _return_value_in_base => CASE WHEN _payload ? 'return_value_in_base' THEN (_payload->>'return_value_in_base')::numeric ELSE NULL END,
                 _secondary_return_quantity => CASE WHEN _payload ? 'secondary_return_quantity' THEN (_payload->>'secondary_return_quantity')::numeric ELSE NULL END,
-                _secondary_return_value_in_base => CASE WHEN _payload ? 'secondary_return_value_in_base' THEN (_payload->>'secondary_return_value_in_base')::numeric ELSE NULL END
+                _secondary_return_value_in_base => CASE WHEN _payload ? 'secondary_return_value_in_base' THEN (_payload->>'secondary_return_value_in_base')::numeric ELSE NULL END,
+                _allocation_policy => COALESCE(_payload->>'allocation_policy','per_leg')
             );
         WHEN 'borrow' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','debt_qty','value_in_base','comment','borrowed_crypto_asset_id']::text[]))) THEN
