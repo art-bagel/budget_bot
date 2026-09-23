@@ -2597,12 +2597,21 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     let cryptoBasis = 0;
     let basisMissing = false;
     let basisEstimated = false;
+    const fundingUnits = new Map<string, number>();
+    const addFunding = (units: unknown) => {
+      if (!units || typeof units !== 'object') return;
+      for (const [loan, amount] of Object.entries(units)) {
+        const quantity = Number(amount);
+        if (Number.isFinite(quantity) && quantity > 0) fundingUnits.set(loan, (fundingUnits.get(loan) ?? 0) + quantity);
+      }
+    };
     for (const position of scopedOpenPositions.filter((p) => p.asset_type_code === 'crypto')) {
       const assetId = getCryptoAssetId(position);
       const key = `${position.investment_account_id}:${assetId}`;
       if (valuedAssets.has(key)) continue;
       valuedAssets.add(key);
       const entry = cryptoAssetsByAccount.get(position.investment_account_id)?.find((a) => a.crypto_asset_id === assetId);
+      addFunding(entry?.funding_units);
       if (!entry || entry.remaining_cost_basis === null || entry.basis_quality === 'unknown' || entry.basis_quality === 'invalid') {
         basisMissing = true;
       } else {
@@ -2611,6 +2620,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       }
     }
     for (const protocol of visibleCryptoProtocolPositions) {
+      addFunding(protocol.metadata.funding_units0);
+      addFunding(protocol.metadata.funding_units1);
       if (protocol.cost_basis_in_base === null) basisMissing = true;
       else cryptoBasis += Number(protocol.cost_basis_in_base);
       basisEstimated ||= protocol.metadata.basis_quality === 'estimated';
@@ -2626,6 +2637,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       investedPrincipal,
       basisMissing,
       basisEstimated,
+      fundingParts: Array.from(fundingUnits, ([loan, quantity]) => {
+        const protocol = cryptoProtocolPositions.find((p) => String(p.id) === loan);
+        const symbol = protocol ? String(protocol.metadata.borrowed_asset_symbol ?? protocol.metadata.borrowed_asset ?? '?') : '?';
+        return { loan, quantity, symbol };
+      }),
       cashValue: activeAssetTypeCode === 'all'
         ? totalInvestmentCashInBase
         : scopedGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
@@ -2636,6 +2652,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   }, [
     activeAssetTypeCode,
     cryptoProtocolValueInBase,
+    cryptoProtocolPositions,
     cryptoAssetsByAccount,
     cryptoLivePrices,
     visibleCryptoProtocolPositions,
@@ -3108,12 +3125,20 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               </div>
               <div className="pf-tsum__grid">
                 <div className="pf-tsum__cell">
-                  <div className="pf-tsum__cell-label">{activeScopeBasisLabel}</div>
+                  <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Подтверждённые затраты' : activeScopeBasisLabel}</div>
                   <div className="pf-tsum__cell-value">
                     {activeScopeDisplayMetrics.basisMissing ? '—' : activeScopeBasisPrefix + new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                 </div>
+                {activeScopeDisplayMetrics.fundingParts.length > 0 && (
+                  <div className="pf-tsum__cell">
+                    <div className="pf-tsum__cell-label">Открытое финансирование · стоимость неокончательная</div>
+                    {activeScopeDisplayMetrics.fundingParts.map((part) => (
+                      <div key={part.loan}>+ {formatNumericAmount(part.quantity, 12)} {part.symbol}</div>
+                    ))}
+                  </div>
+                )}
                 <div className="pf-tsum__cell pf-tsum__cell--mid">
                   <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
                   <div className={`pf-tsum__cell-value${activeScopeResultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>

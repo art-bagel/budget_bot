@@ -6,6 +6,8 @@ DECLARE
     _qty numeric(50,18); _cost numeric; _avg numeric;
     _missing integer := 0; _invalid integer := 0; _entries integer := 0;
     _asset_quality text;
+    _funding jsonb;
+    _components jsonb;
     _estimated boolean := false; _quality text; _declared text;
     _e record; _field text; _raw text; _value numeric;
 BEGIN
@@ -53,7 +55,14 @@ BEGIN
         _cost:=_entry-_consumed;
         _avg:=CASE WHEN _qty>0 THEN _cost/_qty ELSE 0 END;
     END IF;
+    SELECT COALESCE(metadata->'funding_units','{}'::jsonb) INTO _funding FROM portfolio_positions WHERE id=_position_id;
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('loan_id',f.key,'quantity',f.value,
+        'symbol',COALESCE(a.symbol,p.metadata->>'borrowed_asset_symbol','?'))),'[]') INTO _components
+        FROM jsonb_each_text(_funding) f JOIN crypto_protocol_positions p ON p.id=f.key::bigint
+        LEFT JOIN crypto_assets a ON a.id=(p.metadata->>'borrowed_crypto_asset_id')::bigint;
     RETURN jsonb_build_object(
+        'funding_components',_components,
+        'funding_units',_funding,'basis_final',_funding='{}'::jsonb,
         'basis_quality',_quality,'missing_cost_fields',_missing,'invalid_cost_fields',_invalid,
         'total_entry_value_in_base',CASE WHEN _quality IN ('unknown','invalid') THEN NULL ELSE _entry END,
         'total_consumed_cost_basis',CASE WHEN _quality IN ('unknown','invalid') THEN NULL ELSE _consumed END,

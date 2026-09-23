@@ -7,6 +7,10 @@ BEGIN
     IF _s->>'basis_quality'='invalid' THEN
         RAISE EXCEPTION 'Invalid cost ledger for position %; reconstruct source events',_position_id;
     END IF;
+    IF COALESCE(_s->'funding_units','{}')<>'{}'::jsonb
+       AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL THEN
+        RAISE EXCEPTION 'Операции с заёмным финансированием проводятся через журнал криптоистории';
+    END IF;
     RETURN _s;
 END
 $function$;

@@ -19,7 +19,7 @@ class CryptoSourceCommand(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
                   'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
-                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund']
+                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction']
     payload: dict[str, Any]
 
     @field_validator('payload')
@@ -241,6 +241,9 @@ class CryptoAccountAssetSummary(BaseModel):
     total_consumed_cost_basis: Optional[float]
     basis_quality: Literal['known', 'confirmed_zero', 'estimated', 'unknown', 'invalid']
     remaining_cost_basis: Optional[float]
+    basis_final: bool = True
+    funding_units: dict[str, float] = Field(default_factory=dict)
+    funding_components: list[dict[str, str]] = Field(default_factory=list)
     avg_cost_per_unit: Optional[float]
     realized_pnl_lifetime_in_base: Optional[float]
     last_event_at: Optional[date] = None

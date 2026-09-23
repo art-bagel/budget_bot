@@ -49,6 +49,13 @@ DECLARE
     _net_original_secondary numeric;
 BEGIN
     SET search_path TO budgeting;
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_protocol_positions WHERE id=_position_id AND
+        (metadata->>'funding_policy'='components' OR COALESCE(metadata->'funding_units0','{}')<>'{}'::jsonb
+            OR COALESCE(metadata->'funding_units1','{}')<>'{}'::jsonb)) THEN
+        RAISE EXCEPTION 'Операции с заёмным финансированием проводятся через журнал криптоистории';
+    END IF;
+
     IF _allocation_policy IS NULL OR _allocation_policy NOT IN ('per_leg','equal','net_composition') THEN
         RAISE EXCEPTION 'Unknown LP cost allocation policy';
     END IF;

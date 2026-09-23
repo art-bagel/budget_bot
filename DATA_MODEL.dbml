@@ -294,3 +294,11 @@ Table crypto_source_event_links {
   }
   Note: "Links to operations/portfolio_events/liability/accrual ledgers captured atomically by insertion triggers; no amounts duplicated here."
 }
+
+// Component financing (source journal, 2026-09-23): portfolio_positions.metadata.funding_units
+// maps lending protocol ids to decimal units of principal. Protocol metadata holds
+// funding_units0/funding_units1 per leg; expense portfolio_events.metadata.funding_units
+// retains consumed funding until settlement. Source-event result records unit movements
+// and holder settlements. Cash basis adjustments are zero-quantity top_up events;
+// these units are not additional assets or liabilities. Per-command owner-locked
+// conservation requires sum(units) = outstanding principal for each component loan.

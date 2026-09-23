@@ -218,7 +218,7 @@ async def main():
                 status='known_components_checked' if last['event_no']<=11 else 'historical_quantities_checked_full_cost_unresolved',
                 total_portfolio_basis=None if unknown_positions or unknown_protocols else str(held+protocol_basis),
                 limitation='Unknown values are not zero; known subtotals are not total historical capital')
-            if last['event_no']==100 and not unknown_positions and not unknown_protocols and unknown_swaps==0:
+            if last['event_no']==100 and not unknown_positions and not unknown_protocols and unknown_swaps==0 and not plan.get('funding_components'):
                 totals=await sql("""SELECT jsonb_build_object(
                     'fees',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric) FILTER(WHERE event_type='fee'),0),
                     'expenses',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric) FILTER(WHERE metadata->>'target_kind'='expense'),0),
@@ -236,6 +236,37 @@ async def main():
                 state['capital_reconciliation']=dict(**totals,interest_cost=str(interest),debt_basis=str(debt),asset_basis=str(held+protocol_basis),net_basis=str(expected),difference='0.00',quality='estimated_with_documented_conventions')
                 state['cost_reconciliation']['status']='reference_estimates_reconciled'
                 state['cost_reconciliation']['limitation']='Reference valuations, Telegram rounding and explicitly accepted zero-cost receipt; not exact market or tax accounting'
+                state['accounting_closed_with_limitations']=True
+            if plan.get('funding_components'):
+                assert not unknown_positions and not unknown_protocols and unknown_swaps==0
+                totals=await sql("""SELECT jsonb_build_object(
+                    'fees',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE event_type='fee'),0)::text,
+                    'expenses',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'target_kind'='expense'),0)::text,
+                    'refunds',COALESCE(sum((metadata->>'entry_value_in_base')::numeric) FILTER(WHERE metadata->>'source_kind'='fee_refund'),0)::text,
+                    'interest',COALESCE(sum((metadata->>'funding_interest_cost')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'funding_policy'='components'),0)::text,
+                    'swap_result',COALESCE(sum((metadata->>'realized_in_base')::numeric) FILTER(WHERE event_type='swap_out'),0)::text
+                    ) FROM budgeting.portfolio_events WHERE created_by_user_id=$1""",uid)
+                expected=funding-Decimal(totals['fees'])-Decimal(totals['expenses'])-Decimal(totals['interest'])+Decimal(totals['refunds'])
+                assert held+protocol_basis==expected,(held,protocol_basis,expected,totals)
+                assert Decimal(totals['swap_result'])==0
+                unit_checks=await sql("""WITH holders AS (
+                    SELECT metadata->'funding_units' units FROM budgeting.portfolio_positions WHERE owner_user_id=$1
+                    UNION ALL SELECT metadata->'funding_units0' FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1
+                    UNION ALL SELECT metadata->'funding_units1' FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1
+                    UNION ALL SELECT e.metadata->'funding_units' FROM budgeting.portfolio_events e JOIN budgeting.portfolio_positions p ON p.id=e.position_id WHERE p.owner_user_id=$1
+                ), amounts AS (SELECT key,sum(value::numeric) amount FROM holders CROSS JOIN LATERAL jsonb_each_text(COALESCE(units,'{}')) GROUP BY key)
+                SELECT COALESCE(jsonb_agg(jsonb_build_object('loan_id',p.id,'units',COALESCE(a.amount,0)::text,
+                    'principal',(COALESCE((p.metadata->>'borrowed_quantity')::numeric,0)-COALESCE((p.metadata->>'debt_interest_quantity')::numeric,0))::text)), '[]')
+                FROM budgeting.crypto_protocol_positions p LEFT JOIN amounts a ON a.key=p.id::text
+                WHERE p.owner_user_id=$1 AND p.metadata->>'funding_policy'='components'""",uid)
+                for check in unit_checks:
+                    assert Decimal(check['units'])==Decimal(check['principal']),check
+                if plan.get('expected_telegram_usdt'):
+                    actual=await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2",accounts['telegram'],str(assets['0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe']))
+                    assert actual==Decimal(plan['expected_telegram_usdt'])
+                state['capital_reconciliation']=dict(**totals,confirmed_asset_cost=str(expected),difference='0.00',funding_units=unit_checks)
+                state['cost_reconciliation']['status']='carried_cost_and_components_reconciled'
+                state['cost_reconciliation']['limitation']='Confirmed cash costs plus open financing units; net LP convention and documented micro-rounding'
                 state['accounting_closed_with_limitations']=True
             state['verified_through'] = last['event_no']
             state['diagnostic_only'] = bool(plan.get('diagnostic_only', False))

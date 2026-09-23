@@ -32,6 +32,13 @@ DECLARE
     _added_basis numeric(20, 2);
 BEGIN
     SET search_path TO budgeting;
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_protocol_positions WHERE id=_position_id AND
+        (metadata->>'funding_policy'='components' OR COALESCE(metadata->'funding_units0','{}')<>'{}'::jsonb
+            OR COALESCE(metadata->'funding_units1','{}')<>'{}'::jsonb)) THEN
+        RAISE EXCEPTION 'Операции с заёмным финансированием проводятся через журнал криптоистории';
+    END IF;
+
     FOREACH _input_qty IN ARRAY ARRAY[_secondary_quantity] LOOP
         IF _input_qty IS NOT NULL AND (_input_qty < 0 OR _input_qty::text IN ('NaN','Infinity','-Infinity') OR _input_qty<>round(_input_qty,18)) THEN
             RAISE EXCEPTION 'Quantity must be finite, nonnegative and have at most 18 decimal places';

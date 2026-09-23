@@ -25,6 +25,9 @@ DECLARE
     _refund_basis numeric;
     _refund_unknown boolean;
     _refund_estimated boolean;
+    _funding_mode boolean;
+    _funding_before jsonb;
+    _funding_audit jsonb;
     _conversion_source record;
     _conversion_target record;
     _old_source text := current_setting('budgeting.crypto_source_event_id',true);
@@ -120,6 +123,30 @@ BEGIN
                 OR COALESCE((_payload->>'rewards_claimed_in_base')::numeric,0)<>0
                 OR COALESCE((_payload->>'rewards_unclaimed_in_base')::numeric,0)<>0 THEN
                 RAISE EXCEPTION 'Post protocol accruals separately; do not import final balances';
+            END IF;
+        END IF;
+        IF _payload ? 'funding_policy' AND (_kind<>'borrow' OR _payload->>'funding_policy' IS DISTINCT FROM 'components') THEN
+            RAISE EXCEPTION 'Unsupported funding policy';
+        END IF;
+        _funding_mode:=COALESCE(_payload->>'funding_policy'='components',false) OR EXISTS(
+            SELECT 1 FROM crypto_protocol_positions WHERE owner_type=_account.owner_type
+            AND owner_user_id IS NOT DISTINCT FROM _account.owner_user_id
+            AND owner_family_id IS NOT DISTINCT FROM _account.owner_family_id AND metadata->>'funding_policy'='components');
+        IF _funding_mode THEN
+            SELECT jsonb_build_object('positions',COALESCE((SELECT jsonb_object_agg(id::text,
+                jsonb_build_object('quantity',quantity,'units',COALESCE(metadata->'funding_units','{}')))
+                FROM portfolio_positions WHERE owner_type=_account.owner_type AND owner_user_id IS NOT DISTINCT FROM _account.owner_user_id AND owner_family_id IS NOT DISTINCT FROM _account.owner_family_id),'{}'::jsonb),
+                'protocols',COALESCE((SELECT jsonb_object_agg(id::text,to_jsonb(p)) FROM crypto_protocol_positions p
+                WHERE owner_type=_account.owner_type AND owner_user_id IS NOT DISTINCT FROM _account.owner_user_id AND owner_family_id IS NOT DISTINCT FROM _account.owner_family_id),'{}'::jsonb)) INTO _funding_before;
+            _payload:=_payload-'funding_policy';
+            IF _kind IN ('borrow','repay','accrue') THEN
+                _payload:=_payload-'valuation_quality'-'valuation_source';
+                IF _kind='borrow' THEN _payload:=_payload||jsonb_build_object('value_in_base',0);
+                ELSIF _kind='repay' THEN _payload:=_payload||jsonb_build_object('value_in_base',NULL);
+                ELSE _payload:=_payload||jsonb_build_object('interest_value_in_base',0); END IF;
+            END IF;
+            IF _kind='swap' AND _payload->>'basis_policy' IS DISTINCT FROM 'carry' THEN
+                RAISE EXCEPTION 'Funded history requires carry swaps';
             END IF;
         END IF;
         CASE _kind
@@ -237,6 +264,25 @@ BEGIN
                     'basis_quality',_summary->>'basis_quality','realized_in_base',0,'economic_kind','staking_conversion')
                 WHERE linked_operation_id=(_result->>'operation_id')::bigint;
             _result:=_result || jsonb_build_object('economic_kind','staking_conversion','carried_cost_basis',_numeric,'basis_quality',_summary->>'basis_quality');
+        WHEN 'quantity_correction' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
+                'investment_account_id','crypto_asset_id','quantity','comment']::text[])))
+                OR _payload->>'investment_account_id' IS NULL OR _payload->>'crypto_asset_id' IS NULL
+                OR (_payload->>'quantity')::numeric IS NULL OR (_payload->>'quantity')::numeric<=0
+                OR NULLIF(btrim(_payload->>'comment'),'') IS NULL
+                OR NOT(_evidence ? 'quantity_correction') THEN
+                RAISE EXCEPTION 'Quantity correction requires positive quantity, explanation and source evidence';
+            END IF;
+            -- This is an explicitly evidenced rounding adjustment, not income.
+            -- The existing monetary basis stays intact; only its denominator changes.
+            _result:=budgeting.put__crypto_receive_reward(_user_id,
+                (_payload->>'investment_account_id')::bigint,(_payload->>'crypto_asset_id')::bigint,
+                (_payload->>'quantity')::numeric,_payload->>'comment',_accounting_date);
+            UPDATE portfolio_events SET event_type='top_up',metadata=(metadata-'income_kind') ||
+                jsonb_build_object('entry_value_in_base',0,'basis_quality','estimated',
+                    'source_kind','quantity_correction','correction_evidence',_evidence->'quantity_correction')
+                WHERE id=(_result->>'event_id')::bigint;
+            _result:=_result || jsonb_build_object('source_kind','quantity_correction','basis_quality','estimated');
         WHEN 'reward', 'receive_unknown', 'fee_refund' THEN
             IF _payload ? 'basis_assumption' AND (_kind<>'receive_unknown' OR (_payload->>'basis_assumption') IS DISTINCT FROM 'owner_zero' OR NULLIF(btrim(_payload->>'comment'),'') IS NULL) THEN
                 RAISE EXCEPTION 'Zero-basis assumption requires an unclassified receipt and explanation';
@@ -582,6 +628,10 @@ BEGIN
             IF _result ? 'metadata' THEN
                 _result:=jsonb_set(_result,'{metadata,debt_basis_quality}',to_jsonb((SELECT metadata->>'debt_basis_quality' FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint)));
             END IF;
+        END IF;
+        IF _funding_mode THEN
+            _funding_audit:=budgeting.put__crypto_funding_components(_user_id,_id,_index,_kind,_payload,_funding_before,_result,_accounting_date);
+            _result:=_result||jsonb_build_object('funding',_funding_audit);
         END IF;
         _results := _results || jsonb_build_array(_result);
         _index := _index+1;

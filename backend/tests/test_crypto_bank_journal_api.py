@@ -339,6 +339,69 @@ async def main():
                     assert Decimal(str(summary['remaining_cost_basis']))==Decimal(cost),summary
                 repeat=await client.post('/api/v1/crypto/source-events',json=event(37+case*3,[close_net]))
                 assert repeat.json()==response.json()
+            correction=dict(kind='quantity_correction',payload=dict(investment_account_id=inv,crypto_asset_id=tokens[0],quantity='0.02',comment='Rounded source discrepancy'))
+            before=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',position)
+            body=event(44,[correction])
+            bad=await client.post('/api/v1/crypto/source-events',json=body)
+            assert bad.status_code==400,bad.text
+            body['evidence']={'quantity_correction':{'source':'test source','shortfall':'0.02'}}
+            response=await client.post('/api/v1/crypto/source-events',json=body)
+            assert response.status_code==200,response.text
+            result=response.json()['results'][0]
+            e=await sql('SELECT to_jsonb(e) FROM budgeting.portfolio_events e WHERE id=$1',result['event_id'])
+            assert e['event_type']=='top_up' and e['metadata']['entry_value_in_base']==0 and 'income_kind' not in e['metadata'],e
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',result['position_id'])
+            assert Decimal(str(summary['remaining_cost_basis']))==10 and Decimal(str(summary['quantity_now']))==Decimal('11.02'),summary
+            repeat=await client.post('/api/v1/crypto/source-events',json=body)
+            assert repeat.json()==response.json()
+            debt_asset=await sql("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ('DEBT','Debt test','testnet',$1,18) RETURNING id",str(uid)+'debt')
+            output_asset=await sql("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ('FUNDED','Funded test','testnet',$1,18) RETURNING id",str(uid)+'funded')
+            collateral=result['position_id']
+            response=await client.post('/api/v1/crypto/source-events',json=event(45,[dict(kind='create_protocol',payload=dict(investment_account_id=inv,protocol_name='Component loan',position_type='lending',asset_symbol='NET',quantity='1',source_position_id=collateral,crypto_asset_id=tokens[0]))]))
+            assert response.status_code==200,response.text
+            loan_id=response.json()['results'][0]['id']
+            borrow=dict(kind='borrow',payload=dict(position_id=loan_id,debt_qty='40',borrowed_crypto_asset_id=debt_asset,funding_policy='components'))
+            response=await client.post('/api/v1/crypto/source-events',json=event(46,[borrow]))
+            assert response.status_code==200,response.text
+            debt_position=response.json()['results'][0]['metadata']['borrowed_position_id']
+            response=await client.post('/api/v1/crypto/source-events',json=event(47,[dict(kind='swap',payload=dict(position_id=debt_position,from_amount='20',to_crypto_asset_id=output_asset,to_amount='250',basis_policy='carry')),dict(kind='expense',payload=dict(source_position_id=debt_position,quantity='20'))]))
+            assert response.status_code==200,response.text
+            funded_position=response.json()['results'][0]['position_id']
+            await sql("SELECT budgeting.put__record_income($1,$2,3000,'RUB')",uid,bank)
+            response=await client.post('/api/v1/crypto/source-events',json=event(48,[dict(kind='bank_buy',payload=dict(bank_account_id=bank,crypto_asset_id=debt_asset,quantity='10',fiat_currency_code='RUB',fiat_amount='3000')),dict(kind='bank_to_portfolio',payload=dict(bank_account_id=bank,investment_account_id=inv,crypto_asset_id=debt_asset,quantity='10'))]))
+            assert response.status_code==200,response.text
+            debt_position=response.json()['results'][1]['position_id']
+            repayment=dict(kind='repay',payload=dict(position_id=loan_id,source_position_id=debt_position,repay_qty='10'))
+            response=await client.post('/api/v1/crypto/source-events',json=event(49,[repayment]))
+            assert response.status_code==200,response.text
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',funded_position)
+            assert summary['remaining_cost_basis']==1500 and Decimal(str(summary['funding_units'][str(loan_id)]))==15,summary
+            assert not summary['basis_final'],summary
+            allocated=await sql("SELECT sum((metadata->>'funding_confirmed_cost')::numeric) FROM budgeting.portfolio_events WHERE created_by_user_id=$1",uid)
+            assert allocated==1500,allocated
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(49,[repayment]))
+            assert repeat.json()==response.json()
+            # New borrowing must not dilute already confirmed costs; unused return cancels itself.
+            response=await client.post('/api/v1/crypto/source-events',json=event(50,[dict(kind='borrow',payload={**borrow['payload'],'debt_qty':'10'})]))
+            assert response.status_code==200,response.text
+            debt_position=response.json()['results'][0]['metadata']['borrowed_position_id']
+            response=await client.post('/api/v1/crypto/source-events',json=event(51,[dict(kind='repay',payload={**repayment['payload'],'source_position_id':debt_position})]))
+            assert response.status_code==200,response.text
+            after=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',funded_position)
+            assert after==summary,(after,summary)
+            response=await client.get(f'/api/v1/crypto/accounts/{inv}/assets/{output_asset}')
+            assert response.status_code==200,response.text
+            detail=response.json()
+            assert detail['basis_final'] is False and detail['funding_units'][str(loan_id)]==15,detail
+            assert detail['funding_components'][0]['symbol']=='DEBT',detail
+            try:
+                await sql('SELECT budgeting.get__crypto_position_movable_entry_summary($1)',funded_position)
+            except asyncpg.RaiseError:
+                pass
+            else:
+                raise AssertionError('Direct mutation of funded position must require the journal')
+        print('funding: partial repayment to asset/expense, actual costs, new borrowing and self-return, repeat passed')
+        print('quantity correction: evidence required, no new cost or income, exact quantity and repeat passed')
         print('net LP composition: both directions, both-growing, loss/override rejection and repeat passed')
         print('carry swaps: preserved full value/quality, unknown propagation, valuation conflict and repeat passed')
         print('estimated loan/interest/repayment and explicit zero-cost receipt convention passed')

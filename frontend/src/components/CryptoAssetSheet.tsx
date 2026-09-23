@@ -136,11 +136,12 @@ export default function CryptoAssetSheet({
   const basisQuality = detail?.basis_quality ?? detail?.asset_metadata.reconstruction_basis_quality;
   const basisUnknown = basisQuality === 'unknown' || basisQuality === 'invalid' || detail?.remaining_cost_basis == null;
   const basisEstimated = basisQuality === 'estimated';
+  const basisOpen = detail?.basis_final === false;
 
   const currentValue = detail && livePrice && livePrice.price > 0
     ? detail.quantity * livePrice.price
     : null;
-  const unrealized = currentValue !== null && detail && !basisUnknown && detail.remaining_cost_basis !== null
+  const unrealized = currentValue !== null && detail && !basisUnknown && !basisOpen && detail.remaining_cost_basis !== null
     ? currentValue - detail.remaining_cost_basis
     : null;
   const unrealizedPct = unrealized !== null && detail && detail.remaining_cost_basis !== null && detail.remaining_cost_basis > 0
@@ -207,12 +208,15 @@ export default function CryptoAssetSheet({
 
           <div className="ca-sheet__stats">
             <div className="ca-sheet__stat">
-              <span className="ca-sheet__stat-label">Cost basis</span>
+              <span className="ca-sheet__stat-label">{basisOpen ? 'Подтверждённые затраты' : 'Себестоимость'}</span>
               <span className="ca-sheet__stat-val">
                 {basisUnknown ? '—' : `${basisEstimated ? '≈ ' : ''}${formatNumericAmount(detail.remaining_cost_basis ?? 0)} ${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">
-                {basisUnknown ? 'неизвестна' : `avg ${formatNumericAmount(detail.avg_cost_per_unit ?? 0, 4)}`}
+                {basisUnknown ? 'неизвестна' : basisOpen ? 'Неокончательная: открытое финансирование' : `avg ${formatNumericAmount(detail.avg_cost_per_unit ?? 0, 4)}`}
+                {basisOpen && detail.funding_components?.map((part) => (
+                  <span key={part.loan_id} style={{ display: 'block' }}>+ {formatNumericAmount(Number(part.quantity), 12)} {part.symbol}</span>
+                ))}
               </span>
             </div>
             <div className="ca-sheet__stat">

@@ -132,6 +132,8 @@ BEGIN
         'total_entry_value_in_base', (_summary ->> 'total_entry_value_in_base')::numeric,
         'total_consumed_cost_basis', (_summary ->> 'total_consumed_cost_basis')::numeric,
         'basis_quality', _summary ->> 'basis_quality',
+        'funding_components',_summary->'funding_components',
+        'funding_units',_summary->'funding_units','basis_final',(_summary->>'basis_final')::boolean,
         'remaining_cost_basis', (_summary ->> 'remaining_cost_basis')::numeric,
         'avg_cost_per_unit', (_summary ->> 'avg_cost_per_unit')::numeric,
         'realized_pnl_lifetime_in_base', CASE WHEN _summary->>'basis_quality' IN ('unknown','invalid','estimated') THEN NULL ELSE _realized_total END,

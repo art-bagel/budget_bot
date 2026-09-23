@@ -193,6 +193,9 @@ export interface CryptoAccountAssetSummary {
   total_consumed_cost_basis: number | null;
   basis_quality: 'known' | 'confirmed_zero' | 'estimated' | 'unknown' | 'invalid';
   remaining_cost_basis: number | null;
+  basis_final?: boolean;
+  funding_units?: Record<string, number | string>;
+  funding_components?: Array<{ loan_id: string; quantity: string; symbol: string }>;
   avg_cost_per_unit: number | null;
   realized_pnl_lifetime_in_base: number | null;
   last_event_at?: string | null;

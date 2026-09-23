@@ -17,6 +17,13 @@ DECLARE
     _interest_external text := 'protocol-accrual:' || _external_id;
 BEGIN
     SET search_path TO budgeting;
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_protocol_positions WHERE id=_position_id AND
+        (metadata->>'funding_policy'='components' OR COALESCE(metadata->'funding_units0','{}')<>'{}'::jsonb
+            OR COALESCE(metadata->'funding_units1','{}')<>'{}'::jsonb)) THEN
+        RAISE EXCEPTION 'Операции с заёмным финансированием проводятся через журнал криптоистории';
+    END IF;
+
     SELECT * INTO _p FROM crypto_protocol_positions WHERE id=_position_id FOR UPDATE;
     IF _p.id IS NULL THEN RAISE EXCEPTION 'Unknown lending position'; END IF;
     IF NOT budgeting.has__owner_access(_user_id,_p.owner_type,_p.owner_user_id,_p.owner_family_id) THEN
