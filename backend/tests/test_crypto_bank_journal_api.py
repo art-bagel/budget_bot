@@ -422,6 +422,49 @@ async def main():
             summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',estimate_position)
             assert summary['basis_quality']=='estimated' and summary['remaining_cost_basis']==100,summary
             assert (await client.post('/api/v1/crypto/source-events',json=buy_estimate)).json()==response.json()
+            await sql("INSERT INTO budgeting.categories(owner_type,owner_user_id,name,kind) VALUES ('user',$1,'FX Result','system') ON CONFLICT DO NOTHING RETURNING id",uid)
+            bank_sale=dict(kind='bank_sell',payload=dict(position_id=funded_position,bank_account_id=bank,quantity='125',fiat_amount='2000',comment='Test funded sale'))
+            body=event(54,[bank_sale])
+            failed=await client.post('/api/v1/crypto/source-events',json=event(54,[dict(kind='bank_sell',payload={**bank_sale['payload'],'bank_account_id':foreign})]))
+            assert failed.status_code==400,failed.text
+            response=await client.post('/api/v1/crypto/source-events',json=body)
+            assert response.status_code==200,response.text
+            sold=response.json()['results'][0]
+            assert sold['transfer']['amount_in_base']==750 and sold['sale']['realized_fx_result_in_base']==1250,sold
+            assert (await client.post('/api/v1/crypto/source-events',json=body)).json()==response.json()
+            sale_event=await sql("SELECT id FROM budgeting.portfolio_events WHERE linked_operation_id=$1",sold['transfer']['operation_id'])
+            sm=await sql("SELECT metadata FROM budgeting.portfolio_events WHERE id=$1",sale_event)
+            assert Decimal(str(sm['funding_units'][str(loan_id)]))==Decimal('7.5'),sm
+            fx_before=await sql("SELECT amount FROM budgeting.current_budget_balances b JOIN budgeting.categories c ON c.id=b.category_id WHERE c.owner_user_id=$1 AND c.name='FX Result'",uid)
+            await sql("SELECT budgeting.put__record_income($1,$2,3000,'RUB')",uid,bank)
+            purchase=event(55,[dict(kind='bank_buy',payload=dict(bank_account_id=bank,crypto_asset_id=debt_asset,quantity='10',fiat_currency_code='RUB',fiat_amount='3000')),dict(kind='bank_to_portfolio',payload=dict(bank_account_id=bank,investment_account_id=inv,crypto_asset_id=debt_asset,quantity='10'))])
+            response=await client.post('/api/v1/crypto/source-events',json=purchase)
+            assert response.status_code==200,response.text
+            repayment_source=response.json()['results'][1]['position_id']
+            response=await client.post('/api/v1/crypto/source-events',json=event(56,[dict(kind='repay',payload=dict(position_id=loan_id,source_position_id=repayment_source,repay_qty='10'))]))
+            assert response.status_code==200,response.text
+            sm=await sql("SELECT metadata FROM budgeting.portfolio_events WHERE id=$1",sale_event)
+            assert Decimal(str(sm['funding_units'][str(loan_id)]))==5 and Decimal(str(sm['funding_confirmed_cost']))==Decimal('704.55'),sm
+            fx_after=await sql("SELECT amount FROM budgeting.current_budget_balances b JOIN budgeting.categories c ON c.id=b.category_id WHERE c.owner_user_id=$1 AND c.name='FX Result'",uid)
+            # Existing 1 DEBT/100 RUB mixes with 10 DEBT/3000 RUB: repayment WAC=2818.18.
+            assert fx_after==fx_before-Decimal('704.55'),(fx_before,fx_after)
+            assert sm['realized_in_base']==0,sm
+            repayment_account=await sql("INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type) VALUES ('user',$1,'Repayment transit','investment','crypto') RETURNING id",uid)
+            response=await client.post('/api/v1/crypto/source-events',json=event(57,[dict(kind='transfer',payload=dict(position_id=repayment_source,target_investment_account_id=repayment_account,amount='1'))]))
+            assert response.status_code==200,response.text
+            transit=await sql("SELECT id FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND status='open'",repayment_account)
+            cross_repay=event(58,[dict(kind='repay',payload=dict(position_id=loan_id,source_position_id=transit,repay_qty='1'))])
+            response=await client.post('/api/v1/crypto/source-events',json=cross_repay)
+            assert response.status_code==200,response.text
+            assert (await client.post('/api/v1/crypto/source-events',json=cross_repay)).json()==response.json()
+            assert await sql("SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1",transit)==0
+            qty_before=await sql('SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1',funded_position)
+            tiny=event(59,[dict(kind='bank_sell',payload=dict(position_id=funded_position,bank_account_id=bank,quantity='0.000000000000000001',fiat_amount='0.01'))])
+            response=await client.post('/api/v1/crypto/source-events',json=tiny)
+            assert response.status_code==200,response.text
+            assert await sql('SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1',funded_position)==qty_before-Decimal('0.000000000000000001')
+            assert await sql('SELECT COALESCE((SELECT amount FROM budgeting.current_crypto_balances WHERE bank_account_id=$1 AND crypto_asset_id=$2),0)',bank,output_asset)==0
+        print('bank sale: scope rollback, cash proceeds, carry basis, financing holder, later FX adjustment and repeat passed')
         print('observation: evidence guard, no ledger change, repeat; estimated bank funding: source guard, rollback, quality and repeat passed')
         print('funding: partial repayment to asset/expense, actual costs, new borrowing and self-return, repeat passed')
         print('quantity correction: evidence required, no new cost or income, exact quantity and repeat passed')

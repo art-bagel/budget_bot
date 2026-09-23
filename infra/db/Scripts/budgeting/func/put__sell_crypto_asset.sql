@@ -18,8 +18,8 @@ DECLARE
     _owner_family_id bigint;
     _account_kind text;
     _base_currency_code char(3);
-    _crypto_balance numeric(30, 12);
-    _remaining_to_consume numeric(30, 12);
+    _crypto_balance numeric(50, 18);
+    _remaining_to_consume numeric(50, 18);
     _consumed_cost_base numeric(20, 2) := 0;
     _realized_result numeric(20, 2) := 0;
     _fx_result_category_id bigint;
@@ -27,17 +27,21 @@ DECLARE
     _lot_amounts numeric[] := '{}';
     _lot_costs numeric[] := '{}';
     _lot_idx integer;
-    _consume_amount numeric(30, 12);
+    _consume_amount numeric(50, 18);
     _consume_cost numeric(20, 2);
     _lot record;
     _operation_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    IF _crypto_amount <= 0 OR _fiat_amount <= 0 THEN
+    IF _crypto_amount IS NULL OR _fiat_amount IS NULL OR _crypto_amount <= 0 OR _fiat_amount <= 0
+        OR _crypto_amount::text IN ('NaN','Infinity','-Infinity')
+        OR _fiat_amount::text IN ('NaN','Infinity','-Infinity') THEN
         RAISE EXCEPTION 'Amounts must be positive';
     END IF;
-    _crypto_amount := round(_crypto_amount, 12);
+    IF _crypto_amount <> round(_crypto_amount,18) THEN
+        RAISE EXCEPTION 'Crypto quantity must be exact to 18 decimals';
+    END IF;
 
     SELECT owner_type, owner_user_id, owner_family_id, account_kind
     INTO _owner_type, _owner_user_id, _owner_family_id, _account_kind

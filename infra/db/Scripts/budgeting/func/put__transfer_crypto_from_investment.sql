@@ -99,7 +99,14 @@ BEGIN
     END IF;
 
     -- Compute weighted-average consumed cost basis for this exit.
-    _entry_summary := budgeting.get__crypto_position_known_entry_summary(_position_id);
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NOT NULL THEN
+        _entry_summary := budgeting.get__crypto_position_movable_entry_summary(_position_id);
+        IF _entry_summary->>'remaining_cost_basis' IS NULL THEN
+            RAISE EXCEPTION 'Cannot transfer unknown cost to a bank';
+        END IF;
+    ELSE
+        _entry_summary := budgeting.get__crypto_position_known_entry_summary(_position_id);
+    END IF;
     _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
     _consumed_cost_basis := CASE
         WHEN _position_quantity > 0
@@ -151,7 +158,8 @@ BEGIN
         _consumed_cost_basis,
         _consumed_cost_basis,
         _operation_id,
-        jsonb_build_object('source', 'investment_withdrawal', 'position_id', _position_id)
+        jsonb_build_object('source', 'investment_withdrawal', 'position_id', _position_id,
+            'basis_quality', _entry_summary->>'basis_quality')
     );
 
     _event_type := 'transfer_out';

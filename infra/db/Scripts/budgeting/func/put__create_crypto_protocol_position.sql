@@ -33,6 +33,8 @@ DECLARE
     _account_kind text;
     _investment_asset_type text;
     _position_id bigint;
+    _entry_a bigint;
+    _entry_b bigint;
     _source_position record;
     _remaining_quantity numeric(50, 18);
     _asset record;
@@ -236,7 +238,7 @@ BEGIN
                 'token_role', 'token_a'
             ),
             _user_id
-        );
+        ) RETURNING id INTO _entry_a;
     ELSE
         IF NULLIF(btrim(_asset_symbol), '') IS NULL THEN
             RAISE EXCEPTION 'Asset symbol is required';
@@ -370,7 +372,7 @@ BEGIN
                 'basis_quality', _secondary_entry_summary->>'basis_quality'
             ),
             _user_id
-        );
+        ) RETURNING id INTO _entry_b;
     END IF;
 
     INSERT INTO crypto_protocol_positions (
@@ -419,6 +421,10 @@ BEGIN
         _user_id
     )
     RETURNING id INTO _position_id;
+
+    UPDATE portfolio_events
+    SET metadata = metadata || jsonb_build_object('protocol_position_id', _position_id)
+    WHERE id IN (_entry_a, _entry_b);
 
     IF _borrowed_crypto_asset_id IS NOT NULL THEN
         RETURN budgeting.put__lending_take_more_debt(_user_id,_position_id,

@@ -10,6 +10,7 @@ DECLARE
     _settle numeric; _self numeric; _body numeric; _cash numeric; _interest numeric;
     _total numeric; _left_units numeric; _left_cash numeric; _units numeric;
     _take numeric; _cost numeric; _units_after numeric; _expense_id bigint;
+    _operation bigint; _fx bigint; _unallocated bigint; _base char(3);
     _allocations jsonb:='[]'; _owner record; _metadata jsonb;
 BEGIN
     SET search_path TO budgeting;
@@ -34,7 +35,7 @@ BEGIN
             budgeting.calc__crypto_funding_units(COALESCE(metadata->'funding_units','{}'),_moved,-1)) WHERE id=_e.position_id;
         _out:=jsonb_set(_out,ARRAY[_e.position_id::text],_moved);
         UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units_moved',_moved) WHERE id=_e.id;
-        IF _kind IN ('fee','expense') THEN
+        IF _kind IN ('fee','expense','bank_sell') THEN
             UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units',_moved) WHERE id=_e.id;
         END IF;
     END LOOP;
@@ -174,6 +175,19 @@ BEGIN
                         COALESCE((metadata->>CASE WHEN _h.field='funding_units0' THEN 'cost_basis_carried' ELSE 'token1_cost_basis_carried' END)::numeric,0)+_cost,
                         'basis_quality','estimated',CASE WHEN _h.field='funding_units0' THEN 'token0_basis_quality' ELSE 'token1_basis_quality' END,'estimated') WHERE id=_h.id;
             ELSE
+                SELECT metadata INTO _metadata FROM portfolio_events WHERE id=_h.id;
+                IF _cost>0 AND _metadata->>'funding_bank_sale'='true' THEN
+                    _base:=budgeting.get__owner_base_currency(_owner.owner_type,_owner.owner_user_id,_owner.owner_family_id);
+                    _fx:=budgeting.get__owner_system_category_id(_owner.owner_type,_owner.owner_user_id,_owner.owner_family_id,'FX Result');
+                    _unallocated:=budgeting.get__owner_system_category_id(_owner.owner_type,_owner.owner_user_id,_owner.owner_family_id,'Unallocated');
+                    INSERT INTO operations(actor_user_id,owner_type,owner_user_id,owner_family_id,type,comment,operated_on)
+                    VALUES(_uid,_owner.owner_type,_owner.owner_user_id,_owner.owner_family_id,'investment_trade',
+                        'Уточнение себестоимости проданной криптовалюты при погашении займа',_day) RETURNING id INTO _operation;
+                    INSERT INTO budget_entries(operation_id,category_id,currency_code,amount)
+                    VALUES(_operation,_fx,_base,-_cost),(_operation,_unallocated,_base,_cost);
+                    PERFORM budgeting.put__apply_current_budget_delta(_fx,_base,-_cost);
+                    PERFORM budgeting.put__apply_current_budget_delta(_unallocated,_base,_cost);
+                END IF;
                 UPDATE portfolio_events SET metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1))
                     ||jsonb_build_object('funding_confirmed_cost',COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)+_cost) WHERE id=_h.id;
             END IF;
@@ -181,7 +195,7 @@ BEGIN
             _left_units:=_left_units-_take; _left_cash:=_left_cash-_cost; _total:=_total-_h.units;
         END LOOP;
         IF _left_units<>0 OR _left_cash<>0 THEN RAISE EXCEPTION 'Funding settlement remainder'; END IF;
-    ELSIF _kind NOT IN ('fee','expense','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation') THEN
+    ELSIF _kind NOT IN ('fee','expense','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.

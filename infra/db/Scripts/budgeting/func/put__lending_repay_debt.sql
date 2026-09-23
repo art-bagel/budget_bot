@@ -122,9 +122,13 @@ BEGIN
         RAISE EXCEPTION 'Unknown open crypto asset position %', _source_position_id;
     END IF;
 
-    IF _source_position.investment_account_id <> _existing.investment_account_id
-       OR _source_position.asset_type_code <> 'crypto' THEN
-        RAISE EXCEPTION 'Source position must be an open crypto asset on the same account';
+    IF _source_position.asset_type_code <> 'crypto'
+       OR _source_position.owner_type IS DISTINCT FROM _existing.owner_type
+       OR _source_position.owner_user_id IS DISTINCT FROM _existing.owner_user_id
+       OR _source_position.owner_family_id IS DISTINCT FROM _existing.owner_family_id
+       OR (_source_position.investment_account_id <> _existing.investment_account_id
+           AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL) THEN
+        RAISE EXCEPTION 'Repayment source must share the loan owner; cross-account repayment requires the journal';
     END IF;
 
     _source_asset_id := COALESCE((_source_position.metadata ->> 'crypto_asset_id')::bigint, 0);

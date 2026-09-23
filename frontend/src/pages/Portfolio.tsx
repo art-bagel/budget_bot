@@ -40,6 +40,7 @@ import PortfolioPositionDialog from '../components/PortfolioPositionDialog';
 import TinkoffSyncDialog from '../components/TinkoffSyncDialog';
 import CryptoAssetSheet from '../components/CryptoAssetSheet';
 import CryptoIncomeSheet from '../components/CryptoIncomeSheet';
+import CryptoProtocolHistory from '../components/CryptoProtocolHistory';
 import CryptoProtocolPartialCloseSheet from '../components/CryptoProtocolPartialCloseSheet';
 import CryptoSwapSheet from '../components/CryptoSwapSheet';
 import CryptoWithdrawSheet from '../components/CryptoWithdrawSheet';
@@ -5204,6 +5205,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </div>
               </form>
             )}
+            <CryptoProtocolHistory
+              key={`${selectedProtocolPosition.id}:${selectedProtocolPosition.updated_at}`}
+              positionId={selectedProtocolPosition.id}
+              baseCurrencyCode={user.base_currency_code}
+            />
           </div>
         </BottomSheet>
       )}

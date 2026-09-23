@@ -1160,3 +1160,20 @@ export function settlePendingFiatExpense(saleEventId: number, body: {
     body: JSON.stringify(body),
   });
 }
+
+export interface CryptoProtocolHistoryEntry {
+  id: string;
+  event_at: string;
+  kind: string;
+  quantity: number | null;
+  symbol: string;
+  cost_basis: number | null;
+  comment: string | null;
+}
+
+export async function fetchCryptoProtocolHistory(positionId: number, offset = 0): Promise<{
+  total: number;
+  entries: CryptoProtocolHistoryEntry[];
+}> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/history?limit=50&offset=${offset}`);
+}

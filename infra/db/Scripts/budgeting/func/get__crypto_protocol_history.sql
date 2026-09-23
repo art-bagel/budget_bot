@@ -1,0 +1,94 @@
+CREATE OR REPLACE FUNCTION budgeting.get__crypto_protocol_history(
+    _user_id bigint, _position_id bigint, _limit integer DEFAULT 50, _offset integer DEFAULT 0
+) RETURNS jsonb LANGUAGE plpgsql AS $function$
+DECLARE
+    _p budgeting.crypto_protocol_positions%ROWTYPE;
+    _result jsonb;
+BEGIN
+    SET search_path TO budgeting;
+    SELECT * INTO _p FROM crypto_protocol_positions WHERE id = _position_id;
+    IF _p.id IS NULL OR NOT budgeting.has__owner_access(
+        _user_id, _p.owner_type, _p.owner_user_id, _p.owner_family_id
+    ) THEN
+        RAISE EXCEPTION 'DeFi position unavailable';
+    END IF;
+    IF _limit NOT BETWEEN 1 AND 200 OR _offset < 0 THEN
+        RAISE EXCEPTION 'Invalid history page';
+    END IF;
+    WITH initial_links AS (
+        -- Historical imports created asset entries before the protocol id existed.
+        -- Match the exact command result, never a date, symbol or protocol name.
+        SELECT l.ledger_id
+        FROM crypto_source_event_links l JOIN crypto_source_events s ON s.id=l.source_event_id
+        WHERE l.ledger_table='portfolio_events'
+          AND s.commands->l.command_index->>'kind'='create_protocol'
+          AND s.result->'results'->l.command_index->>'id'=_position_id::text
+    ), asset_rows AS (
+        SELECT 'asset:'||e.id AS id, e.event_at, e.id AS sequence,
+            COALESCE(e.metadata->>'action', e.event_type) AS kind,
+            e.quantity, COALESCE(p.metadata->>'asset_symbol',p.title) AS symbol,
+            COALESCE(e.metadata->>'consumed_cost_basis',e.metadata->>'entry_value_in_base',
+                e.metadata->>'value_in_base')::numeric AS cost_basis,
+            e.comment
+        FROM portfolio_events e JOIN portfolio_positions p ON p.id=e.position_id
+        WHERE p.owner_type=_p.owner_type
+          AND p.owner_user_id IS NOT DISTINCT FROM _p.owner_user_id
+          AND p.owner_family_id IS NOT DISTINCT FROM _p.owner_family_id
+          AND (e.metadata->>'protocol_position_id'=_position_id::text
+            OR e.metadata->>'source_protocol_position_id'=_position_id::text
+            OR e.id IN (SELECT ledger_id FROM initial_links))
+    ), rows AS (
+        SELECT * FROM asset_rows
+        UNION ALL
+        SELECT 'debt:'||e.id, e.event_at, e.id, e.event_kind,
+            abs(e.quantity), a.symbol, NULL::numeric,
+            CASE WHEN e.event_kind='liquidation' THEN 'Погашение долга за счёт залога' ELSE NULL END
+        FROM crypto_liability_events e JOIN crypto_assets a ON a.id=e.crypto_asset_id
+        WHERE e.protocol_position_id=_position_id AND e.portfolio_event_id IS NULL
+        UNION ALL
+        SELECT 'accrual:'||e.id,e.event_at,e.id,'collateral_accrual',
+            e.collateral_quantity,_p.asset_symbol,NULL::numeric,NULL::text
+        FROM crypto_protocol_accrual_events e
+        WHERE e.protocol_position_id=_position_id AND e.collateral_quantity>0
+        UNION ALL
+        SELECT 'liquidation-collateral:'||e.id,e.event_at,e.id,'collateral_liquidation',
+            (e.metadata->'result'->>'collateral_quantity')::numeric,_p.asset_symbol,
+            (e.metadata->'result'->>'collateral_cost_consumed_in_base')::numeric,NULL::text
+        FROM crypto_liability_events e
+        WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
+        UNION ALL
+        SELECT 'custody:'||s.id||':'||c.ordinality,s.accounting_date,s.id,
+            CASE WHEN c.value->'payload'->>'to_custody'='main' THEN 'lp_return' ELSE 'lp_farm' END,
+            (c.value->'payload'->>'quantity')::numeric,'LP',NULL::numeric,NULL::text
+        FROM crypto_source_events s CROSS JOIN LATERAL jsonb_array_elements(s.commands) WITH ORDINALITY c
+        WHERE c.value->>'kind'='lp_custody'
+          AND c.value->'payload'->>'position_id'=_position_id::text
+          AND s.owner_key=CASE WHEN _p.owner_type='user' THEN 'user:'||_p.owner_user_id ELSE 'family:'||_p.owner_family_id END
+        UNION ALL
+        -- Older manually created positions may have no immutable opening link.
+        -- Do not pass their current balance off as the original deposit.
+        SELECT 'opening:'||_p.id,_p.deposited_at,0,'opening',NULL::numeric,
+            _p.asset_symbol,NULL::numeric,'Размещение зарегистрировано; состав первоначальной операции не сохранён.'
+        WHERE NOT EXISTS (SELECT 1 FROM asset_rows WHERE kind='stake_to_protocol')
+    ), ordered AS (
+        SELECT r.*,COALESCE(s.occurred_at,r.event_at::timestamptz) AS sort_at,
+            COALESCE(s.order_in_timestamp,0) AS sort_order,
+            COALESCE(l.command_index,0) AS sort_command
+        FROM rows r
+        LEFT JOIN crypto_source_event_links l ON l.ledger_id=split_part(r.id,':',2)::bigint
+          AND l.ledger_table=CASE split_part(r.id,':',1)
+            WHEN 'asset' THEN 'portfolio_events' WHEN 'debt' THEN 'crypto_liability_events'
+            WHEN 'liquidation-collateral' THEN 'crypto_liability_events'
+            WHEN 'accrual' THEN 'crypto_protocol_accrual_events' END
+        LEFT JOIN crypto_source_events s ON s.id=COALESCE(l.source_event_id,
+            CASE WHEN r.id LIKE 'custody:%' THEN split_part(r.id,':',2)::bigint END)
+    ), page AS (
+        SELECT * FROM ordered ORDER BY event_at DESC,sort_at DESC,sort_order DESC,sort_command DESC,sequence DESC,id DESC
+        LIMIT _limit OFFSET _offset
+    )
+    SELECT jsonb_build_object('total',(SELECT count(*) FROM rows),
+        'entries',COALESCE((SELECT jsonb_agg(to_jsonb(page)-'sort_at'-'sort_order'-'sort_command' ORDER BY event_at DESC,sort_at DESC,sort_order DESC,sort_command DESC,sequence DESC,id DESC) FROM page),'[]'::jsonb))
+    INTO _result;
+    RETURN _result;
+END
+$function$;

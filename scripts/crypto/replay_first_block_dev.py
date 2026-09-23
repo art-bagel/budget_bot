@@ -101,7 +101,7 @@ async def main():
         wallets={r.split(':')[1] for r in refs if r.startswith(('account:','position:'))}
         for wallet in sorted(wallets-accounts.keys()):
             async with pool.acquire() as db:
-                name={'exchange_source':'Технический источник покупок (dev)', 'battery':'Батарейка — возврат', 'intermediate':'Промежуточный кошелёк', 'second':'Второй кошелёк', 'fourth':'Четвёртый кошелёк', 'telegram_yield':'Размещения Telegram'}.get(wallet,wallet)
+                name={'exchange_source':'Технический источник покупок (dev)', 'battery':'Батарейка — возврат', 'intermediate':'Промежуточный кошелёк', 'second':'Второй кошелёк', 'fourth':'Четвёртый кошелёк', 'telegram_yield':'Размещения Telegram', 'external_evaa':'Стороннее погашение EVAA — технический счёт'}.get(wallet,wallet)
                 existing = await db.fetchval("SELECT id FROM budgeting.bank_accounts WHERE owner_user_id=$1 AND name=$2 AND account_kind='investment' AND investment_asset_type='crypto'", uid, name)
                 accounts[wallet] = existing or await db.fetchval("INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type,provider_name) VALUES ('user',$1,$2,'investment','crypto',$3) RETURNING id",uid,name,'reconstruction_internal' if wallet in plan.get('internal_accounts',[]) else None)
                 state['accounts']=accounts
@@ -174,6 +174,8 @@ async def main():
                     assert await sql('SELECT count(*) FROM budgeting.portfolio_events WHERE created_by_user_id=$1', uid) == before
                 elif 'event_no' in row:
                     for master, quantity in row['expected_main'].items():
+                        if master in plan.get('excluded_assets', {}):
+                            continue
                         if master in assets:
                             actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts['main'], str(assets[master]))
                         else:
@@ -185,6 +187,8 @@ async def main():
             # Final-state checks also execute on a repeated run.
             last = next(r for r in reversed(plan['rows']) if 'event_no' in r)
             for master, quantity in last['expected_main'].items():
+                if master in plan.get('excluded_assets', {}):
+                    continue
                 if master in assets:
                     actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts['main'], str(assets[master]))
                 else:
@@ -193,7 +197,7 @@ async def main():
             if last.get('lp_receipt'):
                 receipt = last['lp_receipt']
                 assert await sql("SELECT metadata->'lp_receipt' FROM budgeting.crypto_protocol_positions WHERE investment_account_id=$1 AND metadata->'lp_receipt'->>'master'=$2", accounts['main'], receipt['master']) == receipt
-            assert await sql("SELECT COALESCE((SELECT amount FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='RUB'),0)", accounts['primary_cash']) == 0
+            assert await sql("SELECT COALESCE((SELECT amount FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='RUB'),0)", accounts['primary_cash']) == Decimal(plan.get('expected_bank_RUB','0'))
             summaries = []
             async with pool.acquire() as db:
                 for r in await db.fetch('SELECT id,investment_account_id,title FROM budgeting.portfolio_positions WHERE owner_user_id=$1 ORDER BY id', uid):
@@ -247,9 +251,10 @@ async def main():
                     'expenses',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'target_kind'='expense'),0)::text,
                     'refunds',COALESCE(sum((metadata->>'entry_value_in_base')::numeric) FILTER(WHERE metadata->>'source_kind'='fee_refund'),0)::text,
                     'interest',COALESCE(sum((metadata->>'funding_interest_cost')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'funding_policy'='components'),0)::text,
+                    'bank_withdrawals',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'target_kind'='bank'),0)::text,
                     'swap_result',COALESCE(sum((metadata->>'realized_in_base')::numeric) FILTER(WHERE event_type='swap_out'),0)::text
                     ) FROM budgeting.portfolio_events WHERE created_by_user_id=$1""",uid)
-                expected=funding-Decimal(totals['fees'])-Decimal(totals['expenses'])-Decimal(totals['interest'])+Decimal(totals['refunds'])
+                expected=funding-Decimal(totals['fees'])-Decimal(totals['expenses'])-Decimal(totals['interest'])-Decimal(totals['bank_withdrawals'])+Decimal(totals['refunds'])
                 assert held+protocol_basis==expected,(held,protocol_basis,expected,totals)
                 assert Decimal(totals['swap_result'])==0
                 unit_checks=await sql("""WITH holders AS (
@@ -275,13 +280,13 @@ async def main():
                 for master, quantity in expected_assets.items():
                     actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts[wallet], str(assets[master]))
                     assert actual == Decimal(quantity), (wallet, master, actual, quantity)
-            if plan.get('accepted_custody_after_200'):
+            if plan.get('accepted_custody') or plan.get('accepted_custody_after_200'):
                 actual_custody = await sql("""SELECT COALESCE(jsonb_object_agg(master,quantity),'{}') FROM (
                     SELECT metadata->'lp_receipt'->>'master' master, sum((metadata->'lp_receipt'->>'quantity')::numeric)::text quantity
                     FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND status='open'
                     AND metadata ? 'lp_receipt' AND metadata->'lp_receipt'->>'custody'<>'main'
                     GROUP BY 1) t""",uid)
-                expected_custody = {r['master']: Decimal(r['quantity']) for r in plan['accepted_custody_after_200']}
+                expected_custody = {r['master']: Decimal(r['quantity']) for r in plan.get('accepted_custody',plan.get('accepted_custody_after_200',[]))}
                 assert {k:Decimal(v) for k,v in actual_custody.items()} == expected_custody
                 state['custody_verified'] = actual_custody
             state['limitations'] = plan.get('limitations',state['limitations'])

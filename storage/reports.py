@@ -465,6 +465,13 @@ class Reports(DataBase):
         )
         return result if result else []
 
+    async def get__crypto_protocol_history(
+        self, user_id: int, position_id: int, limit: int = 50, offset: int = 0,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('get__crypto_protocol_history'), user_id, position_id, limit, offset,
+        )
+
     async def get__crypto_account_assets(
         self,
         user_id: int,

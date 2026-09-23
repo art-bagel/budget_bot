@@ -90,7 +90,7 @@ BEGIN
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert')) THEN
+            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -153,7 +153,9 @@ BEGIN
         WHEN 'observation' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k<>'comment')
                 OR NULLIF(btrim(_payload->>'comment'),'') IS NULL
-                OR _evidence->'zero_movement' IS DISTINCT FROM 'true'::jsonb THEN
+                OR (_evidence->'zero_movement' IS DISTINCT FROM 'true'::jsonb
+                    AND NOT COALESCE(CASE WHEN jsonb_typeof(_evidence->'excluded_token_movements')='array'
+                        THEN jsonb_array_length(_evidence->'excluded_token_movements')>0 ELSE false END,false)) THEN
                 RAISE EXCEPTION 'Observation requires zero movement evidence and a comment';
             END IF;
             _result:=jsonb_build_object('observed',true,'economic_change',false);
@@ -185,6 +187,39 @@ BEGIN
             _result:=jsonb_build_object('position_id',_resource.id,'receipt_master',_payload->>'receipt_master',
                 'quantity',_payload->>'quantity','from_custody',_payload->>'from_custody','to_custody',_payload->>'to_custody',
                 'cost_basis_in_base',_resource.cost_basis_in_base);
+        WHEN 'bank_sell' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
+                ARRAY['position_id','bank_account_id','quantity','fiat_amount','comment'])))
+                OR NOT (_payload ?& ARRAY['position_id','bank_account_id','quantity','fiat_amount']) THEN
+                RAISE EXCEPTION 'Bank sale requires position, bank, quantity and proceeds';
+            END IF;
+            _numeric:=(_payload->>'fiat_amount')::numeric;
+            IF _numeric<=0 OR _numeric::text IN ('NaN','Infinity','-Infinity') OR _numeric<>round(_numeric,2) THEN
+                RAISE EXCEPTION 'Bank sale proceeds must be positive exact money';
+            END IF;
+            SELECT * INTO _resource FROM portfolio_positions WHERE id=(_payload->>'position_id')::bigint;
+            -- One atomic transfer and immediate base-currency sale. Existing bank
+            -- holdings would mix FIFO lots with this funding holder, so reject them.
+            IF EXISTS(SELECT 1 FROM crypto_lots WHERE bank_account_id=(_payload->>'bank_account_id')::bigint
+                AND crypto_asset_id=(_resource.metadata->>'crypto_asset_id')::bigint AND amount_remaining>0) THEN
+                RAISE EXCEPTION 'Immediate bank sale requires no prior lots of this coin';
+            END IF;
+            _result:=budgeting.put__transfer_crypto_from_investment(_user_id,
+                (_payload->>'position_id')::bigint,(_payload->>'bank_account_id')::bigint,
+                (_payload->>'quantity')::numeric,NULL,_payload->>'comment',_accounting_date);
+            _result:=jsonb_build_object('transfer',_result,'sale',budgeting.put__sell_crypto_asset(_user_id,
+                (_payload->>'bank_account_id')::bigint,(_resource.metadata->>'crypto_asset_id')::bigint,
+                (_payload->>'quantity')::numeric,
+                budgeting.get__owner_base_currency(_account.owner_type,_account.owner_user_id,_account.owner_family_id),
+                _numeric,_payload->>'comment',_accounting_date));
+            IF EXISTS(SELECT 1 FROM crypto_lot_consumptions c JOIN crypto_lots l ON l.id=c.lot_id
+                WHERE c.operation_id=(_result->'sale'->>'operation_id')::bigint
+                AND l.opened_by_operation_id<>(_result->'transfer'->>'operation_id')::bigint) THEN
+                RAISE EXCEPTION 'Concurrent bank lots changed; retry the atomic sale';
+            END IF;
+            UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_bank_sale',true,
+                'bank_sale_operation_id',_result->'sale'->'operation_id','bank_sale_proceeds',_numeric)
+            WHERE linked_operation_id=(_result->'transfer'->>'operation_id')::bigint;
         WHEN 'bank_buy', 'bank_to_portfolio' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
                 CASE WHEN _kind='bank_buy' THEN ARRAY['bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']

@@ -19,7 +19,7 @@ class CryptoSourceCommand(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
                   'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
-                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation']
+                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation']
     payload: dict[str, Any]
 
     @field_validator('payload')
@@ -721,6 +721,16 @@ async def get_crypto_protocol_positions(
         status=status,
     )
     return [CryptoProtocolPositionItem(**item) for item in items]
+
+
+@router.get('/protocol-positions/{position_id}/history')
+async def get_crypto_protocol_history(
+    position_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    return await reports.get__crypto_protocol_history(user.user_id, position_id, limit, offset)
 
 
 @router.post('/protocol-positions', response_model=CryptoProtocolPositionItem)
