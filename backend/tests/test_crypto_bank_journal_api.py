@@ -400,6 +400,29 @@ async def main():
                 pass
             else:
                 raise AssertionError('Direct mutation of funded position must require the journal')
+            # A zero-value chain message is auditable but must not fabricate a ledger entry.
+            observation = event(52,[dict(kind='observation',payload=dict(comment='Zero movement message'))])
+            count_before = await sql('SELECT count(*) FROM budgeting.portfolio_events WHERE created_by_user_id=$1',uid)
+            bad = await client.post('/api/v1/crypto/source-events',json=observation)
+            assert bad.status_code==400,bad.text
+            observation['evidence']={'zero_movement':True}
+            response=await client.post('/api/v1/crypto/source-events',json=observation)
+            assert response.status_code==200,response.text
+            assert response.json()['links']==[]
+            assert await sql('SELECT count(*) FROM budgeting.portfolio_events WHERE created_by_user_id=$1',uid)==count_before
+            assert (await client.post('/api/v1/crypto/source-events',json=observation)).json()==response.json()
+            await sql("SELECT budgeting.put__record_income($1,$2,100,'RUB')",uid,bank)
+            buy_estimate=event(53,[dict(kind='bank_buy',payload=dict(bank_account_id=bank,crypto_asset_id=debt_asset,quantity='1',fiat_currency_code='RUB',fiat_amount='100')),dict(kind='bank_to_portfolio',payload=dict(bank_account_id=bank,investment_account_id=inv,crypto_asset_id=debt_asset,quantity='1',purchase_quality='estimated'))])
+            bad=await client.post('/api/v1/crypto/source-events',json=buy_estimate)
+            assert bad.status_code==400,bad.text
+            buy_estimate['commands'][1]['payload']['purchase_source']='Owner accepted historical estimate'
+            response=await client.post('/api/v1/crypto/source-events',json=buy_estimate)
+            assert response.status_code==200,response.text
+            estimate_position=response.json()['results'][1]['position_id']
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',estimate_position)
+            assert summary['basis_quality']=='estimated' and summary['remaining_cost_basis']==100,summary
+            assert (await client.post('/api/v1/crypto/source-events',json=buy_estimate)).json()==response.json()
+        print('observation: evidence guard, no ledger change, repeat; estimated bank funding: source guard, rollback, quality and repeat passed')
         print('funding: partial repayment to asset/expense, actual costs, new borrowing and self-return, repeat passed')
         print('quantity correction: evidence required, no new cost or income, exact quantity and repeat passed')
         print('net LP composition: both directions, both-growing, loss/override rejection and repeat passed')

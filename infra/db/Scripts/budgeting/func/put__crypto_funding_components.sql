@@ -181,7 +181,7 @@ BEGIN
             _left_units:=_left_units-_take; _left_cash:=_left_cash-_cost; _total:=_total-_h.units;
         END LOOP;
         IF _left_units<>0 OR _left_cash<>0 THEN RAISE EXCEPTION 'Funding settlement remainder'; END IF;
-    ELSIF _kind NOT IN ('fee','expense','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund') THEN
+    ELSIF _kind NOT IN ('fee','expense','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.

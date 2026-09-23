@@ -63,7 +63,7 @@ async def main():
             uid, accounts, assets = state['user_id'], state['accounts'], state['assets']
             if (state.get('funding_mode') == 'isolated_fixture') != args.allow_isolated_funding_fixture:
                 raise ValueError('Cannot change funding mode of an existing replay')
-            assert await sql("SELECT count(*)=1 FROM budgeting.bank_accounts WHERE id=$1 AND owner_user_id=$2 AND name='История main — первая сотня'", accounts['main'], uid)
+            assert await sql("SELECT count(*)=1 FROM budgeting.bank_accounts WHERE id=$1 AND owner_user_id=$2 AND account_kind='investment' AND investment_asset_type='crypto'", accounts['main'], uid)
             for row in plan['rows']:
                 old = state['posted'].get(row['source_id'])
                 if old and old['input_hash'] != digest(row):
@@ -101,8 +101,11 @@ async def main():
         wallets={r.split(':')[1] for r in refs if r.startswith(('account:','position:'))}
         for wallet in sorted(wallets-accounts.keys()):
             async with pool.acquire() as db:
-                name={'exchange_source':'Технический источник покупок (dev)', 'battery':'Батарейка — возврат', 'intermediate':'Промежуточный кошелёк', 'second':'Второй кошелёк', 'fourth':'Четвёртый кошелёк'}.get(wallet,wallet)
-                accounts[wallet]=await db.fetchval("INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type,provider_name) VALUES ('user',$1,$2,'investment','crypto',$3) RETURNING id",uid,name,'reconstruction_internal' if wallet in plan.get('internal_accounts',[]) else None)
+                name={'exchange_source':'Технический источник покупок (dev)', 'battery':'Батарейка — возврат', 'intermediate':'Промежуточный кошелёк', 'second':'Второй кошелёк', 'fourth':'Четвёртый кошелёк', 'telegram_yield':'Размещения Telegram'}.get(wallet,wallet)
+                existing = await db.fetchval("SELECT id FROM budgeting.bank_accounts WHERE owner_user_id=$1 AND name=$2 AND account_kind='investment' AND investment_asset_type='crypto'", uid, name)
+                accounts[wallet] = existing or await db.fetchval("INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type,provider_name) VALUES ('user',$1,$2,'investment','crypto',$3) RETURNING id",uid,name,'reconstruction_internal' if wallet in plan.get('internal_accounts',[]) else None)
+                state['accounts']=accounts
+                save(state)
         state['accounts']=accounts
         # Extend the asset dictionary on resume, never create token balances.
         needed = {c['payload'][key]['resource_ref'].split('asset:ton:', 1)[1]
@@ -112,9 +115,9 @@ async def main():
         for master in sorted(needed - assets.keys()):
             asset = plan['assets'][master]
             async with pool.acquire() as db:
-                asset_id = await db.fetchval("SELECT id FROM budgeting.crypto_assets WHERE network_code='ton' AND contract_address=$1 LIMIT 1", master)
+                asset_id = await db.fetchval("SELECT id FROM budgeting.crypto_assets WHERE network_code=$1 AND contract_address=$2 LIMIT 1", asset.get('network_code','ton'), master)
                 if asset_id is None:
-                    asset_id = await db.fetchval("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ($1,$1,'ton',$2,$3) RETURNING id", asset['symbol'], master, asset['decimals'])
+                    asset_id = await db.fetchval("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ($1,$1,$2,$3,$4) RETURNING id", asset['symbol'], asset.get('network_code','ton'), master, asset['decimals'])
             assets[master] = asset_id
         save(state)
         app = FastAPI()
@@ -266,8 +269,28 @@ async def main():
                     assert actual==Decimal(plan['expected_telegram_usdt'])
                 state['capital_reconciliation']=dict(**totals,confirmed_asset_cost=str(expected),difference='0.00',funding_units=unit_checks)
                 state['cost_reconciliation']['status']='carried_cost_and_components_reconciled'
-                state['cost_reconciliation']['limitation']='Confirmed cash costs plus open financing units; net LP convention and documented micro-rounding'
+                state['cost_reconciliation']['limitation']='Historical cash costs including explicitly accepted estimates, plus open financing units; net LP convention and documented micro-rounding'
                 state['accounting_closed_with_limitations']=True
+            for wallet, expected_assets in plan.get('expected_accounts', {}).items():
+                for master, quantity in expected_assets.items():
+                    actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts[wallet], str(assets[master]))
+                    assert actual == Decimal(quantity), (wallet, master, actual, quantity)
+            if plan.get('accepted_custody_after_200'):
+                actual_custody = await sql("""SELECT COALESCE(jsonb_object_agg(master,quantity),'{}') FROM (
+                    SELECT metadata->'lp_receipt'->>'master' master, sum((metadata->'lp_receipt'->>'quantity')::numeric)::text quantity
+                    FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND status='open'
+                    AND metadata ? 'lp_receipt' AND metadata->'lp_receipt'->>'custody'<>'main'
+                    GROUP BY 1) t""",uid)
+                expected_custody = {r['master']: Decimal(r['quantity']) for r in plan['accepted_custody_after_200']}
+                assert {k:Decimal(v) for k,v in actual_custody.items()} == expected_custody
+                state['custody_verified'] = actual_custody
+            state['limitations'] = plan.get('limitations',state['limitations'])
+            state['purchase_funding_quality'] = {
+                'actual_RUB': str(sum(Decimal(r.get('funding_RUB','0')) for r in plan['rows'] if r.get('funding_quality')!='estimated')),
+                'estimated_RUB': str(sum(Decimal(r.get('funding_RUB','0')) for r in plan['rows'] if r.get('funding_quality')=='estimated'))}
+            if plan.get('main_account_name'):
+                async with pool.acquire() as db:
+                    await db.execute('UPDATE budgeting.bank_accounts SET name=$1 WHERE id=$2 AND owner_user_id=$3',plan['main_account_name'],accounts['main'],uid)
             state['verified_through'] = last['event_no']
             state['diagnostic_only'] = bool(plan.get('diagnostic_only', False))
             if state['diagnostic_only']:

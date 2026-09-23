@@ -3125,7 +3125,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               </div>
               <div className="pf-tsum__grid">
                 <div className="pf-tsum__cell">
-                  <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Подтверждённые затраты' : activeScopeBasisLabel}</div>
+                  <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
                   <div className="pf-tsum__cell-value">
                     {activeScopeDisplayMetrics.basisMissing ? '—' : activeScopeBasisPrefix + new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>

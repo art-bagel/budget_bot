@@ -150,6 +150,13 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'observation' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k<>'comment')
+                OR NULLIF(btrim(_payload->>'comment'),'') IS NULL
+                OR _evidence->'zero_movement' IS DISTINCT FROM 'true'::jsonb THEN
+                RAISE EXCEPTION 'Observation requires zero movement evidence and a comment';
+            END IF;
+            _result:=jsonb_build_object('observed',true,'economic_change',false);
         WHEN 'lp_custody' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
                 ARRAY['position_id','receipt_master','quantity','from_custody','to_custody']))) THEN
@@ -181,7 +188,7 @@ BEGIN
         WHEN 'bank_buy', 'bank_to_portfolio' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
                 CASE WHEN _kind='bank_buy' THEN ARRAY['bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']
-                ELSE ARRAY['bank_account_id','investment_account_id','crypto_asset_id','quantity','comment'] END))) THEN
+                ELSE ARRAY['bank_account_id','investment_account_id','crypto_asset_id','quantity','comment','purchase_quality','purchase_source'] END))) THEN
                 RAISE EXCEPTION 'Unsupported argument for bank crypto command';
             END IF;
             FOREACH _key IN ARRAY CASE WHEN _kind='bank_buy'
@@ -209,9 +216,23 @@ BEGIN
                     (_payload->>'fiat_currency_code')::char(3),_numeric,(_payload->>'crypto_asset_id')::bigint,
                     (_payload->>'quantity')::numeric,_payload->>'comment',_accounting_date);
             ELSE
+                IF _payload ? 'purchase_quality' AND
+                    (_payload->>'purchase_quality' IS DISTINCT FROM 'estimated' OR NULLIF(btrim(_payload->>'purchase_source'),'') IS NULL) THEN
+                    RAISE EXCEPTION 'Estimated bank purchase requires its source';
+                END IF;
+                IF _payload ? 'purchase_source' AND NOT (_payload ? 'purchase_quality') THEN
+                    RAISE EXCEPTION 'Purchase source requires explicit quality';
+                END IF;
                 _result:=budgeting.put__transfer_crypto_to_investment(_user_id,(_payload->>'bank_account_id')::bigint,
                     (_payload->>'investment_account_id')::bigint,(_payload->>'crypto_asset_id')::bigint,
                     (_payload->>'quantity')::numeric,NULL,NULL,_payload->>'comment',_accounting_date);
+                IF _payload->>'purchase_quality'='estimated' THEN
+                    UPDATE portfolio_events e SET metadata=e.metadata || jsonb_build_object(
+                        'basis_quality','estimated','purchase_source',_payload->>'purchase_source')
+                    FROM crypto_source_event_links l WHERE l.source_event_id=_id AND l.command_index=_index
+                        AND l.ledger_table='portfolio_events' AND l.ledger_id=e.id;
+                    _result:=_result || jsonb_build_object('basis_quality','estimated','purchase_source',_payload->>'purchase_source');
+                END IF;
             END IF;
         WHEN 'buy_fiat', 'sell_fiat' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
