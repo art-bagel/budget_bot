@@ -1,0 +1,30 @@
+{
+  "passed": 18,
+  "checks": [
+    "exact_retry",
+    "cash_and_event_linked",
+    "weighted_average_sale_profit",
+    "remaining_basis",
+    "cash_budget_once",
+    "old_bank_lot_untouched",
+    "multi_command_rollback",
+    "foreign_currency_no_fake_valuation",
+    "invalid_money_and_insufficient_cash_rollback",
+    "full_sale_closes_and_records_loss",
+    "free_reward_sale_exact",
+    "new_purchase_exact",
+    "estimated_quality_preserved",
+    "unknown_cost_real_proceeds",
+    "all_historical_dates",
+    "foreign_bank_owner_rejected",
+    "concurrent_family_retry",
+    "family_owner_from_accounts"
+  ],
+  "scope": "Synthetic full-schema HTTP integration; PostgreSQL 14.15; authentication override; no personal history",
+  "source_sha256": {
+    "infra/db/Scripts/budgeting/func/put__crypto_fiat_trade.sql": "35a7f26c516026083450621af6fc326c3981c157477d9211a0b57eaac374c031",
+    "infra/db/Scripts/budgeting/func/put__crypto_source_event.sql": "e4bf72219f2bee37d32f8f44b86f15981c75ca228e03a89c882479270df5e79b",
+    "backend/app/routers/crypto.py": "5c10587325e7fe5d130f2ac85f1c1d64d63f4979bb3c6515f1f8f8332e69cc79",
+    "backend/tests/test_crypto_fiat_trade_api.py": "7274817f737a41b8a1962b5b5a2f376a59b4499efb653263648b0badcea78a5b"
+  }
+}

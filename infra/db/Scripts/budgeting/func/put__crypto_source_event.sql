@@ -117,6 +117,20 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'buy_fiat', 'sell_fiat' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
+                'investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']::text[]))) THEN
+                RAISE EXCEPTION 'Unsupported argument for fiat trade';
+            END IF;
+            FOREACH _key IN ARRAY ARRAY['investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount'] LOOP
+                IF _payload->>_key IS NULL THEN RAISE EXCEPTION 'Missing required fiat trade argument %',_key; END IF;
+            END LOOP;
+            _result:=budgeting.put__crypto_fiat_trade(_user_id,
+                CASE WHEN _kind='buy_fiat' THEN 'buy' ELSE 'sell' END,
+                (_payload->>'investment_account_id')::bigint,(_payload->>'bank_account_id')::bigint,
+                (_payload->>'crypto_asset_id')::bigint,(_payload->>'quantity')::numeric,
+                _payload->>'fiat_currency_code',(_payload->>'fiat_amount')::numeric,
+                _payload->>'comment',_accounting_date);
         WHEN 'reward' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['investment_account_id','crypto_asset_id','quantity','comment']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for reward';
