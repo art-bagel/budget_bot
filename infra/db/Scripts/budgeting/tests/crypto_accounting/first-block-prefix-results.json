@@ -1,0 +1,40 @@
+{
+  "status": "contiguous_prefix_1_6_verified_first_hundred_incomplete",
+  "source_events": 21,
+  "main_events": 6,
+  "total_main_events_in_block": 100,
+  "remaining_to_post_in_block": 94,
+  "protocol_positions": 1,
+  "cost_reconciliation": {
+    "funding": "48508.00",
+    "held": "44787.71",
+    "protocol": "2636.28",
+    "disposed": "1084.01",
+    "difference": "0.00"
+  },
+  "checks": [
+    "each first-six main quantity checkpoint matches original ledger",
+    "LP receipt tracked once in protocol evidence",
+    "no seeded crypto quantities or cost basis",
+    "RUB funding exactly matches 14 documented purchases",
+    "repeat does not add portfolio events or cash",
+    "resume from missing local acknowledgement reuses DB journal",
+    "asset TON card shows quantity, basis and operation history"
+  ],
+  "limitations": [
+    "Historical RUB funding boundary, not a bank income reconstruction",
+    "Unknown-time purchases use explicitly labelled ordering placeholders",
+    "Pre-main 4.947 TON outflow has unknown destination",
+    "0.05 TON withdrawal difference treated as separate fee under current policy",
+    "LP receipt quantity kept in protocol evidence, not duplicated as free token capital",
+    "Not the full first hundred; no full app UI verification yet",
+    "Portfolio aggregate invested amount incorrectly shows zero; card basis is correct",
+    "PostgreSQL 14 only; PG17 pending",
+    "LP custody changes from event7 not mapped yet"
+  ],
+  "sha256": {
+    "scripts/crypto/build_first_block_replay.py": "1cda6df849ee5538453e9aa957262aa41f4b4b2dbf34f6c387cf1d702287b553",
+    "scripts/crypto/replay_first_block_dev.py": "721a87d1601e5f1236315f354fbe58a55909e671debd55ecc11a943739f0ef40",
+    "outputs/crypto-first-block-dev/plan-v2.json": "8cbb33431063b3a78541594221c52c137ab099b13aad0f99f1e35facad4789de"
+  }
+}
