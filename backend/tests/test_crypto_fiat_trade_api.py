@@ -202,6 +202,32 @@ async def main():
                 for _ in range(2)])
             check('concurrent_manual_settlement_once', concurrent[0] == concurrent[1])
             check('concurrent_manual_settlement_lot_closed', await sql("SELECT COALESCE(sum(amount_remaining),0)=0 FROM budgeting.fx_lots WHERE bank_account_id=$1", bank))
+            # Estimated purchases enter through the public journal, no metadata patching.
+            estimated_body = envelope('estimated-buy', 20, [command('buy_fiat', '10', '1000',
+                purchase_quality='estimated', purchase_source='owner-approved estimate fixture')])
+            estimated = await post(estimated_body)
+            ep = estimated['results'][0]['position_id']
+            check('estimated_purchase_result', estimated['results'][0]['basis_quality'] == 'estimated')
+            check('estimated_cash_provenance', await sql("SELECT metadata->>'fiat_amount_quality'='estimated' AND metadata->>'purchase_source'='owner-approved estimate fixture' FROM budgeting.portfolio_events WHERE id=$1", estimated['results'][0]['event_id']))
+            saved = await state()
+            check('estimated_purchase_retry', await post(estimated_body) == estimated and await state() == saved)
+            for label, quality, source in [('unknown', 'unknown', 'fixture'), ('zero', 'confirmed_zero', 'fixture'),
+                    ('missing-source', 'estimated', None), ('blank-source', 'estimated', ' ')]:
+                await post(envelope('bad-estimate-' + label, 21, [command('buy_fiat', '1', '100',
+                    purchase_quality=quality, purchase_source=source)]), 400)
+                check('estimate_validation_' + label, await state() == saved)
+            await post(envelope('known-after-estimated', 21, [command('buy_fiat', '10', '2000')]))
+            es = await sql('SELECT budgeting.get__crypto_position_entry_summary($1)', ep)
+            check('known_topup_does_not_erase_estimate', es['basis_quality'] == 'estimated' and es['remaining_cost_basis'] == 3000)
+            sold = await post(envelope('estimated-disposal', 22, [command('sell_fiat', '5', '900')]))
+            check('estimated_purchase_flows_to_profit', sold['results'][0]['basis_quality'] == 'estimated'
+                  and sold['results'][0]['cost_basis'] == 750 and sold['results'][0]['realized_in_base'] == 150)
+            saved = await state()
+            await post(envelope('sale-quality-override', 23, [command('sell_fiat', '1', '100', purchase_quality='known')]), 400)
+            check('sale_quality_override_rejected', await state() == saved)
+            await post(envelope('estimated-rollback', 23, [command('buy_fiat', '1', '100',
+                purchase_quality='estimated', purchase_source='fixture'), command('sell_fiat', '999', '1')]), 400)
+            check('estimated_batch_rollback', await state() == saved)
             family = await sql("INSERT INTO budgeting.families(name,base_currency_code,created_by_user_id) VALUES ('Fiat family','RUB',$1) RETURNING id", uid)
             await sql("INSERT INTO budgeting.family_members(family_id,user_id,role) VALUES ($1,$2,'owner') RETURNING user_id", family, uid)
             cat = await sql("INSERT INTO budgeting.categories(owner_type,owner_family_id,name,kind) VALUES ('family',$1,'Unallocated','system') RETURNING id", family)

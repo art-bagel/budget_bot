@@ -5,7 +5,8 @@ CREATE FUNCTION budgeting.put__crypto_fiat_trade(
     _fiat_currency_code text, _fiat_amount numeric,
     _comment text DEFAULT NULL, _operated_at date DEFAULT NULL,
     _historical_value_in_base numeric DEFAULT NULL, _valuation_source text DEFAULT NULL,
-    _defer_manual_expense boolean DEFAULT false
+    _defer_manual_expense boolean DEFAULT false,
+    _purchase_quality text DEFAULT NULL, _purchase_source text DEFAULT NULL
 )
 RETURNS jsonb LANGUAGE plpgsql AS $function$
 DECLARE
@@ -27,6 +28,19 @@ BEGIN
     END IF;
     IF _defer_manual_expense IS NULL OR (_defer_manual_expense AND _direction<>'sell') THEN
         RAISE EXCEPTION 'Only sale proceeds can await manual expense';
+    END IF;
+    IF _direction='sell' AND (_purchase_quality IS NOT NULL OR _purchase_source IS NOT NULL) THEN
+        RAISE EXCEPTION 'Purchase quality cannot override sale cost quality';
+    END IF;
+    IF _direction='buy' THEN
+        _quality:=COALESCE(_purchase_quality,'known');
+        IF _quality NOT IN ('known','estimated') THEN
+            RAISE EXCEPTION 'Cash purchase quality must be known or estimated';
+        END IF;
+        IF (_quality='estimated' OR _purchase_source IS NOT NULL)
+            AND NULLIF(btrim(_purchase_source),'') IS NULL THEN
+            RAISE EXCEPTION 'Estimated purchase requires a source for its monetary estimate';
+        END IF;
     END IF;
     -- Shared account order serializes first-position creation and opposite trades.
     PERFORM id FROM bank_accounts WHERE id IN (_investment_account_id,_bank_account_id)
@@ -100,7 +114,7 @@ BEGIN
             'target_kind','bank','target_bank_account_id',_bank_account_id);
         _sign:=1;
     ELSE
-        _cost:=_fiat_amount; _quality:='known'; _event_type:='top_up'; _sign:=-1;
+        _cost:=_fiat_amount; _event_type:='top_up'; _sign:=-1;
         IF _position_id IS NULL THEN
             _event_type:='open';
             INSERT INTO portfolio_positions(owner_type,owner_user_id,owner_family_id,investment_account_id,
@@ -113,7 +127,8 @@ BEGIN
         ELSE
             UPDATE portfolio_positions SET quantity=quantity+_quantity,amount_in_currency=0 WHERE id=_position_id;
         END IF;
-        _metadata:=jsonb_build_object('entry_value_in_base',_cost,'basis_quality','known',
+        _metadata:=jsonb_build_object('entry_value_in_base',_cost,'basis_quality',_quality,
+            'fiat_amount_quality',_quality,'purchase_source',_purchase_source,
             'source_kind','bank','source_bank_account_id',_bank_account_id);
     END IF;
     INSERT INTO operations(actor_user_id,owner_type,owner_user_id,owner_family_id,type,comment,operated_on)

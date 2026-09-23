@@ -119,7 +119,7 @@ BEGIN
         CASE _kind
         WHEN 'buy_fiat', 'sell_fiat' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
-                'investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment','historical_value_in_base','valuation_source','defer_manual_expense']::text[]))) THEN
+                'investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment','historical_value_in_base','valuation_source','defer_manual_expense','purchase_quality','purchase_source']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for fiat trade';
             END IF;
             FOREACH _key IN ARRAY ARRAY['investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount'] LOOP
@@ -131,7 +131,8 @@ BEGIN
                 (_payload->>'crypto_asset_id')::bigint,(_payload->>'quantity')::numeric,
                 _payload->>'fiat_currency_code',(_payload->>'fiat_amount')::numeric,
                 _payload->>'comment',_accounting_date,(_payload->>'historical_value_in_base')::numeric,
-                _payload->>'valuation_source',COALESCE((_payload->>'defer_manual_expense')::boolean,false));
+                _payload->>'valuation_source',COALESCE((_payload->>'defer_manual_expense')::boolean,false),
+                _payload->>'purchase_quality',_payload->>'purchase_source');
         WHEN 'settle_fiat_sale' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
                 'sale_event_id','category_id','comment']::text[])))
