@@ -688,6 +688,14 @@ function lendingGroupKey(position: CryptoProtocolPosition): string {
   return key ? `${position.investment_account_id}:${position.network_code}:${String(key)}` : `position:${position.id}`;
 }
 
+// EVAA pool identity is independent of the collateral symbol (TON can belong to either pool).
+function protocolDisplayName(position: CryptoProtocolPosition): string {
+  const master = position.metadata?.lending_master_contract;
+  if (master === '0:bcad466a47fa565750729565253cd073ca24d856804499090c2100d95c809f9e') return 'EVAA Master';
+  if (master === '0:489595f65115a45c24a0dd0176309654fb00b95e40682f0c3e85d5a4d86dfb25') return 'EVAA LP';
+  return position.protocol_name;
+}
+
 export default function Portfolio({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
@@ -3435,7 +3443,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                   {position.asset_symbol.slice(0, 1).toUpperCase()}
                                 </div>
                                 <div className="pf-pos__copy">
-                                  <div className="pf-pos__title">{position.protocol_name}</div>
+                                  <div className="pf-pos__title">{protocolDisplayName(position)}</div>
                                   <div className="pf-pos__sub">
                                     {position.asset_symbol} · {typeLabel.toLowerCase()}{extra}
                                   </div>
@@ -3766,7 +3774,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <div key={position.id} className="portfolio-analytics-row">
                       <div className="portfolio-analytics-row__top">
                         <div>
-                          <div className="portfolio-analytics-row__title">{position.protocol_name}</div>
+                          <div className="portfolio-analytics-row__title">{protocolDisplayName(position)}</div>
                           <div className="portfolio-analytics-row__meta">
                             {position.asset_symbol} · {(PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type).toLowerCase()} · {position.status === 'open' ? 'Открыта' : 'Закрыта'}
                           </div>
@@ -4815,7 +4823,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           open={!!selectedProtocolPosition}
           gray
           tag={`${selectedProtocolPosition.owner_type === 'family' ? 'Семейный' : 'Личный'} · ${selectedProtocolPosition.investment_account_name}`}
-          title={selectedProtocolPosition.protocol_name}
+          title={protocolDisplayName(selectedProtocolPosition)}
           icon={<CategorySvgIcon code="coins" />}
           iconColor="o"
           onClose={() => {
