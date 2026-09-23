@@ -1,6 +1,6 @@
 """Compile a contiguous first-block prefix from locked evidence, never old basis.
 
-The prefix is deliberately gated at event 7. Remaining accepted decisions are
+The prefix is deliberately gated at event 11. Remaining accepted decisions are
 listed for implementation, not counted as loaded. Output stays private.
 """
 import argparse
@@ -17,6 +17,8 @@ from compile_main_commands import ref
 
 PIN = '7b2663b7ea2f1bc4256eb83dffede384f488e8b6'
 BASE = 'crypto-task/chronological-rebuild/blocks/0001-0100/accepted/v1/'
+PREFIX = 11
+USDT = '0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe'
 TON = 'native TON'
 NOT = '0:2f956143c461769579baef2e32cc2d7bc18283f40d20bb03e432cd603ac33ffc'
 
@@ -48,7 +50,7 @@ def build():
         totals[m['event_no']][m['master']] += Decimal(m['quantity_delta'])
         balances[m['master']] += Decimal(m['quantity_delta'])
         assets[m['master']] = {'symbol': m['asset'], 'decimals': m['decimals']}
-        if m['event_no'] <= 7:
+        if m['event_no'] <= PREFIX:
             checkpoints[m['event_no']] = {k: str(v) for k, v in balances.items()}
     rows = []
 
@@ -89,8 +91,35 @@ def build():
         evidence={'source': withdrawal, 'classification': 'pre-main external outflow; destination unresolved; not a claimed owned balance'},
         commands=[command('expense', source_position_id=pos('telegram'), quantity=withdrawal['quantity'],
                           comment='Вывод до main: получатель не установлен; внешний отток, назначение неизвестно')]))
+    swaps = read('outputs/crypto-telegram-history-2026-09-23-v2/telegram-owner-swaps.json')
+    swap = next(r for r in swaps if r['source_row'] == 20)
+    assert swap['spent_quantity'] == '2.396125799' and swap['quantity'] == '995'
+    rows.append(dict(source_id=swap['source_key'], occurred_at='2024-06-12T05:41:00+00:00',
+        accounting_date=swap['date'], order_in_timestamp=20, evidence={'owner_swap': swap},
+        commands=[command('swap', position_id=pos('telegram'), from_amount=swap['spent_quantity'],
+            to_crypto_asset_id=ref('asset', 'ton', NOT), to_amount=swap['quantity'], value_in_base=None,
+            comment='Подтверждённый обмен 2,396125799 TON на 995 NOT; рублёвая оценка сделки неизвестна')]))
+    purchase = next(r for r in purchases if r['source_row'] == 21)
+    usdt_link = next(r for r in read('outputs/crypto-telegram-history-2026-09-23-v2/telegram-main-usdt-links.json') if r['event_no'] == 8)
+    assert usdt_link['event_id'] == events[7]['event_id']
+    assert purchase['quantity'] == usdt_link['document_quantity'] == '290.32'
+    assert Decimal(usdt_link['chain_received']).quantize(Decimal('0.01')) == Decimal(purchase['quantity'])
+    # Explicit reconstruction assumption: this immediately withdrawn purchase is
+    # the whole linked on-chain amount. The source document itself stays rounded.
+    qty = usdt_link['chain_received']
+    rows.append(dict(source_id=purchase['source_key'], occurred_at='2024-06-12T14:52:00+00:00',
+        accounting_date=purchase['date'], order_in_timestamp=21, funding_RUB=purchase['fiat_amount'],
+        evidence={'purchase': purchase, 'withdrawal_link': usdt_link,
+                  'quantity_quality': 'inferred_from_linked_full_withdrawal_not_exact_purchase_document',
+                  'assumption': 'No intervening USDT movement; rounded purchase equals whole linked withdrawal; no extra funding or reward'},
+        commands=[command('bank_buy', bank_account_id=ref('account', 'primary_cash'),
+            crypto_asset_id=ref('asset', 'ton', USDT), quantity=qty, fiat_currency_code='RUB',
+            fiat_amount=purchase['fiat_amount'], comment='27000 RUB → USDT; количество восстановлено по связанному выводу 290,32258, в документе 290,32'),
+            command('bank_to_portfolio', bank_account_id=ref('account', 'primary_cash'),
+                investment_account_id=ref('account', 'telegram'), crypto_asset_id=ref('asset', 'ton', USDT), quantity=qty,
+                comment='Купленные USDT в Telegram; точность количества восстановлена по выводу')]))
     lp_info = None
-    for e in events[:7]:
+    for e in events[:PREFIX]:
         n = e['event_no']
         net = totals[n]
         commands = []
@@ -109,23 +138,24 @@ def build():
             assert link['event_id'] == e['event_id'] and -net[NOT] == Decimal(link['quantity_NOT'])
             evidence['own_link'] = link
             commands = [transfer('main', 'telegram', -net[NOT], NOT), fee('main', -net[TON])]
-        elif n == 4:
+        elif n in (4, 10):
             a = e['raw']['actions']
             principal = Decimal(a[0]['TonTransfer']['amount']) / Decimal(10**9)
-            not_qty = Decimal(a[1]['JettonTransfer']['amount']) / Decimal(10**9)
-            lp_master = next(k for k in net if k not in (TON, NOT))
-            assert principal == Decimal('9.357406226') and net[NOT] == -not_qty
+            secondary = NOT if n == 4 else USDT
+            not_qty = Decimal(a[1]['JettonTransfer']['amount']) / Decimal(10**a[1]['JettonTransfer']['jetton']['decimals'])
+            lp_master = next(k for k in net if k not in (TON, secondary))
+            assert principal > 0 and net[secondary] == -not_qty
             lp_info = {'master': lp_master, 'quantity': str(net[lp_master]), 'custody': 'main', 'event_id': e['event_id']}
             commands = [command('create_protocol', investment_account_id=ref('account', 'main'), protocol_name='STON.fi',
                 position_type='liquidity_pool', asset_symbol='TON', source_position_id=pos('main'),
-                quantity=str(principal), crypto_asset_id=ref('asset', 'ton', TON), secondary_source_position_id=pos('main', NOT),
+                quantity=str(principal), crypto_asset_id=ref('asset', 'ton', TON), secondary_source_position_id=pos('main', secondary),
                 secondary_quantity=str(not_qty), network_code='ton', metadata={'lp_receipt': lp_info},
-                comment='Событие 4: капитал TON и NOT в пуле; LP-токен — подтверждение доли, не дополнительный капитал'),
+                comment=('Событие 4: капитал TON и NOT в пуле; LP-токен — подтверждение доли, не дополнительный капитал' if n == 4 else 'Событие 10: TON и USDT в пуле; LP-токен подтверждает долю')),
                 fee('main', -net[TON] - principal)]
         elif n == 5:
             assert len(net) == 1 and net[TON] < 0
             commands = [fee('main', -net[TON])]
-        elif n == 7:
+        elif n in (7, 11):
             a = e['raw']['actions'][0]['JettonTransfer']
             master = a['jetton']['address']
             qty = Decimal(a['amount']) / Decimal(10**a['jetton']['decimals'])
@@ -138,6 +168,15 @@ def build():
             commands = [command('lp_custody', position_id=ref('protocol', lp_info['event_id']), receipt_master=master,
                 quantity=str(qty), from_custody='main', to_custody=custody), fee('main', -net[TON])]
             lp_info = {**lp_info, 'custody': custody}
+        elif n == 8:
+            assert net[USDT] == Decimal(usdt_link['chain_received']) and net[TON] < 0
+            evidence['telegram_link'] = usdt_link
+            commands = [transfer('telegram', 'main', net[USDT], USDT), fee('main', -net[TON])]
+        elif n == 9:
+            source = next(r for r in telegram if r['source_row'] == 23)
+            assert source['quantity'] == '136.05' and Decimal('136') > net[TON] > 135
+            evidence.update(telegram_source=source, withdrawal_difference_policy='0.05 TON separate withdrawal fee')
+            commands = [transfer('telegram', 'main', '136'), fee('telegram', '0.05'), fee('main', Decimal('136') - net[TON])]
         rows.append(dict(source_id='main:' + e['event_id'], event_no=n,
             occurred_at=datetime.fromtimestamp(e['timestamp'], timezone.utc).isoformat(),
             accounting_date=datetime.fromtimestamp(e['timestamp'], ZoneInfo('Europe/Moscow')).date().isoformat(),
@@ -147,13 +186,13 @@ def build():
     assert len({r['source_id'] for r in rows}) == len(rows)
     status = [{'event_no': e['event_no'], 'event_id': e['event_id'], 'description': workbook['events'][i][2],
                'accepted_explanation': reviews[i]['explanation'],
-               'status': 'compiled_contiguous_prefix_requires_api' if i < 7 else 'accepted_analysis_requires_command_mapping',
+               'status': 'compiled_contiguous_prefix_requires_api' if i < PREFIX else 'accepted_analysis_requires_command_mapping',
                'uploaded': False} for i, e in enumerate(events)]
     return {'inputs': inputs, 'assets': assets, 'rows': rows, 'events': status,
             'summary': {'block': '0001-0100', 'total_events': 100, 'total_movements': 295,
-                'compiled_contiguous_prefix': 7, 'source_events': len(rows),
+                'compiled_contiguous_prefix': PREFIX, 'source_events': len(rows),
                 'command_counts': dict(Counter(c['kind'] for r in rows for c in r['commands'])),
-                'first_unimplemented_event': 8, 'first_unimplemented_kind': workbook['events'][7][2],
+                'first_unimplemented_event': PREFIX + 1, 'first_unimplemented_kind': workbook['events'][PREFIX][2],
                 'loaded': 0, 'verified': 0, 'block_closed': False}}
 
 

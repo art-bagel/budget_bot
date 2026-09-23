@@ -88,6 +88,19 @@ async def main():
             state = dict(funding_mode='isolated_fixture' if args.allow_isolated_funding_fixture else 'existing_cash_only', user_id=uid, accounts=accounts, assets=assets, database=args.database, socket=str(args.socket), posted={}, verified_through=0,
                          limitations=['Historical RUB funding boundary, not a bank income reconstruction', 'Unknown-time purchases use explicitly labelled ordering placeholders', 'Pre-main 4.947 TON outflow has unknown destination', '0.05 TON withdrawal difference treated as separate fee under current policy', 'LP receipt quantity kept in protocol evidence, not duplicated as free token capital', 'Not the full first hundred; no full app UI verification yet'])
             save(state)
+        # Extend the asset dictionary on resume, never create token balances.
+        needed = {c['payload'][key]['resource_ref'].split('asset:ton:', 1)[1]
+                  for row in plan['rows'] for c in row['commands']
+                  for key in ('crypto_asset_id', 'to_crypto_asset_id')
+                  if isinstance(c['payload'].get(key), dict) and 'resource_ref' in c['payload'][key]}
+        for master in sorted(needed - assets.keys()):
+            asset = plan['assets'][master]
+            async with pool.acquire() as db:
+                asset_id = await db.fetchval("SELECT id FROM budgeting.crypto_assets WHERE network_code='ton' AND contract_address=$1 AND symbol=$2 LIMIT 1", master, asset['symbol'])
+                if asset_id is None:
+                    asset_id = await db.fetchval("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ($1,$1,'ton',$2,$3) RETURNING id", asset['symbol'], master, asset['decimals'])
+            assets[master] = asset_id
+        save(state)
         app = FastAPI()
         app.include_router(crypto.router)
         app.include_router(portfolio.router)
@@ -155,7 +168,9 @@ async def main():
             for master, quantity in last['expected_main'].items():
                 if master in assets:
                     actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts['main'], str(assets[master]))
-                    assert actual == Decimal(quantity)
+                else:
+                    actual = await sql("SELECT COALESCE(sum((metadata->'lp_receipt'->>'quantity')::numeric),0) FROM budgeting.crypto_protocol_positions WHERE investment_account_id=$1 AND metadata->'lp_receipt'->>'master'=$2 AND metadata->'lp_receipt'->>'custody'='main'", accounts['main'], master)
+                assert actual == Decimal(quantity), (master, actual, quantity)
             if last.get('lp_receipt'):
                 receipt = last['lp_receipt']
                 assert await sql("SELECT metadata->'lp_receipt' FROM budgeting.crypto_protocol_positions WHERE investment_account_id=$1 AND metadata->'lp_receipt'->>'master'=$2", accounts['main'], receipt['master']) == receipt
@@ -169,11 +184,22 @@ async def main():
             state.update(position_summaries=summaries, protocol_positions=response.json(), first_unimplemented_event=plan['summary']['first_unimplemented_event'], block_closed=False,
                          documented_funding_RUB=str(sum(Decimal(r.get('funding_RUB', '0')) for r in plan['rows'])))
             funding = Decimal(state['documented_funding_RUB'])
-            held = sum(Decimal(str(p['summary']['remaining_cost_basis'])) for p in summaries)
+            unknown_positions = [p for p in summaries if p['summary']['remaining_cost_basis'] is None]
+            # This prefix has one unknown lot (995 NOT) mixed with confirmed-zero
+            # airdrop NOT. Do not generalize omission to mixed positive-cost lots.
+            for p in unknown_positions:
+                assert p['investment_account_id'] == accounts['telegram'] and p['title'] == 'NOT'
+                assert Decimal(str(p['summary']['quantity_now'])) == Decimal('2095')
+                assert await sql("SELECT COALESCE(sum((metadata->>'entry_value_in_base')::numeric),0) FROM budgeting.portfolio_events WHERE position_id=$1", p['id']) == 0
+            held = sum(Decimal(str(p['summary']['remaining_cost_basis'])) for p in summaries if p['summary']['remaining_cost_basis'] is not None)
             protocol_basis = sum(Decimal(str(p['cost_basis_in_base'])) for p in state['protocol_positions'])
             disposed = await sql("SELECT COALESCE(sum((metadata->>'consumed_cost_basis')::numeric),0) FROM budgeting.portfolio_events WHERE created_by_user_id=$1 AND (event_type='fee' OR metadata->>'target_kind'='expense')", uid)
-            assert held + protocol_basis + disposed == funding, (held, protocol_basis, disposed, funding)
-            state['cost_reconciliation'] = dict(funding=str(funding), held=str(held), protocol=str(protocol_basis), disposed=str(disposed), difference='0.00')
+            # Swaps remove historical cost and introduce a separately valued new
+            # asset. Missing valuation is unknown, never an assumed zero profit.
+            swaps = await sql("SELECT COALESCE(sum((metadata->>'consumed_cost_basis')::numeric - COALESCE((metadata->>'value_in_base')::numeric,0)),0) FROM budgeting.portfolio_events WHERE created_by_user_id=$1 AND event_type='swap_out'", uid)
+            unknown_swaps = await sql("SELECT count(*) FROM budgeting.portfolio_events WHERE created_by_user_id=$1 AND event_type='swap_out' AND metadata->>'value_in_base' IS NULL", uid)
+            assert held + protocol_basis + disposed + swaps == funding, (held, protocol_basis, disposed, swaps, funding)
+            state['cost_reconciliation'] = dict(funding=str(funding), held=str(held), protocol=str(protocol_basis), disposed=str(disposed), swap_cost_less_known_valuation=str(swaps), unknown_swap_valuations=unknown_swaps, difference='0.00', scope='Known cost components only; unknown swap valuation is not zero cost or loss')
             state['verified_through'] = last['event_no']
             save(state)
             print(json.dumps({k: state[k] for k in ('user_id','verified_through','documented_funding_RUB','first_unimplemented_event','block_closed')}, ensure_ascii=False))
