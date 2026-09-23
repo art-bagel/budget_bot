@@ -234,7 +234,7 @@ async def main():
             assert D(str(protocol["metadata"]["cost_basis_carried"])) == D(
                 str(protocol["cost_basis_in_base"])
             )
-            # Foreign sale with financing must remain rejected until disposal-holder support exists.
+            # Funded fiat sale without an explicit pending settlement remains rejected.
             before = await sql(
                 "SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1", pos
             )
@@ -547,6 +547,194 @@ async def main():
                     str(other_loan),
                 )
                 is None
+            )
+            # Group collateral legs by on-chain account without changing money.
+            master = "0:" + "a" * 64
+            user_contract = "0:" + "b" * 64
+            for number, protocol in [(30, loan), (31, other_loan)]:
+                await post(
+                    number,
+                    [
+                        c(
+                            "tag_lending_account",
+                            position_id=protocol,
+                            master_contract=master,
+                            user_contract=user_contract,
+                        )
+                    ],
+                )
+            await post(
+                32,
+                [
+                    c(
+                        "tag_lending_account",
+                        position_id=loan,
+                        master_contract=master,
+                        user_contract="0:" + "c" * 64,
+                    )
+                ],
+                400,
+            )
+            r = await post(
+                33,
+                [
+                    c(
+                        "create_protocol",
+                        investment_account_id=inv,
+                        protocol_name="Unsecured technical loan",
+                        position_type="lending",
+                        asset_symbol="LCOLL",
+                        crypto_asset_id=collateral,
+                        quantity="0",
+                        cost_basis_in_base="0",
+                    )
+                ],
+            )
+            empty_loan = r["results"][0]["id"]
+            assert D(str(r["results"][0]["cost_basis_in_base"])) == 0
+            await post(
+                34,
+                [
+                    c(
+                        "create_protocol",
+                        investment_account_id=inv,
+                        protocol_name="Invalid unbacked capital",
+                        position_type="lending",
+                        asset_symbol="LCOLL",
+                        quantity="0",
+                        cost_basis_in_base="1",
+                    )
+                ],
+                400,
+            )
+            await post(
+                35,
+                [
+                    c(
+                        "tag_lending_account",
+                        position_id=empty_loan,
+                        master_contract=master,
+                        user_contract=user_contract,
+                    )
+                ],
+            )
+            await post(
+                36,
+                [
+                    c(
+                        "borrow",
+                        position_id=empty_loan,
+                        borrowed_crypto_asset_id=debt,
+                        debt_qty="1",
+                        funding_policy="components",
+                    )
+                ],
+            )
+            await post(
+                37,
+                [
+                    c(
+                        "borrow",
+                        position_id=other_loan,
+                        borrowed_crypto_asset_id=debt,
+                        debt_qty="1",
+                        funding_policy="components",
+                    )
+                ],
+                400,
+            )
+            assert (
+                await sql(
+                    "SELECT count(*) FROM budgeting.crypto_source_events WHERE anchor_account_id=$1 AND source_id='37'",
+                    inv,
+                )
+                == 0
+            )
+            debt_position = await sql(
+                "SELECT (metadata->>'borrowed_position_id')::bigint FROM budgeting.crypto_protocol_positions WHERE id=$1",
+                empty_loan,
+            )
+            sale_qty = await sql(
+                "SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1",
+                debt_position,
+            )
+            sale = await post(
+                38,
+                [
+                    c(
+                        "sell_fiat",
+                        investment_account_id=inv,
+                        bank_account_id=bank,
+                        crypto_asset_id=debt,
+                        quantity=str(sale_qty),
+                        fiat_currency_code="USD",
+                        fiat_amount="1",
+                        historical_value_in_base="90",
+                        valuation_source="Synthetic historical rate",
+                        defer_manual_expense=True,
+                    )
+                ],
+            )
+            sale_id = sale["results"][0]["event_id"]
+            sale_before = await sql(
+                "SELECT metadata FROM budgeting.portfolio_events WHERE id=$1", sale_id
+            )
+            assert D(str(sale_before["funding_units"][str(empty_loan)])) == 1
+            await sql("SELECT budgeting.put__record_income($1,$2,100,'RUB')", uid, bank)
+            bought = await post(
+                39,
+                [
+                    c(
+                        "bank_buy",
+                        bank_account_id=bank,
+                        crypto_asset_id=debt,
+                        quantity="1",
+                        fiat_currency_code="RUB",
+                        fiat_amount="100",
+                    ),
+                    c(
+                        "bank_to_portfolio",
+                        bank_account_id=bank,
+                        investment_account_id=inv,
+                        crypto_asset_id=debt,
+                        quantity="1",
+                    ),
+                ],
+            )
+            await post(
+                40,
+                [
+                    c(
+                        "repay",
+                        position_id=empty_loan,
+                        source_position_id=bought["results"][1]["position_id"],
+                        repay_qty="1",
+                        interest_qty="0",
+                    )
+                ],
+            )
+            sale_after = await sql(
+                "SELECT metadata FROM budgeting.portfolio_events WHERE id=$1", sale_id
+            )
+            assert sale_after["funding_units"] == {}
+            assert D(str(sale_after["funding_confirmed_cost"])) == 100
+            assert (
+                D(str(sale_before["realized_in_base"]))
+                - D(str(sale_after["realized_in_base"]))
+                == 100
+            )
+            assert (
+                await sql(
+                    "SELECT amount FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'",
+                    bank,
+                )
+                == 1
+            )
+            print(
+                "PASS: funded card conversion retains financing; payoff refines cost/result without changing fiat proceeds"
+            )
+            print(
+                "PASS: immutable lending identity, empty loan, no unbacked cash, duplicate account debt rejected atomically"
             )
             print(
                 "PASS: refinancing replaces principal units across assets/protocols/expenses; interest remains expense; new-loan payoff resolves costs; retry and RUB conservation"

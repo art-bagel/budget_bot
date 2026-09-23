@@ -187,7 +187,8 @@ async def main():
                         assert actual == Decimal(quantity), (row['event_no'], master, actual, quantity)
                     state['verified_through'] = row['event_no']
                 state['posted'][row['source_id']] = dict(input_hash=digest(row), request=body, response=result)
-                save(state)
+                if not old:
+                    save(state)
             # Final-state checks also execute on a repeated run.
             last = next(r for r in reversed(plan['rows']) if 'event_no' in r)
             for master, quantity in last['expected_main'].items():
@@ -290,9 +291,17 @@ async def main():
                     FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND status='open'
                     AND metadata ? 'lp_receipt' AND metadata->'lp_receipt'->>'custody'<>'main'
                     GROUP BY 1) t""",uid)
-                expected_custody = {r['master']: Decimal(r['quantity']) for r in plan.get('accepted_custody',plan.get('accepted_custody_after_200',[]))}
+                expected_custody = {}
+                for receipt in plan.get('accepted_custody', plan.get('accepted_custody_after_200', [])):
+                    expected_custody[receipt['master']] = expected_custody.get(receipt['master'], Decimal(0)) + Decimal(receipt['quantity'])
                 assert {k:Decimal(v) for k,v in actual_custody.items()} == expected_custody
                 state['custody_verified'] = actual_custody
+            for event_no, expected in plan.get('expected_evaa', {}).items():
+                source = next(row for row in plan['rows'] if row.get('event_no') == int(event_no))['source_id'].removeprefix('main:')
+                actual = await sql("SELECT jsonb_build_object('coll',current_quantity::text,'debt',metadata->>'borrowed_quantity','body',((metadata->>'borrowed_quantity')::numeric-COALESCE((metadata->>'debt_interest_quantity')::numeric,0))::text) FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND metadata->>'source_event_id'=$2", uid, source)
+                assert actual and all(Decimal(actual[key]) == Decimal(value) for key, value in expected.items()), (event_no, expected, actual)
+            if 'expected_bank_USD' in plan:
+                assert await sql("SELECT COALESCE(sum(amount),0) FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", accounts['primary_cash']) == Decimal(plan['expected_bank_USD'])
             state['limitations'] = plan.get('limitations',state['limitations'])
             state['purchase_funding_quality'] = {
                 'actual_RUB': str(sum(Decimal(r.get('funding_RUB','0')) for r in plan['rows'] if r.get('funding_quality')!='estimated')),
@@ -300,6 +309,9 @@ async def main():
             if plan.get('main_account_name'):
                 async with pool.acquire() as db:
                     await db.execute('UPDATE budgeting.bank_accounts SET name=$1 WHERE id=$2 AND owner_user_id=$3',plan['main_account_name'],accounts['main'],uid)
+            for wallet, name in plan.get('account_display_names', {}).items():
+                async with pool.acquire() as db:
+                    await db.execute('UPDATE budgeting.bank_accounts SET name=$1 WHERE id=$2 AND owner_user_id=$3', name, accounts[wallet], uid)
             state['verified_through'] = last['event_no']
             state['diagnostic_only'] = bool(plan.get('diagnostic_only', False))
             if state['diagnostic_only']:

@@ -36,7 +36,7 @@ BEGIN
             budgeting.calc__crypto_funding_units(COALESCE(metadata->'funding_units','{}'),_moved,-1)) WHERE id=_e.position_id;
         _out:=jsonb_set(_out,ARRAY[_e.position_id::text],_moved);
         UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units_moved',_moved) WHERE id=_e.id;
-        IF _kind IN ('fee','expense','bank_sell') THEN
+        IF _kind IN ('fee','expense','bank_sell','sell_fiat') THEN
             UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units',_moved) WHERE id=_e.id;
         END IF;
     END LOOP;
@@ -235,6 +235,12 @@ BEGIN
                     PERFORM budgeting.put__apply_current_budget_delta(_fx,_base,-_cost);
                     PERFORM budgeting.put__apply_current_budget_delta(_unallocated,_base,_cost);
                 END IF;
+                IF _metadata->>'action'='fiat_sell' THEN
+                    -- Proceeds and the fiat lot are fixed; repayment only refines disposal cost.
+                    UPDATE portfolio_events SET metadata=metadata||jsonb_build_object(
+                        'realized_in_base',COALESCE((metadata->>'realized_in_base')::numeric,0)-_cost)
+                    WHERE id=_h.id;
+                END IF;
                 UPDATE portfolio_events SET metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1),_ref_take))
                     ||jsonb_build_object('funding_confirmed_cost',COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)+_cost) WHERE id=_h.id;
             END IF;
@@ -244,8 +250,10 @@ BEGIN
         END LOOP;
         IF _left_units<>0 OR _left_cash<>0 OR _ref_left<>'{}'::jsonb THEN RAISE EXCEPTION 'Funding settlement remainder'; END IF;
     ELSIF _kind='sell_fiat' THEN
-        IF _out<>'{}'::jsonb THEN RAISE EXCEPTION 'Funded foreign fiat sale requires settlement tracking'; END IF;
-    ELSIF _kind NOT IN ('fee','expense','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation') THEN
+        IF _out<>'{}'::jsonb AND NOT COALESCE((_p->>'defer_manual_expense')::boolean,false) THEN
+            RAISE EXCEPTION 'Funded fiat sale requires pending manual settlement tracking';
+        END IF;
+    ELSIF _kind NOT IN ('fee','expense','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.

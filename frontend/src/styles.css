@@ -9555,6 +9555,15 @@ select.dlg-row__ghost option {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.pf-dstats--lending-group {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  row-gap: 16px;
+}
+.pf-dstats--lending-group .pf-dstats__cell:nth-child(even) { border-right: 0; }
+.pf-dstats--lending-group .pf-dstats__value {
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
 .pf-dstats__value--pos { color: var(--pos); }
 .pf-dstats__value--neg { color: var(--neg); }
 .pf-dstats__sub {

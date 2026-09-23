@@ -682,6 +682,12 @@ function getEventLabel(item: PortfolioEvent): string {
 }
 
 
+// A lending account may hold several collateral assets against one debt.
+function lendingGroupKey(position: CryptoProtocolPosition): string {
+  const key = position.position_type === 'lending' && position.metadata?.lending_account_key;
+  return key ? `${position.investment_account_id}:${position.network_code}:${String(key)}` : `position:${position.id}`;
+}
+
 export default function Portfolio({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
@@ -790,8 +796,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         getTinkoffConnections().catch(() => [] as ExternalConnection[]),
         fetchCryptoAssets().catch(() => [] as CryptoAsset[]),
       ]);
+      const visibleAccounts = investmentAccounts.filter((account) => account.provider_name !== 'reconstruction_internal');
+      const internalAccountIds = new Set(investmentAccounts.filter((account) => account.provider_name === 'reconstruction_internal').map((account) => account.id));
       const snapshots = await Promise.all(
-        investmentAccounts.map(async (account) => ({
+        visibleAccounts.map(async (account) => ({
           account,
           balances: await fetchBankAccountSnapshot(account.id),
         })),
@@ -799,7 +807,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
       setAccounts(snapshots);
       setCashAccounts(loadedCashAccounts);
-      setPositions(loadedPositions);
+      setPositions(loadedPositions.filter((position) => !internalAccountIds.has(position.investment_account_id ?? -1)));
       setCurrencies(loadedCurrencies);
       setSummaryItems(loadedSummary);
       setTinkoffConnections(loadedConnections);
@@ -2270,6 +2278,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     [cryptoProtocolPositions, selectedProtocolPositionId],
   );
 
+  const selectedLendingGroup = useMemo(() => selectedProtocolPosition
+    ? cryptoProtocolPositions.filter((position) => position.status === 'open'
+      && lendingGroupKey(position) === lendingGroupKey(selectedProtocolPosition))
+    : [], [cryptoProtocolPositions, selectedProtocolPosition]);
+
   const selectedPositionEvents = selectedPosition ? (eventsByPosition[selectedPosition.id] ?? []) : [];
 
   const selectedPositionCancelledIncomeIds = useMemo(
@@ -2440,7 +2453,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const visibleCryptoProtocolPositions = useMemo(() => {
     if (activeAssetTypeCode !== 'crypto') return [];
-    const openPositions = cryptoProtocolPositions.filter((position) => position.status === 'open');
+    const openPositions = cryptoProtocolPositions.filter((position) => position.status === 'open' && accounts.some(({ account }) => account.id === position.investment_account_id));
     return activeAccountTabKey === 'all'
       ? openPositions
       : openPositions.filter((position) => {
@@ -2453,7 +2466,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     const grouped = new Map<number, CryptoProtocolPosition[]>();
     for (const position of visibleCryptoProtocolPositions) {
       const items = grouped.get(position.investment_account_id) ?? [];
-      items.push(position);
+      const existing = items.findIndex((item) => lendingGroupKey(item) === lendingGroupKey(position));
+      if (existing < 0) items.push(position);
+      else if ((getLendingMetadata(position).borrowed_quantity ?? 0) > 0) items[existing] = position;
       grouped.set(position.investment_account_id, items);
     }
     return grouped;
@@ -3389,7 +3404,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <div className="pf-grp__subhead">DeFi</div>
                       {groupProtocolPositions.length > 0 ? (
                         groupProtocolPositions.map((position) => {
-                          const protocolValue = getLendingNetValue(position);
+                          const members = visibleCryptoProtocolPositions.filter((item) => lendingGroupKey(item) === lendingGroupKey(position));
+                          const protocolValue = members.reduce((sum, item) => sum + getLendingNetValue(item), 0);
                           const typeLabel = PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type;
                           let extra = '';
                           if (position.position_type === 'liquidity_pool') {
@@ -3398,7 +3414,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             else if (position.current_quantity) extra = ` · ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}`;
                           } else if (position.position_type === 'lending') {
                             const lend = getLendingMetadata(position);
-                            const qtyPart = position.current_quantity ? ` · ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}` : '';
+                            const qtyPart = members.map((item) => ` · ${formatNumericAmount(item.current_quantity ?? item.quantity ?? 0, 8)} ${item.asset_symbol}`).join('');
                             const debtPart = (lend.borrowed_quantity ?? 0) > 0
                               ? ` · долг ${formatNumericAmount(lend.borrowed_quantity ?? 0, 8)} ${lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}`
                               : '';
@@ -4810,12 +4826,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         >
           <div className="pf-detail-body">
             <div className="pf-detail-meta-row">
-              <span className="pf-detail-ticker">{selectedProtocolPosition.asset_symbol}</span>
+              <span className="pf-detail-ticker">{selectedLendingGroup.length > 1 ? selectedLendingGroup.map((item) => item.asset_symbol).join(' + ') : selectedProtocolPosition.asset_symbol}</span>
               {selectedProtocolPosition.network_code && <span className="pf-detail-pill">{selectedProtocolPosition.network_code}</span>}
               <span className="pf-detail-pill">{(PROTOCOL_TYPE_LABELS[selectedProtocolPosition.position_type] ?? selectedProtocolPosition.position_type).toLowerCase()}</span>
             </div>
 
-            <div className="pf-dstats">
+            <div className={`pf-dstats${selectedLendingGroup.length > 1 ? " pf-dstats--lending-group" : ""}`}>
               {selectedProtocolPosition.position_type === 'liquidity_pool' ? (() => {
                 const lp = getLiquidityPoolMetadata(selectedProtocolPosition);
                 return (
@@ -4846,7 +4862,30 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     )}
                   </>
                 );
-              })() : selectedProtocolPosition.position_type === 'lending' ? (() => {
+              })() : selectedProtocolPosition.position_type === 'lending' && selectedLendingGroup.length > 1 ? (
+                <>
+                  {selectedLendingGroup.map((item) => (
+                    <div className="pf-dstats__cell" key={item.id}>
+                      <span className="pf-dstats__label">Залог {item.asset_symbol}</span>
+                      <span className="pf-dstats__value">{formatNumericAmount(item.current_quantity ?? item.quantity ?? 0, 8)}</span>
+                      <span className="pf-dstats__sub">{item.asset_symbol}</span>
+                    </div>
+                  ))}
+                  {selectedLendingGroup.filter((item) => (getLendingMetadata(item).borrowed_quantity ?? 0) > 0).map((item) => {
+                    const debt = getLendingMetadata(item);
+                    return <div className="pf-dstats__cell" key={`debt:${item.id}`}>
+                      <span className="pf-dstats__label">Общий долг</span>
+                      <span className="pf-dstats__value">{formatNumericAmount(debt.borrowed_quantity ?? 0, 8)}</span>
+                      <span className="pf-dstats__sub">{debt.borrowed_asset_symbol ?? debt.borrowed_asset}</span>
+                    </div>;
+                  })}
+                  <div className="pf-dstats__cell">
+                    <span className="pf-dstats__label">Баланс счёта</span>
+                    <span className="pf-dstats__value">{formatNumericAmount(selectedLendingGroup.reduce((sum, item) => sum + getLendingNetValue(item), 0), 0)}</span>
+                    <span className="pf-dstats__sub">{user.base_currency_code}</span>
+                  </div>
+                </>
+              ) : selectedProtocolPosition.position_type === 'lending' ? (() => {
                 const lend = getLendingMetadata(selectedProtocolPosition);
                 const collateralValue = getCryptoProtocolEstimatedValue(selectedProtocolPosition);
                 const borrowQty = lend.borrowed_quantity ?? 0;
@@ -4906,6 +4945,19 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </>
               )}
             </div>
+
+            {selectedLendingGroup.length > 1 && (
+              <div className="pf-dcond">
+                <p>Залоги одного счёта EVAA. Выберите залог для операций и его истории. Общий долг показан выше.</p>
+                {selectedLendingGroup.map((item) => (
+                  <button type="button" className="pf-dcond__row" key={item.id}
+                    aria-pressed={item.id === selectedProtocolPosition.id}
+                    onClick={() => handleOpenProtocolDetails(item.id)}>
+                    {item.asset_symbol}{item.id === selectedProtocolPosition.id ? ' · выбран' : ''}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="pf-dcond">
               <div className="pf-dcond__head">
@@ -5020,11 +5072,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
             {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type !== 'liquidity_pool' && (() => {
               const isLending = selectedProtocolPosition.position_type === 'lending';
-              const lend = isLending ? getLendingMetadata(selectedProtocolPosition) : null;
-              const hasDebt = (lend?.borrowed_quantity ?? 0) > 0;
+              const debtPosition = selectedLendingGroup.find((item) => (getLendingMetadata(item).borrowed_quantity ?? 0) > 0) ?? selectedProtocolPosition;
+              const hasDebt = (getLendingMetadata(debtPosition).borrowed_quantity ?? 0) > 0;
               const openLendingSheet = (kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close') => {
                 setSelectedProtocolPositionId(null);
-                setLendingSheet({ kind, positionId: selectedProtocolPosition.id });
+                setLendingSheet({ kind, positionId: kind === 'take_debt' || kind === 'repay_debt' ? debtPosition.id : selectedProtocolPosition.id });
               };
               if (isLending) {
                 return (
@@ -5048,7 +5100,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       type="button"
                       onClick={() => openLendingSheet('take_debt')}
                     >
-                      {lend?.borrowed_crypto_asset_id != null ? 'Взять ещё в долг' : 'Взять в долг'}
+                      {hasDebt ? 'Взять ещё в долг' : 'Взять в долг'}
                     </button>
                     {hasDebt && (
                       <button

@@ -82,6 +82,19 @@ BEGIN
         RAISE EXCEPTION 'Заём по этому лендингу уже идёт в другой монете';
     END IF;
 
+    -- One live debt per currency within the same on-chain lending account.
+    IF _existing.metadata->>'lending_account_key' IS NOT NULL AND EXISTS (
+        SELECT 1 FROM crypto_protocol_positions p
+        WHERE p.id<>_existing.id AND p.investment_account_id=_existing.investment_account_id
+          AND p.network_code IS NOT DISTINCT FROM _existing.network_code
+          AND p.status='open' AND p.position_type='lending'
+          AND p.metadata->>'lending_account_key'=_existing.metadata->>'lending_account_key'
+          AND (p.metadata->>'borrowed_crypto_asset_id')::bigint=_borrow_asset_id
+          AND COALESCE((p.metadata->>'borrowed_quantity')::numeric,0)>0
+    ) THEN
+        RAISE EXCEPTION 'По этому счёту уже есть долг в данной монете; используйте позицию общего долга';
+    END IF;
+
     SELECT *
     INTO _borrow_asset
     FROM crypto_assets

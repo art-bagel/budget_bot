@@ -115,7 +115,13 @@ BEGIN
             END IF;
         END LOOP;
         IF _kind='create_protocol' THEN
-            IF _payload->>'source_position_id' IS NULL THEN
+            IF _payload->>'source_position_id' IS NULL AND NOT (
+                _payload->>'position_type'='lending'
+                AND COALESCE((_payload->>'quantity')::numeric,0)=0
+                AND COALESCE((_payload->>'cost_basis_in_base')::numeric,0)=0
+                AND COALESCE((_payload->>'current_value_in_base')::numeric,0)=0
+                AND COALESCE((_payload->>'borrowed_quantity')::numeric,0)=0
+            ) THEN
                 RAISE EXCEPTION 'Historical protocol deposit requires a source position';
             END IF;
             IF (_payload->>'current_quantity' IS NOT NULL AND
@@ -150,6 +156,40 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'tag_lending_account' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN ('position_id','master_contract','user_contract'))
+                OR COALESCE(_payload->>'master_contract','') !~ '^0:[0-9a-f]{64}$'
+                OR COALESCE(_payload->>'user_contract','') !~ '^0:[0-9a-f]{64}$' THEN
+                RAISE EXCEPTION 'Lending identity requires canonical master and user contracts';
+            END IF;
+            SELECT * INTO _resource FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint FOR UPDATE;
+            IF _resource.id IS NULL OR _resource.position_type<>'lending'
+                OR _resource.owner_type IS DISTINCT FROM _account.owner_type
+                OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
+                OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id THEN
+                RAISE EXCEPTION 'Lending position belongs to another owner or is unavailable';
+            END IF;
+            IF _resource.metadata ? 'lending_account_key' AND _resource.metadata->>'lending_account_key'
+                IS DISTINCT FROM (_payload->>'master_contract')||'/'||(_payload->>'user_contract') THEN
+                RAISE EXCEPTION 'Cannot change an established lending account identity';
+            END IF;
+            IF COALESCE((_resource.metadata->>'borrowed_quantity')::numeric,0)>0 AND EXISTS (
+                SELECT 1 FROM crypto_protocol_positions p
+                WHERE p.id<>_resource.id AND p.status='open' AND p.position_type='lending'
+                  AND p.investment_account_id=_resource.investment_account_id
+                  AND p.network_code IS NOT DISTINCT FROM _resource.network_code
+                  AND p.metadata->>'lending_account_key'=(_payload->>'master_contract')||'/'||(_payload->>'user_contract')
+                  AND p.metadata->>'borrowed_crypto_asset_id'=_resource.metadata->>'borrowed_crypto_asset_id'
+                  AND COALESCE((p.metadata->>'borrowed_quantity')::numeric,0)>0
+            ) THEN
+                RAISE EXCEPTION 'Cannot group duplicate active debts of the same currency';
+            END IF;
+            UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
+                'lending_master_contract',_payload->>'master_contract',
+                'lending_user_contract',_payload->>'user_contract',
+                'lending_account_key',(_payload->>'master_contract')||'/'||(_payload->>'user_contract'))
+                WHERE id=_resource.id;
+            _result:=jsonb_build_object('position_id',_resource.id,'economic_change',false);
         WHEN 'observation' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k<>'comment')
                 OR NULLIF(btrim(_payload->>'comment'),'') IS NULL
