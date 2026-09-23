@@ -119,7 +119,7 @@ BEGIN
         CASE _kind
         WHEN 'buy_fiat', 'sell_fiat' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
-                'investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']::text[]))) THEN
+                'investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment','historical_value_in_base','valuation_source','defer_manual_expense']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for fiat trade';
             END IF;
             FOREACH _key IN ARRAY ARRAY['investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount'] LOOP
@@ -130,6 +130,16 @@ BEGIN
                 (_payload->>'investment_account_id')::bigint,(_payload->>'bank_account_id')::bigint,
                 (_payload->>'crypto_asset_id')::bigint,(_payload->>'quantity')::numeric,
                 _payload->>'fiat_currency_code',(_payload->>'fiat_amount')::numeric,
+                _payload->>'comment',_accounting_date,(_payload->>'historical_value_in_base')::numeric,
+                _payload->>'valuation_source',COALESCE((_payload->>'defer_manual_expense')::boolean,false));
+        WHEN 'settle_fiat_sale' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
+                'sale_event_id','category_id','comment']::text[])))
+                OR _payload->>'sale_event_id' IS NULL OR _payload->>'category_id' IS NULL THEN
+                RAISE EXCEPTION 'Invalid manual settlement arguments';
+            END IF;
+            _result:=budgeting.put__settle_crypto_fiat_sale(_user_id,_anchor_account_id,
+                (_payload->>'sale_event_id')::bigint,(_payload->>'category_id')::bigint,
                 _payload->>'comment',_accounting_date);
         WHEN 'reward' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['investment_account_id','crypto_asset_id','quantity','comment']::text[]))) THEN

@@ -128,6 +128,63 @@ async def main():
             saved = await state()
             await post(envelope('foreign-owner', 9, [bad]), 400)
             check('foreign_bank_owner_rejected', await state() == saved)
+            # Foreign proceeds use their historical valuation, not disposed basis.
+            await post(envelope('usd-funding', 10, [command('buy_fiat', '10', '1000')]))
+            sale = command('sell_fiat', '5', '20', historical_value_in_base='1800',
+                           valuation_source='synthetic historical fixture', defer_manual_expense=True)
+            sale['payload']['fiat_currency_code'] = 'USD'
+            body = envelope('usd-sale', 11, [sale])
+            result = await post(body)
+            usd_sale = result['results'][0]
+            check('usd_sale_cost_and_profit', usd_sale['cost_basis'] == 500 and usd_sale['realized_in_base'] == 1300)
+            check('usd_cash_not_rub_amount', await sql("SELECT amount=20 AND historical_cost_in_base=1800 FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", bank))
+            check('usd_lot_actual_value', await sql("SELECT amount_remaining=20 AND cost_base_remaining=1800 FROM budgeting.fx_lots WHERE id=$1", usd_sale['fx_lot_id']))
+            check('usd_sale_repeat', await post(body) == result)
+            for label, value in [('missing', None), ('zero', '0'), ('negative', '-1'), ('nan', 'NaN'), ('precision', '1.001')]:
+                bad = json.loads(json.dumps(sale))
+                bad['payload']['historical_value_in_base'] = value
+                saved = await state()
+                await post(envelope('bad-usd-' + label, 12, [bad]), 400)
+                check('usd_quote_rejected_' + label, await state() == saved)
+            bad = json.loads(json.dumps(sale))
+            bad['payload']['valuation_source'] = ' '
+            await post(envelope('bad-usd-source', 12, [bad]), 400)
+            check('usd_quote_requires_evidence', await sql("SELECT count(*)=1 FROM budgeting.fx_lots WHERE bank_account_id=$1 AND currency_code='USD'", bank))
+            expense_cat = await sql("INSERT INTO budgeting.categories(owner_type,owner_user_id,name,kind) VALUES ('user',$1,'Manual card','regular') RETURNING id", uid)
+            settle = dict(kind='settle_fiat_sale', payload=dict(sale_event_id=usd_sale['event_id'], category_id=expense_cat))
+            invalid = json.loads(json.dumps(settle))
+            invalid['payload']['category_id'] = cat
+            await post(envelope('bad-allocation', 12, [invalid]), 400)
+            check('failed_allocation_keeps_usd', await sql("SELECT amount=20 FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", bank))
+            allocated = await post(envelope('allocate-card', 12, [settle]))
+            check('manual_expense_historical_cost', allocated['results'][0]['expense_cost_in_base'] == 1800)
+            check('manual_expense_consumes_lot', await sql("SELECT amount_remaining=0 AND cost_base_remaining=0 FROM budgeting.fx_lots WHERE id=$1", usd_sale['fx_lot_id']))
+            # Even a different source key cannot spend the same card allocation twice.
+            saved = await state()
+            repeated = await post(envelope('allocate-card-again', 13, [settle]))
+            check('manual_settlement_stable_operation', repeated['results'] == allocated['results'])
+            current = await state()
+            check('manual_settlement_no_double_spend', current['operations'] == saved['operations'] and current['budget'] == saved['budget'])
+            invalid['payload']['category_id'] = cat
+            await post(envelope('changed-allocation', 14, [invalid]), 400)
+            check('manual_category_change_rejected', (await state())['operations'] == current['operations'])
+            try:
+                await sql('SELECT budgeting.put__reverse_operation($1,$2)', uid, allocated['results'][0]['operation_id'])
+                check('linked_expense_reversal_rejected', False)
+            except asyncpg.RaiseError as exc:
+                check('linked_expense_reversal_rejected', 'historical correction' in str(exc))
+            # A later failing command rolls the settlement and its marker back together.
+            await post(envelope('usd-sale-two', 14, [sale]))
+            second = await sql("SELECT max(id) FROM budgeting.portfolio_events WHERE position_id=$1", usd_sale['position_id'])
+            rollback_settle = dict(kind='settle_fiat_sale', payload=dict(sale_event_id=second, category_id=expense_cat))
+            await post(envelope('allocation-rollback', 15, [rollback_settle, command('sell_fiat', '999', '1')]), 400)
+            check('allocation_marker_rollback', await sql("SELECT NOT(metadata ? 'manual_expense_settlement') FROM budgeting.portfolio_events WHERE id=$1", second))
+            check('allocation_money_rollback', await sql("SELECT amount=20 FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", bank))
+            concurrent = await asyncio.gather(*[
+                sql("SELECT budgeting.put__settle_crypto_fiat_sale($1,$2,$3,$4,NULL,'2025-01-01')", uid, inv, second, expense_cat)
+                for _ in range(2)])
+            check('concurrent_manual_settlement_once', concurrent[0] == concurrent[1])
+            check('concurrent_manual_settlement_lot_closed', await sql("SELECT COALESCE(sum(amount_remaining),0)=0 FROM budgeting.fx_lots WHERE bank_account_id=$1", bank))
             family = await sql("INSERT INTO budgeting.families(name,base_currency_code,created_by_user_id) VALUES ('Fiat family','RUB',$1) RETURNING id", uid)
             await sql("INSERT INTO budgeting.family_members(family_id,user_id,role) VALUES ($1,$2,'owner') RETURNING user_id", family, uid)
             cat = await sql("INSERT INTO budgeting.categories(owner_type,owner_family_id,name,kind) VALUES ('family',$1,'Unallocated','system') RETURNING id", family)
