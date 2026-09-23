@@ -239,6 +239,10 @@ async def main():
                 state['accounting_closed_with_limitations']=True
             state['verified_through'] = last['event_no']
             state['diagnostic_only'] = bool(plan.get('diagnostic_only', False))
+            if state['diagnostic_only']:
+                state['accounting_closed_with_limitations'] = False
+                state['cost_reconciliation']['status'] = 'diagnostic_only_not_final_policy'
+                state['cost_reconciliation']['limitation'] = plan.get('diagnostic_reason', 'Incomplete policy implementation')
             save(state)
             print(json.dumps({k: state[k] for k in ('user_id','verified_through','documented_funding_RUB','first_unimplemented_event','block_closed')}, ensure_ascii=False))
     finally:

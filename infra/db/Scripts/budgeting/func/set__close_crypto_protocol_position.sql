@@ -44,9 +44,12 @@ DECLARE
     _primary_quality text;
     _secondary_quality text;
     _secondary_asset_id bigint;
+    _net_primary numeric;
+    _net_secondary numeric;
+    _net_original_secondary numeric;
 BEGIN
     SET search_path TO budgeting;
-    IF _allocation_policy IS NULL OR _allocation_policy NOT IN ('per_leg','equal') THEN
+    IF _allocation_policy IS NULL OR _allocation_policy NOT IN ('per_leg','equal','net_composition') THEN
         RAISE EXCEPTION 'Unknown LP cost allocation policy';
     END IF;
     FOREACH _input_qty IN ARRAY ARRAY[_current_quantity,_return_quantity,_secondary_return_quantity] LOOP
@@ -99,7 +102,7 @@ BEGIN
     _base_currency_code := budgeting.get__owner_base_currency(_existing.owner_type, _existing.owner_user_id, _existing.owner_family_id);
     _primary_quality := COALESCE(_existing.metadata->>'token0_basis_quality',_existing.metadata->>'basis_quality','known');
     _secondary_quality := COALESCE(_existing.metadata->>'token1_basis_quality','known');
-    IF _allocation_policy='equal' AND _existing.position_type<>'liquidity_pool' THEN
+    IF _allocation_policy IN ('equal','net_composition') AND _existing.position_type<>'liquidity_pool' THEN
         RAISE EXCEPTION 'Equal allocation applies only to LP';
     END IF;
     IF _existing.position_type='liquidity_pool' THEN
@@ -124,6 +127,43 @@ BEGIN
             END IF;
             _primary_quality := _existing.metadata->>'basis_quality';
             _secondary_quality := _primary_quality;
+        END IF;
+    END IF;
+
+    IF _allocation_policy='net_composition' THEN
+        IF _return_value_in_base IS NOT NULL OR _secondary_return_value_in_base IS NOT NULL THEN
+            RAISE EXCEPTION 'Net composition derives allocation; explicit values are not allowed';
+        END IF;
+        _net_original_secondary:=(_existing.metadata->>'token1_quantity')::numeric;
+        IF COALESCE(_existing.quantity,0)<=0 OR COALESCE(_net_original_secondary,0)<=0 THEN
+            RAISE EXCEPTION 'Net composition requires positive original quantities';
+        END IF;
+        IF (_resolved_return_quantity<_existing.quantity AND _secondary_return_quantity<=_net_original_secondary)
+            OR (_secondary_return_quantity<_net_original_secondary AND _resolved_return_quantity<=_existing.quantity) THEN
+            RAISE EXCEPTION 'Unexplained LP quantity loss requires explicit classification';
+        END IF;
+        _net_secondary:=(_existing.metadata->>'token1_cost_basis_carried')::numeric;
+        _net_primary:=_existing.cost_basis_in_base-_net_secondary;
+        IF _existing.cost_basis_in_base IS NULL OR _primary_quality='unknown' OR _secondary_quality='unknown'
+            OR _net_primary IS NULL OR _net_secondary IS NULL THEN
+            _net_primary:=NULL;
+            _net_secondary:=NULL;
+            _primary_quality:='unknown';
+            _secondary_quality:='unknown';
+        ELSE
+            IF _net_primary<0 OR _net_secondary<0 THEN
+                RAISE EXCEPTION 'Invalid original LP component cost';
+            END IF;
+            IF _resolved_return_quantity<_existing.quantity THEN
+                _net_primary:=round(_net_primary*_resolved_return_quantity/_existing.quantity,2);
+                _net_secondary:=_existing.cost_basis_in_base-_net_primary;
+            ELSIF _secondary_return_quantity<_net_original_secondary THEN
+                _net_secondary:=round(_net_secondary*_secondary_return_quantity/_net_original_secondary,2);
+                _net_primary:=_existing.cost_basis_in_base-_net_secondary;
+            END IF;
+            -- The net-change convention is explicit, not a market valuation.
+            _primary_quality:=CASE WHEN _net_primary=0 THEN 'confirmed_zero' ELSE 'estimated' END;
+            _secondary_quality:=CASE WHEN _net_secondary=0 THEN 'confirmed_zero' ELSE 'estimated' END;
         END IF;
     END IF;
 
@@ -180,6 +220,9 @@ BEGIN
                     _existing.cost_basis_in_base-(_existing.metadata->>'token1_cost_basis_carried')::numeric
                 ELSE (_existing.metadata->>'cost_basis_carried')::numeric END);
             IF _primary_quality='unknown' THEN _principal_entry_value:=NULL; END IF;
+            IF _allocation_policy='net_composition' THEN
+                _principal_entry_value:=_net_primary;
+            END IF;
             IF _allocation_policy='equal' THEN
                 _principal_entry_value:=round(_existing.cost_basis_in_base/2,2);
                 _primary_quality:=CASE WHEN _existing.cost_basis_in_base IS NULL THEN 'unknown'
@@ -382,6 +425,9 @@ BEGIN
             _secondary_value := round(_secondary_return_value_in_base, 2);
         END IF;
 
+        IF _allocation_policy='net_composition' THEN
+            _secondary_value:=_net_secondary;
+        END IF;
         IF _allocation_policy='equal' THEN
             _secondary_value:=_existing.cost_basis_in_base-_principal_entry_value;
         END IF;

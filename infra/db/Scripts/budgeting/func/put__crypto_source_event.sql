@@ -299,11 +299,28 @@ BEGIN
                 (_payload->>'source_position_id')::bigint,
                 (_payload->>'quantity')::numeric, 'expense', _payload->>'comment', _accounting_date);
         WHEN 'swap' THEN
+            IF _payload ? 'basis_policy' AND (_payload->>'basis_policy') IS DISTINCT FROM 'carry' THEN
+                RAISE EXCEPTION 'Unsupported swap basis policy';
+            END IF;
+            IF _payload->>'basis_policy'='carry' THEN
+                IF _payload ?| ARRAY['value_in_base','valuation_source','valuation_quality'] THEN
+                    RAISE EXCEPTION 'Carried swap must not supply a market valuation';
+                END IF;
+                SELECT * INTO _conversion_source FROM portfolio_positions
+                    WHERE id=(_payload->>'position_id')::bigint FOR UPDATE;
+                IF _conversion_source.id IS NULL OR NOT budgeting.has__owner_access(
+                    _user_id,_conversion_source.owner_type,_conversion_source.owner_user_id,_conversion_source.owner_family_id) THEN
+                    RAISE EXCEPTION 'Unknown or inaccessible carry source';
+                END IF;
+                _summary:=budgeting.get__crypto_position_movable_entry_summary(_conversion_source.id);
+                _numeric:=round((_summary->>'remaining_cost_basis')::numeric
+                    * (_payload->>'from_amount')::numeric / NULLIF(_conversion_source.quantity,0),2);
+            END IF;
             IF _payload ? 'valuation_quality' AND ((_payload->>'valuation_quality') IS DISTINCT FROM 'estimated'
                 OR _payload->>'value_in_base' IS NULL OR NULLIF(btrim(_payload->>'valuation_source'),'') IS NULL) THEN
                 RAISE EXCEPTION 'Estimated swap valuation requires amount and source';
             END IF;
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','from_amount','to_crypto_asset_id','to_amount','target_investment_account_id','comment','value_in_base','valuation_source','valuation_quality']::text[]))) THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','from_amount','to_crypto_asset_id','to_amount','target_investment_account_id','comment','value_in_base','valuation_source','valuation_quality','basis_policy']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for swap';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'from_amount') OR _payload->'from_amount'='null'::jsonb OR NOT (_payload ? 'to_crypto_asset_id') OR _payload->'to_crypto_asset_id'='null'::jsonb OR NOT (_payload ? 'to_amount') OR _payload->'to_amount'='null'::jsonb THEN
@@ -318,9 +335,17 @@ BEGIN
                 _target_investment_account_id => CASE WHEN _payload ? 'target_investment_account_id' THEN (_payload->>'target_investment_account_id')::bigint ELSE NULL END,
                 _comment => CASE WHEN _payload ? 'comment' THEN (_payload->>'comment')::text ELSE NULL END,
                 _operated_at => _accounting_date,
-                _value_in_base => CASE WHEN _payload ? 'value_in_base' THEN (_payload->>'value_in_base')::numeric ELSE NULL END,
-                _valuation_source => CASE WHEN _payload ? 'valuation_source' THEN (_payload->>'valuation_source')::text ELSE NULL END
+                _value_in_base => CASE WHEN _payload->>'basis_policy'='carry' THEN _numeric WHEN _payload ? 'value_in_base' THEN (_payload->>'value_in_base')::numeric ELSE NULL END,
+                _valuation_source => CASE WHEN _payload->>'basis_policy'='carry' THEN 'carried acquisition cost' WHEN _payload ? 'valuation_source' THEN (_payload->>'valuation_source')::text ELSE NULL END
             );
+            IF _payload->>'basis_policy'='carry' THEN
+                UPDATE portfolio_events SET metadata=(metadata-'valuation_source'-'valuation_date'-'value_at_swap_in_base')
+                    || jsonb_build_object('basis_policy','carry','basis_quality',_summary->>'basis_quality',
+                        'realized_in_base',0)
+                WHERE linked_operation_id=(_result->>'operation_id')::bigint AND event_type IN ('swap_in','swap_out');
+                _result:=_result || jsonb_build_object('basis_policy','carry','carried_cost_basis',_numeric,
+                    'basis_quality',_summary->>'basis_quality');
+            END IF;
             IF _payload->>'valuation_quality'='estimated' THEN
                 UPDATE portfolio_events SET metadata=metadata || jsonb_build_object(
                     'valuation_quality','estimated','basis_quality',CASE WHEN event_type='swap_in' THEN 'estimated' ELSE metadata->>'basis_quality' END)
