@@ -483,13 +483,62 @@ async def main():
                     str(other_loan),
                 )
                 assert count > 0, (table, field)
+            # Old collateral now contains both its own and the other loan's
+            # funding. Liquidation must refinance the principal share, retain
+            # penalty units in expenses, and preserve both debt-unit totals.
+            cross_liquidation = c(
+                "liquidate",
+                position_id=loan,
+                collateral_qty="3",
+                debt_qty="1",
+                collateral_fee_qty="1",
+            )
+            cross_before = await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            await post(
+                17,
+                [
+                    {
+                        **cross_liquidation,
+                        "payload": {**cross_liquidation["payload"], "debt_qty": "999"},
+                    }
+                ],
+                400,
+            )
+            assert cross_before == await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            cross_result = await post(17, [cross_liquidation])
+            assert await post(17, [cross_liquidation]) == cross_result
+            settlement = await sql(
+                "SELECT metadata FROM budgeting.portfolio_events WHERE created_by_user_id=$1 AND metadata->>'source_kind'='liquidation_funding_settlement' ORDER BY id DESC LIMIT 1",
+                uid,
+            )
+            assert D(str(settlement["funding_refinanced_units"][str(other_loan)])) > 0
+            assert D(str(settlement["funding_units"][str(other_loan)])) > 0
+            for loan_id, principal in ((loan, D(11)), (other_loan, D(12))):
+                held_units = await sql(
+                    """
+                    SELECT sum(COALESCE((units->>$2)::numeric,0)) FROM (
+                        SELECT metadata->'funding_units' units FROM budgeting.portfolio_positions WHERE owner_user_id=$1
+                        UNION ALL SELECT metadata->'funding_units0' FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1
+                        UNION ALL SELECT metadata->'funding_units1' FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1
+                        UNION ALL SELECT metadata->'funding_units' FROM budgeting.portfolio_events WHERE created_by_user_id=$1
+                    ) h""",
+                    uid,
+                    str(loan_id),
+                )
+                assert held_units == principal, (loan_id, held_units, principal)
             # Pay the new debt with purchased coins. Replacement units must then
             # resolve into actual RUB at the old holders, not disappear with debt.
             await sql(
                 "SELECT budgeting.put__record_income($1,$2,1200,'RUB')", uid, bank
             )
             await post(
-                17,
+                18,
                 [
                     c(
                         "bank_buy",
@@ -509,7 +558,7 @@ async def main():
                 ],
             )
             await post(
-                18,
+                19,
                 [
                     c(
                         "repay",
@@ -737,7 +786,7 @@ async def main():
                 "PASS: immutable lending identity, empty loan, no unbacked cash, duplicate account debt rejected atomically"
             )
             print(
-                "PASS: refinancing replaces principal units across assets/protocols/expenses; interest remains expense; new-loan payoff resolves costs; retry and RUB conservation"
+                "PASS: cross-loan liquidation preserves both debt-unit totals; refinancing replaces principal units across assets/protocols/expenses; interest remains expense; new-loan payoff resolves costs; retry and RUB conservation"
             )
             print(
                 "PASS: funded collateral top-up, liquidation self-cancellation, expense allocation, cash conservation, rollback, retry, unsupported funded sale guard"

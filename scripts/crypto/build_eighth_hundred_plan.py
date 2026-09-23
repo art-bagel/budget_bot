@@ -1,4 +1,4 @@
-"""Compile events 601-700 from pinned quantities, carrying cash and funding units."""
+"""Compile events 701-743 from pinned quantities, carrying cash and funding units."""
 
 import argparse
 from collections import Counter, defaultdict
@@ -14,10 +14,9 @@ from build_first_block_replay import PIN, TON, USDT
 from build_history_inventory import ROOT, git
 from build_second_hundred_plan import JETTON, command as C, position as P
 from compile_main_commands import ref
-from audit_evaa_accounts import USER_A, USER_B
-from verify_evaa_liquidations import command as decode, nodes, boc, Bits
+from verify_evaa_liquidations import verify as verify_liquidation
 
-BASE = "crypto-task/chronological-rebuild/blocks/0601-0700/accepted/v1/"
+BASE = "crypto-task/chronological-rebuild/blocks/0701-0800/accepted/v1/"
 MAIN = "0:29ee71155245d272af9946305e8f21959eff23a07582ebbda39d47fd8383decf"
 COLD = "0:a52881caeb14f2139c17697363edd9979265c6a9ba7175b0dbe275a53fa9199e"
 GROUP = "0:3c9582af5fbfac15b6658dcd85b037c05de95bd795f1f70323a48992f22c61aa"
@@ -46,20 +45,13 @@ def build(prefix):
     )
     ledger = read(BASE + "ledger.json")
     reviews = read(BASE + "economic-review.json")
-    cp = read(BASE + "checkpoint.json")
     bybit = read(
         "outputs/crypto-history-inventory-2026-09-23-v2/bybit-rows.json", False
     )
     byend = read(BASE + "bybit-cost-continuation.json")
-    server_register = read(
-        "crypto-task/chronological-rebuild/amendments/"
-        "2026-09-19-server-purchases-700/server-payments.json"
-    )
-    servers = {}
-    for number, day in ((622, "2025-08-28"), (645, "2025-09-07")):
-        matches = [x for x in server_register["payments"] if x["date"] == day]
-        assert len(matches) == 1
-        servers[number] = matches[0]
+    servers = {x["event_no"]: x for x in read(BASE + "server-purchases.json")}
+    ledger = [x for x in ledger if x["event_no"] <= 743]
+    reviews = [x for x in reviews if x["event_no"] <= 743]
     assets = plan["assets"]
     excluded = plan["excluded_assets"]
     net = defaultdict(lambda: defaultdict(D))
@@ -125,8 +117,8 @@ def build(prefix):
     def proto(n):
         return ref("protocol", events[n - 1]["event_id"])
 
-    start = events[599]["timestamp"]
-    finish = events[699]["timestamp"]
+    start = events[699]["timestamp"]
+    finish = events[742]["timestamp"]
     # Exchange custody/trading is a hidden calculation boundary; withdrawals to Ethereum retain basis.
     eth = "service:bybit:ETH"
     assets[eth] = dict(symbol="ETH", decimals=18, network_code="ethereum")
@@ -274,6 +266,8 @@ def build(prefix):
                 q = D(z["amount"]) / 10**9
                 if not q:
                     continue
+                if sender == recipient:
+                    continue
                 if MAIN in (sender, recipient):
                     continue
                 if sender in (COLD, SECOND) and recipient in (COLD, SECOND):
@@ -326,78 +320,15 @@ def build(prefix):
                     int(e["lt"]) + 1,
                 )
 
-    # Decode historical EVAA request rates + the successful response principal.
-    def evaa(n):
-        trace = read(f"outputs/crypto-seventh-block-dev/sources/trace-{n}.json", False)
-        assert trace.get("emulated") is False
-        ts = [z["transaction"] for z in nodes(trace)]
-        for tx in ts:
-            if tx["account"]["address"] not in (USER_A, USER_B):
-                continue
-            try:
-                cells, b, version, upgrade, op, query = decode(tx["in_msg"]["raw_body"])
-            except (AssertionError, KeyError):
-                continue
-            if op not in (0x11, 0x21):
-                continue
-            assert tx["success"] and not tx["aborted"]
-            asset, amount, supply, borrow = b.u(256), b.u(64), b.u(64), b.u(64)
-            reply = next(
-                t
-                for t in ts
-                if t["in_msg"].get("op_code")
-                == ("0x0000011a" if op == 17 else "0x00000211")
-                and t["in_msg"]["source"]["address"] == tx["account"]["address"]
-            )
-            rb = Bits(boc(reply["in_msg"]["raw_body"])[0][0])
-            assert rb.u(32) == (0x11A if op == 17 else 0x211) and rb.u(64) == query
-            assert rb.address() == MAIN and rb.u(256) == asset
-            actual = rb.u(64)
-            after = rb.i(64)
-            first = rb.i(64)
-            second = rb.i(64)
-            before = after - first - second if op == 17 else after + second - first
-            assert reply["success"] and not reply["aborted"]
-            return dict(
-                before=before,
-                after=after,
-                amount=amount,
-                actual=actual,
-                supply=supply,
-                borrow=borrow,
-                op=op,
-                asset=asset,
-                transaction=tx["hash"],
-                user=tx["account"]["address"],
-            )
-        raise AssertionError(n)
-
     loans = {
         int(k): {a: D(v) for a, v in x.items()}
         for k, x in plan["expected_evaa"].items()
     }
-
-    def accrue(n, loan, coll=None, debt=None):
-        x = loans[loan]
-        coll = x["coll"] if coll is None else coll
-        debt = x["debt"] if debt is None else debt
-        assert coll >= x["coll"] and debt >= x["debt"], (n, x, coll, debt)
-        out = []
-        if coll != x["coll"] or debt != x["debt"]:
-            out = [
-                C(
-                    "accrue",
-                    position_id=proto(loan),
-                    collateral_qty=str(coll - x["coll"]),
-                    interest_qty=str(debt - x["debt"]),
-                    interest_value_in_base="0",
-                    collateral_before=str(x["coll"]),
-                    debt_before=str(x["debt"]),
-                )
-            ]
-        x.update(coll=coll, debt=debt)
-        return out
-
+    liquidation_links = {
+        x["event_no"]: x
+        for x in read(BASE + "evaa-evidence-links.json")
+        if x["kind"] == "liquidation"
+    }
     running = {
         k: D(v)
         for k, v in next(r for r in reversed(original) if "expected_main" in r)[
@@ -405,12 +336,12 @@ def build(prefix):
         ].items()
     }
     receipts = {int(k): v for k, v in byend["receipts"].items()}
-    for n in range(601, 701):
+    for n in range(701, 744):
         ev = events[n - 1]
         v = net[n]
         cmds = []
         paid = received = D(0)
-        evidence = dict(accepted_review=reviews[n - 601])
+        evidence = dict(accepted_review=reviews[n - 701])
         t, order = ev["timestamp"], int(ev["lt"])
         for a, q in v.items():
             running[a] = running.get(a, D(0)) + q
@@ -444,8 +375,8 @@ def build(prefix):
             received = q if a == TON else D(0)
         elif n in servers:
             purchase = servers[n]
-            quantity = D(str(purchase["ton"]))
-            rub = D(str(purchase["rub"]))
+            quantity = D(str(purchase["quantity_TON"]))
+            rub = D(str(purchase["fiat_paid_RUB"]))
             action = ev["raw"]["actions"][0]["TonTransfer"]
             assert action["sender"]["address"] == GROUP
             assert action["recipient"]["address"] == MAIN
@@ -469,79 +400,112 @@ def build(prefix):
                 ),
             ]
             evidence["server_purchase"] = purchase
-        elif n in (649, 663):
-            z = evaa(n)
-            assert z["user"] == USER_A
-            link = next(
-                x for x in read(BASE + "evaa-cost-links.json") if x["event_no"] == n
+        elif n in liquidation_links:
+            z = verify_liquidation(
+                liquidation_links[n],
+                read(f"outputs/evaa-liquidation-history/trace-{n}.json", False),
             )
-            assert z["before"] == link["principal_before"]
-            assert z["after"] == link["principal_after"]
-            assert z["actual"] == link["amount_atomic"]
-            q = D(z["actual"]) / 10**9
-            after = D(z["after"] * z["supply"] // 10**12) / 10**9
-            if n == 649:
-                assert q == 90
-                cmds = accrue(n, 330, coll=after + q) + [
-                    C(
-                        "partial_close_protocol",
-                        position_id=proto(330),
-                        principal_qty=str(q),
-                    )
-                ]
-                received = q
-            else:
-                assert q == 123
-                cmds = accrue(n, 330, coll=after - q) + [
-                    C(
-                        "top_up_protocol",
-                        position_id=proto(330),
-                        source_position_id=P("main"),
-                        quantity=str(q),
-                    )
-                ]
-                paid = q
-            loans[330]["coll"] = after
-            evidence["evaa"] = z
-        elif n == 662:
-            proof = read(BASE + "tonco-proof.json")
-            assert proof["status"] == "PASS" and proof["mint_event"] == 597
-            assert proof["capital_raw"][1] == 0
-            assert proof["burned_liquidity"] == proof["position"]["liquidity"]
-            for filename, sha in proof["sources"].items():
-                read(BASE + filename)
-                assert inputs[-1]["sha256"] == sha
-            principal = D(proof["capital_raw"][0]) / 10**9
-            ton_reward = D(proof["fees_raw"][0]) / 10**9
-            usdt_reward = D(proof["fees_raw"][1]) / 10**6
-            assert usdt_reward == v[USDT]
-            received = principal + ton_reward
+            root = 443 if n == 740 else 330
+            loan = loans[root]
+            coll_before, debt_before = D(z["collateral_before"]), D(z["debt_before"])
+            # Earlier snapshots contain a three-nanoton floor residue on TON-SLP.
+            # Consume it explicitly with the liquidation instead of negative accrual.
+            rounding = max(D(0), loan["coll"] - coll_before)
+            assert rounding <= D("0.000000003"), (n, rounding)
+            coll_before = max(coll_before, loan["coll"])
+            assert debt_before >= loan["debt"]
             cmds = [
                 C(
-                    "close_protocol",
-                    position_id=proto(597),
-                    return_quantity=str(principal),
-                    secondary_return_quantity="0",
-                    allocation_policy="net_composition",
-                ),
-                reward("main", TON, ton_reward),
-                reward("main", USDT, usdt_reward),
+                    "accrue",
+                    position_id=proto(root),
+                    collateral_qty=str(coll_before - loan["coll"]),
+                    interest_qty=str(debt_before - loan["debt"]),
+                    interest_value_in_base="0",
+                    collateral_before=str(loan["coll"]),
+                    debt_before=str(loan["debt"]),
+                )
             ]
-            evidence["tonco_proof"] = proof
-        elif n in (601, 606, 610, 636, 637, 664):
-            a = symbols["tgUSD"] if n == 601 else JETTON
-            cmds = [reward("main", a, v[a])]
+            reduction = D(z["debt_removed"])
+            interest = (
+                reduction * (debt_before - loan["body"]) / debt_before
+            ).quantize(D("0.000001"))
+            cmds.append(
+                C(
+                    "liquidate",
+                    position_id=proto(root),
+                    collateral_qty=str(coll_before - D(z["collateral_after"])),
+                    debt_qty=str(reduction),
+                    interest_qty=str(interest),
+                    collateral_fee_qty="0",
+                    comment="EVAA: изъятие залога и погашение долга; отдельный штраф не установлен",
+                )
+            )
+            loan.update(
+                coll=D(z["collateral_after"]),
+                debt=D(z["debt_after"]),
+                body=loan["body"] - reduction + interest,
+            )
+            received = D(ev["raw"]["actions"][0]["TonTransfer"]["amount"]) / 10**9
+            cmds.append(reward("main", TON, received))
+            evidence.update(
+                liquidation=z,
+                collateral_rounding_correction=str(rounding),
+                penalty_quality="unknown; zero parameter is not a confirmed zero penalty",
+            )
+        elif n == 721:
+            paid = D(22)
+            assert (
+                ev["raw"]["actions"][0]["SmartContractExec"]["ton_attached"]
+                == 22 * 10**9
+            )
+            evidence["nft_evidence"] = read(BASE + "nft-721.json")
+            cmds = [transfer("main", "gifts", TON, paid)]
+        elif n == 723:
+            paid = D("0.100554713")
+            actions = ev["raw"]["actions"]
+            assert actions[0]["SmartContractExec"]["ton_attached"] == 1200000000
+            assert (
+                sum(
+                    x["TonTransfer"]["amount"]
+                    for x in actions
+                    if x["type"] == "TonTransfer"
+                    and x["TonTransfer"]["recipient"]["address"] == MAIN
+                )
+                == 1099445287
+            )
+            cmds = [
+                C(
+                    "expense",
+                    source_position_id=P("main"),
+                    quantity=str(paid),
+                    comment="Операция коллекции NFT, за вычетом возврата",
+                )
+            ]
+        elif n in (725, 726, 728):
+            cmds = [reward("main", JETTON, v[JETTON])]
+            if n in (726, 728):
+                paid = D("0.0725")
+                # Isolate the specific call to return its original cost in 727/729.
+                boundary = "service_call_" + str(n)
+                cmds.append(transfer("main", boundary, TON, paid))
+        elif n in (727, 729):
+            received = D("0.0596")
+            boundary = "service_call_" + str(n - 1)
+            cmds = [
+                transfer(boundary, "main", TON, received),
+                C(
+                    "expense",
+                    source_position_id=P(boundary),
+                    quantity="0.0129",
+                    comment="Сервисный вызов за вычетом возврата",
+                ),
+            ]
         elif ev["raw"]["actions"][0]["type"] == "JettonSwap":
             z = ev["raw"]["actions"][0]["JettonSwap"]
             a = z["jetton_master_in"]["address"]
             q = D(z["amount_in"]) / 10 ** int(z["jetton_master_in"]["decimals"])
             received = D(z["ton_out"]) / 10**9
             cmds = [swap("main", a, q, TON, received)]
-        elif n in (670, 671, 672):
-            assert ev["raw"]["actions"][0]["type"] == "NftItemTransfer"
-            evidence["nft_policy"] = (
-                "NFT outside crypto valuation; actual TON fees retained"
-            )
         else:
             actions = ev["raw"]["actions"]
             assert len(actions) == 1 and actions[0]["type"] == "TonTransfer", n
@@ -577,8 +541,13 @@ def build(prefix):
                     evidence["micro_assumption"] = (
                         "Zero new own-money cost; address not identified as own"
                     )
-                elif "Telegram Stars" in z.get("comment", "") or n == 609 or n >= 666:
-                    if n >= 666:
+                elif (
+                    "Telegram Stars" in z.get("comment", "")
+                    or n == 724
+                    or n <= 715
+                    or n == 732
+                ):
+                    if n <= 715 or n == 732:
                         assert q == D("0.03")
                     cmds = [
                         C(
@@ -586,12 +555,12 @@ def build(prefix):
                             source_position_id=P("main"),
                             quantity=str(q),
                             comment="Telegram Stars"
-                            if n in (630, 631, 651, 659)
+                            if n == 738
                             else "Малый сервисный платёж",
                         )
                     ]
                 elif incoming:
-                    assert n in (634, 658), n
+                    raise AssertionError(("Unmapped main receipt", n))
                     cmds = [dict(gift_return=dict(wallet="main", quantity=str(q)))]
                 else:
                     cmds = [transfer("main", "gifts", TON, q)]
@@ -614,7 +583,10 @@ def build(prefix):
             evidence,
             order,
             **(
-                dict(funding_RUB=str(servers[n]["rub"]), funding_quality="known")
+                dict(
+                    funding_RUB=str(servers[n]["fiat_paid_RUB"]),
+                    funding_quality="known",
+                )
                 if n in servers
                 else {}
             ),
@@ -660,9 +632,6 @@ def build(prefix):
     assert plan["rows"] == sorted(
         plan["rows"], key=lambda r: (r["occurred_at"], r["order_in_timestamp"])
     )
-    for r in cp["main_wallet_balances"]:
-        if r["master"] not in excluded:
-            assert running.get(r["master"], 0) == D(r["quantity"]), r
     plan["events"] += [
         dict(
             event_no=r["event_no"],
@@ -674,25 +643,33 @@ def build(prefix):
         for r in reviews
     ]
     plan["expected_accounts"].update(side_final)
-    reference = read(BASE + "cost-bounds-0700.json")
-    plan["expected_accounts"]["shared_claim"] = {
-        TON: str(
-            D(
-                reference["final_accounts"]["own:group:principal_claim"][
-                    "quantity_or_units"
-                ]
-            )
-            + sum(D(str(x["ton"])) for x in servers.values())
-        )
+    shared = D(plan["expected_accounts"]["shared_claim"][TON])
+    for row in added:
+        for c in row["commands"]:
+            if c["kind"] != "transfer":
+                continue
+            p = c["payload"]
+            if p["target_investment_account_id"] == ref("account", "shared_claim"):
+                shared += D(p["amount"])
+            if p["position_id"] == P("shared_claim"):
+                shared -= D(p["amount"])
+    plan["expected_accounts"]["shared_claim"] = {TON: str(shared)}
+    # Independently sum raw exchange deltas from the accepted opening balance.
+    balances = {
+        k: D(v) for k, v in plan["expected_accounts"]["exchange_source"].items()
     }
+    for rs in groups.values():
+        for r in rs:
+            if r["Актив"] in keys:
+                balances[keys[r["Актив"]]] = balances.get(keys[r["Актив"]], D(0)) + D(
+                    r["Изменение"].replace(",", ".")
+                )
     plan["expected_accounts"]["exchange_source"] = {
-        TON: "0",
-        USDT: "0.00660505",
-        eth: "0",
+        k: str(v) for k, v in balances.items()
     }
     plan["expected_accounts"]["gifts"] = {TON: str(gifts)}
-    plan["main_account_name"] = "История main — события 1–700"
     plan["expected_evaa"] = loans
+    plan["main_account_name"] = "История main — события 1–743"
     plan["expected_bank_USD"] = str(
         sum(
             D(c["payload"]["fiat_amount"])
@@ -706,10 +683,10 @@ def build(prefix):
         "RUB": str(sum(D(r.get("funding_RUB", "0")) for r in added))
     }
     plan["summary"].update(
-        block="0001-0700",
-        total_events=700,
+        block="0001-0743",
+        total_events=743,
         total_movements=plan["summary"]["total_movements"] + len(ledger),
-        compiled_contiguous_prefix=700,
+        compiled_contiguous_prefix=743,
         source_events=len(plan["rows"]),
         command_counts=dict(
             Counter(c["kind"] for r in plan["rows"] for c in r["commands"])
@@ -719,11 +696,13 @@ def build(prefix):
         ),
     )
     plan["limitations"] += [
-        "Server purchases 622/645 corrected from shared-claim returns: 23.58 TON for 6309.49 RUB; fresh replay required.",
-        "52 and 61 JETTON are probable rewards per owner recollection, zero new own-money cost.",
-        "5 TON via @push and 2.79 TON treated as probable service returns with gift pool carrying cost.",
-        "Micro external TON receipts <=0.001 carry zero new own-money cost under accepted materiality policy.",
+        "Partial eighth block through 743; later collateral changes and unknown-cost Arbitrum return are not posted; not closed through 800.",
+        "3.595 TON on second remains a probable gift-service return, carrying pooled cost.",
     ]
+    plan["summary"]["first_unimplemented_event"] = 744
+    plan["summary"]["first_unimplemented_kind"] = (
+        "Collateral top-ups and unresolved Ethereum cost boundary"
+    )
     plan["inputs"] += inputs + [
         dict(path=str(prefix), sha256=hashlib.sha256(prefix.read_bytes()).hexdigest())
     ]

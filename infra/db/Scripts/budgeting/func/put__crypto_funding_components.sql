@@ -149,9 +149,11 @@ BEGIN
             _cash:=_cash-_interest;
             _map:=budgeting.calc__crypto_funding_units('{}',_old->'metadata'->'funding_units0',
                 (_p->>'collateral_qty')::numeric/(_old->>'quantity')::numeric);
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_map) k WHERE k<>_loan) THEN
-                RAISE EXCEPTION 'Cross-loan liquidation refinancing is not implemented';
-            END IF;
+            -- Collateral can carry financing from another loan. Its principal
+            -- share replaces the settled loan's units at their current holders;
+            -- the interest/penalty share stays with the liquidation expense.
+            _refinancing:=budgeting.calc__crypto_funding_units('{}',_map-_loan,
+                _pa*_pb);
             _self:=round(COALESCE((_map->>_loan)::numeric,0)*_pa*_pb,18);
             IF _self>_body THEN RAISE EXCEPTION 'Liquidated self-financing exceeds principal settled'; END IF;
             UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
