@@ -47,6 +47,18 @@ class Ledger(DataBase):
             self._fn('get__crypto_source_events'), user_id, anchor_account_id, limit, offset,
         )
 
+    async def get__pending_crypto_fiat_expenses(self, user_id, limit=50, offset=0):
+        return await self.call_function(
+            self._fn('get__pending_crypto_fiat_expenses'), user_id, limit, offset,
+        )
+
+    async def put__settle_crypto_fiat_sale(self, user_id, investment_account_id,
+                                          sale_event_id, category_id, operated_at):
+        return await self.call_function(
+            self._fn('put__settle_crypto_fiat_sale'), user_id, investment_account_id,
+            sale_event_id, category_id, None, operated_at,
+        )
+
     async def put__record_fx_rate_snapshot(
         self,
         base_currency_code: str,

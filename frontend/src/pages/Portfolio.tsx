@@ -43,6 +43,7 @@ import CryptoIncomeSheet from '../components/CryptoIncomeSheet';
 import CryptoProtocolPartialCloseSheet from '../components/CryptoProtocolPartialCloseSheet';
 import CryptoSwapSheet from '../components/CryptoSwapSheet';
 import CryptoWithdrawSheet from '../components/CryptoWithdrawSheet';
+import PendingFiatExpenses from '../components/PendingFiatExpenses';
 import CryptoTransferSheet from '../components/CryptoTransferSheet';
 import {
   LpAddLiquiditySheet,
@@ -3106,6 +3107,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </div>
               </div>
             </div>
+          )}
+
+          {activeAssetTypeCode === 'crypto' && (
+            <PendingFiatExpenses onChanged={() => { void loadPortfolio(); }} />
           )}
 
           {activeAssetTypeCode === 'all' && openPositions.length > 0 && (() => {

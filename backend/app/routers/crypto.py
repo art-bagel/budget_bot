@@ -69,6 +69,48 @@ async def get_crypto_source_events(anchor_account_id: int = Query(gt=0),
     return await ledger.get__crypto_source_events(user.user_id, anchor_account_id, limit, offset)
 
 
+class PendingFiatExpenseCategory(BaseModel):
+    id: int
+    name: str
+
+
+class PendingFiatExpense(BaseModel):
+    sale_event_id: int
+    investment_account_id: int
+    sale_date: date
+    amount: str
+    currency_code: str
+    bank_account_id: int
+    bank_account_name: str
+    investment_account_name: str
+    comment: Optional[str] = None
+    categories: list[PendingFiatExpenseCategory]
+
+
+class SettleFiatSaleRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    investment_account_id: int = Field(gt=0)
+    category_id: int = Field(gt=0)
+    operated_at: date
+
+
+@router.get('/pending-fiat-expenses', response_model=list[PendingFiatExpense])
+async def pending_fiat_expenses(limit: int = Query(50, ge=1, le=200),
+                                offset: int = Query(0, ge=0),
+                                user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    return await ledger.get__pending_crypto_fiat_expenses(user.user_id, limit, offset)
+
+
+@router.post('/pending-fiat-expenses/{sale_event_id}/settle')
+async def settle_fiat_sale(sale_event_id: int, body: SettleFiatSaleRequest,
+                           user: CurrentUser = Depends(get_current_user)) -> dict:
+    if sale_event_id <= 0:
+        raise HTTPException(status_code=422, detail='Некорректная оплата')
+    return await ledger.put__settle_crypto_fiat_sale(
+        user.user_id, body.investment_account_id, sale_event_id, body.category_id, body.operated_at,
+    )
+
+
 COINGECKO_IDS_BY_SYMBOL = {
     'BTC': 'bitcoin',
     'ETH': 'ethereum',

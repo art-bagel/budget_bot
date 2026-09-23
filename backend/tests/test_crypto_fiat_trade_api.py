@@ -140,6 +140,15 @@ async def main():
             check('usd_cash_not_rub_amount', await sql("SELECT amount=20 AND historical_cost_in_base=1800 FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", bank))
             check('usd_lot_actual_value', await sql("SELECT amount_remaining=20 AND cost_base_remaining=1800 FROM budgeting.fx_lots WHERE id=$1", usd_sale['fx_lot_id']))
             check('usd_sale_repeat', await post(body) == result)
+            pending = await client.get('/api/v1/crypto/pending-fiat-expenses?limit=1&offset=0')
+            check('pending_list_exact_currency_and_amount', pending.status_code == 200 and pending.json()[0]['currency_code'] == 'USD' and Decimal(pending.json()[0]['amount']) == 20)
+            check('pending_list_pagination', (await client.get('/api/v1/crypto/pending-fiat-expenses?limit=1&offset=1')).json() == [])
+            app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=other)
+            check('pending_list_other_owner_hidden', (await client.get('/api/v1/crypto/pending-fiat-expenses')).json() == [])
+            denied = await client.post(f"/api/v1/crypto/pending-fiat-expenses/{usd_sale['event_id']}/settle", json=dict(investment_account_id=inv, category_id=cat, operated_at='2025-01-01'))
+            check('pending_settlement_other_owner_denied', denied.status_code == 400)
+            app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=uid)
+
             for label, value in [('missing', None), ('zero', '0'), ('negative', '-1'), ('nan', 'NaN'), ('precision', '1.001')]:
                 bad = json.loads(json.dumps(sale))
                 bad['payload']['historical_value_in_base'] = value
@@ -156,7 +165,15 @@ async def main():
             invalid['payload']['category_id'] = cat
             await post(envelope('bad-allocation', 12, [invalid]), 400)
             check('failed_allocation_keeps_usd', await sql("SELECT amount=20 FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", bank))
-            allocated = await post(envelope('allocate-card', 12, [settle]))
+            pending = (await client.get('/api/v1/crypto/pending-fiat-expenses')).json()
+            check('pending_categories_owner_regular_only', pending[0]['categories'] == [{'id': expense_cat, 'name': 'Manual card'}])
+            manual_body = dict(investment_account_id=inv, category_id=expense_cat, operated_at='2025-01-01')
+            response = await client.post(f"/api/v1/crypto/pending-fiat-expenses/{usd_sale['event_id']}/settle", json=manual_body)
+            assert response.status_code == 200, response.text
+            allocated = {'results': [response.json()]}
+            repeated_http = await client.post(f"/api/v1/crypto/pending-fiat-expenses/{usd_sale['event_id']}/settle", json=manual_body)
+            check('manual_endpoint_retry', repeated_http.status_code == 200 and repeated_http.json() == response.json())
+            check('allocated_disappears_from_pending', (await client.get('/api/v1/crypto/pending-fiat-expenses')).json() == [])
             check('manual_expense_historical_cost', allocated['results'][0]['expense_cost_in_base'] == 1800)
             check('manual_expense_consumes_lot', await sql("SELECT amount_remaining=0 AND cost_base_remaining=0 FROM budgeting.fx_lots WHERE id=$1", usd_sale['fx_lot_id']))
             # Even a different source key cannot spend the same card allocation twice.

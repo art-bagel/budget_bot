@@ -1132,3 +1132,31 @@ export async function applyTinkoffSync(
 export async function fetchTinkoffLivePrices(): Promise<TinkoffLivePrice[]> {
   return apiFetch<TinkoffLivePrice[]>('/tinkoff/live-prices');
 }
+
+export interface PendingFiatExpense {
+  sale_event_id: number;
+  investment_account_id: number;
+  sale_date: string;
+  amount: string;
+  currency_code: string;
+  bank_account_id: number;
+  bank_account_name: string;
+  investment_account_name: string;
+  comment: string | null;
+  categories: { id: number; name: string }[];
+}
+
+export function fetchPendingFiatExpenses(limit = 20, offset = 0) {
+  return apiFetch<PendingFiatExpense[]>(`/crypto/pending-fiat-expenses?limit=${limit}&offset=${offset}`);
+}
+
+export function settlePendingFiatExpense(saleEventId: number, body: {
+  investment_account_id: number;
+  category_id: number;
+  operated_at: string;
+}) {
+  return apiFetch<{ operation_id: number }>(`/crypto/pending-fiat-expenses/${saleEventId}/settle`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
