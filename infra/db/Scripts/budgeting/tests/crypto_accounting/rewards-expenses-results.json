@@ -1,0 +1,198 @@
+{
+  "scope": "Disposable SQL fixture + real HTTP/storage; synthetic identities",
+  "checks": [
+    {
+      "name": "retry_identical_response_no_changes",
+      "passed": true
+    },
+    {
+      "name": "equivalent_timezone_is_same_event",
+      "passed": true
+    },
+    {
+      "name": "one_source_links_multiple_legs",
+      "passed": true
+    },
+    {
+      "name": "exact_quantity_through_envelope",
+      "passed": true
+    },
+    {
+      "name": "accounting_date_applied_to_all_legs",
+      "passed": true
+    },
+    {
+      "name": "changed_quantity_rejected_without_changes",
+      "passed": true
+    },
+    {
+      "name": "changed_evidence_rejected_without_changes",
+      "passed": true
+    },
+    {
+      "name": "changed_timestamp_rejected_without_changes",
+      "passed": true
+    },
+    {
+      "name": "out_of_order_and_collision_no_changes",
+      "passed": true
+    },
+    {
+      "name": "concurrent_retry_once",
+      "passed": true
+    },
+    {
+      "name": "second_leg_failure_rolls_back_envelope_and_first_leg",
+      "passed": true
+    },
+    {
+      "name": "failed_source_can_be_retried",
+      "passed": true
+    },
+    {
+      "name": "final_balance_instead_of_operations_rejected",
+      "passed": true
+    },
+    {
+      "name": "actor_and_date_override_rejected",
+      "passed": true
+    },
+    {
+      "name": "unauthorized_retry_and_read_denied",
+      "passed": true
+    },
+    {
+      "name": "paginated_ordered_history",
+      "passed": true
+    },
+    {
+      "name": "envelope_validation",
+      "passed": true
+    },
+    {
+      "name": "journal_context_does_not_leak",
+      "passed": true
+    },
+    {
+      "name": "accrual_and_liability_links",
+      "passed": true
+    },
+    {
+      "name": "accrual_repeat_through_source",
+      "passed": true
+    },
+    {
+      "name": "five_command_protocol_lifecycle",
+      "passed": true
+    },
+    {
+      "name": "lifecycle_retry_preserves_state",
+      "passed": true
+    },
+    {
+      "name": "transfer_interest_liquidation_dispatch",
+      "passed": true
+    },
+    {
+      "name": "invalid_or_inexact_numbers_no_changes",
+      "passed": true
+    },
+    {
+      "name": "cross_owner_command_rejected",
+      "passed": true
+    },
+    {
+      "name": "first_reward_creates_zero_cost_asset",
+      "passed": true
+    },
+    {
+      "name": "reward_concurrent_repeat_no_duplicate",
+      "passed": true
+    },
+    {
+      "name": "reward_dilutes_average_without_adding_capital",
+      "passed": true
+    },
+    {
+      "name": "expense_consumes_weighted_average",
+      "passed": true
+    },
+    {
+      "name": "expense_distinct_from_fee_or_own_transfer",
+      "passed": true
+    },
+    {
+      "name": "expense_repeat_once",
+      "passed": true
+    },
+    {
+      "name": "reward_and_failed_expense_roll_back_together",
+      "passed": true
+    },
+    {
+      "name": "reward_expense_invalid_values_and_price_override_rejected",
+      "passed": true
+    },
+    {
+      "name": "reward_preserves_eighteenth_decimal",
+      "passed": true
+    },
+    {
+      "name": "expense_preserves_eighteenth_decimal",
+      "passed": true
+    },
+    {
+      "name": "unknown_cost_not_replaced_by_reward_zero",
+      "passed": true
+    },
+    {
+      "name": "full_expense_closes_quantity",
+      "passed": true
+    },
+    {
+      "name": "new_reward_after_close_has_own_zero_cost",
+      "passed": true
+    },
+    {
+      "name": "estimated_cost_propagates",
+      "passed": true
+    },
+    {
+      "name": "foreign_reward_rejected",
+      "passed": true
+    },
+    {
+      "name": "new_commands_do_not_create_cash_operations",
+      "passed": true
+    },
+    {
+      "name": "family_members_share_deduplication_scope",
+      "passed": true
+    },
+    {
+      "name": "family_reward_expense_preserves_owner_and_basis",
+      "passed": true
+    }
+  ],
+  "passed": 43,
+  "total": 43,
+  "postgresql": "14.15",
+  "regression_passed": 132,
+  "regression_total": 132,
+  "full_schema_suites": [
+    "auth",
+    "crypto_assets",
+    "fx_lots",
+    "money_ledger",
+    "scheduled_expenses"
+  ],
+  "source_sha256": {
+    "backend/app/routers/crypto.py": "694698fd5dd1c9e4f10a96a571279c4c310a0cc1f6a271cce14bf569a6caaca9",
+    "backend/tests/test_crypto_source_events_api.py": "d67353a37da6bfbe6c4c63d946fa5b7c5384e1c39dd34472612cedb247361f82",
+    "infra/db/Scripts/budgeting/tests/crypto_accounting/run_checks.py": "0d2bc528b4ea83a197287bc991f99a779d809c0660263fa9d555ec5f95fc7493",
+    "infra/db/Scripts/budgeting/func/put__crypto_consume.sql": "dbb360e30195790667b84d4cf417b179109b34ae1e0ea77d0d9d1186deb90012",
+    "infra/db/Scripts/budgeting/func/put__crypto_pay_fee.sql": "e1de22c5121852b36f2b39ed089c1ca60ca14a60f33436c21e825819452f2c8a",
+    "infra/db/Scripts/budgeting/func/put__crypto_receive_reward.sql": "2340a13b86247be9a9728732a9dbea6ab15ffc6bb6db5526a64ec0b9a1c266a7",
+    "infra/db/Scripts/budgeting/func/put__crypto_source_event.sql": "ce5b33184ea75584e9b6fdd979d7402770976e416c939e47df129d6e2a9c7a3c"
+  }
+}

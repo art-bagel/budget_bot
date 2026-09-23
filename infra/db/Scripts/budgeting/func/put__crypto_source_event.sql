@@ -117,6 +117,27 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'reward' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['investment_account_id','crypto_asset_id','quantity','comment']::text[]))) THEN
+                RAISE EXCEPTION 'Unsupported argument for reward';
+            END IF;
+            IF _payload->>'investment_account_id' IS NULL OR _payload->>'crypto_asset_id' IS NULL OR _payload->>'quantity' IS NULL THEN
+                RAISE EXCEPTION 'Missing required argument for reward';
+            END IF;
+            _result := budgeting.put__crypto_receive_reward(_user_id,
+                (_payload->>'investment_account_id')::bigint,
+                (_payload->>'crypto_asset_id')::bigint,
+                (_payload->>'quantity')::numeric, _payload->>'comment', _accounting_date);
+        WHEN 'expense' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['source_position_id','quantity','comment']::text[]))) THEN
+                RAISE EXCEPTION 'Unsupported argument for expense';
+            END IF;
+            IF _payload->>'source_position_id' IS NULL OR _payload->>'quantity' IS NULL THEN
+                RAISE EXCEPTION 'Missing required argument for expense';
+            END IF;
+            _result := budgeting.put__crypto_consume(_user_id,
+                (_payload->>'source_position_id')::bigint,
+                (_payload->>'quantity')::numeric, 'expense', _payload->>'comment', _accounting_date);
         WHEN 'swap' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','from_amount','to_crypto_asset_id','to_amount','target_investment_account_id','comment','value_in_base','valuation_source']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for swap';

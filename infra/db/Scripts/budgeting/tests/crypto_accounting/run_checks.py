@@ -33,7 +33,7 @@ files = [DB / 'tb' / (n + '.sql') for n in
 files += [DB / 'func' / (n + '.sql') for n in [
     'get__crypto_position_entry_summary', 'get__crypto_position_known_entry_summary',
     'get__crypto_position_movable_entry_summary', 'check__crypto_lending_state',
-    'get__crypto_account_assets', 'get__crypto_asset_detail', 'put__crypto_pay_fee', 'get__crypto_protocol_positions',
+    'get__crypto_account_assets', 'get__crypto_asset_detail', 'put__crypto_consume', 'put__crypto_pay_fee', 'get__crypto_protocol_positions',
     'put__create_crypto_protocol_position', 'put__lending_take_more_debt',
     'put__lending_repay_debt', 'set__close_crypto_protocol_position',
     'put__record_portfolio_income', 'put__swap_crypto_investment_asset',

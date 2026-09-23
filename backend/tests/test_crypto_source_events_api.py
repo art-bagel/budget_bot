@@ -163,6 +163,69 @@ async def main():
             await sql("INSERT INTO budgeting.bank_accounts VALUES(33,'Other','user',2,NULL,'investment','crypto',true)")
             await post(envelope('cross-scope', [dict(kind='transfer', payload=dict(position_id=1, target_investment_account_id=33, amount='1'))], order=7), 400)
             check('cross_owner_command_rejected', await snapshot() == saved)
+            # Rewards and external spending use the portfolio weighted-average ledger.
+            await sql("INSERT INTO budgeting.bank_accounts VALUES(55,'Reward audit','user',1,NULL,'investment','crypto',true)")
+            def reward(qty='10', account=55, asset=1):
+                return dict(kind='reward', payload=dict(investment_account_id=account, crypto_asset_id=asset, quantity=qty))
+
+            first_reward = envelope('first-free-reward', [reward()], order=7)
+            reward_result = await post(first_reward)
+            reward_position = reward_result['results'][0]['position_id']
+
+            async def basis(position):
+                return await sql('SELECT budgeting.get__crypto_position_entry_summary($1)', position)
+
+            check('first_reward_creates_zero_cost_asset', (await basis(reward_position))['remaining_cost_basis'] == 0
+                  and (await basis(reward_position))['quantity_now'] == 10
+                  and len(reward_result['links']) == 1)
+            saved = await snapshot()
+            repeats = await asyncio.gather(post(first_reward), post(first_reward))
+            check('reward_concurrent_repeat_no_duplicate', repeats[0] == repeats[1] == reward_result and await snapshot() == saved)
+            # Synthetic purchased lot: ten units at total 1000, then ten free units.
+            await sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":1000,\"basis_quality\":\"known\"}' WHERE position_id=$1", reward_position)
+            await post(envelope('dilution-reward', [reward()], order=8))
+            current = await basis(reward_position)
+            check('reward_dilutes_average_without_adding_capital', current['quantity_now'] == 20 and current['remaining_cost_basis'] == 1000 and current['avg_cost_per_unit'] == 50)
+
+            def expense(qty='5', position=reward_position):
+                return dict(kind='expense', payload=dict(source_position_id=position, quantity=qty, comment='External purchase'))
+
+            spend_envelope = envelope('external-expense', [expense()], order=9)
+            spend = await post(spend_envelope)
+            current = await basis(reward_position)
+            check('expense_consumes_weighted_average', current['quantity_now'] == 15 and current['remaining_cost_basis'] == 750 and spend['results'][0]['consumed_cost_basis'] == 250)
+            event = await sql("SELECT to_jsonb(e) FROM budgeting.portfolio_events e WHERE id=$1", spend['links'][0]['ledger_id'])
+            check('expense_distinct_from_fee_or_own_transfer', event['event_type'] == 'transfer_out' and event['metadata']['action'] == 'external_expense' and event['metadata']['target_kind'] == 'expense' and event['metadata']['realized_in_base'] == -250 and event['event_at'] == '2025-01-06')
+            saved = await snapshot()
+            check('expense_repeat_once', await post(spend_envelope) == spend and await snapshot() == saved)
+            await post(envelope('reward-spend-rollback', [reward(), expense('1000000')], order=10), 400)
+            check('reward_and_failed_expense_roll_back_together', await snapshot() == saved)
+            for command in [reward('NaN'), reward('0'), reward('-1'), reward('Infinity'), reward('0.0000000000000000001'), expense('NaN'), expense('0'), expense('-1')]:
+                await post(envelope('invalid-reward-expense', [command], order=10), 400)
+            await post(envelope('reward-price-override', [dict(kind='reward', payload={**reward()['payload'], 'value_in_base':'999'})], order=10), 400)
+            check('reward_expense_invalid_values_and_price_override_rejected', await snapshot() == saved)
+            await post(envelope('precise-reward', [reward('0.000000000000000001')], order=10))
+            qty = await sql('SELECT quantity::text FROM budgeting.portfolio_positions WHERE id=$1', reward_position)
+            check('reward_preserves_eighteenth_decimal', Decimal(qty) == Decimal('15.000000000000000001'))
+            await post(envelope('precise-expense', [expense('0.000000000000000001')], order=11))
+            check('expense_preserves_eighteenth_decimal', (await basis(reward_position))['quantity_now'] == 15)
+            # Unknown and estimated costs must survive both directions.
+            await sql("UPDATE budgeting.portfolio_positions SET metadata=metadata || '{\"basis_quality\":\"unknown\"}' WHERE id=$1", reward_position)
+            unknown = await post(envelope('unknown-reward-expense', [reward(), expense()], order=12))
+            check('unknown_cost_not_replaced_by_reward_zero', (await basis(reward_position))['remaining_cost_basis'] is None and unknown['results'][1]['consumed_cost_basis'] is None)
+            await post(envelope('close-unknown', [expense('20')], order=13))
+            check('full_expense_closes_quantity', await sql('SELECT quantity=0 AND status=\'closed\' FROM budgeting.portfolio_positions WHERE id=$1', reward_position))
+            reopened = await post(envelope('reward-after-close', [reward()], order=14))
+            new_position = reopened['results'][0]['position_id']
+            check('new_reward_after_close_has_own_zero_cost', new_position != reward_position and (await basis(new_position))['basis_quality'] == 'confirmed_zero')
+            await sql("UPDATE budgeting.portfolio_events SET metadata='{\"entry_value_in_base\":1000,\"basis_quality\":\"estimated\"}' WHERE position_id=$1", new_position)
+            estimated = await post(envelope('estimated-reward-expense', [reward(), expense(position=new_position)], order=15))
+            check('estimated_cost_propagates', estimated['results'][1]['basis_quality'] == 'estimated' and (await basis(new_position))['basis_quality'] == 'estimated' and (await basis(new_position))['remaining_cost_basis'] == 750)
+            saved = await snapshot()
+            await post(envelope('foreign-reward', [reward(account=33)], order=16), 400)
+            check('foreign_reward_rejected', await snapshot() == saved)
+            # No cash operation is fabricated for a free in-kind reward or consumption.
+            check('new_commands_do_not_create_cash_operations', all(x['ledger_table']=='portfolio_events' for x in reward_result['links']+spend['links']))
             # Same family event seen by two members has one owner-scoped key.
             await sql("INSERT INTO budgeting.families VALUES(1)")
             await sql("INSERT INTO budgeting.bank_accounts VALUES(44,'Family','family',NULL,1,'investment','crypto',true)")
@@ -174,6 +237,13 @@ async def main():
             family_result = await post(family)
             app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=2)
             check('family_members_share_deduplication_scope', await post(family) == family_result)
+            family_flow = {**envelope('family-reward-expense', [reward('1', account=44),
+                expense('1', position=family_position)], order=1), 'anchor_account_id': 44}
+            family_flow_result = await post(family_flow)
+            check('family_reward_expense_preserves_owner_and_basis',
+                  family_flow_result['results'][1]['consumed_cost_basis'] == 90
+                  and (await basis(family_position))['remaining_cost_basis'] == 810)
+
     finally:
         await crypto.ledger.close()
     report = {'scope': 'Disposable SQL fixture + real HTTP/storage; synthetic identities', 'checks': checks,
