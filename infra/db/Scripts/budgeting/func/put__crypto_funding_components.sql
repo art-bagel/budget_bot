@@ -12,6 +12,7 @@ DECLARE
     _take numeric; _cost numeric; _units_after numeric; _expense_id bigint;
     _operation bigint; _fx bigint; _unallocated bigint; _base char(3);
     _allocations jsonb:='[]'; _owner record; _metadata jsonb;
+    _refinancing jsonb:='{}'; _ref_left jsonb; _ref_take jsonb;
 BEGIN
     SET search_path TO budgeting;
     IF current_setting('budgeting.crypto_source_event_id',true) IS DISTINCT FROM _sid::text THEN
@@ -131,9 +132,10 @@ BEGIN
         _interest:=_cash-round(_cash*_body/(_p->>'repay_qty')::numeric,2);
         _cash:=_cash-_interest;
         _map:=COALESCE(_out->(_p->>'source_position_id'),'{}');
-        IF EXISTS(SELECT 1 FROM jsonb_object_keys(_map) k WHERE k<>_loan) THEN
-            RAISE EXCEPTION 'Cross-loan refinancing components are not implemented';
-        END IF;
+        -- New-loan units used for principal replace old-loan units at their
+        -- current holders. The interest share remains an expense holder.
+        _refinancing:=budgeting.calc__crypto_funding_units('{}',_map-_loan,
+            _body/(_p->>'repay_qty')::numeric);
         _self:=round(COALESCE((_map->>_loan)::numeric,0)*_body/(_p->>'repay_qty')::numeric,18);
         IF _self>_body THEN RAISE EXCEPTION 'Return contains more same-loan units than principal repaid'; END IF;
         ELSE
@@ -172,10 +174,13 @@ BEGIN
         END IF;
         _settle:=_body-_self;
         -- The interest-paid fraction is an expense holder, not self-cancelled principal.
-        _map:=budgeting.calc__crypto_funding_units(_map,jsonb_build_object(_loan,_self),-1);
+        _map:=budgeting.calc__crypto_funding_units(
+            budgeting.calc__crypto_funding_units(_map,jsonb_build_object(_loan,_self),-1),
+            _refinancing,-1);
         UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units',_map,
             'funding_interest_cost',_interest,'funding_principal_cost',_cash,
-            'funding_self_cancelled',_self,'funding_policy','components','realized_in_base',0)
+            'funding_self_cancelled',_self,'funding_refinanced_units',_refinancing,
+            'funding_policy','components','realized_in_base',0)
             WHERE id=_expense_id;
         SELECT sum(u) INTO _total FROM (
             SELECT COALESCE((metadata->'funding_units'->>_loan)::numeric,0) u FROM portfolio_positions
@@ -185,8 +190,8 @@ BEGIN
             UNION ALL SELECT COALESCE((e.metadata->'funding_units'->>_loan)::numeric,0) FROM portfolio_events e JOIN portfolio_positions p ON p.id=e.position_id
                 WHERE p.owner_type=_owner.owner_type AND p.owner_user_id IS NOT DISTINCT FROM _owner.owner_user_id AND p.owner_family_id IS NOT DISTINCT FROM _owner.owner_family_id
         ) t;
-        IF _settle>COALESCE(_total,0) OR (_settle=0 AND _cash<>0) THEN RAISE EXCEPTION 'Funding settlement mismatch'; END IF;
-        _left_units:=_settle; _left_cash:=_cash;
+        IF _settle>COALESCE(_total,0) OR (_settle=0 AND (_cash<>0 OR _refinancing<>'{}'::jsonb)) THEN RAISE EXCEPTION 'Funding settlement mismatch'; END IF;
+        _left_units:=_settle; _left_cash:=_cash; _ref_left:=_refinancing;
         FOR _h IN SELECT * FROM (
             SELECT 'position' kind,id,'funding_units' field,(metadata->'funding_units'->>_loan)::numeric units FROM portfolio_positions
                 WHERE owner_type=_owner.owner_type AND owner_user_id IS NOT DISTINCT FROM _owner.owner_user_id AND owner_family_id IS NOT DISTINCT FROM _owner.owner_family_id
@@ -199,10 +204,12 @@ BEGIN
         ) holders WHERE units>0 ORDER BY kind,id,field LOOP
             _take:=CASE WHEN _h.units=_total THEN _left_units ELSE round(_left_units*_h.units/_total,18) END;
             _cost:=CASE WHEN _h.units=_total THEN _left_cash ELSE round(_left_cash*_h.units/_total,2) END;
+            _ref_take:=CASE WHEN _h.units=_total THEN _ref_left
+                ELSE budgeting.calc__crypto_funding_units('{}',_ref_left,_h.units/_total) END;
             _units_after:=_h.units-_take;
             _map:=jsonb_build_object(_loan,_take);
             IF _h.kind='position' THEN
-                UPDATE portfolio_positions SET metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1)) WHERE id=_h.id;
+                UPDATE portfolio_positions SET metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1),_ref_take)) WHERE id=_h.id;
                 IF _cost>0 THEN
                     INSERT INTO portfolio_events(position_id,event_type,event_at,quantity,comment,metadata,created_by_user_id)
                     VALUES(_h.id,'top_up',_day,0,'Уточнение затрат при погашении займа',jsonb_build_object(
@@ -210,7 +217,7 @@ BEGIN
                 END IF;
             ELSIF _h.kind='protocol' THEN
                 UPDATE crypto_protocol_positions SET cost_basis_in_base=cost_basis_in_base+_cost,
-                    metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1))
+                    metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1),_ref_take))
                     || jsonb_build_object(CASE WHEN _h.field='funding_units0' THEN 'cost_basis_carried' ELSE 'token1_cost_basis_carried' END,
                         COALESCE((metadata->>CASE WHEN _h.field='funding_units0' THEN 'cost_basis_carried' ELSE 'token1_cost_basis_carried' END)::numeric,0)+_cost,
                         'basis_quality','estimated',CASE WHEN _h.field='funding_units0' THEN 'token0_basis_quality' ELSE 'token1_basis_quality' END,'estimated') WHERE id=_h.id;
@@ -228,13 +235,14 @@ BEGIN
                     PERFORM budgeting.put__apply_current_budget_delta(_fx,_base,-_cost);
                     PERFORM budgeting.put__apply_current_budget_delta(_unallocated,_base,_cost);
                 END IF;
-                UPDATE portfolio_events SET metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1))
+                UPDATE portfolio_events SET metadata=jsonb_set(metadata,ARRAY[_h.field],budgeting.calc__crypto_funding_units(budgeting.calc__crypto_funding_units(metadata->_h.field,_map,-1),_ref_take))
                     ||jsonb_build_object('funding_confirmed_cost',COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)+_cost) WHERE id=_h.id;
             END IF;
-            _allocations:=_allocations||jsonb_build_array(jsonb_build_object('holder_kind',_h.kind,'holder_id',_h.id,'field',_h.field,'units',_take,'cost',_cost));
+            _allocations:=_allocations||jsonb_build_array(jsonb_build_object('holder_kind',_h.kind,'holder_id',_h.id,'field',_h.field,'units',_take,'cost',_cost,'replacement_units',_ref_take));
+            _ref_left:=budgeting.calc__crypto_funding_units(_ref_left,_ref_take,-1);
             _left_units:=_left_units-_take; _left_cash:=_left_cash-_cost; _total:=_total-_h.units;
         END LOOP;
-        IF _left_units<>0 OR _left_cash<>0 THEN RAISE EXCEPTION 'Funding settlement remainder'; END IF;
+        IF _left_units<>0 OR _left_cash<>0 OR _ref_left<>'{}'::jsonb THEN RAISE EXCEPTION 'Funding settlement remainder'; END IF;
     ELSIF _kind='sell_fiat' THEN
         IF _out<>'{}'::jsonb THEN RAISE EXCEPTION 'Funded foreign fiat sale requires settlement tracking'; END IF;
     ELSIF _kind NOT IN ('fee','expense','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation') THEN

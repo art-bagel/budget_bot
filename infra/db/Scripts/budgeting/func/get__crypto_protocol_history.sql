@@ -63,6 +63,21 @@ BEGIN
         FROM crypto_liability_events e
         WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
         UNION ALL
+        SELECT 'liquidation-interest:'||e.id,e.event_at,e.id,'liquidation_interest',
+            abs(e.interest_quantity),a.symbol,NULL::numeric,
+            'Входит в погашенный долг; не дополнительное списание.'::text
+        FROM crypto_liability_events e JOIN crypto_assets a ON a.id=e.crypto_asset_id
+        WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
+        UNION ALL
+        SELECT 'liquidation-fee:'||e.id,e.event_at,e.id,'liquidation_fee',
+            NULLIF((e.metadata->'request'->>'collateral_fee_quantity')::numeric,0),
+            _p.asset_symbol,NULL::numeric,
+            CASE WHEN COALESCE((e.metadata->'request'->>'collateral_fee_quantity')::numeric,0)>0
+                THEN 'Входит в изъятый залог; не дополнительное списание.'
+                ELSE 'Количество отдельно не установлено. Ноль в расчёте не подтверждает отсутствие штрафа; себестоимость распределена условно без отдельной штрафной части.' END
+        FROM crypto_liability_events e
+        WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
+        UNION ALL
         SELECT 'custody:'||s.id||':'||c.ordinality,s.accounting_date,s.id,
             CASE WHEN c.value->'payload'->>'to_custody'='main' THEN 'lp_return' ELSE 'lp_farm' END,
             (c.value->'payload'->>'quantity')::numeric,'LP',NULL::numeric,NULL::text
@@ -85,6 +100,8 @@ BEGIN
           AND l.ledger_table=CASE split_part(r.id,':',1)
             WHEN 'asset' THEN 'portfolio_events' WHEN 'debt' THEN 'crypto_liability_events'
             WHEN 'liquidation-collateral' THEN 'crypto_liability_events'
+            WHEN 'liquidation-interest' THEN 'crypto_liability_events'
+            WHEN 'liquidation-fee' THEN 'crypto_liability_events'
             WHEN 'accrual' THEN 'crypto_protocol_accrual_events' END
         LEFT JOIN crypto_source_events s ON s.id=COALESCE(l.source_event_id,
             CASE WHEN r.id LIKE 'custody:%' THEN split_part(r.id,':',2)::bigint END)

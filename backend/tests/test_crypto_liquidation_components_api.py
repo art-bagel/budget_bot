@@ -369,10 +369,188 @@ async def main():
             expense_rows = [
                 row for row in history["entries"] if row["kind"] == "external_expense"
             ]
+            fee_rows = [
+                row for row in history["entries"] if row["kind"] == "liquidation_fee"
+            ]
+            assert sorted(D(str(row["quantity"])) for row in fee_rows) == [D(1), D(2)]
+            assert all("не дополнительное" in row["comment"] for row in fee_rows)
+            interest_rows = [
+                row
+                for row in history["entries"]
+                if row["kind"] == "liquidation_interest"
+            ]
+            assert sum(D(str(row["quantity"])) for row in interest_rows) == D("0.5")
             assert len(expense_rows) == 2
             assert all(row["quantity"] is None for row in expense_rows)
             assert sum(D(str(row["cost_basis"])) for row in expense_rows) == expense
             assert expense > 0
+            # Refinance part of the old loan, including interest, from a new loan.
+            r = await post(
+                13,
+                [
+                    c(
+                        "create_protocol",
+                        investment_account_id=inv,
+                        protocol_name="Second lending account",
+                        position_type="lending",
+                        asset_symbol="LCOLL",
+                        quantity="1",
+                        source_position_id=pos,
+                        crypto_asset_id=collateral,
+                    )
+                ],
+            )
+            other_loan = r["results"][0]["id"]
+            r = await post(
+                14,
+                [
+                    c(
+                        "borrow",
+                        position_id=other_loan,
+                        borrowed_crypto_asset_id=debt,
+                        debt_qty="12",
+                        funding_policy="components",
+                    )
+                ],
+            )
+            other_debtpos = r["results"][0]["metadata"]["borrowed_position_id"]
+            await post(
+                15,
+                [
+                    c(
+                        "accrue",
+                        position_id=loan,
+                        collateral_qty="0",
+                        interest_qty="1",
+                        interest_value_in_base="0",
+                        collateral_before="69",
+                        debt_before="22",
+                    )
+                ],
+            )
+            repayment = c(
+                "repay",
+                position_id=loan,
+                source_position_id=other_debtpos,
+                repay_qty="11",
+                interest_qty="1",
+            )
+            await post(
+                16,
+                [{**repayment, "payload": {**repayment["payload"], "repay_qty": "24"}}],
+                400,
+            )
+            assert (
+                await sql(
+                    "SELECT (metadata->>'borrowed_quantity')::numeric FROM budgeting.crypto_protocol_positions WHERE id=$1",
+                    loan,
+                )
+                == 23
+            )
+            result = await post(16, [repayment])
+            assert await post(16, [repayment]) == result
+            old_balance = await sql(
+                "SELECT (metadata->>'borrowed_quantity')::numeric FROM budgeting.crypto_protocol_positions WHERE id=$1",
+                loan,
+            )
+            assert old_balance == 12
+            new_balance = await sql(
+                "SELECT (metadata->>'borrowed_quantity')::numeric FROM budgeting.crypto_protocol_positions WHERE id=$1",
+                other_loan,
+            )
+            assert new_balance == 12
+            refinance_expense = await sql(
+                "SELECT metadata FROM budgeting.portfolio_events WHERE position_id=$1 AND metadata->>'target_kind'='lending_repay' ORDER BY id DESC LIMIT 1",
+                other_debtpos,
+            )
+            assert D(str(refinance_expense["funding_interest_cost"])) == 0
+            assert D(str(refinance_expense["funding_units"][str(other_loan)])) == 1
+            assert (
+                D(str(refinance_expense["funding_refinanced_units"][str(other_loan)]))
+                == 10
+            )
+            # Every holder class must receive replacement units, including prior expenses.
+            for table, field, where in [
+                ("portfolio_positions", "funding_units", "owner_user_id"),
+                ("crypto_protocol_positions", "funding_units0", "owner_user_id"),
+                ("portfolio_events", "funding_units", "created_by_user_id"),
+            ]:
+                count = await sql(
+                    f"SELECT count(*) FROM budgeting.{table} WHERE {where}=$1 AND (metadata->$2->>$3)::numeric>0 AND (metadata->$2->>$4)::numeric>0",
+                    uid,
+                    field,
+                    str(loan),
+                    str(other_loan),
+                )
+                assert count > 0, (table, field)
+            # Pay the new debt with purchased coins. Replacement units must then
+            # resolve into actual RUB at the old holders, not disappear with debt.
+            await sql(
+                "SELECT budgeting.put__record_income($1,$2,1200,'RUB')", uid, bank
+            )
+            await post(
+                17,
+                [
+                    c(
+                        "bank_buy",
+                        bank_account_id=bank,
+                        crypto_asset_id=debt,
+                        quantity="11",
+                        fiat_currency_code="RUB",
+                        fiat_amount="1200",
+                    ),
+                    c(
+                        "bank_to_portfolio",
+                        bank_account_id=bank,
+                        investment_account_id=inv,
+                        crypto_asset_id=debt,
+                        quantity="11",
+                    ),
+                ],
+            )
+            await post(
+                18,
+                [
+                    c(
+                        "repay",
+                        position_id=other_loan,
+                        source_position_id=other_debtpos,
+                        repay_qty="12",
+                        interest_qty="0",
+                    )
+                ],
+            )
+            assert (
+                await sql(
+                    "SELECT (metadata->>'borrowed_quantity')::numeric FROM budgeting.crypto_protocol_positions WHERE id=$1",
+                    other_loan,
+                )
+                == 0
+            )
+            cash = await sql(
+                "SELECT sum((budgeting.get__crypto_position_entry_summary(id)->>'remaining_cost_basis')::numeric) FROM budgeting.portfolio_positions WHERE owner_user_id=$1 AND status='open'",
+                uid,
+            )
+            protocol_cash = await sql(
+                "SELECT sum(cost_basis_in_base) FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND status='open'",
+                uid,
+            )
+            expense = await sql(
+                "SELECT sum(COALESCE((metadata->>'funding_interest_cost')::numeric,0)+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FROM budgeting.portfolio_events WHERE created_by_user_id=$1",
+                uid,
+            )
+            assert cash + protocol_cash + expense == 11200
+            assert (
+                await sql(
+                    "SELECT (metadata->'funding_units'->>$2)::numeric FROM budgeting.portfolio_events WHERE position_id=$1 AND metadata->>'target_kind'='lending_repay' ORDER BY id LIMIT 1",
+                    other_debtpos,
+                    str(other_loan),
+                )
+                is None
+            )
+            print(
+                "PASS: refinancing replaces principal units across assets/protocols/expenses; interest remains expense; new-loan payoff resolves costs; retry and RUB conservation"
+            )
             print(
                 "PASS: funded collateral top-up, liquidation self-cancellation, expense allocation, cash conservation, rollback, retry, unsupported funded sale guard"
             )
