@@ -2593,7 +2593,29 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     const scopedOpenPositions = activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions;
     const scopedGroups = activeAssetTypeCode === 'all' ? filteredOpenPositionGroups : visibleOpenPositionGroups;
     const nkdValue = scopedOpenPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
-    const investedPrincipal = scopedOpenPositions.reduce((sum, position) => sum + (
+    const valuedAssets = new Set<string>();
+    let cryptoBasis = 0;
+    let basisMissing = false;
+    let basisEstimated = false;
+    for (const position of scopedOpenPositions.filter((p) => p.asset_type_code === 'crypto')) {
+      const assetId = getCryptoAssetId(position);
+      const key = `${position.investment_account_id}:${assetId}`;
+      if (valuedAssets.has(key)) continue;
+      valuedAssets.add(key);
+      const entry = cryptoAssetsByAccount.get(position.investment_account_id)?.find((a) => a.crypto_asset_id === assetId);
+      if (!entry || entry.remaining_cost_basis === null || entry.basis_quality === 'unknown' || entry.basis_quality === 'invalid') {
+        basisMissing = true;
+      } else {
+        cryptoBasis += Number(entry.remaining_cost_basis);
+        basisEstimated ||= entry.basis_quality === 'estimated';
+      }
+    }
+    for (const protocol of visibleCryptoProtocolPositions) {
+      if (protocol.cost_basis_in_base === null) basisMissing = true;
+      else cryptoBasis += Number(protocol.cost_basis_in_base);
+      basisEstimated ||= protocol.metadata.basis_quality === 'estimated';
+    }
+    const investedPrincipal = cryptoBasis + scopedOpenPositions.filter((p) => p.asset_type_code !== 'crypto').reduce((sum, position) => sum + (
       activeAssetTypeCode === 'security'
         ? getPositionVisibleInvestedPrincipal(position)
         : getPositionInvestedPrincipal(position)
@@ -2602,6 +2624,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0)
         + (activeAssetTypeCode === 'crypto' ? cryptoProtocolValueInBase : 0),
       investedPrincipal,
+      basisMissing,
+      basisEstimated,
       cashValue: activeAssetTypeCode === 'all'
         ? totalInvestmentCashInBase
         : scopedGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
@@ -2612,6 +2636,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   }, [
     activeAssetTypeCode,
     cryptoProtocolValueInBase,
+    cryptoAssetsByAccount,
+    cryptoLivePrices,
+    visibleCryptoProtocolPositions,
     filteredOpenPositionGroups,
     moexPrices,
     tinkoffLivePrices,
@@ -2625,12 +2652,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const activeScopeResultValue = activeScopeDisplayMetrics.resultValue;
   const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
   const activeScopeNkdValue = activeScopeDisplayMetrics.nkdValue;
-  const activeScopeBasisLabel = 'Вложено';
-  // Crypto entry summaries and DeFi basis are not aggregated here yet.
-  // The legacy zero must not be presented as invested capital or profit.
   const activeScopeHasCrypto = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
     .some((position) => position.asset_type_code === 'crypto')
     || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
+  const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
+    .some((position) => position.asset_type_code === 'crypto' && !(Number(getCryptoLivePrice(position)?.price) > 0))
+    || visibleCryptoProtocolPositions.some((position) => !(Number(cryptoLivePrices.get(position.crypto_asset_id ?? -1)?.price) > 0)
+      || (position.position_type === 'liquidity_pool' && !(Number(cryptoLivePrices.get(Number(position.metadata.token1_crypto_asset_id))?.price) > 0)));
+  const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
+  const activeScopeBasisPrefix = activeScopeDisplayMetrics.basisEstimated ? '≈ ' : '';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
     ? Landmark
     : activeAssetTypeCode === 'crypto'
@@ -3058,7 +3088,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
                 <div className="pf-tsum__now-row">
                   <div className="pf-tsum__now-value">
-                    {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
+                    {activeScopeMarketIncomplete ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                   {!activeScopeHasCrypto && activeScopeBaseValue > 0 && (() => {
@@ -3074,13 +3104,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     );
                   })()}
                 </div>
-                <div className="pf-tsum__now-period">{activeScopeDisplayMetrics.resultLabel}</div>
+                <div className="pf-tsum__now-period">{activeScopeMarketIncomplete ? 'Рыночная оценка неполная' : activeScopeDisplayMetrics.resultLabel}</div>
               </div>
               <div className="pf-tsum__grid">
                 <div className="pf-tsum__cell">
                   <div className="pf-tsum__cell-label">{activeScopeBasisLabel}</div>
                   <div className="pf-tsum__cell-value">
-                    {activeScopeHasCrypto ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
+                    {activeScopeDisplayMetrics.basisMissing ? '—' : activeScopeBasisPrefix + new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                 </div>
@@ -3158,7 +3188,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <div className="pf-alloc__totals">
                   <div className="pf-alloc__t-cell">
                     <span>{activeScopeBasisLabel}</span>
-                    <strong>{activeScopeHasCrypto ? '—' : fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+                    <strong>{activeScopeDisplayMetrics.basisMissing ? '—' : activeScopeBasisPrefix + fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
                     <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
                   </div>
                   <span className="pf-alloc__t-sep" />
@@ -3168,7 +3198,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {activeScopeHasCrypto ? '—' : `${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </strong>
                     <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                      {activeScopeHasCrypto ? 'Себестоимость — в карточках активов' : `${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
+                      {activeScopeHasCrypto ? 'Доход: нужна полная рыночная оценка' : `${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
                     </em>
                   </div>
                 </div>

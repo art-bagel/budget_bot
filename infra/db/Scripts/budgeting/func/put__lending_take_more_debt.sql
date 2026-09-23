@@ -200,7 +200,7 @@ BEGIN
             'borrowed_position_id', _target_position_id,
             'borrowed_value_in_base', _new_value,
             'debt_cost_basis_in_base', _new_value,
-            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' ELSE 'known' END,
+            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' WHEN _existing.metadata->>'debt_basis_quality'='estimated' THEN 'estimated' ELSE 'known' END,
             'debt_accounting_version', 2
         ),
         updated_at = current_timestamp

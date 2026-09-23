@@ -1,6 +1,7 @@
 """Bank exchange and portfolio transfer via the journal, disposable dev only."""
 import asyncio
 from decimal import Decimal
+from datetime import date, timedelta
 import os
 from pathlib import Path
 import sys
@@ -45,7 +46,7 @@ async def main():
 
         def event(n, commands):
             return dict(anchor_account_id=inv, source_namespace='bank-journal-test', source_id=str(n),
-                occurred_at=f'2024-01-{n:02}T12:00:00Z', accounting_date=f'2024-01-{n:02}', order_in_timestamp=0, commands=commands)
+                occurred_at=f'{date(2024,1,1)+timedelta(days=n-1)}T12:00:00Z', accounting_date=str(date(2024,1,1)+timedelta(days=n-1)), order_in_timestamp=0, commands=commands)
 
         buy = dict(kind='bank_buy', payload=dict(bank_account_id=bank, crypto_asset_id=asset,
             quantity='1.000000000000000001', fiat_currency_code='RUB', fiat_amount='10.00'))
@@ -255,6 +256,41 @@ async def main():
             for position in (pa,pc):
                 summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',position)
                 assert summary['remaining_cost_basis'] is None and summary['basis_quality']=='unknown',summary
+            estimated=dict(kind='swap',payload=dict(position_id=pc,from_amount='1',to_crypto_asset_id=b2,to_amount='1',value_in_base='4',valuation_source='historical reference fixture',valuation_quality='estimated'))
+            for patch in [dict(valuation_quality='known'),dict(value_in_base=None),dict(valuation_source='')]:
+                bad=await client.post('/api/v1/crypto/source-events',json=event(27,[dict(kind='swap',payload={**estimated['payload'],**patch})]))
+                assert bad.status_code==400,bad.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(27,[estimated]))
+            assert response.status_code==200,response.text
+            summary=await sql('SELECT budgeting.get__crypto_position_entry_summary($1)',pb)
+            assert summary['basis_quality']=='estimated' and Decimal(str(summary['remaining_cost_basis']))==Decimal('24.33'),summary
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(27,[estimated]))
+            assert repeat.json()==response.json()
+            response=await client.post('/api/v1/crypto/source-events',json=event(28,[dict(kind='create_protocol',payload=dict(investment_account_id=inv,protocol_name='Estimated debt test',position_type='lending',asset_symbol='LPB',quantity='1',source_position_id=pb,crypto_asset_id=b2))]))
+            assert response.status_code==200,response.text
+            lending=response.json()['results'][0]['id']
+            loan=dict(kind='borrow',payload=dict(position_id=lending,debt_qty='2',borrowed_crypto_asset_id=a2,value_in_base='6',valuation_quality='estimated',valuation_source='reference test'))
+            bad=await client.post('/api/v1/crypto/source-events',json=event(29,[dict(kind='borrow',payload={**loan['payload'],'valuation_source':''})]))
+            assert bad.status_code==400,bad.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(29,[loan]))
+            assert response.status_code==200,response.text
+            assert (await sql(protocol_query,lending))['metadata']['debt_basis_quality']=='estimated'
+            response=await client.post('/api/v1/crypto/source-events',json=event(30,[dict(kind='accrue',payload=dict(position_id=lending,collateral_qty='0',interest_qty='0.1',interest_value_in_base='0.3',collateral_before='1',debt_before='2',valuation_quality='estimated',valuation_source='reference test'))]))
+            assert response.status_code==200,response.text
+            response=await client.post('/api/v1/crypto/source-events',json=event(31,[dict(kind='repay',payload=dict(position_id=lending,source_position_id=pa,repay_qty='0.1',interest_qty='0.1',value_in_base='0.3',valuation_quality='estimated',valuation_source='reference test'))]))
+            assert response.status_code==200,response.text
+            md=(await sql(protocol_query,lending))['metadata']
+            assert md['debt_basis_quality']=='estimated' and Decimal(str(md['debt_cost_basis_in_base']))==6,md
+            zero=dict(kind='receive_unknown',payload=dict(investment_account_id=inv,crypto_asset_id=b2,quantity='0.0000018',basis_assumption='owner_zero',comment='Explicit owner convention; origin unknown'))
+            response=await client.post('/api/v1/crypto/source-events',json=event(32,[zero]))
+            assert response.status_code==200,response.text
+            entry=await sql('SELECT to_jsonb(e) FROM budgeting.portfolio_events e WHERE id=$1',response.json()['results'][0]['event_id'])
+            assert entry['event_type']=='top_up' and entry['metadata']['entry_value_in_base']==0 and entry['metadata']['basis_quality']=='estimated',entry
+            assert entry['metadata']['source_kind']=='unclassified_receipt' and 'income_kind' not in entry['metadata'],entry
+            repeat=await client.post('/api/v1/crypto/source-events',json=event(32,[zero]))
+            assert repeat.json()==response.json()
+        print('estimated loan/interest/repayment and explicit zero-cost receipt convention passed')
+        print('reference swap valuation: explicit quality, missing-value/source guards, unknown source cost and repeat passed')
         print('equal LP allocation: odd-cent conservation, conflicting values rejected, idempotence and unknown total propagation passed')
         print('fee refunds: historical cost, cent remainder, repeat, pool exhaustion and unknown-cost propagation passed')
         print('staking conversion: round-trip basis, source/target guards, unknown propagation; unclassified receipt not a free reward passed')

@@ -51,7 +51,7 @@ BEGIN
             'borrowed_value_in_base',(_p.metadata->>'debt_cost_basis_in_base')::numeric+_v,
             'debt_interest_quantity',COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0)+_q,
             'debt_interest_basis_in_base',CASE WHEN COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0)=0 THEN _v ELSE (_p.metadata->>'debt_interest_basis_in_base')::numeric+_v END,
-            'debt_basis_quality',CASE WHEN (_p.metadata->>'debt_cost_basis_in_base')::numeric+_v IS NULL THEN 'unknown' ELSE 'known' END
+            'debt_basis_quality',CASE WHEN (_p.metadata->>'debt_cost_basis_in_base')::numeric+_v IS NULL THEN 'unknown' WHEN _p.metadata->>'debt_basis_quality'='estimated' THEN 'estimated' ELSE 'known' END
         ), updated_at=current_timestamp WHERE id=_position_id;
     END IF;
     RETURN (SELECT item FROM jsonb_array_elements(

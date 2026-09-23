@@ -218,7 +218,27 @@ async def main():
                 status='known_components_checked' if last['event_no']<=11 else 'historical_quantities_checked_full_cost_unresolved',
                 total_portfolio_basis=None if unknown_positions or unknown_protocols else str(held+protocol_basis),
                 limitation='Unknown values are not zero; known subtotals are not total historical capital')
+            if last['event_no']==100 and not unknown_positions and not unknown_protocols and unknown_swaps==0:
+                totals=await sql("""SELECT jsonb_build_object(
+                    'fees',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric) FILTER(WHERE event_type='fee'),0),
+                    'expenses',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric) FILTER(WHERE metadata->>'target_kind'='expense'),0),
+                    'fee_refunds',COALESCE(sum((metadata->>'entry_value_in_base')::numeric) FILTER(WHERE metadata->>'source_kind'='fee_refund'),0),
+                    'swap_result',COALESCE(sum((metadata->>'realized_in_base')::numeric) FILTER(WHERE event_type='swap_out'),0),
+                    'repay_result',COALESCE(sum((metadata->>'realized_in_base')::numeric) FILTER(WHERE metadata->>'target_kind'='lending_repay'),0),
+                    'unknown_disposals',count(*) FILTER(WHERE (event_type='fee' OR metadata->>'target_kind'='expense') AND metadata->>'consumed_cost_basis' IS NULL),
+                    'unknown_results',count(*) FILTER(WHERE (event_type='swap_out' OR metadata->>'target_kind'='lending_repay') AND metadata->>'realized_in_base' IS NULL)
+                    ) FROM budgeting.portfolio_events WHERE created_by_user_id=$1""",uid)
+                assert totals['unknown_disposals']==0 and totals['unknown_results']==0, totals
+                interest=await sql("SELECT COALESCE(sum(debt_basis_change_in_base),0) FROM budgeting.crypto_liability_events WHERE created_by_user_id=$1 AND event_kind='interest_accrual'",uid)
+                debt=sum(Decimal(str(p['metadata'].get('debt_cost_basis_in_base',0))) for p in opened_protocols)
+                expected=funding+Decimal(str(totals['swap_result']))+Decimal(str(totals['repay_result']))-Decimal(str(totals['fees']))-Decimal(str(totals['expenses']))+Decimal(str(totals['fee_refunds']))-interest
+                assert held+protocol_basis-debt==expected, (held,protocol_basis,debt,expected,totals)
+                state['capital_reconciliation']=dict(**totals,interest_cost=str(interest),debt_basis=str(debt),asset_basis=str(held+protocol_basis),net_basis=str(expected),difference='0.00',quality='estimated_with_documented_conventions')
+                state['cost_reconciliation']['status']='reference_estimates_reconciled'
+                state['cost_reconciliation']['limitation']='Reference valuations, Telegram rounding and explicitly accepted zero-cost receipt; not exact market or tax accounting'
+                state['accounting_closed_with_limitations']=True
             state['verified_through'] = last['event_no']
+            state['diagnostic_only'] = bool(plan.get('diagnostic_only', False))
             save(state)
             print(json.dumps({k: state[k] for k in ('user_id','verified_through','documented_funding_RUB','first_unimplemented_event','block_closed')}, ensure_ascii=False))
     finally:

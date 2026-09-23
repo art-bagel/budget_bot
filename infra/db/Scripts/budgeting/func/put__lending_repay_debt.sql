@@ -208,7 +208,7 @@ BEGIN
             'borrowed_quantity', _new_borrowed,
             'borrowed_value_in_base', _new_value,
             'debt_cost_basis_in_base', _new_value,
-            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' ELSE 'known' END,
+            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' WHEN _existing.metadata->>'debt_basis_quality'='estimated' THEN 'estimated' ELSE 'known' END,
             'debt_interest_quantity', _interest_remaining - _interest_qty,
             'debt_interest_basis_in_base', CASE WHEN _interest_remaining=_interest_qty THEN 0 ELSE _interest_basis - _interest_basis_consumed END
         ),

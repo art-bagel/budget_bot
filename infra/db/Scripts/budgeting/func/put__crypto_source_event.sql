@@ -238,7 +238,10 @@ BEGIN
                 WHERE linked_operation_id=(_result->>'operation_id')::bigint;
             _result:=_result || jsonb_build_object('economic_kind','staking_conversion','carried_cost_basis',_numeric,'basis_quality',_summary->>'basis_quality');
         WHEN 'reward', 'receive_unknown', 'fee_refund' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['investment_account_id','crypto_asset_id','quantity','comment']::text[]))) THEN
+            IF _payload ? 'basis_assumption' AND (_kind<>'receive_unknown' OR (_payload->>'basis_assumption') IS DISTINCT FROM 'owner_zero' OR NULLIF(btrim(_payload->>'comment'),'') IS NULL) THEN
+                RAISE EXCEPTION 'Zero-basis assumption requires an unclassified receipt and explanation';
+            END IF;
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['investment_account_id','crypto_asset_id','quantity','comment','basis_assumption']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for reward';
             END IF;
             IF _payload->>'investment_account_id' IS NULL OR _payload->>'crypto_asset_id' IS NULL OR _payload->>'quantity' IS NULL THEN
@@ -278,9 +281,12 @@ BEGIN
             END IF;
             IF _kind='receive_unknown' THEN
                 UPDATE portfolio_events SET event_type='top_up',metadata=(metadata-'income_kind') ||
-                    jsonb_build_object('entry_value_in_base',NULL,'basis_quality','unknown','source_kind','unclassified_receipt')
+                    jsonb_build_object('entry_value_in_base',CASE WHEN _payload->>'basis_assumption'='owner_zero' THEN 0 ELSE NULL END,
+                        'basis_quality',CASE WHEN _payload->>'basis_assumption'='owner_zero' THEN 'estimated' ELSE 'unknown' END,
+                        'basis_assumption',_payload->>'basis_assumption','source_kind','unclassified_receipt')
                     WHERE id=(_result->>'event_id')::bigint;
-                _result:=_result || jsonb_build_object('entry_value_in_base',NULL,'basis_quality','unknown');
+                _result:=_result || jsonb_build_object('entry_value_in_base',CASE WHEN _payload->>'basis_assumption'='owner_zero' THEN 0 ELSE NULL END,
+                    'basis_quality',CASE WHEN _payload->>'basis_assumption'='owner_zero' THEN 'estimated' ELSE 'unknown' END);
             END IF;
         WHEN 'expense' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['source_position_id','quantity','comment']::text[]))) THEN
@@ -293,7 +299,11 @@ BEGIN
                 (_payload->>'source_position_id')::bigint,
                 (_payload->>'quantity')::numeric, 'expense', _payload->>'comment', _accounting_date);
         WHEN 'swap' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','from_amount','to_crypto_asset_id','to_amount','target_investment_account_id','comment','value_in_base','valuation_source']::text[]))) THEN
+            IF _payload ? 'valuation_quality' AND ((_payload->>'valuation_quality') IS DISTINCT FROM 'estimated'
+                OR _payload->>'value_in_base' IS NULL OR NULLIF(btrim(_payload->>'valuation_source'),'') IS NULL) THEN
+                RAISE EXCEPTION 'Estimated swap valuation requires amount and source';
+            END IF;
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','from_amount','to_crypto_asset_id','to_amount','target_investment_account_id','comment','value_in_base','valuation_source','valuation_quality']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for swap';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'from_amount') OR _payload->'from_amount'='null'::jsonb OR NOT (_payload ? 'to_crypto_asset_id') OR _payload->'to_crypto_asset_id'='null'::jsonb OR NOT (_payload ? 'to_amount') OR _payload->'to_amount'='null'::jsonb THEN
@@ -311,6 +321,12 @@ BEGIN
                 _value_in_base => CASE WHEN _payload ? 'value_in_base' THEN (_payload->>'value_in_base')::numeric ELSE NULL END,
                 _valuation_source => CASE WHEN _payload ? 'valuation_source' THEN (_payload->>'valuation_source')::text ELSE NULL END
             );
+            IF _payload->>'valuation_quality'='estimated' THEN
+                UPDATE portfolio_events SET metadata=metadata || jsonb_build_object(
+                    'valuation_quality','estimated','basis_quality',CASE WHEN event_type='swap_in' THEN 'estimated' ELSE metadata->>'basis_quality' END)
+                WHERE linked_operation_id=(_result->>'operation_id')::bigint AND event_type IN ('swap_in','swap_out');
+                _result:=_result || jsonb_build_object('valuation_quality','estimated');
+            END IF;
         WHEN 'transfer' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','target_investment_account_id','amount','comment']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for transfer';
@@ -431,7 +447,11 @@ BEGIN
                 _allocation_policy => COALESCE(_payload->>'allocation_policy','per_leg')
             );
         WHEN 'borrow' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','debt_qty','value_in_base','comment','borrowed_crypto_asset_id']::text[]))) THEN
+            IF _payload ? 'valuation_quality' AND ((_payload->>'valuation_quality') IS DISTINCT FROM 'estimated'
+                OR _payload->>'value_in_base' IS NULL OR NULLIF(btrim(_payload->>'valuation_source'),'') IS NULL) THEN
+                RAISE EXCEPTION 'Estimated lending valuation requires amount and source';
+            END IF;
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','debt_qty','value_in_base','comment','borrowed_crypto_asset_id','valuation_quality','valuation_source']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for borrow';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'debt_qty') OR _payload->'debt_qty'='null'::jsonb THEN
@@ -447,7 +467,11 @@ BEGIN
                 _borrowed_crypto_asset_id => CASE WHEN _payload ? 'borrowed_crypto_asset_id' THEN (_payload->>'borrowed_crypto_asset_id')::bigint ELSE NULL END
             );
         WHEN 'repay' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','source_position_id','repay_qty','value_in_base','comment','interest_qty']::text[]))) THEN
+            IF _payload ? 'valuation_quality' AND ((_payload->>'valuation_quality') IS DISTINCT FROM 'estimated'
+                OR _payload->>'value_in_base' IS NULL OR NULLIF(btrim(_payload->>'valuation_source'),'') IS NULL) THEN
+                RAISE EXCEPTION 'Estimated lending valuation requires amount and source';
+            END IF;
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','source_position_id','repay_qty','value_in_base','comment','interest_qty','valuation_quality','valuation_source']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for repay';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'source_position_id') OR _payload->'source_position_id'='null'::jsonb OR NOT (_payload ? 'repay_qty') OR _payload->'repay_qty'='null'::jsonb THEN
@@ -464,7 +488,11 @@ BEGIN
                 _interest_qty => CASE WHEN _payload ? 'interest_qty' THEN (_payload->>'interest_qty')::numeric ELSE 0 END
             );
         WHEN 'accrue' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','collateral_qty','interest_qty','interest_value_in_base','collateral_before','debt_before']::text[]))) THEN
+            IF _payload ? 'valuation_quality' AND ((_payload->>'valuation_quality') IS DISTINCT FROM 'estimated'
+                OR _payload->>'interest_value_in_base' IS NULL OR NULLIF(btrim(_payload->>'valuation_source'),'') IS NULL) THEN
+                RAISE EXCEPTION 'Estimated lending valuation requires amount and source';
+            END IF;
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','collateral_qty','interest_qty','interest_value_in_base','collateral_before','debt_before','valuation_quality','valuation_source']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for accrue';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'collateral_qty') OR _payload->'collateral_qty'='null'::jsonb OR NOT (_payload ? 'interest_qty') OR _payload->'interest_qty'='null'::jsonb OR NOT (_payload ? 'interest_value_in_base') OR NOT (_payload ? 'collateral_before') OR _payload->'collateral_before'='null'::jsonb OR NOT (_payload ? 'debt_before') OR _payload->'debt_before'='null'::jsonb THEN
@@ -516,6 +544,20 @@ BEGIN
                 _comment => CASE WHEN _payload ? 'comment' THEN (_payload->>'comment')::text ELSE NULL END
             );        ELSE RAISE EXCEPTION 'Unsupported source command kind';
         END CASE;
+        IF _kind IN ('borrow','accrue','repay') AND _payload->>'valuation_quality'='estimated' THEN
+            UPDATE portfolio_events e SET metadata=e.metadata || jsonb_build_object(
+                'valuation_quality','estimated','valuation_source',_payload->>'valuation_source') ||
+                CASE WHEN e.metadata->>'entry_value_in_base' IS NOT NULL THEN jsonb_build_object('basis_quality','estimated') ELSE '{}'::jsonb END
+            FROM crypto_source_event_links l WHERE l.source_event_id=_id AND l.command_index=_index
+                AND l.ledger_table='portfolio_events' AND l.ledger_id=e.id;
+            UPDATE crypto_protocol_positions SET metadata=metadata || jsonb_build_object(
+                'debt_basis_quality',CASE WHEN metadata->>'debt_cost_basis_in_base' IS NULL THEN 'unknown' ELSE 'estimated' END)
+            WHERE id=(_payload->>'position_id')::bigint;
+            _result:=_result || jsonb_build_object('valuation_quality','estimated');
+            IF _result ? 'metadata' THEN
+                _result:=jsonb_set(_result,'{metadata,debt_basis_quality}',to_jsonb((SELECT metadata->>'debt_basis_quality' FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint)));
+            END IF;
+        END IF;
         _results := _results || jsonb_build_array(_result);
         _index := _index+1;
     END LOOP;
