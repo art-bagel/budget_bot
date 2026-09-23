@@ -1,6 +1,6 @@
 """Compile a contiguous first-block prefix from locked evidence, never old basis.
 
-The prefix is deliberately gated at event 6. Remaining accepted decisions are
+The prefix is deliberately gated at event 7. Remaining accepted decisions are
 listed for implementation, not counted as loaded. Output stays private.
 """
 import argparse
@@ -48,7 +48,7 @@ def build():
         totals[m['event_no']][m['master']] += Decimal(m['quantity_delta'])
         balances[m['master']] += Decimal(m['quantity_delta'])
         assets[m['master']] = {'symbol': m['asset'], 'decimals': m['decimals']}
-        if m['event_no'] <= 6:
+        if m['event_no'] <= 7:
             checkpoints[m['event_no']] = {k: str(v) for k, v in balances.items()}
     rows = []
 
@@ -90,7 +90,7 @@ def build():
         commands=[command('expense', source_position_id=pos('telegram'), quantity=withdrawal['quantity'],
                           comment='Вывод до main: получатель не установлен; внешний отток, назначение неизвестно')]))
     lp_info = None
-    for e in events[:6]:
+    for e in events[:7]:
         n = e['event_no']
         net = totals[n]
         commands = []
@@ -125,6 +125,19 @@ def build():
         elif n == 5:
             assert len(net) == 1 and net[TON] < 0
             commands = [fee('main', -net[TON])]
+        elif n == 7:
+            a = e['raw']['actions'][0]['JettonTransfer']
+            master = a['jetton']['address']
+            qty = Decimal(a['amount']) / Decimal(10**a['jetton']['decimals'])
+            assert lp_info and master == lp_info['master'] and qty == Decimal(lp_info['quantity'])
+            assert net[master] == -qty and set(net) == {master, TON}
+            assert a['sender']['address'] == e['raw']['account']['address']
+            custody = a['recipient']['address']
+            evidence['lp_transfer'] = {'master': master, 'quantity': str(qty), 'destination': custody,
+                                       'base_transactions': e['raw']['actions'][0]['base_transactions']}
+            commands = [command('lp_custody', position_id=ref('protocol', lp_info['event_id']), receipt_master=master,
+                quantity=str(qty), from_custody='main', to_custody=custody), fee('main', -net[TON])]
+            lp_info = {**lp_info, 'custody': custody}
         rows.append(dict(source_id='main:' + e['event_id'], event_no=n,
             occurred_at=datetime.fromtimestamp(e['timestamp'], timezone.utc).isoformat(),
             accounting_date=datetime.fromtimestamp(e['timestamp'], ZoneInfo('Europe/Moscow')).date().isoformat(),
@@ -134,13 +147,13 @@ def build():
     assert len({r['source_id'] for r in rows}) == len(rows)
     status = [{'event_no': e['event_no'], 'event_id': e['event_id'], 'description': workbook['events'][i][2],
                'accepted_explanation': reviews[i]['explanation'],
-               'status': 'compiled_contiguous_prefix_requires_api' if i < 6 else 'accepted_analysis_requires_command_mapping',
+               'status': 'compiled_contiguous_prefix_requires_api' if i < 7 else 'accepted_analysis_requires_command_mapping',
                'uploaded': False} for i, e in enumerate(events)]
     return {'inputs': inputs, 'assets': assets, 'rows': rows, 'events': status,
             'summary': {'block': '0001-0100', 'total_events': 100, 'total_movements': 295,
-                'compiled_contiguous_prefix': 6, 'source_events': len(rows),
+                'compiled_contiguous_prefix': 7, 'source_events': len(rows),
                 'command_counts': dict(Counter(c['kind'] for r in rows for c in r['commands'])),
-                'first_unimplemented_event': 7, 'first_unimplemented_kind': workbook['events'][6][2],
+                'first_unimplemented_event': 8, 'first_unimplemented_kind': workbook['events'][7][2],
                 'loaded': 0, 'verified': 0, 'block_closed': False}}
 
 

@@ -11,7 +11,7 @@ class FirstBlockReplay(unittest.TestCase):
         cls.plan = build()
 
     def test_contiguous_prefix_and_full_remaining_register(self):
-        self.assertEqual([r['event_no'] for r in self.plan['rows'] if 'event_no' in r], list(range(1, 7)))
+        self.assertEqual([r['event_no'] for r in self.plan['rows'] if 'event_no' in r], list(range(1, 8)))
         self.assertEqual([r['event_no'] for r in self.plan['events']], list(range(1, 101)))
         self.assertFalse(self.plan['summary']['block_closed'])
         self.assertEqual(self.plan['summary']['loaded'], 0)
@@ -44,6 +44,15 @@ class FirstBlockReplay(unittest.TestCase):
         self.assertEqual(r['evidence']['time_quality'], 'date_only_ordering_placeholder')
         r = next(r for r in self.plan['rows'] if r['source_id'] == 'telegram:row:12')
         self.assertIn('destination unresolved', r['evidence']['classification'])
+
+    def test_farm_moves_receipt_without_new_capital(self):
+        row = next(r for r in self.plan['rows'] if r.get('event_no') == 7)
+        self.assertEqual([c['kind'] for c in row['commands']], ['lp_custody', 'fee'])
+        self.assertEqual(row['commands'][0]['payload']['quantity'], '0.081245847')
+        self.assertNotEqual(row['lp_receipt']['custody'], 'main')
+        self.assertEqual(row['commands'][1]['payload']['quantity'], '0.104529001')
+        self.assertEqual(Decimal(row['expected_main']['native TON']), Decimal('0.383920988'))
+        self.assertEqual(Decimal(row['expected_main'][row['lp_receipt']['master']]), 0)
 
     def test_reproducible(self):
         self.assertEqual(build(), self.plan)

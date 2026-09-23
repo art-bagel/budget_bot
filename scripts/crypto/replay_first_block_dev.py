@@ -126,6 +126,9 @@ async def main():
                             pos = await sql("SELECT id FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2 AND status='open'", account, str(asset_id))
                             if pos:
                                 bindings[f'position:{wallet}:ton:{master}'] = pos
+                    async with pool.acquire() as db:
+                        for protocol in await db.fetch("SELECT id,metadata->'lp_receipt'->>'event_id' AS source_id FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND metadata ? 'lp_receipt'", uid):
+                            bindings['protocol:' + protocol['source_id']] = protocol['id']
                     body = dict(anchor_account_id=accounts['main'], source_namespace='first-hundred-dev-v1', source_id=row['source_id'],
                         occurred_at=row['occurred_at'], accounting_date=row['accounting_date'], order_in_timestamp=row['order_in_timestamp'],
                         commands=bind_commands(row['commands'], bindings), evidence={**row['evidence'], 'input_hash': digest(row), 'inputs': plan['inputs']})
@@ -142,7 +145,7 @@ async def main():
                         if master in assets:
                             actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts['main'], str(assets[master]))
                         else:
-                            actual = await sql("SELECT sum((metadata->'lp_receipt'->>'quantity')::numeric) FROM budgeting.crypto_protocol_positions WHERE investment_account_id=$1 AND metadata->'lp_receipt'->>'master'=$2", accounts['main'], master)
+                            actual = await sql("SELECT COALESCE(sum((metadata->'lp_receipt'->>'quantity')::numeric),0) FROM budgeting.crypto_protocol_positions WHERE investment_account_id=$1 AND metadata->'lp_receipt'->>'master'=$2 AND metadata->'lp_receipt'->>'custody'='main'", accounts['main'], master)
                         assert actual == Decimal(quantity), (row['event_no'], master, actual, quantity)
                     state['verified_through'] = row['event_no']
                 state['posted'][row['source_id']] = dict(input_hash=digest(row), request=body, response=result)
@@ -153,6 +156,9 @@ async def main():
                 if master in assets:
                     actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts['main'], str(assets[master]))
                     assert actual == Decimal(quantity)
+            if last.get('lp_receipt'):
+                receipt = last['lp_receipt']
+                assert await sql("SELECT metadata->'lp_receipt' FROM budgeting.crypto_protocol_positions WHERE investment_account_id=$1 AND metadata->'lp_receipt'->>'master'=$2", accounts['main'], receipt['master']) == receipt
             assert await sql("SELECT COALESCE((SELECT amount FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='RUB'),0)", accounts['primary_cash']) == 0
             summaries = []
             async with pool.acquire() as db:
@@ -160,7 +166,7 @@ async def main():
                     summaries.append({**dict(r), 'summary': await db.fetchval('SELECT budgeting.get__crypto_position_entry_summary($1)', r['id'])})
             response = await client.get('/api/v1/crypto/protocol-positions')
             assert response.status_code == 200, response.text
-            state.update(position_summaries=summaries, protocol_positions=response.json(), first_unimplemented_event=7, block_closed=False,
+            state.update(position_summaries=summaries, protocol_positions=response.json(), first_unimplemented_event=plan['summary']['first_unimplemented_event'], block_closed=False,
                          documented_funding_RUB=str(sum(Decimal(r.get('funding_RUB', '0')) for r in plan['rows'])))
             funding = Decimal(state['documented_funding_RUB'])
             held = sum(Decimal(str(p['summary']['remaining_cost_basis'])) for p in summaries)

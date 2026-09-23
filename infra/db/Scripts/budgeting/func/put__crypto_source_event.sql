@@ -117,6 +117,34 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'lp_custody' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
+                ARRAY['position_id','receipt_master','quantity','from_custody','to_custody']))) THEN
+                RAISE EXCEPTION 'Unsupported LP custody argument';
+            END IF;
+            FOREACH _key IN ARRAY ARRAY['position_id','receipt_master','quantity','from_custody','to_custody'] LOOP
+                IF NULLIF(btrim(_payload->>_key),'') IS NULL THEN RAISE EXCEPTION 'Missing LP custody argument %',_key; END IF;
+            END LOOP;
+            SELECT * INTO _resource FROM crypto_protocol_positions
+            WHERE id=(_payload->>'position_id')::bigint FOR UPDATE;
+            IF _resource.status IS DISTINCT FROM 'open' OR _resource.position_type IS DISTINCT FROM 'liquidity_pool'
+                OR _resource.metadata->'lp_receipt'->>'master' IS DISTINCT FROM _payload->>'receipt_master'
+                OR _resource.metadata->'lp_receipt'->>'custody' IS DISTINCT FROM _payload->>'from_custody'
+                OR (_resource.metadata->'lp_receipt'->>'quantity')::numeric IS DISTINCT FROM (_payload->>'quantity')::numeric
+                OR (_payload->>'quantity')::numeric<=0 THEN
+                RAISE EXCEPTION 'LP receipt does not match current custody';
+            END IF;
+            IF _payload->>'to_custody' = _payload->>'from_custody'
+                OR NOT (_payload->>'to_custody'='main' OR _payload->>'to_custody' ~ '^0:[0-9a-f]{64}$') THEN
+                RAISE EXCEPTION 'Invalid LP custody destination';
+            END IF;
+            -- Receipt ownership and principal remain unchanged. The immutable
+            -- source envelope records the transition; no new capital or income.
+            UPDATE crypto_protocol_positions SET metadata=jsonb_set(metadata,'{lp_receipt,custody}',_payload->'to_custody'),
+                updated_at=current_timestamp WHERE id=_resource.id;
+            _result:=jsonb_build_object('position_id',_resource.id,'receipt_master',_payload->>'receipt_master',
+                'quantity',_payload->>'quantity','from_custody',_payload->>'from_custody','to_custody',_payload->>'to_custody',
+                'cost_basis_in_base',_resource.cost_basis_in_base);
         WHEN 'bank_buy', 'bank_to_portfolio' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
                 CASE WHEN _kind='bank_buy' THEN ARRAY['bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']

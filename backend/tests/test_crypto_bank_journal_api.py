@@ -92,6 +92,42 @@ async def main():
             before = await sql(snapshot, bank, uid)
             repeat = await client.post('/api/v1/crypto/source-events', json=event(3, [buy, transfer]))
             assert repeat.json() == result and before == await sql(snapshot, bank, uid)
+            receipt = dict(master='0:' + 'a'*64, quantity='0.5', custody='main')
+            create = dict(kind='create_protocol', payload=dict(investment_account_id=inv, protocol_name='TEST LP',
+                position_type='liquidity_pool', asset_symbol='BANKTEST', quantity='1', source_position_id=pos,
+                crypto_asset_id=asset, metadata={'lp_receipt': receipt}))
+            response = await client.post('/api/v1/crypto/source-events', json=event(4, [create]))
+            assert response.status_code == 200, response.text
+            protocol_id = response.json()['results'][0]['id']
+            custody = dict(kind='lp_custody', payload=dict(position_id=protocol_id, receipt_master=receipt['master'],
+                quantity='0.5', from_custody='main', to_custody='0:' + 'b'*64))
+            protocol_query = 'SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1'
+            before = await sql(protocol_query, protocol_id)
+            fail_fee = dict(kind='fee', payload=dict(source_position_id=pos, quantity='100'))
+            response = await client.post('/api/v1/crypto/source-events', json=event(5, [custody, fail_fee]))
+            assert response.status_code == 400
+            assert before == await sql(protocol_query, protocol_id), 'Custody must roll back with fee failure'
+            for patch in [{'quantity':'0.1'}, {'from_custody':'wrong'}, {'receipt_master':'0:'+'c'*64},
+                          {'to_custody':'main'}, {'to_custody':'arbitrary'}, {'cost_basis_in_base':'0'}]:
+                response = await client.post('/api/v1/crypto/source-events', json=event(5,[dict(kind='lp_custody',payload={**custody['payload'],**patch})]))
+                assert response.status_code == 400, (patch,response.text)
+                assert before == await sql(protocol_query,protocol_id)
+            response = await client.post('/api/v1/crypto/source-events', json=event(5,[custody]))
+            assert response.status_code == 200, response.text
+            after = await sql(protocol_query,protocol_id)
+            assert after['metadata']['lp_receipt']['custody'] == '0:'+'b'*64
+            for key in ('cost_basis_in_base','quantity','current_quantity','current_value_in_base','rewards_claimed_in_base'):
+                assert after[key] == before[key], key
+            repeat = await client.post('/api/v1/crypto/source-events', json=event(5,[custody]))
+            assert repeat.status_code == 200 and repeat.json()==response.json()
+            assert after == await sql(protocol_query,protocol_id)
+            stale = await client.post('/api/v1/crypto/source-events', json=event(6,[custody]))
+            assert stale.status_code == 400
+            back = dict(kind='lp_custody',payload={**custody['payload'],'from_custody':'0:'+'b'*64,'to_custody':'main'})
+            response = await client.post('/api/v1/crypto/source-events',json=event(6,[back]))
+            assert response.status_code == 200, response.text
+            assert (await sql(protocol_query,protocol_id))['metadata']['lp_receipt']==receipt
+        print('lp_custody: cost preservation, whole receipt guards, rollback, retry, stale source and return passed')
         print('bank_journal_api: bank-only exchange, exact 18 decimals, cost-preserving transfer, atomic rollback, 7 invalid cases and idempotent batch passed')
     finally:
         await pool.close()
