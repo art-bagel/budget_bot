@@ -153,11 +153,15 @@ async def main():
                 else:
                     bindings = {'account:' + k: v for k, v in accounts.items()}
                     bindings.update({'asset:ton:' + k: v for k, v in assets.items()})
-                    for wallet, account in accounts.items():
-                        for master, asset_id in assets.items():
-                            pos = await sql("SELECT id FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2 AND status='open'", account, str(asset_id))
-                            if pos:
-                                bindings[f'position:{wallet}:ton:{master}'] = pos
+                    wallets_by_id = {value:key for key,value in accounts.items()}
+                    masters_by_id = {str(value):key for key,value in assets.items()}
+                    async with pool.acquire() as db:
+                        positions = await db.fetch("SELECT id,investment_account_id,metadata->>'crypto_asset_id' asset_id FROM budgeting.portfolio_positions WHERE investment_account_id=ANY($1::bigint[]) AND status='open'", list(accounts.values()))
+                    for pos in positions:
+                        if pos['asset_id'] in masters_by_id:
+                            wallet = wallets_by_id[pos['investment_account_id']]
+                            master = masters_by_id[pos['asset_id']]
+                            bindings[f'position:{wallet}:ton:{master}'] = pos['id']
                     async with pool.acquire() as db:
                         for protocol in await db.fetch("SELECT id,COALESCE(metadata->'lp_receipt'->>'event_id',metadata->>'source_event_id') AS source_id FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND (metadata ? 'lp_receipt' OR metadata ? 'source_event_id')", uid):
                             bindings['protocol:' + protocol['source_id']] = protocol['id']
@@ -251,7 +255,7 @@ async def main():
                     'expenses',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'target_kind'='expense'),0)::text,
                     'refunds',COALESCE(sum((metadata->>'entry_value_in_base')::numeric) FILTER(WHERE metadata->>'source_kind'='fee_refund'),0)::text,
                     'interest',COALESCE(sum((metadata->>'funding_interest_cost')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'funding_policy'='components'),0)::text,
-                    'bank_withdrawals',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'target_kind'='bank'),0)::text,
+                    'bank_withdrawals',COALESCE(sum((metadata->>'consumed_cost_basis')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FILTER(WHERE metadata->>'target_kind'='bank' OR metadata->>'action'='fiat_sell'),0)::text,
                     'swap_result',COALESCE(sum((metadata->>'realized_in_base')::numeric) FILTER(WHERE event_type='swap_out'),0)::text
                     ) FROM budgeting.portfolio_events WHERE created_by_user_id=$1""",uid)
                 expected=funding-Decimal(totals['fees'])-Decimal(totals['expenses'])-Decimal(totals['interest'])-Decimal(totals['bank_withdrawals'])+Decimal(totals['refunds'])
@@ -280,7 +284,7 @@ async def main():
                 for master, quantity in expected_assets.items():
                     actual = await sql("SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2", accounts[wallet], str(assets[master]))
                     assert actual == Decimal(quantity), (wallet, master, actual, quantity)
-            if plan.get('accepted_custody') or plan.get('accepted_custody_after_200'):
+            if 'accepted_custody' in plan or plan.get('accepted_custody_after_200'):
                 actual_custody = await sql("""SELECT COALESCE(jsonb_object_agg(master,quantity),'{}') FROM (
                     SELECT metadata->'lp_receipt'->>'master' master, sum((metadata->'lp_receipt'->>'quantity')::numeric)::text quantity
                     FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND status='open'

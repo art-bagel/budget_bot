@@ -61,6 +61,11 @@ BEGIN
             'funding_units0',COALESCE(_out->(_p->>'source_position_id'),'{}'),
             'funding_units1',COALESCE(_out->(_p->>'secondary_source_position_id'),'{}'))
             WHERE id=(_result->>'id')::bigint;
+    ELSIF _kind='top_up_protocol' THEN
+        UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
+            'funding_units0',budgeting.calc__crypto_funding_units(metadata->'funding_units0',COALESCE(_out->(_p->>'source_position_id'),'{}')),
+            'funding_units1',budgeting.calc__crypto_funding_units(metadata->'funding_units1',COALESCE(_out->(_p->>'secondary_source_position_id'),'{}')))
+            WHERE id=(_p->>'position_id')::bigint;
     ELSIF _kind IN ('close_protocol','partial_close_protocol') THEN
         _old:=_before->'protocols'->(_p->>'position_id');
         _a0:=COALESCE(_old->'metadata'->'funding_units0','{}');
@@ -111,8 +116,9 @@ BEGIN
         END LOOP;
         UPDATE portfolio_positions SET metadata=jsonb_set(metadata,'{funding_units}',
             budgeting.calc__crypto_funding_units(metadata->'funding_units',_map)) WHERE id=_e.position_id;
-    ELSIF _kind='repay' THEN
+    ELSIF _kind IN ('repay','liquidate') THEN
         _loan:=_p->>'position_id';
+        IF _kind='repay' THEN
         _body:=(_p->>'repay_qty')::numeric-COALESCE((_p->>'interest_qty')::numeric,0);
         SELECT e.* INTO _e FROM portfolio_events e JOIN crypto_source_event_links l
             ON l.ledger_table='portfolio_events' AND l.ledger_id=e.id
@@ -130,6 +136,40 @@ BEGIN
         END IF;
         _self:=round(COALESCE((_map->>_loan)::numeric,0)*_body/(_p->>'repay_qty')::numeric,18);
         IF _self>_body THEN RAISE EXCEPTION 'Return contains more same-loan units than principal repaid'; END IF;
+        ELSE
+            _old:=_before->'protocols'->_loan;
+            _body:=(_p->>'debt_qty')::numeric-COALESCE((_p->>'interest_qty')::numeric,0);
+            _cash:=(_result->>'collateral_cost_consumed_in_base')::numeric;
+            IF _cash IS NULL THEN RAISE EXCEPTION 'Cannot settle unknown liquidation cost'; END IF;
+            _pa:=((_p->>'collateral_qty')::numeric-COALESCE((_p->>'collateral_fee_qty')::numeric,0))/(_p->>'collateral_qty')::numeric;
+            _pb:=_body/(_p->>'debt_qty')::numeric;
+            _interest:=_cash-round(_cash*_pa*_pb,2);
+            _cash:=_cash-_interest;
+            _map:=budgeting.calc__crypto_funding_units('{}',_old->'metadata'->'funding_units0',
+                (_p->>'collateral_qty')::numeric/(_old->>'quantity')::numeric);
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_map) k WHERE k<>_loan) THEN
+                RAISE EXCEPTION 'Cross-loan liquidation refinancing is not implemented';
+            END IF;
+            _self:=round(COALESCE((_map->>_loan)::numeric,0)*_pa*_pb,18);
+            IF _self>_body THEN RAISE EXCEPTION 'Liquidated self-financing exceeds principal settled'; END IF;
+            UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
+                'funding_units0',budgeting.calc__crypto_funding_units(metadata->'funding_units0',_map,-1),
+                'cost_basis_carried',cost_basis_in_base) WHERE id=_loan::bigint;
+            SELECT id INTO _pid FROM portfolio_positions WHERE investment_account_id=(_old->>'investment_account_id')::bigint
+                AND metadata->>'crypto_asset_id'=_old->>'crypto_asset_id' ORDER BY (status='open') DESC,id DESC LIMIT 1;
+            IF _pid IS NULL THEN RAISE EXCEPTION 'Liquidation collateral source position is missing'; END IF;
+            -- Zero quantity: collateral was removed by the protocol function. This
+            -- expense holder carries only financing/interest/penalty, never wallet coins.
+            INSERT INTO portfolio_events(position_id,event_type,event_at,quantity,comment,metadata,created_by_user_id)
+            VALUES(_pid,'transfer_out',_day,0,'Проценты и издержки ликвидации',jsonb_build_object(
+                'consumed_cost_basis',0,'source_kind','liquidation_funding_settlement',
+                'protocol_position_id',_loan,'liability_event_id',_result->'liability_event_id'),_uid)
+                RETURNING id INTO _expense_id;
+            UPDATE crypto_liability_events SET realized_in_base=0,
+                metadata=metadata||jsonb_build_object('funding_policy','components',
+                    'funding_principal_cost',_cash,'funding_expense_cost',_interest)
+                WHERE id=(_result->>'liability_event_id')::bigint;
+        END IF;
         _settle:=_body-_self;
         -- The interest-paid fraction is an expense holder, not self-cancelled principal.
         _map:=budgeting.calc__crypto_funding_units(_map,jsonb_build_object(_loan,_self),-1);
@@ -195,6 +235,8 @@ BEGIN
             _left_units:=_left_units-_take; _left_cash:=_left_cash-_cost; _total:=_total-_h.units;
         END LOOP;
         IF _left_units<>0 OR _left_cash<>0 THEN RAISE EXCEPTION 'Funding settlement remainder'; END IF;
+    ELSIF _kind='sell_fiat' THEN
+        IF _out<>'{}'::jsonb THEN RAISE EXCEPTION 'Funded foreign fiat sale requires settlement tracking'; END IF;
     ELSIF _kind NOT IN ('fee','expense','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;

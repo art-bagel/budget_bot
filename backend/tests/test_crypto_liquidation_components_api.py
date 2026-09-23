@@ -1,0 +1,383 @@
+"""Real API regression: liquidation redistributes cost and financing, disposable DB."""
+
+import asyncio
+from datetime import date, timedelta
+from decimal import Decimal as D
+import os
+from pathlib import Path
+import sys
+
+socket = Path(sys.argv[1]).resolve()
+assert str(socket).startswith("/private/tmp/crypto-portfolio-audit.")
+assert sys.argv[3].startswith("boundary_")
+os.environ.update(
+    APP_ENV="development",
+    APP_PORT="8000",
+    DB_HOST=str(socket),
+    DB_PORT=sys.argv[2],
+    DB_DATABASE=sys.argv[3],
+    DB_SCHEMA="budgeting",
+    POSTGRES_USER="audit",
+    POSTGRES_PASSWORD="",
+    TELEGRAM_BOT_TOKEN="",
+)
+import asyncpg  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+import httpx  # noqa: E402
+from backend.app.dependencies import CurrentUser, get_current_user  # noqa: E402
+from backend.app.routers import crypto  # noqa: E402
+
+
+async def main():
+    pool = await crypto.ledger._get_pool()
+
+    async def sql(q, *a):
+        async with pool.acquire() as db:
+            return await db.fetchval(q, *a)
+
+    try:
+        uid = await sql(
+            "INSERT INTO budgeting.users(base_currency_code) VALUES('RUB') RETURNING id"
+        )
+        await sql(
+            "INSERT INTO budgeting.categories(owner_type,owner_user_id,name,kind) VALUES('user',$1,'Unallocated','system') RETURNING id",
+            uid,
+        )
+        bank = await sql(
+            "INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name) VALUES('user',$1,'Liquidation fixture') RETURNING id",
+            uid,
+        )
+        inv = await sql(
+            "INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type) VALUES('user',$1,'Liquidation portfolio','investment','crypto') RETURNING id",
+            uid,
+        )
+        tokens = []
+        for symbol in ("LCOLL", "LDEBT"):
+            tokens.append(
+                await sql(
+                    "INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES($1,$1,'testnet',$2,18) RETURNING id",
+                    symbol,
+                    str(uid) + symbol,
+                )
+            )
+        collateral, debt = tokens
+        await sql("SELECT budgeting.put__record_income($1,$2,10000,'RUB')", uid, bank)
+        app = FastAPI()
+        app.include_router(crypto.router)
+        app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=uid)
+
+        @app.exception_handler(asyncpg.RaiseError)
+        async def business_error(request, exc):
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+
+        def c(kind, **payload):
+            return dict(kind=kind, payload=payload)
+
+        def body(n, commands):
+            day = str(date(2024, 1, 1) + timedelta(days=n))
+            return dict(
+                anchor_account_id=inv,
+                source_namespace="liquidation-components-test",
+                source_id=str(n),
+                occurred_at=day + "T12:00:00Z",
+                accounting_date=day,
+                order_in_timestamp=0,
+                commands=commands,
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+
+            async def post(n, commands, code=200):
+                r = await client.post(
+                    "/api/v1/crypto/source-events", json=body(n, commands)
+                )
+                assert r.status_code == code, r.text
+                return r.json()
+
+            r = await post(
+                1,
+                [
+                    c(
+                        "bank_buy",
+                        bank_account_id=bank,
+                        crypto_asset_id=collateral,
+                        quantity="100",
+                        fiat_currency_code="RUB",
+                        fiat_amount="10000",
+                    ),
+                    c(
+                        "bank_to_portfolio",
+                        bank_account_id=bank,
+                        investment_account_id=inv,
+                        crypto_asset_id=collateral,
+                        quantity="100",
+                    ),
+                ],
+            )
+            pos = r["results"][1]["position_id"]
+            r = await post(
+                2,
+                [
+                    c(
+                        "create_protocol",
+                        investment_account_id=inv,
+                        protocol_name="Synthetic lending",
+                        position_type="lending",
+                        asset_symbol="LCOLL",
+                        quantity="50",
+                        source_position_id=pos,
+                        crypto_asset_id=collateral,
+                    )
+                ],
+            )
+            loan = r["results"][0]["id"]
+            r = await post(
+                3,
+                [
+                    c(
+                        "borrow",
+                        position_id=loan,
+                        borrowed_crypto_asset_id=debt,
+                        debt_qty="20",
+                        funding_policy="components",
+                    )
+                ],
+            )
+            debtpos = r["results"][0]["metadata"]["borrowed_position_id"]
+            await post(
+                4,
+                [
+                    c(
+                        "swap",
+                        position_id=debtpos,
+                        from_amount="20",
+                        to_crypto_asset_id=collateral,
+                        to_amount="10",
+                        basis_policy="carry",
+                    )
+                ],
+            )
+            await post(
+                5,
+                [
+                    c(
+                        "top_up_protocol",
+                        position_id=loan,
+                        source_position_id=pos,
+                        quantity="30",
+                    )
+                ],
+            )
+            protocol = await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            assert D(str(protocol["cost_basis_in_base"])) == 7500
+            assert D(str(protocol["metadata"]["funding_units0"][str(loan)])) == 10
+            liquidation = c(
+                "liquidate",
+                position_id=loan,
+                collateral_qty="8",
+                debt_qty="4",
+                collateral_fee_qty="2",
+            )
+            before = await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            await post(
+                6,
+                [
+                    {
+                        **liquidation,
+                        "payload": {**liquidation["payload"], "debt_qty": "21"},
+                    }
+                ],
+                400,
+            )
+            assert before == await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            result = await post(6, [liquidation])
+            assert await post(6, [liquidation]) == result
+            protocol = await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            assert D(str(protocol["quantity"])) == 72
+            assert D(str(protocol["metadata"]["borrowed_quantity"])) == 16
+            summary = await sql(
+                "SELECT budgeting.get__crypto_position_entry_summary($1)", pos
+            )
+            expense = await sql(
+                "SELECT sum((metadata->>'funding_interest_cost')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FROM budgeting.portfolio_events WHERE created_by_user_id=$1 AND metadata->>'funding_policy'='components'",
+                uid,
+            )
+            assert (
+                D(str(summary["remaining_cost_basis"]))
+                + D(str(protocol["cost_basis_in_base"]))
+                + expense
+                == 10000
+            )
+            assert expense > D("187.5"), (
+                "Expense financing receives its share of principal cost too"
+            )
+            event = await sql(
+                "SELECT to_jsonb(e) FROM budgeting.crypto_liability_events e WHERE protocol_position_id=$1 AND event_kind='liquidation'",
+                loan,
+            )
+            assert event["realized_in_base"] == 0
+            assert D(str(protocol["metadata"]["cost_basis_carried"])) == D(
+                str(protocol["cost_basis_in_base"])
+            )
+            # Foreign sale with financing must remain rejected until disposal-holder support exists.
+            before = await sql(
+                "SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1", pos
+            )
+            await post(
+                7,
+                [
+                    c(
+                        "sell_fiat",
+                        investment_account_id=inv,
+                        bank_account_id=bank,
+                        crypto_asset_id=collateral,
+                        quantity="1",
+                        fiat_currency_code="RUB",
+                        fiat_amount="100",
+                    )
+                ],
+                400,
+            )
+            assert before == await sql(
+                "SELECT quantity FROM budgeting.portfolio_positions WHERE id=$1", pos
+            )
+            # Concentrated LP can return only one leg. Both cash and loan units
+            # from the exhausted leg must move to the returned asset.
+            r = await post(
+                8,
+                [
+                    c(
+                        "borrow",
+                        position_id=loan,
+                        borrowed_crypto_asset_id=debt,
+                        debt_qty="10",
+                        funding_policy="components",
+                    )
+                ],
+            )
+            dp = r["results"][0]["metadata"]["borrowed_position_id"]
+            before_basis = await sql(
+                "SELECT (budgeting.get__crypto_position_entry_summary($1)->>'remaining_cost_basis')::numeric",
+                pos,
+            )
+            r = await post(
+                9,
+                [
+                    c(
+                        "create_protocol",
+                        investment_account_id=inv,
+                        protocol_name="One-sided LP",
+                        position_type="liquidity_pool",
+                        asset_symbol="LCOLL",
+                        quantity="5",
+                        source_position_id=pos,
+                        crypto_asset_id=collateral,
+                        secondary_source_position_id=dp,
+                        secondary_quantity="10",
+                    )
+                ],
+            )
+            lp = r["results"][0]["id"]
+            close = c(
+                "close_protocol",
+                position_id=lp,
+                return_quantity="6",
+                secondary_return_quantity="0",
+                allocation_policy="net_composition",
+            )
+            await post(
+                10,
+                [{**close, "payload": {**close["payload"], "return_quantity": "0"}}],
+                400,
+            )
+            closed = await post(10, [close])
+            assert await post(10, [close]) == closed
+            after_basis = await sql(
+                "SELECT (budgeting.get__crypto_position_entry_summary($1)->>'remaining_cost_basis')::numeric",
+                pos,
+            )
+            assert before_basis == after_basis
+            assert (
+                await sql(
+                    "SELECT COALESCE(sum(quantity),0) FROM budgeting.portfolio_positions WHERE investment_account_id=$1 AND metadata->>'crypto_asset_id'=$2",
+                    inv,
+                    str(debt),
+                )
+                == 0
+            )
+            await post(
+                11,
+                [
+                    c(
+                        "accrue",
+                        position_id=loan,
+                        collateral_qty="0",
+                        interest_qty="0.5",
+                        interest_value_in_base="0",
+                        collateral_before="72",
+                        debt_before="26",
+                    )
+                ],
+            )
+            result = await post(
+                12,
+                [
+                    c(
+                        "liquidate",
+                        position_id=loan,
+                        collateral_qty="3",
+                        debt_qty="4.5",
+                        interest_qty="0.5",
+                        collateral_fee_qty="1",
+                    )
+                ],
+            )
+            assert result["results"][0]["realized_in_base"] == 0
+            protocol = await sql(
+                "SELECT to_jsonb(p) FROM budgeting.crypto_protocol_positions p WHERE id=$1",
+                loan,
+            )
+            assert D(str(protocol["metadata"]["borrowed_quantity"])) == 22
+            assert D(str(protocol["metadata"]["debt_interest_quantity"])) == 0
+            cash = await sql(
+                "SELECT sum((budgeting.get__crypto_position_entry_summary(id)->>'remaining_cost_basis')::numeric) FROM budgeting.portfolio_positions WHERE owner_user_id=$1 AND status='open'",
+                uid,
+            )
+            expense = await sql(
+                "SELECT sum((metadata->>'funding_interest_cost')::numeric+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)) FROM budgeting.portfolio_events WHERE created_by_user_id=$1 AND metadata->>'funding_policy'='components'",
+                uid,
+            )
+            assert cash + D(str(protocol["cost_basis_in_base"])) + expense == 10000
+            history = await sql(
+                "SELECT budgeting.get__crypto_protocol_history($1,$2,200,0)", uid, loan
+            )
+            expense_rows = [
+                row for row in history["entries"] if row["kind"] == "external_expense"
+            ]
+            assert len(expense_rows) == 2
+            assert all(row["quantity"] is None for row in expense_rows)
+            assert sum(D(str(row["cost_basis"])) for row in expense_rows) == expense
+            assert expense > 0
+            print(
+                "PASS: funded collateral top-up, liquidation self-cancellation, expense allocation, cash conservation, rollback, retry, unsupported funded sale guard"
+            )
+    finally:
+        await pool.close()
+
+
+asyncio.run(main())

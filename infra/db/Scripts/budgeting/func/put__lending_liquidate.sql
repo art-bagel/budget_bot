@@ -70,7 +70,8 @@ BEGIN
         OR (_p.metadata->>'debt_accounting_version') IS DISTINCT FROM '2' THEN
         RAISE EXCEPTION 'Liquidation requires an open version-2 loan';
     END IF;
-    IF (_p.metadata->>'basis_quality') IN ('estimated','invalid')
+    IF (_p.metadata->>'basis_quality')='invalid'
+        OR ((_p.metadata->>'basis_quality')='estimated' AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL)
         OR _p.quantity IS NULL OR _p.current_quantity IS NULL
         OR _p.quantity<>_p.current_quantity THEN
         RAISE EXCEPTION 'Reconcile collateral quantity and cost before liquidation';
@@ -116,6 +117,13 @@ BEGIN
         'realized_in_base',_debt_consumed-_collateral_consumed,
         'asset_realized_before_fee_in_base',_settlement_value_in_base-(_collateral_consumed-_fee_basis),
         'liability_realized_in_base',_debt_consumed-_settlement_value_in_base);
+    IF _p.metadata->>'funding_policy'='components' THEN
+        -- The journal redistributes principal cost to funding holders and
+        -- separates financing expenses. Seized cost is not realized loss.
+        _result:=_result||jsonb_build_object('realized_before_fee_in_base',0,
+            'realized_in_base',0,'asset_realized_before_fee_in_base',NULL,
+            'liability_realized_in_base',NULL,'funding_policy','components');
+    END IF;
     -- Interest expense was recognized at accrual. Releasing its liability here
     -- is NOT another expense. Fee is a breakdown of total, not an extra debit.
     UPDATE crypto_protocol_positions SET

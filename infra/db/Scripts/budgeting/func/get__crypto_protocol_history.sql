@@ -25,10 +25,16 @@ BEGIN
           AND s.result->'results'->l.command_index->>'id'=_position_id::text
     ), asset_rows AS (
         SELECT 'asset:'||e.id AS id, e.event_at, e.id AS sequence,
-            COALESCE(e.metadata->>'action', e.event_type) AS kind,
-            e.quantity, COALESCE(p.metadata->>'asset_symbol',p.title) AS symbol,
-            COALESCE(e.metadata->>'consumed_cost_basis',e.metadata->>'entry_value_in_base',
-                e.metadata->>'value_in_base')::numeric AS cost_basis,
+            CASE WHEN e.metadata->>'source_kind'='liquidation_funding_settlement'
+                THEN 'external_expense' ELSE COALESCE(e.metadata->>'action', e.event_type) END AS kind,
+            CASE WHEN e.metadata->>'source_kind'='liquidation_funding_settlement'
+                THEN NULL::numeric ELSE e.quantity END AS quantity,
+            COALESCE(p.metadata->>'asset_symbol',p.title) AS symbol,
+            CASE WHEN e.metadata->>'source_kind'='liquidation_funding_settlement'
+                THEN COALESCE((e.metadata->>'funding_interest_cost')::numeric,0)
+                    + COALESCE((e.metadata->>'funding_confirmed_cost')::numeric,0)
+                ELSE COALESCE(e.metadata->>'consumed_cost_basis',e.metadata->>'entry_value_in_base',
+                    e.metadata->>'value_in_base')::numeric END AS cost_basis,
             e.comment
         FROM portfolio_events e JOIN portfolio_positions p ON p.id=e.position_id
         WHERE p.owner_type=_p.owner_type

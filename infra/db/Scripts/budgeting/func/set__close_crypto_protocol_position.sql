@@ -113,9 +113,11 @@ BEGIN
         RAISE EXCEPTION 'Equal allocation applies only to LP';
     END IF;
     IF _existing.position_type='liquidity_pool' THEN
-        IF _resolved_return_quantity<=0 OR COALESCE(_secondary_return_quantity,0)<=0
+        IF _secondary_return_quantity IS NULL
+            OR _resolved_return_quantity+_secondary_return_quantity<=0
+            OR ((_resolved_return_quantity=0 OR _secondary_return_quantity=0) AND _allocation_policy<>'net_composition')
             OR _existing.metadata->>'token1_crypto_asset_id' IS NULL THEN
-            RAISE EXCEPTION 'Full LP close requires both identified returned assets';
+            RAISE EXCEPTION 'Full LP close requires explicit quantities for both assets; one-sided redemption requires net composition';
         END IF;
         IF _return_value_in_base IS NOT NULL OR _secondary_return_value_in_base IS NOT NULL THEN
             IF _existing.cost_basis_in_base IS NULL OR _return_value_in_base IS NULL
