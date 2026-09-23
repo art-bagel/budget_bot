@@ -18,7 +18,7 @@ def positive(value):
     return format(amount, 'f')
 
 
-def build(inventory, related, bybit_exports):
+def build(inventory, related, bybit_exports, telegram=None):
     inputs = []
 
     def read(folder, name):
@@ -36,12 +36,12 @@ def build(inventory, related, bybit_exports):
     by_id = {r['event_id']: r for r in events}
     exchanges = []
 
-    def add(key, direction, date, asset, quantity, amount, evidence, event=None):
+    def add(key, direction, date, asset, quantity, amount, evidence, event=None, quality="known"):
         if event and by_no.get(event['event_no']) != event:
             raise ValueError('Invalid event link')
         exchanges.append({'source_key': key, 'direction': direction, 'date_as_in_source': date,
                           'asset': asset, 'quantity': positive(quantity), 'currency': 'RUB',
-                          'fiat_amount': positive(amount), 'presentation_account': 'primary',
+                          'fiat_amount': positive(amount), 'basis_quality': quality, 'presentation_account': 'primary',
                           'evidence': evidence, 'linked_main_event': None if event is None else {
                               k: event[k] for k in ('event_no', 'event_id', 'timestamp', 'lt')},
                           'status': 'review_plan_not_executable',
@@ -63,6 +63,17 @@ def build(inventory, related, bybit_exports):
     for r in read(inventory, 'friend-sales.json'):
         add(f"main:event:{r['event_no']}:friend-sale", 'sell_fiat', r['date_msk'], r['asset'],
             r['quantity'], r['proceeds'], {'file': 'friend-sales.json', 'source': r['source']}, by_no[r['event_no']])
+    if telegram is not None:
+        telegram_summary = read(telegram, 'summary.json')
+        if telegram_summary['source_commit'] != parent['source_commit']:
+            raise ValueError('Telegram and main source versions differ')
+        for r in read(telegram, 'telegram-purchases.json'):
+            add(r['source_key'], 'buy_fiat', r['date'], r['asset'], r['quantity'], r['fiat_amount'],
+                {'file': 'telegram-purchases.json', 'source_row': r['source_row'],
+                 'amount_evidence': r['amount_evidence'], 'time_as_in_source': r['time_as_in_source']},
+                quality=r['basis_quality'])
+            if r['basis_quality'] == 'estimated':
+                exchanges[-1]['required_before_posting'].append('preserve_estimated_cash_and_basis_quality')
     if len({r['source_key'] for r in exchanges}) != len(exchanges):
         raise ValueError('Duplicate cash exchange')
     # Presentation sorting only. No fabricated time or same-day accounting order.
@@ -129,6 +140,8 @@ def build(inventory, related, bybit_exports):
                'card_amount_multiset_matches_original': True,
 
                'cash_exchange_candidates': len(exchanges),
+               'buy_rub_by_quality': {q: str(sum(Decimal(r['fiat_amount']) for r in exchanges
+                   if r['direction'] == 'buy_fiat' and r['basis_quality'] == q)) for q in ('known', 'estimated')},
                'buy_rub_total': str(sum(Decimal(r['fiat_amount']) for r in exchanges if r['direction'] == 'buy_fiat')),
                'sale_rub_total': str(sum(Decimal(r['fiat_amount']) for r in exchanges if r['direction'] == 'sell_fiat')),
                'card_source_rows': len(expected), 'card_groups': len(cards), 'card_exceptions': len(exceptions),
@@ -147,11 +160,12 @@ def main():
     parser.add_argument('--related', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
     parser.add_argument('--bybit-exports', type=Path, required=True)
+    parser.add_argument('--telegram', type=Path)
     args = parser.parse_args()
     out = args.output_dir.resolve()
     if out.exists() or not out.is_relative_to((ROOT / 'outputs').resolve()):
         parser.error('Use a new directory under ignored outputs/')
-    result = build(args.inventory, args.related, args.bybit_exports)
+    result = build(args.inventory, args.related, args.bybit_exports, args.telegram)
     out.mkdir(parents=True)
     for name, data in result.items():
         (out / name).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
