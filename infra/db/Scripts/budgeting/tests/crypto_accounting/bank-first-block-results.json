@@ -1,0 +1,42 @@
+{
+  "status": "bank_prefix_1_6_verified",
+  "main_events": 6,
+  "source_events": 21,
+  "bank_exchanges": 14,
+  "bank_to_portfolio_transfers": 14,
+  "funding_mode": "isolated_fixture",
+  "cost_reconciliation": {
+    "funding": "48508.00",
+    "held": "44787.71",
+    "protocol": "2636.28",
+    "disposed": "1084.01",
+    "difference": "0.00"
+  },
+  "checks": [
+    "18 decimal bank purchase and transfer",
+    "bank balance exists before investment transfer",
+    "idempotent purchase and compound event",
+    "whole batch rollback on transfer failure",
+    "7 invalid/foreign-owner cases",
+    "bank boundary regression",
+    "57 fiat-trade API checks",
+    "6 compiler checks",
+    "crypto assets SQL suite",
+    "full historical replay retry",
+    "UI shows RUB debit and TON credit on cash account",
+    "default replay without funding flag fails with zero income, exchange and source rows"
+  ],
+  "limitations": [
+    "94 main events in first hundred still not posted",
+    "estimated bank lots unsupported; compiler rejects them",
+    "production expense correction not performed",
+    "aggregate invested UI still shows zero",
+    "UI operation clock is insertion time, not source timestamp"
+  ],
+  "sha256": {
+    "infra/db/Scripts/budgeting/func/put__buy_crypto_asset.sql": "3a648e9e10ff59dd504533dcc43d3a2c2d6b8458848e7c35851ae25a9a5b346d",
+    "infra/db/Scripts/budgeting/func/put__crypto_source_event.sql": "1c7c74fccd9778a2b096c7e5481c226804c854b3504db4b3fa21e2dabdab1971",
+    "backend/tests/test_crypto_bank_journal_api.py": "a89c276b1f05092d0ecd81e3683c0f19c99b203b7630f715b17322b7f138196b",
+    "outputs/crypto-first-block-dev/plan-bank-v1.json": "d6fee508962476a1f0b3ffdf0171f2ce21693dfee56e014ad558fabdb7d10ac8"
+  }
+}

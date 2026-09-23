@@ -19,6 +19,8 @@ class FirstBlockReplay(unittest.TestCase):
     def test_funding_is_only_documented_purchases(self):
         purchases = [r for r in self.plan['rows'] if r.get('funding_RUB')]
         self.assertEqual(len(purchases), 14)
+        for row in purchases:
+            self.assertEqual([c['kind'] for c in row['commands']], ['bank_buy', 'bank_to_portfolio'])
         self.assertEqual(sum(Decimal(r['funding_RUB']) for r in purchases), Decimal('48508'))
         before_first_transfer = [r for r in purchases if r['occurred_at'] < '2024-05-28T16:19:46+00:00']
         self.assertEqual(len(before_first_transfer), 13)

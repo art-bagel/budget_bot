@@ -22,6 +22,7 @@ parser.add_argument('--port', type=int, default=55441)
 parser.add_argument('--database', default='boundary_usd_clean')
 parser.add_argument('--plan', type=Path, required=True)
 parser.add_argument('--state', type=Path, required=True)
+parser.add_argument('--allow-isolated-funding-fixture', action='store_true', help='Test funding only, never use for production import')
 args = parser.parse_args()
 if not str(args.socket.resolve()).startswith('/private/tmp/crypto-portfolio-audit.') or not args.database.startswith('boundary_'):
     raise ValueError('Only disposable local boundary dev cluster is supported')
@@ -60,6 +61,8 @@ async def main():
             if state['database'] != args.database or state['socket'] != str(args.socket):
                 raise ValueError('State belongs to another database')
             uid, accounts, assets = state['user_id'], state['accounts'], state['assets']
+            if (state.get('funding_mode') == 'isolated_fixture') != args.allow_isolated_funding_fixture:
+                raise ValueError('Cannot change funding mode of an existing replay')
             assert await sql("SELECT count(*)=1 FROM budgeting.bank_accounts WHERE id=$1 AND owner_user_id=$2 AND name='История main — первая сотня'", accounts['main'], uid)
             for row in plan['rows']:
                 old = state['posted'].get(row['source_id'])
@@ -82,7 +85,7 @@ async def main():
                     if asset_id is None:
                         asset_id = await db.fetchval("INSERT INTO budgeting.crypto_assets(symbol,name,network_code,contract_address,decimals) VALUES ($1,$1,'ton',$2,$3) RETURNING id", asset['symbol'], address, asset['decimals'])
                     assets[master] = asset_id
-            state = dict(user_id=uid, accounts=accounts, assets=assets, database=args.database, socket=str(args.socket), posted={}, verified_through=0,
+            state = dict(funding_mode='isolated_fixture' if args.allow_isolated_funding_fixture else 'existing_cash_only', user_id=uid, accounts=accounts, assets=assets, database=args.database, socket=str(args.socket), posted={}, verified_through=0,
                          limitations=['Historical RUB funding boundary, not a bank income reconstruction', 'Unknown-time purchases use explicitly labelled ordering placeholders', 'Pre-main 4.947 TON outflow has unknown destination', '0.05 TON withdrawal difference treated as separate fee under current policy', 'LP receipt quantity kept in protocol evidence, not duplicated as free token capital', 'Not the full first hundred; no full app UI verification yet'])
             save(state)
         app = FastAPI()
@@ -98,8 +101,8 @@ async def main():
             for row in plan['rows']:
                 # Cash funding and its marker are transactional and resumable even
                 # if the subsequent API request fails. Exact documented payment only.
-                if row.get('funding_RUB'):
-                    marker = 'Вложение в криптоисторию (не зарплата): ' + row['source_id']
+                if row.get('funding_RUB') and args.allow_isolated_funding_fixture:
+                    marker = 'DEV ONLY — тестовое финансирование покупки: ' + row['source_id']
                     async with pool.acquire() as db, db.transaction():
                         await db.execute('SELECT pg_advisory_xact_lock($1)', uid)
                         exists = await db.fetchval('SELECT id FROM budgeting.operations WHERE owner_user_id=$1 AND comment=$2', uid, marker)

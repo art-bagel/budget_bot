@@ -71,13 +71,17 @@ def build():
         if r['source_row'] > 17:
             continue
         when = datetime.fromisoformat(r['date'] + 'T' + (r['time_as_in_source'] or '12:00')).replace(tzinfo=ZoneInfo('Europe/Moscow'))
+        if r['basis_quality'] != 'known':
+            raise ValueError('Bank lots do not yet support estimated purchase basis')
         rows.append(dict(source_id=r['source_key'], occurred_at=when.astimezone(timezone.utc).isoformat(),
             accounting_date=r['date'], order_in_timestamp=r['source_row'], funding_RUB=r['fiat_amount'],
             evidence={'purchase': r, 'time_quality': 'source_minute' if r['time_as_in_source'] else 'date_only_ordering_placeholder',
                       'funding_boundary': 'Documented RUB paid for crypto, not reconstructed salary/bank income'},
-            commands=[command('buy_fiat', investment_account_id=ref('account', 'telegram'), bank_account_id=ref('account', 'primary_cash'),
+            commands=[command('bank_buy', bank_account_id=ref('account', 'primary_cash'),
                 crypto_asset_id=ref('asset', 'ton', TON), quantity=r['quantity'], fiat_currency_code='RUB',
-                fiat_amount=r['fiat_amount'], purchase_quality=r['basis_quality'], purchase_source=json.dumps(r['amount_evidence'], ensure_ascii=False))]))
+                fiat_amount=r['fiat_amount'], comment='Покупка TON за RUB: ' + r['source_key']),
+                command('bank_to_portfolio', bank_account_id=ref('account', 'primary_cash'), investment_account_id=ref('account', 'telegram'),
+                    crypto_asset_id=ref('asset', 'ton', TON), quantity=r['quantity'], comment='Перевод купленных TON в Telegram: ' + r['source_key'])]))
     assert len(rows) == 14
     withdrawal = next(r for r in telegram if r['source_row'] == 12)
     assert withdrawal['quantity'] == '4.947'

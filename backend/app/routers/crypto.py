@@ -19,7 +19,7 @@ class CryptoSourceCommand(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
                   'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
-                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale']
+                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio']
     payload: dict[str, Any]
 
     @field_validator('payload')

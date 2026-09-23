@@ -117,6 +117,41 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'bank_buy', 'bank_to_portfolio' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
+                CASE WHEN _kind='bank_buy' THEN ARRAY['bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']
+                ELSE ARRAY['bank_account_id','investment_account_id','crypto_asset_id','quantity','comment'] END))) THEN
+                RAISE EXCEPTION 'Unsupported argument for bank crypto command';
+            END IF;
+            FOREACH _key IN ARRAY CASE WHEN _kind='bank_buy'
+                THEN ARRAY['bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount']
+                ELSE ARRAY['bank_account_id','investment_account_id','crypto_asset_id','quantity'] END LOOP
+                IF _payload->>_key IS NULL THEN RAISE EXCEPTION 'Missing bank crypto argument %',_key; END IF;
+            END LOOP;
+            SELECT * INTO _resource FROM bank_accounts WHERE id=(_payload->>'bank_account_id')::bigint;
+            IF _resource.id IS NULL OR NOT _resource.is_active OR _resource.account_kind<>'cash'
+                OR _resource.owner_type IS DISTINCT FROM _account.owner_type
+                OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
+                OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id THEN
+                RAISE EXCEPTION 'Bank account is outside source journal owner scope';
+            END IF;
+            IF _kind='bank_buy' THEN
+                IF _payload->>'fiat_currency_code' IS DISTINCT FROM
+                    budgeting.get__owner_base_currency(_account.owner_type,_account.owner_user_id,_account.owner_family_id)::text THEN
+                    RAISE EXCEPTION 'Historical bank buy currently requires base currency';
+                END IF;
+                _numeric:=(_payload->>'fiat_amount')::numeric;
+                IF _numeric<=0 OR _numeric::text IN ('NaN','Infinity','-Infinity') OR _numeric<>round(_numeric,2) THEN
+                    RAISE EXCEPTION 'Historical bank purchase amount must be positive exact money';
+                END IF;
+                _result:=budgeting.put__buy_crypto_asset(_user_id,(_payload->>'bank_account_id')::bigint,
+                    (_payload->>'fiat_currency_code')::char(3),_numeric,(_payload->>'crypto_asset_id')::bigint,
+                    (_payload->>'quantity')::numeric,_payload->>'comment',_accounting_date);
+            ELSE
+                _result:=budgeting.put__transfer_crypto_to_investment(_user_id,(_payload->>'bank_account_id')::bigint,
+                    (_payload->>'investment_account_id')::bigint,(_payload->>'crypto_asset_id')::bigint,
+                    (_payload->>'quantity')::numeric,NULL,NULL,_payload->>'comment',_accounting_date);
+            END IF;
         WHEN 'buy_fiat', 'sell_fiat' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY[
                 'investment_account_id','bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment','historical_value_in_base','valuation_source','defer_manual_expense','purchase_quality','purchase_source']::text[]))) THEN

@@ -32,10 +32,14 @@ DECLARE
 BEGIN
     SET search_path TO budgeting;
 
-    IF _fiat_amount <= 0 OR _crypto_amount <= 0 THEN
+    IF _fiat_amount IS NULL OR _crypto_amount IS NULL OR _fiat_amount <= 0 OR _crypto_amount <= 0
+        OR _fiat_amount::text IN ('NaN','Infinity','-Infinity')
+        OR _crypto_amount::text IN ('NaN','Infinity','-Infinity') THEN
         RAISE EXCEPTION 'Amounts must be positive';
     END IF;
-    _crypto_amount := round(_crypto_amount, 12);
+    IF _crypto_amount<>round(_crypto_amount,18) THEN
+        RAISE EXCEPTION 'Crypto quantity must be exact to 18 decimals';
+    END IF;
 
     SELECT owner_type, owner_user_id, owner_family_id, account_kind
     INTO _owner_type, _owner_user_id, _owner_family_id, _account_kind
