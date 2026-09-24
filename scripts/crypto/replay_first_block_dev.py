@@ -300,6 +300,12 @@ async def main():
                 source = next(row for row in plan['rows'] if row.get('event_no') == int(event_no))['source_id'].removeprefix('main:')
                 actual = await sql("SELECT jsonb_build_object('coll',current_quantity::text,'debt',metadata->>'borrowed_quantity','body',((metadata->>'borrowed_quantity')::numeric-COALESCE((metadata->>'debt_interest_quantity')::numeric,0))::text) FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND metadata->>'source_event_id'=$2", uid, source)
                 assert actual and all(Decimal(actual[key]) == Decimal(value) for key, value in expected.items()), (event_no, expected, actual)
+            if 'expected_arbitrum' in plan:
+                expected = plan['expected_arbitrum']
+                actual = await sql("SELECT jsonb_build_object('coll',current_quantity::text,'debt',metadata->>'borrowed_quantity','body',((metadata->>'borrowed_quantity')::numeric-COALESCE((metadata->>'debt_interest_quantity')::numeric,0))::text) FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND metadata->>'source_event_id'='arbitrum:aave'", uid)
+                assert actual and all(Decimal(actual[k]) == Decimal(expected[k]) for k in ('coll','debt','body')), (expected, actual)
+                assert await sql("SELECT count(*) FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND protocol_name LIKE 'Uniswap%' AND status='open'", uid) == 0
+                state['arbitrum_verified'] = dict(**actual, future_rows=len(plan.get('arbitrum_future_rows', [])), diagnostic_only=bool(plan.get('diagnostic_only')))
             if 'expected_bank_USD' in plan:
                 assert await sql("SELECT COALESCE(sum(amount),0) FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='USD'", accounts['primary_cash']) == Decimal(plan['expected_bank_USD'])
             state['limitations'] = plan.get('limitations',state['limitations'])
@@ -318,6 +324,7 @@ async def main():
                 state['accounting_closed_with_limitations'] = False
                 state['cost_reconciliation']['status'] = 'diagnostic_only_not_final_policy'
                 state['cost_reconciliation']['limitation'] = plan.get('diagnostic_reason', 'Incomplete policy implementation')
+            state['block_closed'] = bool(plan.get('close_block')) and not state['diagnostic_only']
             save(state)
             print(json.dumps({k: state[k] for k in ('user_id','verified_through','documented_funding_RUB','first_unimplemented_event','block_closed')}, ensure_ascii=False))
     finally:
