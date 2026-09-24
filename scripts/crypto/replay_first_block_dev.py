@@ -23,7 +23,10 @@ parser.add_argument('--database', default='boundary_usd_clean')
 parser.add_argument('--plan', type=Path, required=True)
 parser.add_argument('--state', type=Path, required=True)
 parser.add_argument('--allow-isolated-funding-fixture', action='store_true', help='Test funding only, never use for production import')
+parser.add_argument('--checkpoint-every', type=int, default=1, help='Save local state every N sources; committed sources recover from the dev DB')
 args = parser.parse_args()
+if args.checkpoint_every < 1:
+    parser.error('--checkpoint-every must be positive')
 if not str(args.socket.resolve()).startswith('/private/tmp/crypto-portfolio-audit.') or not args.database.startswith('boundary_'):
     raise ValueError('Only disposable local boundary dev cluster is supported')
 os.environ.update(APP_ENV='development', APP_PORT='8000', DB_HOST=str(args.socket), DB_PORT=str(args.port),
@@ -130,7 +133,8 @@ async def main():
             return JSONResponse({'detail': str(exc)}, status_code=400)
 
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-            for row in plan['rows']:
+            checkpoint_dirty = False
+            for row_index, row in enumerate(plan['rows'], 1):
                 # Cash funding and its marker are transactional and resumable even
                 # if the subsequent API request fails. Exact documented payment only.
                 if row.get('funding_RUB') and args.allow_isolated_funding_fixture:
@@ -141,6 +145,7 @@ async def main():
                         if exists is None:
                             await db.fetchval("SELECT budgeting.put__record_income($1,$2,$3,'RUB',NULL,NULL,$4,$5::date)", uid, accounts['primary_cash'], Decimal(row['funding_RUB']), marker, date.fromisoformat(row['accounting_date']))
                 old = state['posted'].get(row['source_id'])
+                checkpoint_dirty = checkpoint_dirty or old is None
                 if not old:
                     stored = await sql("SELECT to_jsonb(s) FROM budgeting.crypto_source_events s WHERE anchor_account_id=$1 AND source_namespace='first-hundred-dev-v1' AND source_id=$2", accounts['main'], row['source_id'])
                     if stored:
@@ -187,8 +192,12 @@ async def main():
                         assert actual == Decimal(quantity), (row['event_no'], master, actual, quantity)
                     state['verified_through'] = row['event_no']
                 state['posted'][row['source_id']] = dict(input_hash=digest(row), request=body, response=result)
-                if not old:
-                    save(state)
+                if row_index % args.checkpoint_every == 0:
+                    if checkpoint_dirty:
+                        save(state)
+                        checkpoint_dirty = False
+                    if args.checkpoint_every > 1:
+                        print(json.dumps(dict(sources=row_index, total=len(plan['rows']), through=state['verified_through'])), flush=True)
             # Final-state checks also execute on a repeated run.
             last = next(r for r in reversed(plan['rows']) if 'event_no' in r)
             for master, quantity in last['expected_main'].items():
