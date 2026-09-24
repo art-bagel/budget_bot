@@ -1,4 +1,4 @@
-"""Compile events 701-743 from pinned quantities, carrying cash and funding units."""
+"""Compile events 701-746 from pinned quantities, carrying cash and funding units."""
 
 import argparse
 from collections import Counter, defaultdict
@@ -14,7 +14,14 @@ from build_first_block_replay import PIN, TON, USDT
 from build_history_inventory import ROOT, git
 from build_second_hundred_plan import JETTON, command as C, position as P
 from compile_main_commands import ref
-from verify_evaa_liquidations import verify as verify_liquidation
+from verify_evaa_liquidations import (
+    verify as verify_liquidation,
+    command as decode,
+    nodes,
+    boc,
+    Bits,
+)
+from audit_evaa_accounts import MASTER_B, USER_A, USER_B
 
 BASE = "crypto-task/chronological-rebuild/blocks/0701-0800/accepted/v1/"
 MAIN = "0:29ee71155245d272af9946305e8f21959eff23a07582ebbda39d47fd8383decf"
@@ -50,8 +57,8 @@ def build(prefix):
     )
     byend = read(BASE + "bybit-cost-continuation.json")
     servers = {x["event_no"]: x for x in read(BASE + "server-purchases.json")}
-    ledger = [x for x in ledger if x["event_no"] <= 743]
-    reviews = [x for x in reviews if x["event_no"] <= 743]
+    ledger = [x for x in ledger if x["event_no"] <= 746]
+    reviews = [x for x in reviews if x["event_no"] <= 746]
     assets = plan["assets"]
     excluded = plan["excluded_assets"]
     net = defaultdict(lambda: defaultdict(D))
@@ -118,7 +125,7 @@ def build(prefix):
         return ref("protocol", events[n - 1]["event_id"])
 
     start = events[699]["timestamp"]
-    finish = events[742]["timestamp"]
+    finish = events[745]["timestamp"]
     # Exchange custody/trading is a hidden calculation boundary; withdrawals to Ethereum retain basis.
     eth = "service:bybit:ETH"
     assets[eth] = dict(symbol="ETH", decimals=18, network_code="ethereum")
@@ -320,6 +327,52 @@ def build(prefix):
                     int(e["lt"]) + 1,
                 )
 
+    # Decode historical EVAA request rates + the successful response principal.
+    def evaa(n):
+        trace = read(f"outputs/crypto-eighth-block-dev/sources/trace-{n}.json", False)
+        assert trace.get("emulated") is False
+        ts = [z["transaction"] for z in nodes(trace)]
+        for tx in ts:
+            if tx["account"]["address"] not in (USER_A, USER_B):
+                continue
+            try:
+                cells, b, version, upgrade, op, query = decode(tx["in_msg"]["raw_body"])
+            except (AssertionError, KeyError):
+                continue
+            if op not in (0x11, 0x21):
+                continue
+            assert tx["success"] and not tx["aborted"]
+            asset, amount, supply, borrow = b.u(256), b.u(64), b.u(64), b.u(64)
+            reply = next(
+                t
+                for t in ts
+                if t["in_msg"].get("op_code")
+                == ("0x0000011a" if op == 17 else "0x00000211")
+                and t["in_msg"]["source"]["address"] == tx["account"]["address"]
+            )
+            rb = Bits(boc(reply["in_msg"]["raw_body"])[0][0])
+            assert rb.u(32) == (0x11A if op == 17 else 0x211) and rb.u(64) == query
+            assert rb.address() == MAIN and rb.u(256) == asset
+            actual = rb.u(64)
+            after = rb.i(64)
+            first = rb.i(64)
+            second = rb.i(64)
+            before = after - first - second if op == 17 else after + second - first
+            assert reply["success"] and not reply["aborted"]
+            return dict(
+                before=before,
+                after=after,
+                amount=amount,
+                actual=actual,
+                supply=supply,
+                borrow=borrow,
+                op=op,
+                asset=asset,
+                transaction=tx["hash"],
+                user=tx["account"]["address"],
+            )
+        raise AssertionError(n)
+
     loans = {
         int(k): {a: D(v) for a, v in x.items()}
         for k, x in plan["expected_evaa"].items()
@@ -336,7 +389,7 @@ def build(prefix):
         ].items()
     }
     receipts = {int(k): v for k, v in byend["receipts"].items()}
-    for n in range(701, 744):
+    for n in range(701, 747):
         ev = events[n - 1]
         v = net[n]
         cmds = []
@@ -400,6 +453,64 @@ def build(prefix):
                 ),
             ]
             evidence["server_purchase"] = purchase
+        elif n in (745, 746):
+            z = evaa(n)
+            link = next(
+                x for x in read(BASE + "evaa-evidence-links.json") if x["event_no"] == n
+            )
+            assert z["user"] == (USER_A if n == 745 else USER_B)
+            assert z["op"] == 17
+            assert z["before"] == link["principal_before"]
+            assert z["after"] == link["principal_after"]
+            assert z["actual"] == link["amount_atomic"]
+            q = D(z["actual"]) / 10**9
+            after = D(z["after"] * z["supply"] // 10**12) / 10**9
+            if n == 745:
+                before = after - q
+                assert before >= loans[330]["coll"]
+                cmds = [
+                    C(
+                        "accrue",
+                        position_id=proto(330),
+                        collateral_qty=str(before - loans[330]["coll"]),
+                        interest_qty="0",
+                        interest_value_in_base="0",
+                        collateral_before=str(loans[330]["coll"]),
+                        debt_before=str(loans[330]["debt"]),
+                    ),
+                    C(
+                        "top_up_protocol",
+                        position_id=proto(330),
+                        source_position_id=P("main"),
+                        quantity=str(q),
+                    ),
+                ]
+                loans[330]["coll"] = after
+            else:
+                assert z["before"] == 0 and abs(after - q) <= D("0.000000001")
+                cmds = [
+                    C(
+                        "create_protocol",
+                        investment_account_id=ref("account", "main"),
+                        protocol_name="EVAA",
+                        position_type="lending",
+                        asset_symbol="TON",
+                        quantity=str(q),
+                        source_position_id=P("main"),
+                        crypto_asset_id=ref("asset", "ton", TON),
+                        network_code="ton",
+                        metadata=dict(
+                            source_event_id=ev["event_id"],
+                            lending_account_key=MASTER_B + "/" + USER_B,
+                            lending_master_contract=MASTER_B,
+                            lending_user_contract=USER_B,
+                        ),
+                    )
+                ]
+                # Contract flooring can differ by one nano; retain the deposited quantity.
+                loans[746] = dict(coll=q)
+            paid = q
+            evidence["evaa"] = z
         elif n in liquidation_links:
             z = verify_liquidation(
                 liquidation_links[n],
@@ -669,7 +780,7 @@ def build(prefix):
     }
     plan["expected_accounts"]["gifts"] = {TON: str(gifts)}
     plan["expected_evaa"] = loans
-    plan["main_account_name"] = "История main — события 1–743"
+    plan["main_account_name"] = "История main — события 1–746"
     plan["expected_bank_USD"] = str(
         sum(
             D(c["payload"]["fiat_amount"])
@@ -683,10 +794,10 @@ def build(prefix):
         "RUB": str(sum(D(r.get("funding_RUB", "0")) for r in added))
     }
     plan["summary"].update(
-        block="0001-0743",
-        total_events=743,
+        block="0001-0746",
+        total_events=746,
         total_movements=plan["summary"]["total_movements"] + len(ledger),
-        compiled_contiguous_prefix=743,
+        compiled_contiguous_prefix=746,
         source_events=len(plan["rows"]),
         command_counts=dict(
             Counter(c["kind"] for r in plan["rows"] for c in r["commands"])
@@ -696,12 +807,12 @@ def build(prefix):
         ),
     )
     plan["limitations"] += [
-        "Partial eighth block through 743; later collateral changes and unknown-cost Arbitrum return are not posted; not closed through 800.",
+        "Partial eighth block through 746; unknown-cost Arbitrum return and later events are not posted; not closed through 800.",
         "3.595 TON on second remains a probable gift-service return, carrying pooled cost.",
     ]
-    plan["summary"]["first_unimplemented_event"] = 744
+    plan["summary"]["first_unimplemented_event"] = 747
     plan["summary"]["first_unimplemented_kind"] = (
-        "Collateral top-ups and unresolved Ethereum cost boundary"
+        "Unresolved Ethereum cost boundary before the Bybit receipt"
     )
     plan["inputs"] += inputs + [
         dict(path=str(prefix), sha256=hashlib.sha256(prefix.read_bytes()).hexdigest())
