@@ -127,6 +127,9 @@ BEGIN
         WHERE bank_account_id = _bank_account_id
           AND crypto_asset_id = _crypto_asset_id
           AND amount_remaining > 0
+          -- These funds were already spent externally and are shown in the
+          -- bank only until the owner categorizes the expense.
+          AND NOT COALESCE((metadata->>'reserved_for_manual_expense')::boolean,false)
         ORDER BY created_at, id
     LOOP
         EXIT WHEN _remaining_to_consume <= 0;

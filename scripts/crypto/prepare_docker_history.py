@@ -101,6 +101,39 @@ def corrected_plan(original):
     plan["docker_migration"] = dict(
         server_corrections=changes, no_income=True, original_funding_RUB="2481653.33"
     )
+    # Stars bought gifts: retain the original TON funding in a separate gift
+    # bucket, so unrelated marketplace refunds do not consume its cost.
+    stars_total = D(0)
+    stars_sources = []
+    for row in plan["rows"]:
+        for cmd in row["commands"]:
+            payload = cmd["payload"]
+            if cmd["kind"] == "expense" and payload.get("comment") == "Telegram Stars":
+                assert payload["source_position_id"]["resource_ref"] == "position:main:ton:native TON"
+                stars_total += D(payload["quantity"])
+                stars_sources.append(row["source_id"])
+                cmd.update(kind="transfer", payload=dict(
+                    position_id=payload["source_position_id"],
+                    target_investment_account_id={"resource_ref": "account:gifts_stars"},
+                    amount=payload["quantity"],
+                    comment="Подарки через Telegram Stars — вложенные TON",
+                ))
+                row["evidence"]["stars_gift_policy"] = "Owner confirmed Stars spent on gifts; retain historical TON funding, not live TON or Stars balance"
+            elif row["source_id"] == "bybit:row:597" and cmd["kind"] == "expense":
+                assert payload["quantity"] == "110"
+                cmd.update(kind="bank_withdraw", payload=dict(
+                    position_id=payload["source_position_id"],
+                    bank_account_id={"resource_ref": "account:primary_cash"},
+                    quantity="110",
+                    defer_manual_expense=True,
+                    comment="Экскурсия — 110 USDT оставлены в банковском учёте для распределения расхода",
+                ))
+                row["evidence"]["excursion_bank_policy"] = "Already paid to friend; bookkeeping bank balance pending manual expense, not available exchange funds"
+    assert len(stars_sources) == 25
+    plan["expected_accounts"]["gifts_stars"] = {"native TON": str(stars_total)}
+    plan["account_display_names"]["gifts_stars"] = "Подарки через Stars — вложенные TON"
+    plan["docker_migration"]["stars_gifts"] = dict(sources=stars_sources, funded_TON=str(stars_total))
+    plan["docker_migration"]["excursion_bank_USDT"] = "110"
     return plan
 
 
@@ -145,6 +178,9 @@ async def main():
             )
             if saved:
                 assert saved["funding_RUB"] == str(funding)
+                assert saved["plan"]["docker_migration"].get("stars_gifts") == plan["docker_migration"]["stars_gifts"], "Policy changed: rebuild preview from original baseline"
+                saved_excursion = next(r for r in saved["plan"]["rows"] if r["source_id"] == "bybit:row:597")
+                assert saved_excursion["commands"][0]["payload"].get("defer_manual_expense") is True
                 (OUT / "plan-docker.json").write_text(
                     json.dumps(saved["plan"], ensure_ascii=False, indent=2) + "\n"
                 )

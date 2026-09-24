@@ -36,7 +36,7 @@ BEGIN
             budgeting.calc__crypto_funding_units(COALESCE(metadata->'funding_units','{}'),_moved,-1)) WHERE id=_e.position_id;
         _out:=jsonb_set(_out,ARRAY[_e.position_id::text],_moved);
         UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units_moved',_moved) WHERE id=_e.id;
-        IF _kind IN ('fee','expense','bank_sell','sell_fiat') THEN
+        IF _kind IN ('fee','expense','bank_withdraw','bank_sell','sell_fiat') THEN
             UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units',_moved) WHERE id=_e.id;
         END IF;
     END LOOP;
@@ -225,6 +225,13 @@ BEGIN
                         'basis_quality','estimated',CASE WHEN _h.field='funding_units0' THEN 'token0_basis_quality' ELSE 'token1_basis_quality' END,'estimated') WHERE id=_h.id;
             ELSE
                 SELECT metadata INTO _metadata FROM portfolio_events WHERE id=_h.id;
+                IF _cost>0 AND _metadata->>'funding_bank_withdrawal'='true' THEN
+                    RAISE EXCEPTION 'Bank withdrawal financing dust acquired monetary cost; rebuild required';
+                END IF;
+                IF _metadata->>'funding_bank_withdrawal'='true' AND EXISTS(
+                    SELECT 1 FROM jsonb_each_text(_ref_take) u WHERE abs(u.value::numeric)>0.000000000001) THEN
+                    RAISE EXCEPTION 'Bank withdrawal cannot receive refinanced debt';
+                END IF;
                 IF _cost>0 AND _metadata->>'funding_bank_sale'='true' THEN
                     _base:=budgeting.get__owner_base_currency(_owner.owner_type,_owner.owner_user_id,_owner.owner_family_id);
                     _fx:=budgeting.get__owner_system_category_id(_owner.owner_type,_owner.owner_user_id,_owner.owner_family_id,'FX Result');
@@ -255,7 +262,7 @@ BEGIN
         IF _out<>'{}'::jsonb AND NOT COALESCE((_p->>'defer_manual_expense')::boolean,false) THEN
             RAISE EXCEPTION 'Funded fiat sale requires pending manual settlement tracking';
         END IF;
-    ELSIF _kind NOT IN ('fee','expense','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account') THEN
+    ELSIF _kind NOT IN ('fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.

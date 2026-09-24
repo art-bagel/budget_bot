@@ -24,6 +24,7 @@ parser.add_argument('--plan', type=Path, required=True)
 parser.add_argument('--state', type=Path, required=True)
 parser.add_argument('--allow-isolated-funding-fixture', action='store_true', help='Test funding only, never use for production import')
 parser.add_argument('--docker-preview', action='store_true', help='Use only the prepared local crypto_merge_preview database; no income fixtures')
+parser.add_argument('--verify-capital-each-source', action='store_true', help='Check cash-cost conservation after each newly posted source')
 parser.add_argument('--checkpoint-every', type=int, default=1, help='Save local state every N sources; committed sources recover from the dev DB')
 args = parser.parse_args()
 if args.checkpoint_every < 1:
@@ -69,6 +70,13 @@ async def main():
             return await db.fetchval(q, *values)
 
     try:
+        if args.docker_preview:
+            finalized = await sql('SELECT payload FROM crypto_migration_audit.preparation WHERE id=2')
+            if finalized:
+                prepared = await sql('SELECT payload FROM crypto_migration_audit.preparation WHERE id=1')
+                plan['expected_bank_RUB'] = prepared['plan']['docker_migration']['original_bank_RUB']
+                plan['expected_bank_USD'] = str(Decimal(plan['expected_bank_USD']) - sum(
+                    Decimal(m['paid_USD']) for m in finalized['card_matches']))
         if args.state.exists():
             state = json.loads(args.state.read_text())
             if state['database'] != args.database or state['socket'] != str(args.socket):
@@ -202,6 +210,30 @@ async def main():
                         assert actual == Decimal(quantity), (row['event_no'], master, actual, quantity)
                     state['verified_through'] = row['event_no']
                 state['posted'][row['source_id']] = dict(input_hash=digest(row), request=body, response=result)
+                if args.verify_capital_each_source and not old:
+                    reconciliation = await sql("""WITH positions AS (
+                        SELECT p.id, budgeting.get__crypto_position_entry_summary(p.id) s
+                        FROM budgeting.portfolio_positions p JOIN budgeting.bank_accounts a ON a.id=p.investment_account_id
+                        WHERE p.owner_user_id=$1 AND a.investment_asset_type='crypto'
+                    ), events AS (
+                        SELECT e.* FROM budgeting.portfolio_events e JOIN positions p ON p.id=e.position_id
+                    ) SELECT jsonb_build_object(
+                        'assets', (SELECT COALESCE(sum((s->>'remaining_cost_basis')::numeric),0) FROM positions)
+                            +(SELECT COALESCE(sum(cost_basis_in_base),0) FROM budgeting.crypto_protocol_positions WHERE owner_user_id=$1 AND status='open'),
+                        'outflow', (SELECT COALESCE(sum(
+                            CASE WHEN event_type='fee' OR metadata->>'target_kind' IN ('expense','bank') OR metadata->>'action'='fiat_sell'
+                            THEN COALESCE((metadata->>'consumed_cost_basis')::numeric,0)+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)
+                            WHEN metadata->>'funding_policy'='components' THEN COALESCE((metadata->>'funding_interest_cost')::numeric,0)+COALESCE((metadata->>'funding_confirmed_cost')::numeric,0)
+                            WHEN metadata->>'source_kind'='fee_refund' THEN -COALESCE((metadata->>'entry_value_in_base')::numeric,0)
+                            ELSE 0 END),0) FROM events),
+                        'unknown', (SELECT count(*) FROM positions WHERE s->>'remaining_cost_basis' IS NULL)
+                    )""", uid)
+                    if reconciliation['unknown'] == 0:
+                        prefix_funding = sum(Decimal(r.get('funding_RUB','0')) for r in plan['rows'][:row_index])
+                        if Decimal(str(reconciliation['assets'])) + Decimal(str(reconciliation['outflow'])) != prefix_funding:
+                            save(state)
+                            raise AssertionError(('Per-source capital mismatch', row['source_id'], row_index, prefix_funding, reconciliation))
+
                 if row_index % args.checkpoint_every == 0:
                     if checkpoint_dirty:
                         save(state)

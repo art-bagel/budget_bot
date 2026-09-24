@@ -30,7 +30,7 @@ async def main():
     inv = json.loads((OUT / "inventory.json").read_text())
     operations = {o["id"]: o for o in inv["operations"]}
     db = await connect()
-    baseline = await asyncpg.connect(**{**credentials(), "database": "budget_bot"})
+    baseline = await asyncpg.connect(**{**credentials(), "database": "crypto_before_20260924"})
     await baseline.execute("set default_transaction_read_only=on")
     try:
         async with db.transaction():
@@ -208,7 +208,22 @@ async def main():
             assert await db.fetchval(
                 "select amount from budgeting.current_crypto_balances where bank_account_id=73 and crypto_asset_id=2"
             ) == D("109.35")
+            excursion_asset = state["assets"]["0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe"]
+            excursion = await db.fetchrow("""select sum(amount_remaining) quantity,
+                sum(cost_base_remaining) cost from budgeting.crypto_lots
+                where bank_account_id=73 and crypto_asset_id=$1
+                and metadata->>'reserved_for_manual_expense'='true'""", excursion_asset)
+            assert excursion["quantity"] == D("110")
+            assert excursion["cost"] == D("8580.94")
+            stars = await db.fetchval("""select budgeting.get__crypto_position_entry_summary(id)
+                from budgeting.portfolio_positions where investment_account_id=$1 and status='open'""", state["accounts"]["gifts_stars"])
+            assert D(str(stars["quantity_now"])) == D("231.4944")
+            assert await db.fetchval("""select count(*) from budgeting.portfolio_events
+                where created_by_user_id=$1 and comment='Telegram Stars' and metadata->>'target_kind'='expense'""", UID) == 0
             result["verification"] = dict(
+                stars_gift_asset=stars,
+                excursion_bank_USDT=str(excursion["quantity"]),
+                excursion_bank_cost_RUB=str(excursion["cost"]),
                 no_new_income=True,
                 unrelated_operations_unchanged=True,
                 other_positions_unchanged=True,

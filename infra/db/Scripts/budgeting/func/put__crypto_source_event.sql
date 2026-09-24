@@ -90,7 +90,7 @@ BEGIN
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell')) THEN
+            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -227,6 +227,38 @@ BEGIN
             _result:=jsonb_build_object('position_id',_resource.id,'receipt_master',_payload->>'receipt_master',
                 'quantity',_payload->>'quantity','from_custody',_payload->>'from_custody','to_custody',_payload->>'to_custody',
                 'cost_basis_in_base',_resource.cost_basis_in_base);
+        WHEN 'bank_withdraw' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
+                ARRAY['position_id','bank_account_id','quantity','comment','defer_manual_expense'])))
+                OR NOT (_payload ?& ARRAY['position_id','bank_account_id','quantity']) THEN
+                RAISE EXCEPTION 'Bank withdrawal requires position, bank and quantity';
+            END IF;
+            SELECT * INTO _resource FROM bank_accounts WHERE id=(_payload->>'bank_account_id')::bigint;
+            IF _resource.owner_type IS DISTINCT FROM _account.owner_type
+                OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
+                OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id THEN
+                RAISE EXCEPTION 'Bank withdrawal must stay within source journal owner';
+            END IF;
+            -- Bank lots do not yet support unsettled loan financing. Allow only
+            -- numeric dust, retaining it in the journal's conservation check.
+            IF EXISTS(SELECT 1 FROM portfolio_positions p,
+                LATERAL jsonb_each_text(COALESCE(p.metadata->'funding_units','{}')) u
+                WHERE p.id=(_payload->>'position_id')::bigint
+                AND abs(u.value::numeric * (_payload->>'quantity')::numeric / p.quantity)>0.000000000001) THEN
+                RAISE EXCEPTION 'Settle financing before withdrawing crypto to bank';
+            END IF;
+            _result:=budgeting.put__transfer_crypto_from_investment(_user_id,
+                (_payload->>'position_id')::bigint,(_payload->>'bank_account_id')::bigint,
+                (_payload->>'quantity')::numeric,NULL,_payload->>'comment',_accounting_date);
+            IF _payload ? 'defer_manual_expense' AND jsonb_typeof(_payload->'defer_manual_expense')<>'boolean' THEN
+                RAISE EXCEPTION 'Deferred bank expense flag must be boolean';
+            END IF;
+            IF COALESCE((_payload->>'defer_manual_expense')::boolean,false) THEN
+                UPDATE crypto_lots SET metadata=metadata||jsonb_build_object('reserved_for_manual_expense',true)
+                WHERE opened_by_operation_id=(_result->>'operation_id')::bigint;
+            END IF;
+            UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_bank_withdrawal',true)
+            WHERE linked_operation_id=(_result->>'operation_id')::bigint;
         WHEN 'bank_sell' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
                 ARRAY['position_id','bank_account_id','quantity','fiat_amount','comment'])))
