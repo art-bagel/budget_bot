@@ -23,14 +23,20 @@ parser.add_argument('--database', default='boundary_usd_clean')
 parser.add_argument('--plan', type=Path, required=True)
 parser.add_argument('--state', type=Path, required=True)
 parser.add_argument('--allow-isolated-funding-fixture', action='store_true', help='Test funding only, never use for production import')
+parser.add_argument('--docker-preview', action='store_true', help='Use only the prepared local crypto_merge_preview database; no income fixtures')
 parser.add_argument('--checkpoint-every', type=int, default=1, help='Save local state every N sources; committed sources recover from the dev DB')
 args = parser.parse_args()
 if args.checkpoint_every < 1:
     parser.error('--checkpoint-every must be positive')
-if not str(args.socket.resolve()).startswith('/private/tmp/crypto-portfolio-audit.') or not args.database.startswith('boundary_'):
+if args.docker_preview:
+    if str(args.socket) != '127.0.0.1' or args.port != 5432 or args.database != 'crypto_merge_preview' or args.allow_isolated_funding_fixture or not args.state.exists():
+        raise ValueError('Docker replay requires the prepared local preview, existing state, and no income fixture')
+    from prepare_docker_history import credentials as docker_credentials
+    credentials = docker_credentials()
+elif not str(args.socket.resolve()).startswith('/private/tmp/crypto-portfolio-audit.') or not args.database.startswith('boundary_'):
     raise ValueError('Only disposable local boundary dev cluster is supported')
 os.environ.update(APP_ENV='development', APP_PORT='8000', DB_HOST=str(args.socket), DB_PORT=str(args.port),
-    DB_DATABASE=args.database, DB_SCHEMA='budgeting', POSTGRES_USER='audit', POSTGRES_PASSWORD='', TELEGRAM_BOT_TOKEN='')
+    DB_DATABASE=args.database, DB_SCHEMA='budgeting', POSTGRES_USER=credentials['user'] if args.docker_preview else 'audit', POSTGRES_PASSWORD=credentials['password'] if args.docker_preview else '', TELEGRAM_BOT_TOKEN='')
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import asyncpg  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
@@ -55,6 +61,10 @@ async def main():
     pool = await crypto.ledger._get_pool()
 
     async def sql(q, *values):
+        # Existing owners can also hold securities: crypto reconciliation must
+        # never include fees or amounts from unrelated investments.
+        q = q.replace('FROM budgeting.portfolio_events WHERE created_by_user_id=$1',
+            "FROM budgeting.portfolio_events WHERE position_id IN (SELECT p.id FROM budgeting.portfolio_positions p JOIN budgeting.bank_accounts a ON a.id=p.investment_account_id WHERE a.investment_asset_type='crypto') AND created_by_user_id=$1")
         async with pool.acquire() as db:
             return await db.fetchval(q, *values)
 
@@ -214,7 +224,7 @@ async def main():
             assert await sql("SELECT COALESCE((SELECT amount FROM budgeting.current_bank_balances WHERE bank_account_id=$1 AND currency_code='RUB'),0)", accounts['primary_cash']) == Decimal(plan.get('expected_bank_RUB','0'))
             summaries = []
             async with pool.acquire() as db:
-                for r in await db.fetch('SELECT id,investment_account_id,title FROM budgeting.portfolio_positions WHERE owner_user_id=$1 ORDER BY id', uid):
+                for r in await db.fetch("SELECT p.id,p.investment_account_id,p.title FROM budgeting.portfolio_positions p JOIN budgeting.bank_accounts a ON a.id=p.investment_account_id WHERE p.owner_user_id=$1 AND a.investment_asset_type='crypto' ORDER BY p.id", uid):
                     summaries.append({**dict(r), 'summary': await db.fetchval('SELECT budgeting.get__crypto_position_entry_summary($1)', r['id'])})
             response = await client.get('/api/v1/crypto/protocol-positions')
             assert response.status_code == 200, response.text
