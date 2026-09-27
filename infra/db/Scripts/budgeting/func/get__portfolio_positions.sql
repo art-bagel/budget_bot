@@ -63,7 +63,8 @@ BEGIN
       ON u.id = ba.owner_user_id
     LEFT JOIN families f
       ON f.id = ba.owner_family_id
-    WHERE (
+    WHERE ba.provider_name IS DISTINCT FROM 'reconstruction_internal'
+      AND (
             (pp.owner_type = 'user' AND pp.owner_user_id = _user_id)
             OR
             (pp.owner_type = 'family' AND pp.owner_family_id = _family_id)

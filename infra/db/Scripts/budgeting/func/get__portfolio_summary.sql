@@ -31,6 +31,7 @@ BEGIN
           ON f.id = ba.owner_family_id
         WHERE ba.is_active
           AND ba.account_kind = 'investment'
+          AND ba.provider_name IS DISTINCT FROM 'reconstruction_internal'
           AND (
                 (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
                 OR
