@@ -542,7 +542,6 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           </span>
           <span className="hero__sym">{currencySymbol(overview.base_currency_code)}</span>
         </div>
-        {investmentValueIncomplete && <p className="pf-sec__sub">Учтена известная часть инвестиций. Для части криптоактивов нет актуальной оценки.</p>}
         <dl className="hero__rows">
           <div
             className="hero__row"

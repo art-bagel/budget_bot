@@ -27,7 +27,6 @@ export default function FeeRefundSheet({ eventId, positionId, symbol, onClose, o
   return <BottomSheet open title="Возврат комиссии" tag={symbol} onClose={onClose}
     actions={<div className="tk-foot pf-sheet-actions">{error && <p className="tk-error">{error}</p>}
       <button className="btn btn--primary" disabled={busy || !(Number(quantity) > 0) || !day} onClick={() => void submit()}>{busy ? 'Сохраняем…' : 'Записать возврат'}</button></div>}>
-    <p className="tok-row__hint">Укажите фактически возвращённые монеты. Их себестоимость восстановится из выбранной комиссии.</p>
     <div className="apf-field"><label className="apf-label">Получено, {symbol}</label><input className="apf-input" inputMode="decimal" value={quantity} disabled={busy} onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))} /></div>
     <div className="apf-field"><label className="apf-label">Дата возврата</label><input className="apf-input" type="date" value={day} disabled={busy} onChange={(e) => setDay(e.target.value)} /></div>
     <div className="apf-field"><label className="apf-label">Комментарий</label><input className="apf-input" value={comment} disabled={busy} onChange={(e) => setComment(e.target.value)} /></div>

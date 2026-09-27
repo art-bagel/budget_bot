@@ -2441,11 +2441,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   ]);
 
   useEffect(() => {
-    const fallbackKey = accountTabs[0]?.key ?? 'all';
-    if (!accountTabs.some((tab) => tab.key === activeAccountTabKey)) {
-      setActiveAccountTabKey(fallbackKey);
+    if (activeAccountTabKey !== 'all' && !accountTabs.some((tab) => tab.key === activeAccountTabKey)) {
+      setActiveAccountTabKey('all');
     }
   }, [activeAccountTabKey, accountTabs]);
+
+  useEffect(() => {
+    setActiveAccountTabKey('all');
+  }, [activeAssetTypeCode]);
 
   const activeAccountTab = useMemo(
     () => accountTabs.find((tab) => tab.key === activeAccountTabKey) ?? accountTabs[0] ?? null,
@@ -2992,7 +2995,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <span className="pf-hero__sym">{currencySymbol(user.base_currency_code)}</span>
         </div>
 
-        {cryptoValuationIncomplete && <p className="pf-sec__sub">Оценка неполная: для части монет или DeFi нет актуальных данных.</p>}
 
         {shouldShowHeroPnl && (
           <div className={`pf-hero__pnl${heroPnlValue >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}>
@@ -3225,7 +3227,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 className="pf-alloc"
               >
                 <div className="pf-alloc__head">
-                  <span className="pf-alloc__tag">{cryptoValuationIncomplete ? 'Распределение известной оценки' : 'Распределение'}</span>
+                  <span className="pf-alloc__tag">{cryptoValuationIncomplete ? 'Оценённые активы' : 'Распределение'}</span>
                   <span className="pf-alloc__meta">{typeTabs.length} {typeTabs.length === 1 ? 'тип' : typeTabs.length < 5 ? 'типа' : 'типов'}</span>
                 </div>
                 <div className="pf-alloc__bar" role="img" aria-label="Распределение по типам активов">
@@ -3259,7 +3261,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {activeScopeHasCrypto ? '—' : `${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </strong>
                     <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                      {activeScopeHasCrypto ? 'Доход: нужна полная рыночная оценка' : `${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
+                      {activeScopeHasCrypto ? 'Доход: —' : `${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
                     </em>
                   </div>
                 </div>
@@ -5010,15 +5012,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <div className="pf-dcond">
               <div className="pf-dcond__head"><span className="sec-tag">Себестоимость и оценка</span></div>
               <div className="pf-dcond__row">
-                <span className="pf-dcond__row-label">Учтённые затраты</span>
+                <span className="pf-dcond__row-label">{selectedProtocolPosition.status === 'closed' ? 'Затраты до закрытия' : 'Учтённые затраты'}</span>
                 <span className="pf-dcond__row-value">{selectedProtocolPosition.cost_basis_in_base === null ? 'Не определены' : formatAmount(selectedProtocolPosition.cost_basis_in_base, user.base_currency_code)}</span>
               </div>
               {[selectedProtocolPosition.metadata.funding_units0, selectedProtocolPosition.metadata.funding_units1].some((units) =>
                 units && typeof units === 'object' && Object.values(units).some((amount) => Number(amount) > 0)) && (
-                <p className="pf-dstats__sub">Есть непогашенный заём</p>
+                <div className="pf-dcond__row"><span className="pf-dcond__row-label">Финансирование</span><span className="pf-dcond__row-value">Открыто</span></div>
               )}
               {getProtocolValuation(selectedProtocolPosition).reason && (
-                <p className="pf-dstats__sub">{getProtocolValuation(selectedProtocolPosition).reason}</p>
+                <div className="pf-dcond__row"><span className="pf-dcond__row-label">Оценка</span><span className="pf-dcond__row-value">{getProtocolValuation(selectedProtocolPosition).reason}</span></div>
               )}
               {getProtocolValuation(selectedProtocolPosition).quotes.map((quote) => (
                 <div className="pf-dcond__row" key={quote.crypto_asset_id}>
@@ -5446,7 +5448,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <span className="add-pos-type-tile__icon add-pos-type-tile__icon--o"><Coins size={20} strokeWidth={2} /></span>
                     <div className="add-pos-type-tile__copy">
                       <span className="add-pos-type-tile__label">Актив</span>
-                      <span className="add-pos-type-tile__sub">Создается только через банк: обмен и перевод на crypto-счёт</span>
+                      <span className="add-pos-type-tile__sub">Обмен и перевод из банка</span>
                     </div>
                     <span className="add-pos-type-tile__chev">›</span>
                   </button>
@@ -5461,7 +5463,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <span className="add-pos-type-tile__icon add-pos-type-tile__icon--o"><Package size={20} strokeWidth={2} /></span>
                     <div className="add-pos-type-tile__copy">
                       <span className="add-pos-type-tile__label">DeFi</span>
-                      <span className="add-pos-type-tile__sub">Стейкинг, лендинг, ликвидность — из уже существующего crypto-актива</span>
+                      <span className="add-pos-type-tile__sub">Стейкинг, лендинг, ликвидность</span>
                     </div>
                     <span className="add-pos-type-tile__chev">›</span>
                   </button>
@@ -6160,7 +6162,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <input
                     className="apf-input"
                     type="text"
-                    placeholder="Например: ИИС Тинькофф"
+                    placeholder={newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : 'Например: ИИС Тинькофф'}
                     value={newAccountName}
                     onChange={(e) => setNewAccountName(e.target.value)}
                     autoFocus
@@ -6171,7 +6173,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <input
                     className="apf-input"
                     type="text"
-                    placeholder="Например: Тинькофф Инвестиции"
+                    placeholder={newAccountAssetType === 'crypto' ? 'Необязательно' : 'Например: Тинькофф Инвестиции'}
                     value={newAccountProvider}
                     onChange={(e) => setNewAccountProvider(e.target.value)}
                   />

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, ArrowLeftRight } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
@@ -73,7 +73,6 @@ export default function CryptoTransferSheet({
     && !!targetInvestmentAccountId
     && Number.isFinite(amountNum) && amountNum > 0;
 
-  const targetAccount = targets.find((a) => String(a.id) === targetInvestmentAccountId);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -191,22 +190,13 @@ export default function CryptoTransferSheet({
             </div>
           )}
 
-          {targetAccount && (
-            <div className="cs-sheet__hint">
-              <ArrowLeftRight size={14} strokeWidth={2.2} />
-              <span>
-                Себестоимость и доля заёмного финансирования перейдут на счёт «{targetAccount.name}».
-              </span>
-            </div>
-          )}
 
           <div className="field">
             <span className="fl">Комиссия в {symbol} (если есть)</span>
             <input className="picker-v2" inputMode="decimal" value={feeAmount}
               onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
               disabled={submitting} placeholder="0" />
-            <span className="cs-sheet__hint">Списывается дополнительно с исходного счёта.</span>
-          </div>
+              </div>
 
           <div className="field">
             <span className="fl">Комментарий</span>

@@ -63,6 +63,24 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
             amount=0, currency_code='RUB', quantity=quantity, income_kind='reward',
             destination='position', received_at='2026-09-07'))
 
+    async def test_manual_comments_follow_submitted_note_not_generated_text(self):
+        from uuid import uuid4
+        for note in (None, 'Перевод в DeFi-протокол'):
+            response = await self.client.post(
+                f"/api/v1/portfolio/positions/{self.position['id']}/income",
+                json=dict(request_id=str(uuid4()), amount=0, currency_code='RUB',
+                          quantity='1', income_kind='reward', destination='position',
+                          received_at='2026-09-08', comment=note))
+            self.assertEqual(response.status_code, 200, response.text)
+            rows = await self.db.fetch("""select e.comment,
+                budgeting.is__crypto_audit_comment('portfolio_events',e.id) hidden
+                from budgeting.portfolio_events e where linked_operation_id=$1""",
+                response.json()['operation_id'])
+            self.assertTrue(rows)
+            self.assertTrue(all(r['hidden'] == (note is None) for r in rows))
+            if note is not None:
+                self.assertTrue(any(r['comment'] == note for r in rows))
+
     async def test_reward_exact_quantity_dilutes_cost_preserves_funding_and_date(self):
         # The live wallet's JETTON can consist solely of zero-cost rewards.
         # Add a controlled historical-cost fixture inside this rollback transaction.

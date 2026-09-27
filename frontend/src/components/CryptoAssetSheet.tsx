@@ -202,8 +202,7 @@ export default function CryptoAssetSheet({
             <div className="ca-sheet__hero-value">
               {currentValue !== null
                 ? `${formatNumericAmount(currentValue)} ${baseSym}`
-                : basisUnknown ? 'Оценка стоимости недоступна'
-                  : `≈ ${formatNumericAmount(detail.remaining_cost_basis ?? 0)} ${baseSym} (по себестоимости)`}
+                : '—'}
             </div>
             {livePrice && (
               <div className="ca-sheet__hero-price">

@@ -13,6 +13,7 @@ export function protocolMarketValue(
   currency: string,
 ): ProtocolValuation {
   const unavailable = (reason: string): ProtocolValuation => ({ value: null, reason, quotes: [] });
+  if (position.status === 'closed') return unavailable('Позиция закрыта');
   const quotes: CryptoLivePrice[] = [];
   const priceFor = (id: number | null | undefined): number | null => {
     const quote = id == null ? undefined : prices.get(id);

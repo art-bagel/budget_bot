@@ -87,7 +87,6 @@ export default function CryptoSwapSheet({
   const fromNum = Number(fromAmount);
   const toNum = Number(toAmount);
   const toAsset = cryptoAssets.find((a) => String(a.id) === toCryptoAssetId);
-  const toAccount = targetAccounts.find((a) => String(a.id) === targetInvestmentAccountId);
 
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(fromNum) && fromNum > sourceQuantity;
 
@@ -248,10 +247,6 @@ export default function CryptoSwapSheet({
         </div>
       </div>
 
-      <div className="cs-sheet__hint">
-        Себестоимость списанных монет перейдёт на полученные. Курс для этого не нужен.
-        Если исходная стоимость неизвестна, она останется неизвестной после обмена.
-      </div>
 
       {exceedsBalance && (
         <div className="tk-error">
@@ -260,18 +255,12 @@ export default function CryptoSwapSheet({
         </div>
       )}
 
-      {toAccount && toAccount.id !== position.investment_account_id && (
-        <div className="cs-sheet__hint">
-          <span>Новая позиция {toAsset?.symbol ?? ''} появится на счёте «{toAccount.name}».</span>
-        </div>
-      )}
 
       <div className="field">
         <span className="fl">Комиссия в {sourceSymbol} (если есть)</span>
         <input className="picker-v2" inputMode="decimal" value={feeAmount}
           onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
           disabled={submitting} placeholder="0" />
-        <span className="cs-sheet__hint">Списывается дополнительно с исходного счёта.</span>
       </div>
 
       <div className="field">

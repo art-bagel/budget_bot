@@ -65,3 +65,8 @@ test('wallet valuation distinguishes zero balance from unavailable market value'
     assert.equal(walletMarketValue(5, 1, new Map([[1, quote(1, 200, patch)]]), 'RUB'), null);
   }
 });
+
+
+test('closed DeFi has no current market value even when historical quantities remain', () => {
+  assert.equal(protocolMarketValue(position({ status: 'closed' }), prices, 'RUB').value, null);
+});

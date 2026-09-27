@@ -273,9 +273,6 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Можно вернуть только один токен из пары или оба — оставь поле пустым, чтобы не возвращать.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{tokenASymbol} — вернётся</label>
         <input
@@ -392,9 +389,6 @@ export function LpClaimFeesSheet({ open, position, accountPositions, onClose, on
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Введи количество комиссий по одному или обоим токенам — они зачислятся в актив на счёте как доход.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{tokenASymbol} — комиссии</label>
         <input

@@ -957,6 +957,9 @@ def build(prefix, end=800):
     plan["inputs"] += inputs + [
         dict(path=str(prefix), sha256=hashlib.sha256(prefix.read_bytes()).hexdigest())
     ]
+    plan["internal_accounts"] = sorted(set(plan.get("internal_accounts", [])) | {
+        "refund_766", "service_call_726", "service_call_728",
+    })
     return plan
 
 

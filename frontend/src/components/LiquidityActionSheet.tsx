@@ -56,8 +56,7 @@ export default function LiquidityActionSheet({ position, action, assets, account
       <div className="tk-foot__row"><button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>Отмена</button>
         <button type="button" className="btn btn--primary" disabled={!valid || busy} onClick={() => void submit()}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>
       </div></div>}>
-    {withdraw && <>{field('Доля позиции, %', share, setShare)}<p className="tok-row__hint">Укажите полученные монеты. Для вывода всей позиции используйте «Закрыть позицию».</p></>}
-    {action === 'lp_snapshot' && <p className="tok-row__hint">Количество монет внутри пула на выбранную дату. Остаток кошелька и общая себестоимость не меняются.</p>}
+    {withdraw && field('Доля позиции, %', share, setShare)}
     {reward && <div className="apf-field"><label className="apf-label">Монета награды<select className="apf-input" value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={busy}>
       <option value="">Выберите монету</option>{assets.map((a) => <option key={a.id} value={a.id}>{a.symbol} · {a.network_code}</option>)}
     </select></label></div>}

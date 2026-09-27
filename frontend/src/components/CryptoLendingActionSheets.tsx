@@ -130,9 +130,6 @@ export function LendingTopUpSheet({
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Снимет монеты со счёта и добавит в лендинг.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{sourceSymbol} — количество</label>
         <input
@@ -261,9 +258,6 @@ export function LendingTakeDebtSheet({
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Заёмные монеты прибавятся к активу на счёте, долг увеличится на ту же сумму.
-      </p>
       {lockedAssetId == null && (
         <div className="apf-field">
           <label className="apf-label">Какую монету занимаем</label>
@@ -408,9 +402,6 @@ export function LendingRepayDebtSheet({
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Спишет монеты со счёта и уменьшит долг лендинга.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{symbol || 'Заём'} — погасить</label>
         <input
@@ -434,7 +425,6 @@ export function LendingRepayDebtSheet({
         <label className="apf-label">Из этой суммы — проценты</label>
         <input className="apf-input" type="text" inputMode="decimal" placeholder="0"
           value={interest} onChange={(e) => setInterest(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
-        <span className="tok-row__hint">Основной долг переносит затраты на активы, проценты учитываются как расход.</span>
       </div>
       <div className="apf-field">
         <label className="apf-label">Дата</label>
@@ -522,9 +512,6 @@ export function LendingAdjustSheet({ open, position, onClose, onSuccess }: Commo
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Меняет цифры в позиции без движения по активу — для учёта набежавших процентов.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{collateralSymbol} в лендинге</label>
         <input
@@ -646,9 +633,6 @@ export function LendingPartialWithdrawSheet({
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Часть залога вернётся на счёт. Долг при этом не меняется.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{symbol} — снять</label>
         <input
@@ -753,15 +737,7 @@ export function LendingCloseSheet({
         </div>
       )}
     >
-      {hasDebt ? (
-        <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-          Сначала погаси долг {formatNumericAmount(debtQty, 8)} {lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}, после этого позицию можно закрыть.
-        </p>
-      ) : (
-        <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-          Залог вернётся на счёт. Можно подкрутить количество, если оно отличается от того, что в позиции.
-        </p>
-      )}
+      {hasDebt && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>Сначала погасите долг: {formatNumericAmount(debtQty, 8)} {lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}</span></div>}
       <div className="apf-field">
         <label className="apf-label">{symbol} — вернётся</label>
         <input
@@ -849,11 +825,6 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
         </button>
       </div>}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 12 }}>
-        {liquidate
-          ? 'Укажите фактически списанный залог и погашенный долг по данным протокола. Стоимость основного долга перейдёт к активам, проценты и штраф станут расходом. Здесь учитывается уже произошедшая ликвидация.'
-          : kind === 'yield' ? 'Введите только новые начисленные монеты, оставшиеся внутри протокола. Себестоимость и заёмные единицы не увеличатся.' : 'Введите только новые проценты, а не весь долг. Долг увеличится; расход определится по стоимости монет при погашении.'}
-      </p>
       {liquidate && collateralPositions && collateralPositions.length > 1 && <div className="apf-field">
         <label className="apf-label">Из какого залога списаны монеты</label>
         <select className="picker-v2" value={collateralId} onChange={(e) => setCollateralId(Number(e.target.value))} disabled={busy}>
@@ -866,8 +837,6 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
         {input(`Из погашенного — проценты, ${debtSymbol} (0, если нет)`, interest, setInterest)}
         <label className="apf-label"><input type="checkbox" checked={penaltyUnknown} disabled={busy} onChange={(e) => setPenaltyUnknown(e.target.checked)} /> Размер штрафа неизвестен</label>
         {!penaltyUnknown && input(`Из списанного залога — штраф, ${collateral.asset_symbol} (0, если нет)`, penalty, setPenalty)}
-        {penaltyUnknown && <p className="tok-row__hint">Общее списание сохранится. Распределение стоимости между погашением и штрафом останется условным до уточнения.</p>}
-        <p className="tok-row__hint">Проценты сначала должны быть начислены в истории. Штраф указывайте по данным протокола; неизвестную сумму не заменяйте нулём.</p>
       </>}
       <div className="apf-field"><label className="apf-label">Дата</label>
         <input className="apf-input" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />

@@ -5,7 +5,10 @@ CREATE OR REPLACE FUNCTION budgeting.is__crypto_audit_comment(
         -- Editable position notes follow the last writer of this comment,
         -- not the origin of the position. Later manual notes remain visible.
         SELECT (s.evidence->>'comment_origin' = 'audit'
-                OR s.source_namespace = 'first-hundred-dev-v1') IS TRUE
+                OR s.source_namespace = 'first-hundred-dev-v1'
+                OR (s.source_namespace = 'manual-portfolio-v1'
+                    AND _comment IS DISTINCT FROM s.evidence->'request_payload'->>'comment'
+                    AND _comment IS DISTINCT FROM s.evidence->'fee'->>'comment')) IS TRUE
         FROM budgeting.crypto_source_mutations m
         JOIN budgeting.crypto_source_events s ON s.id=m.source_event_id
         WHERE m.table_name=_ledger_table AND m.row_key=jsonb_build_object('id',_ledger_id)
@@ -21,6 +24,16 @@ CREATE OR REPLACE FUNCTION budgeting.is__crypto_audit_comment(
           -- reconstruction predates that field; its comments are audit notes.
           -- Adopted bank history and manual comments remain user-visible.
           AND (s.evidence->>'comment_origin' = 'audit'
-               OR s.source_namespace = 'first-hundred-dev-v1')
+               OR s.source_namespace = 'first-hundred-dev-v1'
+               OR (s.source_namespace = 'manual-portfolio-v1' AND NOT EXISTS (
+                   -- Generated movement labels are not user notes. Match the
+                   -- original submitted comment, never a list of magic texts.
+                   SELECT 1 FROM budgeting.crypto_source_mutations m
+                   WHERE m.source_event_id=s.id AND m.table_name=_ledger_table
+                     AND m.row_key=jsonb_build_object('id',_ledger_id)
+                     AND NULLIF(m.after_row->>'comment','') IS NOT NULL
+                     AND (m.after_row->>'comment'=s.evidence->'request_payload'->>'comment'
+                          OR m.after_row->>'comment'=s.evidence->'fee'->>'comment')
+               )))
     ) END;
 $function$;
