@@ -1205,9 +1205,9 @@ export type CryptoEditableSource = {
 type CryptoCorrectionState = {
   positions:{id:number;name:string;quantity:string;cost:number|null;funding:Record<string,string>|null}[];
   protocols:{id:number;name:string;quantity:string;cost:string|null;metadata:Record<string,unknown>}[];
-  bank:{bank_account_id:number;currency_code:string;amount:number}[];
+  bank:{bank_account_id:number;currency_code:string;amount:number;historical_cost_in_base:number}[];
   budget:{category_id:number;name:string;currency_code:string;amount:string}[];
-  crypto_bank:{bank_account_id:number;crypto_asset_id:number;symbol:string;amount:number}[];
+  crypto_bank:{bank_account_id:number;crypto_asset_id:number;symbol:string;amount:number;cost_base_remaining:number}[];
 };
 export type CryptoCorrectionResult = {
   source_event_id:number;revision:number;replayed_sources:number;preview_token:string;applied:boolean;

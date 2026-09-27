@@ -17,6 +17,12 @@ BEGIN
      IF oldid IS NULL THEN RAISE EXCEPTION 'Исправление меняет структуру проводок; автоматический пересчёт остановлен'; END IF;
      NEW:=jsonb_populate_record(NEW,jsonb_build_object('id',oldid)||
        CASE WHEN oldrow ? 'created_at' THEN jsonb_build_object('created_at',oldrow->'created_at') ELSE '{}'::jsonb END);
+     -- Explanatory annotations are not financial inputs. Preserve them when
+     -- recreating an imported position; never copy balances/funding metadata.
+     IF TG_TABLE_NAME='crypto_protocol_positions' AND oldrow#>'{metadata,historical_accrual_note}' IS NOT NULL THEN
+       NEW:=jsonb_populate_record(NEW,jsonb_build_object('metadata',
+         (to_jsonb(NEW)->'metadata')||jsonb_build_object('historical_accrual_note',oldrow#>'{metadata,historical_accrual_note}')));
+     END IF;
      UPDATE pg_temp.crypto_replay_identity SET used=true WHERE id=slot;
    END IF;
    RETURN NEW;

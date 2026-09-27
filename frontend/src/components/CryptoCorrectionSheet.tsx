@@ -15,8 +15,8 @@ const fields: Record<string, string> = {
 const kinds: Record<string,string> = { swap:'Обмен',transfer:'Перевод',create_protocol:'Размещение в DeFi',
   top_up_protocol:'Пополнение DeFi',close_protocol:'Закрытие DeFi',partial_close_protocol:'Вывод из DeFi',
   borrow:'Заём',repay:'Погашение',accrue_interest:'Проценты по долгу',liquidate:'Ликвидация',
-  position_income:'Награда',protocol_yield:'Начисление в DeFi',fee:'Комиссия',group_lending:'Общий счёт протокола',
-  bank_buy:'Покупка через банк',bank_to_portfolio:'Ввод в портфель',bank_withdraw:'Вывод в банк',bank_cash_sell:'Продажа в банке' };
+  reward:'Награда',expense:'Расход',receive_unknown:'Поступление',fee_refund:'Возврат комиссии',quantity_correction:'Уточнение количества',staking_convert:'Обмен стейкингового токена',accrue:'Начисление',tag_lending_account:'Счёт протокола',buy_fiat:'Покупка',sell_fiat:'Продажа',bank_sell:'Продажа через банк',settle_fiat_sale:'Категория расхода',position_income:'Награда',protocol_yield:'Начисление в DeFi',fee:'Комиссия',group_lending:'Общий счёт протокола',
+  bank_purchase:'Покупка через банк',bank_settle_sale:'Категория карточной оплаты',budget_allocate:'Распределение бюджета',bank_expense:'Расход',bank_crypto_expense:'Расход в криптовалюте',observation:'Примечание',lp_custody:'Передача LP',bank_buy:'Покупка через банк',bank_to_portfolio:'Ввод в портфель',bank_withdraw:'Вывод в банк',bank_cash_sell:'Продажа в банке' };
 
 type Props = { open:boolean; anchorAccountId:number; accounts:{id:number;name:string}[]; onClose:()=>void; onSuccess:()=>void };
 export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,onClose,onSuccess}:Props) {
@@ -66,8 +66,8 @@ export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,onC
         <label className="tk-field"><span>Счёт</span><select className="tk-input" value={anchorId} disabled={busy} onChange={e=>{setAnchorId(Number(e.target.value));setOffset(0);setError('');}}>
           {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
         </select></label>
-        <p className="tk-hint">Ручные операции владельца выбранного счёта. Перед применением бот покажет результат пересчёта последующей цепочки.</p>
-        {!busy&&rows.length===0&&<p>На этой странице нет ручных операций. Импортированная история хранится отдельно и пока недоступна для такого исправления.</p>}
+        <p className="tk-hint">Операции владельца выбранного счёта с проверенным журналом. Перед применением бот покажет результат пересчёта всей последующей цепочки. Для ранней операции это может занять несколько минут.</p>
+        {!busy&&rows.length===0&&<p>На этой странице нет доступных для исправления операций.</p>}
         {rows.map(row=><button key={row.id} className="btn btn--ghost" type="button" disabled={!row.reversible||busy} onClick={()=>{setSelected(row);setValues({});setReason('');setPreview(null);}}>
           {row.accounting_date} · {row.context} · {row.commands.map(c=>kinds[c.kind]??c.kind).join(' + ')} · версия {row.revision}
           {!row.reversible?' · нет снимка для пересчёта':''}<br />
@@ -90,9 +90,15 @@ export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,onC
           <p>{preview.applied?'Исправление применено':'Предварительный результат'} · пересчитано событий: {preview.replayed_sources}</p>
           {changedPositions.map(p=>{const b=preview.before.positions.find(v=>v.id===p.id);return <p key={p.id}>{p.name}: количество {b?.quantity??'0'} → {p.quantity}; себестоимость {b?.cost??'неизвестна'} → {p.cost??'неизвестна'} в базовой валюте{JSON.stringify(b?.funding)!==JSON.stringify(p.funding)?' · изменилось открытое финансирование':''}</p>;})}
           {changedProtocols.map(p=>{const b=preview.before.protocols.find(v=>v.id===p.id);return <p key={p.id}>{p.name}: количество {b?.quantity??'0'} → {p.quantity}; себестоимость {b?.cost??'неизвестна'} → {p.cost??'неизвестна'} в базовой валюте. Долг: {String(b?.metadata.borrowed_quantity??'0')} → {String(p.metadata.borrowed_quantity??'0')}.</p>;})}
-          {JSON.stringify(preview.before.bank)!==JSON.stringify(preview.after.bank)&&<p>Изменится банковский остаток. Проверьте суммы перед применением: {preview.after.bank.map(b=>`${b.currency_code}: ${b.amount}`).join('; ')}</p>}
+          {preview.after.bank.filter(b=>JSON.stringify(b)!==JSON.stringify(preview.before.bank.find(a=>a.bank_account_id===b.bank_account_id&&a.currency_code===b.currency_code))).map(b=>{
+            const old=preview.before.bank.find(a=>a.bank_account_id===b.bank_account_id&&a.currency_code===b.currency_code);
+            return <p key={`${b.bank_account_id}:${b.currency_code}`}>Банковский счёт №{b.bank_account_id}: {old?.amount??0} → {b.amount} {b.currency_code}; себестоимость {old?.historical_cost_in_base??0} → {b.historical_cost_in_base} в базовой валюте.</p>;
+          })}
           {preview.after.budget.filter(b=>b.amount!==preview.before.budget.find(a=>a.category_id===b.category_id&&a.currency_code===b.currency_code)?.amount).map(b=><p key={`${b.category_id}:${b.currency_code}`}>Категория «{b.name}»: {preview.before.budget.find(a=>a.category_id===b.category_id&&a.currency_code===b.currency_code)?.amount??'0'} → {b.amount} {b.currency_code}</p>)}
-          {JSON.stringify(preview.before.crypto_bank)!==JSON.stringify(preview.after.crypto_bank)&&<p>Изменится криптовалюта на банковском счёте: {preview.after.crypto_bank.map(b=>`${b.symbol}: ${b.amount}`).join('; ')}</p>}
+          {preview.after.crypto_bank.filter(b=>JSON.stringify(b)!==JSON.stringify(preview.before.crypto_bank.find(a=>a.bank_account_id===b.bank_account_id&&a.crypto_asset_id===b.crypto_asset_id))).map(b=>{
+            const old=preview.before.crypto_bank.find(a=>a.bank_account_id===b.bank_account_id&&a.crypto_asset_id===b.crypto_asset_id);
+            return <p key={`${b.bank_account_id}:${b.crypto_asset_id}`}>Криптовалюта на банковском счёте №{b.bank_account_id}: {old?.amount??0} → {b.amount} {b.symbol}; себестоимость {old?.cost_base_remaining??0} → {b.cost_base_remaining} в базовой валюте.</p>;
+          })}
         </section>}
         {!preview?.applied&&<button className="btn btn--primary" type="button" disabled={busy||changes.length===0||!reason.trim()} onClick={()=>void submit(!!preview)}>
           {busy?'Пересчитываем…':preview?'Применить исправление':'Посмотреть результат'}

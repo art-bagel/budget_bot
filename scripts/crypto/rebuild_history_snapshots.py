@@ -75,7 +75,9 @@ async def verify_sources():
     live = await asyncpg.connect(**{**cfg, "database": "budget_bot"})
     try:
         query = "select to_jsonb(s)-'created_at'-'reversible' data from budgeting.crypto_source_events s order by id"
-        rebuilt, existing = await fresh.fetch(query), await live.fetch(query)
+        rebuilt = await fresh.fetch(query)
+        source_ids = [json.loads(r["data"])["id"] for r in rebuilt]
+        existing = await live.fetch(query.replace("order by id", "where id=any($1::bigint[]) order by id"), source_ids)
         if len(rebuilt) != 1960 or len(existing) != len(rebuilt):
             raise RuntimeError("Expected the complete reviewed 1960-source history")
         for a, b in zip(rebuilt, existing, strict=True):

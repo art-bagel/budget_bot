@@ -9,7 +9,7 @@ BEGIN
  IF _limit NOT BETWEEN 1 AND 100 OR _offset<0 THEN RAISE EXCEPTION 'Некорректная страница'; END IF;
  ownerkey:=a.owner_type||':'||CASE WHEN a.owner_type='user' THEN a.owner_user_id ELSE a.owner_family_id END;
  RETURN (SELECT COALESCE(jsonb_agg(to_jsonb(e) ORDER BY occurred_at DESC,order_in_timestamp DESC),'[]'::jsonb) FROM (
- SELECT s.id,s.accounting_date,s.occurred_at,s.order_in_timestamp,s.revision,s.reversible,
+ SELECT s.id,COALESCE((s.commands->0->'payload'->>'operated_at')::date,s.accounting_date) accounting_date,s.occurred_at,s.order_in_timestamp,s.revision,s.reversible,
  (SELECT jsonb_agg(c||jsonb_build_object('editable_fields',budgeting.get__crypto_correction_fields(c->>'kind')) ORDER BY ord)
  FROM jsonb_array_elements(s.commands) WITH ORDINALITY v(c,ord)) commands,
  (SELECT string_agg(DISTINCT COALESCE(p.title,pp.protocol_name,ca.symbol)||CASE WHEN c->>'kind'='swap' THEN ' → '||COALESCE(ca.symbol,'') ELSE '' END,' / ')
@@ -25,6 +25,19 @@ BEGIN
      WHERE r.source_event_id=s.id),'[]'::jsonb) previous_versions
  FROM budgeting.crypto_source_events s WHERE s.owner_key=ownerkey
  -- Imported technical exchange detail stays out of the ordinary manual editor.
- AND s.source_namespace='manual-portfolio-v1'
+ AND (s.source_namespace='manual-portfolio-v1' OR (s.reversible AND EXISTS(
+   SELECT 1 FROM jsonb_array_elements(s.commands) c
+   JOIN budgeting.bank_accounts visible ON visible.id=COALESCE(
+      (c->'payload'->>'investment_account_id')::bigint,
+      (SELECT p.investment_account_id FROM budgeting.portfolio_positions p
+       WHERE p.id=COALESCE(c->'payload'->>'source_position_id',c->'payload'->>'position_id')::bigint
+       AND c->>'kind' IN ('swap','transfer','fee','position_income','bank_withdraw','create_protocol')),
+      (SELECT p.investment_account_id FROM budgeting.crypto_protocol_positions p
+       WHERE p.id=(c->'payload'->>'position_id')::bigint
+       AND c->>'kind' IN ('borrow','repay','liquidate','accrue_interest','protocol_yield','close_protocol','partial_close_protocol','top_up_protocol')),
+      (c->'payload'->>'bank_account_id')::bigint)
+   WHERE cardinality(budgeting.get__crypto_correction_fields(c->>'kind'))>0
+    AND visible.provider_name IS DISTINCT FROM 'reconstruction_internal'
+  )))
  ORDER BY occurred_at DESC,order_in_timestamp DESC LIMIT _limit OFFSET _offset) e);
 END $f$;
