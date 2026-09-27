@@ -34,6 +34,7 @@ import {
   requestAccountDeletion,
   deleteInvestmentAccount,
   setAccountStatistics,
+  updateCryptoAccountSettings,
   deleteTinkoffConnection,
   dissolveFamily,
   fetchBankAccounts,
@@ -131,6 +132,10 @@ export default function Settings({
   const [dissolveInProgress, setDissolveInProgress] = useState(false);
   const [dissolveError, setDissolveError] = useState<string | null>(null);
 
+  const [showArchivedAccounts, setShowArchivedAccounts] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
+  const [accountName, setAccountName] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -177,7 +182,7 @@ export default function Settings({
     setAccountsLoading(true);
     setAccountsError(null);
     try {
-      const items = await fetchBankAccounts('investment');
+      const items = await fetchBankAccounts('investment', true);
       setInvestmentAccounts(items);
     } catch (reason: unknown) {
       setAccountsError(reason instanceof Error ? reason.message : String(reason));
@@ -322,6 +327,20 @@ export default function Settings({
       setCreateInvestmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setCreatingInvestmentAccount(false);
+    }
+  };
+
+  const saveCryptoAccount = async (account: BankAccount, archived: boolean, name = account.name, address = account.wallet_address ?? '') => {
+    setDeletingInvestmentAccountId(account.id);
+    setDeleteInvestmentError(null);
+    try {
+      await updateCryptoAccountSettings(account.id, { name, wallet_address: address.trim() || null, is_archived: archived });
+      setEditingAccount(null);
+      await loadAccounts();
+    } catch (reason: unknown) {
+      setDeleteInvestmentError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingInvestmentAccountId(null);
     }
   };
 
@@ -809,16 +828,34 @@ export default function Settings({
               </form>
             )}
 
+            <button type="button" className="st-btn st-btn--ghost" onClick={() => setShowArchivedAccounts(!showArchivedAccounts)}>
+              {showArchivedAccounts ? 'Активные счета' : 'Архив счетов'}
+            </button>
+            {editingAccount && (
+              <form className="invest-form" onSubmit={(e) => { e.preventDefault(); void saveCryptoAccount(editingAccount, Boolean(editingAccount.is_archived), accountName, walletAddress); }}>
+                <label className="st-field"><span className="st-field__lab">Название счёта</span>
+                  <input className="st-input" value={accountName} maxLength={100} required onChange={(e) => setAccountName(e.target.value)} />
+                </label>
+                <label className="st-field"><span className="st-field__lab">Адрес кошелька</span>
+                  <input className="st-input" value={walletAddress} maxLength={256} autoCapitalize="none" spellCheck={false} onChange={(e) => setWalletAddress(e.target.value)} />
+                </label>
+                <div className="invest-form__foot">
+                  <button type="button" className="st-btn st-btn--ghost" disabled={deletingInvestmentAccountId !== null} onClick={() => void saveCryptoAccount(editingAccount, !editingAccount.is_archived, accountName, walletAddress)}>{editingAccount.is_archived ? 'Восстановить' : 'В архив'}</button>
+                  <button type="button" className="st-btn st-btn--ghost" onClick={() => setEditingAccount(null)}>Отмена</button>
+                  <button type="submit" className="st-btn st-btn--primary" disabled={deletingInvestmentAccountId !== null || !accountName.trim()}>Сохранить</button>
+                </div>
+              </form>
+            )}
             {accountsError && <div className="danger-card__error">{accountsError}</div>}
             {deleteInvestmentError && <div className="danger-card__error">{deleteInvestmentError}</div>}
 
             {accountsLoading ? (
               <div className="row__sub">Загружаем счета…</div>
-            ) : investmentAccounts.length === 0 ? (
-              <div className="row__sub">Инвестиционных счетов пока нет.</div>
+            ) : investmentAccounts.filter(a => Boolean(a.is_archived) === showArchivedAccounts).length === 0 ? (
+              <div className="row__sub">{showArchivedAccounts ? 'Архив пуст.' : 'Инвестиционных счетов пока нет.'}</div>
             ) : (
               <ul className="invest-list">
-                {investmentAccounts.map((account) => {
+                {investmentAccounts.filter(a => Boolean(a.is_archived) === showArchivedAccounts).map((account) => {
                   const tone = account.investment_asset_type
                     ? ASSET_CHIP[account.investment_asset_type]
                     : null;
@@ -840,6 +877,10 @@ export default function Settings({
                         </div>
                       </div>
                       <div className="invest-tile__right">
+                        {account.investment_asset_type === 'crypto' && <>
+                          <button type="button" className="ic-btn-xs" aria-label={`Изменить ${account.name}`} onClick={() => { setEditingAccount(account); setAccountName(account.name); setWalletAddress(account.wallet_address ?? ''); }}><IconChevronRight /></button>
+                        </>}
+
                         <button type="button" role="switch"
                           aria-label={`Включать ${account.name} в общую статистику`}
                           aria-checked={account.include_in_statistics !== false}

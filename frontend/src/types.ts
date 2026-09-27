@@ -653,6 +653,8 @@ export interface FamilyInvitation {
 }
 
 export interface BankAccount {
+  is_archived?: boolean;
+  wallet_address?: string | null;
   include_in_statistics?: boolean;
   id: number;
   name: string;

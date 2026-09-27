@@ -810,7 +810,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
     try {
       const [investmentAccounts, loadedCashAccounts, loadedPositions, loadedCurrencies, loadedSummary, loadedConnections, loadedCryptoAssets] = await Promise.all([
-        fetchBankAccounts('investment'),
+        fetchBankAccounts('investment', true),
         fetchBankAccounts('cash'),
         fetchPortfolioPositions(),
         fetchCurrencies(),
@@ -818,8 +818,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         getTinkoffConnections().catch(() => [] as ExternalConnection[]),
         fetchCryptoAssets().catch(() => [] as CryptoAsset[]),
       ]);
-      const visibleAccounts = investmentAccounts.filter((account) => account.provider_name !== 'reconstruction_internal');
-      const internalAccountIds = new Set(investmentAccounts.filter((account) => account.provider_name === 'reconstruction_internal').map((account) => account.id));
+      const visibleAccounts = investmentAccounts.filter((account) => account.provider_name !== 'reconstruction_internal' && !account.is_archived);
+      const internalAccountIds = new Set(investmentAccounts.filter((account) => (account.provider_name === 'reconstruction_internal' || account.is_archived)).map((account) => account.id));
       const snapshots = await Promise.all(
         visibleAccounts.map(async (account) => ({
           account,

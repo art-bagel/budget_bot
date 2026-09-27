@@ -172,6 +172,9 @@ class Context(DataBase):
             bank_account_id,
         )
 
+    async def set__crypto_account_settings(self, user_id: int, account_id: int, name: str, wallet_address: str | None, archived: bool) -> dict:
+        return await self.call_function(self._fn('set__crypto_account_settings'), user_id, account_id, name, wallet_address, archived)
+
     async def set__account_statistics(self, user_id: int, account_id: int, included: bool) -> dict:
         return await self.call_function(self._fn('set__account_statistics'), user_id, account_id, included)
 

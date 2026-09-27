@@ -32,6 +32,8 @@ class BankAccountItem(BaseModel):
     provider_account_ref: Optional[str] = None
     badge_color: Optional[str] = None
     include_in_statistics: bool = True
+    is_archived: bool = False
+    wallet_address: Optional[str] = None
     is_primary: bool
     is_active: bool
     created_at: str
@@ -461,8 +463,10 @@ async def get_bank_accounts(
     user: CurrentUser = Depends(get_current_user),
     is_active: Optional[bool] = Query(True),
     account_kind: Optional[Literal['cash', 'investment', 'credit']] = Query('cash'),
+    include_archived: bool = Query(False),
 ) -> list:
-    return await reports.get__bank_accounts(user.user_id, is_active, account_kind)
+    items = await reports.get__bank_accounts(user.user_id, is_active, account_kind)
+    return [item for item in items if include_archived or not item.get('is_archived', False)]
 
 
 @router.post('', response_model=BankAccountItem)
@@ -647,3 +651,19 @@ async def update_account_statistics(
     user: CurrentUser = Depends(get_current_user),
 ):
     return await context.set__account_statistics(user.user_id, bank_account_id, body.include_in_statistics)
+
+
+class CryptoAccountSettingsRequest(BaseModel):
+    name: str
+    wallet_address: Optional[str] = None
+    is_archived: bool = False
+
+
+@router.patch('/investment/{bank_account_id}/settings')
+async def update_crypto_account_settings(
+    bank_account_id: int, body: CryptoAccountSettingsRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await context.set__crypto_account_settings(
+        user.user_id, bank_account_id, body.name, body.wallet_address, body.is_archived,
+    )

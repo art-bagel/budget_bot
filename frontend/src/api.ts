@@ -856,8 +856,9 @@ export async function createScheduledExpense(
 
 export async function fetchBankAccounts(
   accountKind: 'cash' | 'investment' | 'credit' = 'cash',
+  includeArchived = false,
 ): Promise<BankAccount[]> {
-  return apiFetch<BankAccount[]>(`/bank-accounts?account_kind=${accountKind}`);
+  return apiFetch<BankAccount[]>(`/bank-accounts?account_kind=${accountKind}&include_archived=${includeArchived}`);
 }
 
 export async function createBankAccount(data: CreateBankAccountRequest): Promise<BankAccount> {
@@ -1244,4 +1245,9 @@ export async function setAccountStatistics(accountId: number, included: boolean)
 
 export async function refundCryptoFee(eventId: number, data: { request_id: string; source_position_id: number; quantity: string; operated_at: string; comment?: string }): Promise<void> {
   await apiFetch(`/crypto/fees/${eventId}/refund`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+
+export async function updateCryptoAccountSettings(id: number, data: {name: string; wallet_address: string | null; is_archived: boolean}): Promise<void> {
+  await apiFetch(`/bank-accounts/investment/${id}/settings`, { method: 'PATCH', body: JSON.stringify(data) });
 }
