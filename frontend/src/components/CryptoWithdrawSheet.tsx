@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useMemo, useState } from 'react';
 import { AlertCircle, Wallet } from 'lucide-react';
 
@@ -51,7 +52,7 @@ export default function CryptoWithdrawSheet({
   );
 
   const defaultBank = targets.find((a) => a.id === defaultBankAccountId) ?? targets[0];
-  const defaultAmount = sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 8) : '';
+  const defaultAmount = position.quantity_exact ?? (sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 18) : '');
   const [bankAccountId, setBankAccountId] = useState<string>(defaultBank ? String(defaultBank.id) : '');
   const [amount, setAmount] = useState(defaultAmount);
   const [withdrawnAt, setWithdrawnAt] = useState(todayIso());
@@ -67,18 +68,21 @@ export default function CryptoWithdrawSheet({
 
   const targetBank = targets.find((a) => String(a.id) === bankAccountId);
 
+  const cryptoRequest = useCryptoRequestKey('bank-withdraw');
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await transferCryptoFromInvestment({
+      const payload = {
         position_id: position.id,
         bank_account_id: Number(bankAccountId),
         amount,
         comment: comment.trim() || undefined,
         operated_at: withdrawnAt || undefined,
-      });
+      };
+      await transferCryptoFromInvestment({...payload, request_id: cryptoRequest.requestId(payload)});
+      cryptoRequest.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));

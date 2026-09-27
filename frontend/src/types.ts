@@ -136,11 +136,12 @@ export interface RecordExpenseResponse {
 }
 
 export interface ExchangeCurrencyRequest {
+  request_id?: string;
   bank_account_id: number;
   from_currency_code?: string;
-  from_amount: number;
+  from_amount: number | string;
   to_currency_code?: string;
-  to_amount: number;
+  to_amount: number | string;
   from_crypto_asset_id?: number;
   to_crypto_asset_id?: number;
   comment?: string;
@@ -234,10 +235,11 @@ export interface CryptoOperationResponse {
 }
 
 export interface TransferCryptoToInvestmentRequest {
+  request_id?: string;
   bank_account_id: number;
   investment_account_id: number;
   crypto_asset_id: number;
-  amount: number;
+  amount: number | string;
   position_id?: number;
   title?: string;
   comment?: string;
@@ -245,6 +247,7 @@ export interface TransferCryptoToInvestmentRequest {
 }
 
 export interface TransferCryptoFromInvestmentRequest {
+  request_id?: string;
   position_id: number;
   bank_account_id: number;
   amount: number | string;

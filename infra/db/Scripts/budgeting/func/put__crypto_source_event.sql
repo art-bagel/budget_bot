@@ -40,7 +40,9 @@ BEGIN
     IF _account.id IS NULL OR NOT budgeting.has__owner_access(_user_id,_account.owner_type,_account.owner_user_id,_account.owner_family_id) THEN
         RAISE EXCEPTION 'Access denied to source journal account';
     END IF;
-    IF _account.account_kind<>'investment' OR _account.investment_asset_type<>'crypto' THEN
+    IF NOT ((_account.account_kind='investment' AND _account.investment_asset_type='crypto')
+        OR (_account.account_kind='cash' AND jsonb_typeof(_commands)='array'
+        AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('bank_buy','bank_cash_sell')))) THEN
         RAISE EXCEPTION 'Source journal requires a crypto investment account';
     END IF;
     _owner_key := _account.owner_type || ':' || CASE WHEN _account.owner_type='user' THEN _account.owner_user_id ELSE _account.owner_family_id END;
@@ -58,7 +60,7 @@ BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended('crypto-source:'||_owner_key,0));
     SELECT * INTO _prior FROM crypto_source_events
         WHERE owner_key=_owner_key AND source_namespace=_source_namespace AND source_id=_source_id;
-    IF FOUND THEN
+    IF FOUND AND current_setting('budgeting.crypto_replay_source',true) IS DISTINCT FROM _prior.id::text THEN
         IF _prior.anchor_account_id IS DISTINCT FROM _anchor_account_id
             OR _prior.occurred_at IS DISTINCT FROM _occurred_at
             OR _prior.order_in_timestamp IS DISTINCT FROM _order_in_timestamp
@@ -68,14 +70,19 @@ BEGIN
         END IF;
         RETURN _prior.result;
     END IF;
-    IF EXISTS(SELECT 1 FROM crypto_source_events WHERE owner_key=_owner_key
+    IF current_setting('budgeting.crypto_replay_source',true) IS DISTINCT FROM COALESCE(_prior.id::text,'missing') AND EXISTS(SELECT 1 FROM crypto_source_events WHERE owner_key=_owner_key
         AND (occurred_at,order_in_timestamp)>=(_occurred_at,_order_in_timestamp)) THEN
         RAISE EXCEPTION 'Source event is out of order; rebuild dependent history';
     END IF;
+    IF _prior.id IS NOT NULL AND current_setting('budgeting.crypto_replay_source',true)=_prior.id::text THEN
+        _id:=_prior.id;
+    ELSE
     INSERT INTO crypto_source_events(owner_key,anchor_account_id,source_namespace,source_id,
         occurred_at,order_in_timestamp,accounting_date,commands,evidence,created_by_user_id)
     VALUES(_owner_key,_anchor_account_id,_source_namespace,_source_id,_occurred_at,
         _order_in_timestamp,_accounting_date,_commands,_evidence,_user_id) RETURNING id INTO _id;
+    END IF;
+    UPDATE crypto_source_events SET reversible=true WHERE id=_id;
     PERFORM set_config('budgeting.crypto_source_event_id',_id::text,true);
     FOR _command IN SELECT value FROM jsonb_array_elements(_commands) LOOP
         IF jsonb_typeof(_command)<>'object' OR NOT (_command ?& ARRAY['kind','payload'])
@@ -113,7 +120,7 @@ BEGIN
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw','position_income')) THEN
+            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw','bank_to_portfolio','position_income')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -348,10 +355,26 @@ BEGIN
             UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_bank_sale',true,
                 'bank_sale_operation_id',_result->'sale'->'operation_id','bank_sale_proceeds',_numeric)
             WHERE linked_operation_id=(_result->'transfer'->>'operation_id')::bigint;
+        WHEN 'bank_cash_sell' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN
+              ('bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment')) THEN
+                RAISE EXCEPTION 'Unsupported cash sale argument';
+            END IF;
+            SELECT * INTO _resource FROM bank_accounts WHERE id=(_payload->>'bank_account_id')::bigint;
+            IF _resource.id IS NULL OR _resource.account_kind<>'cash'
+                OR _resource.owner_type IS DISTINCT FROM _account.owner_type
+                OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
+                OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id THEN
+                RAISE EXCEPTION 'Bank sale is outside journal owner';
+            END IF;
+            _result:=budgeting.put__sell_crypto_asset(_user_id,(_payload->>'bank_account_id')::bigint,
+                (_payload->>'crypto_asset_id')::bigint,(_payload->>'quantity')::numeric,
+                (_payload->>'fiat_currency_code')::char(3),(_payload->>'fiat_amount')::numeric,
+                _payload->>'comment',_accounting_date);
         WHEN 'bank_buy', 'bank_to_portfolio' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(
                 CASE WHEN _kind='bank_buy' THEN ARRAY['bank_account_id','crypto_asset_id','quantity','fiat_currency_code','fiat_amount','comment']
-                ELSE ARRAY['bank_account_id','investment_account_id','crypto_asset_id','quantity','comment','purchase_quality','purchase_source'] END))) THEN
+                ELSE ARRAY['bank_account_id','investment_account_id','crypto_asset_id','quantity','comment','purchase_quality','purchase_source','position_id','title'] END))) THEN
                 RAISE EXCEPTION 'Unsupported argument for bank crypto command';
             END IF;
             FOREACH _key IN ARRAY CASE WHEN _kind='bank_buy'
@@ -367,12 +390,12 @@ BEGIN
                 RAISE EXCEPTION 'Bank account is outside source journal owner scope';
             END IF;
             IF _kind='bank_buy' THEN
-                IF _payload->>'fiat_currency_code' IS DISTINCT FROM
+                IF _source_namespace<>'manual-portfolio-v1' AND _payload->>'fiat_currency_code' IS DISTINCT FROM
                     budgeting.get__owner_base_currency(_account.owner_type,_account.owner_user_id,_account.owner_family_id)::text THEN
                     RAISE EXCEPTION 'Historical bank buy currently requires base currency';
                 END IF;
                 _numeric:=(_payload->>'fiat_amount')::numeric;
-                IF _numeric<=0 OR _numeric::text IN ('NaN','Infinity','-Infinity') OR _numeric<>round(_numeric,2) THEN
+                IF _numeric<=0 OR _numeric::text IN ('NaN','Infinity','-Infinity') OR _numeric<>round(_numeric,CASE WHEN _payload->>'fiat_currency_code'=budgeting.get__owner_base_currency(_account.owner_type,_account.owner_user_id,_account.owner_family_id)::text THEN 2 ELSE 8 END) THEN
                     RAISE EXCEPTION 'Historical bank purchase amount must be positive exact money';
                 END IF;
                 _result:=budgeting.put__buy_crypto_asset(_user_id,(_payload->>'bank_account_id')::bigint,
@@ -388,7 +411,7 @@ BEGIN
                 END IF;
                 _result:=budgeting.put__transfer_crypto_to_investment(_user_id,(_payload->>'bank_account_id')::bigint,
                     (_payload->>'investment_account_id')::bigint,(_payload->>'crypto_asset_id')::bigint,
-                    (_payload->>'quantity')::numeric,NULL,NULL,_payload->>'comment',_accounting_date);
+                    (_payload->>'quantity')::numeric,(_payload->>'position_id')::bigint,_payload->>'title',_payload->>'comment',_accounting_date);
                 IF _payload->>'purchase_quality'='estimated' THEN
                     UPDATE portfolio_events e SET metadata=e.metadata || jsonb_build_object(
                         'basis_quality','estimated','purchase_source',_payload->>'purchase_source')

@@ -1,3 +1,4 @@
+from uuid import UUID, uuid4
 from decimal import Decimal
 from datetime import date
 from typing import Any, Dict, List, Literal, Optional
@@ -91,11 +92,12 @@ class RecordExpenseResponse(BaseModel):
 
 
 class ExchangeCurrencyRequest(BaseModel):
+    request_id: Optional[UUID] = None
     bank_account_id: int
     from_currency_code: Optional[str] = None
-    from_amount: float
+    from_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     to_currency_code: Optional[str] = None
-    to_amount: float
+    to_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     from_crypto_asset_id: Optional[int] = None
     to_crypto_asset_id: Optional[int] = None
     comment: Optional[str] = None
@@ -103,7 +105,7 @@ class ExchangeCurrencyRequest(BaseModel):
 
     @field_validator('from_amount', 'to_amount')
     @classmethod
-    def amounts_must_be_positive(cls, v: float) -> float:
+    def amounts_must_be_positive(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
@@ -454,15 +456,11 @@ async def exchange_currency(
     if to_is_crypto:
         if body.from_currency_code is None:
             raise HTTPException(status_code=422, detail='from_currency_code is required when buying crypto')
-        result = await ledger.put__buy_crypto_asset(
-            user_id=user.user_id,
-            bank_account_id=body.bank_account_id,
-            fiat_currency_code=body.from_currency_code,
-            fiat_amount=body.from_amount,
-            crypto_asset_id=body.to_crypto_asset_id,
-            crypto_amount=body.to_amount,
-            comment=body.comment,
-            operated_at=body.operated_at,
+        result = await ledger.put__manual_crypto_movement(
+            user.user_id, body.request_id or uuid4(), 'bank_buy', dict(
+                bank_account_id=body.bank_account_id, fiat_currency_code=body.from_currency_code,
+                fiat_amount=str(body.from_amount), crypto_asset_id=body.to_crypto_asset_id,
+                quantity=str(body.to_amount), comment=body.comment), body.operated_at,
         )
         result = {
             **result,
@@ -472,15 +470,11 @@ async def exchange_currency(
     elif from_is_crypto:
         if body.to_currency_code is None:
             raise HTTPException(status_code=422, detail='to_currency_code is required when selling crypto')
-        result = await ledger.put__sell_crypto_asset(
-            user_id=user.user_id,
-            bank_account_id=body.bank_account_id,
-            crypto_asset_id=body.from_crypto_asset_id,
-            crypto_amount=body.from_amount,
-            fiat_currency_code=body.to_currency_code,
-            fiat_amount=body.to_amount,
-            comment=body.comment,
-            operated_at=body.operated_at,
+        result = await ledger.put__manual_crypto_movement(
+            user.user_id, body.request_id or uuid4(), 'bank_cash_sell', dict(
+                bank_account_id=body.bank_account_id, crypto_asset_id=body.from_crypto_asset_id,
+                quantity=str(body.from_amount), fiat_currency_code=body.to_currency_code,
+                fiat_amount=str(body.to_amount), comment=body.comment), body.operated_at,
         )
         result = {
             **result,

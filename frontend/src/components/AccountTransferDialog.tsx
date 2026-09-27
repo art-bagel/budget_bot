@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 import BottomSheet from './BottomSheet';
 import { fetchBankAccountSnapshot, fetchBankAccounts, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
@@ -293,19 +294,22 @@ export default function AccountTransferDialog({
     setFromSel(toSel); setToSel(fromSel); setAmount('');
   };
 
+  const cryptoRequest = useCryptoRequestKey('bank-crypto-transfer');
   const handleSubmit = async () => {
     if (!canSubmit || !fromSel || !toSel) return;
     setSubmitting(true); setError(null);
     try {
       if (fromItem?.assetType === 'crypto' && toItem?.kind === 'investment' && fromItem.cryptoAssetId) {
-        await transferCryptoToInvestment({
+        const payload = {
           bank_account_id: fromSel.accountId,
           investment_account_id: toSel.accountId,
           crypto_asset_id: fromItem.cryptoAssetId,
-          amount: amountValue,
+          amount,
           title: assetCode(fromItem),
           comment: comment.trim() || undefined,
-        });
+      };
+      await transferCryptoToInvestment({...payload, request_id: cryptoRequest.requestId(payload)});
+      cryptoRequest.completed();
       } else {
         await transferBetweenAccounts({
           from_account_id: fromSel.accountId,

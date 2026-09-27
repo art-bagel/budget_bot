@@ -1196,3 +1196,27 @@ export async function groupLendingPositions(positionId: number, data: {
     method: 'POST', body: JSON.stringify(data),
   });
 }
+
+export type CryptoEditableSource = {
+  id:number; accounting_date:string; revision:number; reversible:boolean; context:string|null;
+  commands:{kind:string;payload:Record<string,unknown>;editable_fields?:string[]}[];
+  previous_versions:{revision:number;commands:{kind:string;payload:Record<string,unknown>}[]}[];
+};
+type CryptoCorrectionState = {
+  positions:{id:number;name:string;quantity:string;cost:number|null;funding:Record<string,string>|null}[];
+  protocols:{id:number;name:string;quantity:string;cost:string|null;metadata:Record<string,unknown>}[];
+  bank:{bank_account_id:number;currency_code:string;amount:number}[];
+  budget:{category_id:number;name:string;currency_code:string;amount:string}[];
+  crypto_bank:{bank_account_id:number;crypto_asset_id:number;symbol:string;amount:number}[];
+};
+export type CryptoCorrectionResult = {
+  source_event_id:number;revision:number;replayed_sources:number;preview_token:string;applied:boolean;
+  before:CryptoCorrectionState;after:CryptoCorrectionState;
+};
+export function fetchCryptoCorrectionHistory(anchorAccountId:number,offset=0):Promise<CryptoEditableSource[]> {
+  return apiFetch(`/crypto/correction-history?anchor_account_id=${anchorAccountId}&limit=30&offset=${offset}`);
+}
+export function correctCryptoSource(id:number,payload:{expected_revision:number;request_id:string;reason:string;
+  changes:{command_index:number;field:string;value:string}[];apply:boolean;preview_token?:string}):Promise<CryptoCorrectionResult> {
+  return apiFetch(`/crypto/source-events/${id}/correct`,{method:'POST',body:JSON.stringify(payload)});
+}

@@ -18,13 +18,13 @@ DECLARE
     _result_index integer := 0;
 BEGIN
     SET search_path TO budgeting;
-    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer','borrow','repay','accrue_interest','liquidate','create_protocol','top_up_protocol','partial_close_protocol','close_protocol','fee','position_income','protocol_yield','group_lending') OR _kind IS NULL
+    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer','borrow','repay','accrue_interest','liquidate','create_protocol','top_up_protocol','partial_close_protocol','close_protocol','fee','position_income','protocol_yield','group_lending','bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') OR _kind IS NULL
        OR jsonb_typeof(_payload) IS DISTINCT FROM 'object' THEN
         RAISE EXCEPTION 'Некорректная ручная операция';
     END IF;
-    IF _kind='create_protocol' THEN
+    IF _kind IN ('create_protocol','bank_to_portfolio','bank_buy','bank_cash_sell') THEN
         SELECT * INTO _position FROM crypto_protocol_positions WHERE false;
-        SELECT * INTO _account FROM bank_accounts WHERE id=(_payload->>'investment_account_id')::bigint;
+        SELECT * INTO _account FROM bank_accounts WHERE id=(CASE WHEN _kind IN ('bank_buy','bank_cash_sell') THEN _payload->>'bank_account_id' ELSE _payload->>'investment_account_id' END)::bigint;
     ELSE
     IF _kind IN ('borrow','repay','accrue_interest','liquidate','top_up_protocol','partial_close_protocol','close_protocol','protocol_yield','group_lending') THEN
         SELECT * INTO _position FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint;
@@ -81,6 +81,12 @@ BEGIN
        OR EXISTS(SELECT 1 FROM crypto_source_events WHERE owner_key=_owner_key AND accounting_date>_day) THEN
         RAISE EXCEPTION 'После этой даты уже есть операции. Для изменения прошлого нужен пересчёт зависимой истории';
     END IF;
+    IF _kind IN ('bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') AND EXISTS(
+        SELECT 1 FROM operations WHERE owner_type=_account.owner_type
+        AND owner_user_id IS NOT DISTINCT FROM _account.owner_user_id
+        AND owner_family_id IS NOT DISTINCT FROM _account.owner_family_id AND operated_on>_day) THEN
+        RAISE EXCEPTION 'После этой даты уже есть банковские операции. Для изменения прошлого нужен пересчёт';
+    END IF;
     -- Forms specify a day, not an on-chain timestamp. Append at the end of that UTC day.
     _time:=(_day::timestamp + interval '1 day' - interval '1 microsecond') AT TIME ZONE 'UTC';
     SELECT COALESCE(max(order_in_timestamp)+1,0) INTO _order FROM crypto_source_events
@@ -91,6 +97,7 @@ BEGIN
         WHEN _kind='repay' THEN _payload-'value_in_base'
         WHEN _kind='accrue_interest' THEN (_payload-'external_id')||jsonb_build_object('value_in_base',0)
         WHEN _kind='liquidate' THEN _payload-'external_id'-'settlement_value_in_base'
+        WHEN _kind IN ('bank_to_portfolio','bank_withdraw') THEN (_payload-'amount'-'value_in_base')||jsonb_build_object('quantity',_payload->'amount')
         WHEN _kind='create_protocol' THEN _payload-'borrowed_crypto_asset_id'-'borrowed_quantity'-'borrowed_value_in_base'
         WHEN _kind='partial_close_protocol' THEN (_payload-'principal_value_in_base'-'secondary_value_in_base')
             ||jsonb_build_object('rewards_value_in_base',0,'secondary_rewards_value_in_base',0)

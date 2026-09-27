@@ -1,3 +1,4 @@
+import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
@@ -699,6 +700,7 @@ function protocolDisplayName(position: CryptoProtocolPosition): string {
 }
 
 export default function Portfolio({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
+  const [correctionsOpen, setCorrectionsOpen] = useState(false);
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -3091,6 +3093,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           </button>
         ))}
       </div>
+
+      {activeAssetTypeCode === 'crypto' && accounts.some(a => a.account.investment_asset_type === 'crypto') && <>
+        <button type="button" className="btn btn--ghost" onClick={() => setCorrectionsOpen(true)}>Исправить прошлую операцию</button>
+        <CryptoCorrectionSheet accounts={accounts.filter(a => a.account.investment_asset_type === 'crypto').map(a => ({id:a.account.id,name:a.account.name}))} open={correctionsOpen} anchorAccountId={accounts.find(a => a.account.investment_asset_type === 'crypto')!.account.id}
+          onClose={() => setCorrectionsOpen(false)} onSuccess={() => void loadPortfolio()} />
+      </>}
 
       {/* ══ Positions pane ══ */}
       {portfolioView === 'positions' && (

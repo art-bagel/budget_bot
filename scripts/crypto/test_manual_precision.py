@@ -24,7 +24,8 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         async def rollback():
             await self.tx.rollback()
         self.addAsyncCleanup(rollback)
-        for name in ('put__record_crypto_expense', 'put__record_portfolio_income', 'put__swap_crypto_investment_asset', 'put__manual_crypto_movement', 'put__crypto_source_event', 'put__crypto_funding_components', 'put__partial_close_crypto_protocol_position', 'get__portfolio_positions', 'get__portfolio_position', 'get__crypto_protocol_positions', 'set__update_crypto_protocol_position', 'put__lending_liquidate', 'get__crypto_protocol_history'):
+        await self.db.execute((ROOT / 'infra/db/Scripts/budgeting/tb/crypto_source_revisions.sql').read_text())
+        for name in ('capture__crypto_mutation', 'get__crypto_correction_fields', 'get__crypto_correction_state', 'get__crypto_correction_history', 'put__correct_crypto_source', 'put__record_crypto_expense', 'put__record_portfolio_income', 'put__swap_crypto_investment_asset', 'put__manual_crypto_movement', 'put__crypto_source_event', 'put__crypto_funding_components', 'put__partial_close_crypto_protocol_position', 'get__portfolio_positions', 'get__portfolio_position', 'get__crypto_protocol_positions', 'set__update_crypto_protocol_position', 'put__lending_liquidate', 'get__crypto_protocol_history'):
             await self.db.execute((ROOT / f'infra/db/Scripts/budgeting/func/{name}.sql').read_text())
         self.position = await self.db.fetchrow("""select p.id, p.quantity, p.metadata,
             (p.metadata->>'crypto_asset_id')::bigint asset_id
@@ -614,6 +615,136 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         for value in ('0.0000000000000000001', 'NaN', 'Infinity', '-1', '0'):
             bad = await self.client.post('/api/v1/operations/expense', json=dict(bank_account_id=73, category_id=90, crypto_asset_id=asset, amount=value))
             self.assertEqual(bad.status_code, 422, bad.text)
+
+    async def test_revision_preview_apply_retry_and_conflicts(self):
+        from uuid import uuid4
+        import asyncpg
+        from check_user_history import fingerprint
+        uid,account,asset,other,seed=await self.fresh_crypto()
+        pid=await seed(asset,'100','10000')
+        swapped=await self.client.post('/api/v1/crypto/swap-investment-asset',json=dict(
+            request_id=str(uuid4()),position_id=pid,from_amount='10',to_crypto_asset_id=other,
+            to_amount='100',operated_at='2026-09-08'))
+        self.assertEqual(swapped.status_code,200,swapped.text)
+        sid=await self.db.fetchval('select max(id) from budgeting.crypto_source_events where anchor_account_id=$1',account)
+        target=await self.db.fetchval("select id from budgeting.portfolio_positions where investment_account_id=$1 and metadata->>'crypto_asset_id'=$2",account,str(other))
+        loan=await self.client.post('/api/v1/crypto/protocol-positions',json=dict(
+            request_id=str(uuid4()),investment_account_id=account,protocol_name='Revision collateral',
+            position_type='lending',crypto_asset_id=other,asset_symbol='TEST',quantity='50',
+            source_position_id=target,deposited_at='2026-09-08',borrowed_crypto_asset_id=asset,borrowed_quantity='5'))
+        self.assertEqual(loan.status_code,200,loan.text)
+        # Correct the early swap: same 1,000 RUB carried, twice the received coins.
+        request=uuid4()
+        changes=[dict(command_index=0,field='to_amount',value='200')]
+        before=await fingerprint(self.db)
+        async def correct(apply=False,token=None,revision=1,request_id=request):
+            return await self.db.fetchval('select budgeting.put__correct_crypto_source($1,$2,$3,$4,$5,$6,$7,$8)',
+                uid,sid,revision,request_id,changes,'Уточнено количество обмена',apply,token)
+        preview=await correct()
+        self.assertFalse(preview['applied'])
+        self.assertEqual(before,await fingerprint(self.db))
+        self.assertEqual(preview['replayed_sources'],2)
+        result=await correct(True,preview['preview_token'])
+        self.assertTrue(result['applied'])
+        self.assertEqual(await self.db.fetchval('select quantity from budgeting.portfolio_positions where id=$1',target),D(150))
+        self.assertEqual(await self.db.fetchval('select cost_basis_in_base from budgeting.crypto_protocol_positions where id=$1',loan.json()['id']),D(250))
+        self.assertEqual(result,await correct(True,preview['preview_token']))
+        self.assertEqual(await self.db.fetchval('select count(*) from budgeting.crypto_source_revisions where source_event_id=$1',sid),1)
+        # Another edit of an already corrected source, with original identities.
+        changes[0]['value']='300'
+        preview2=await correct(revision=2,request_id=uuid4())
+        self.assertEqual(preview2['revision'],3)
+        reward=await self.client.post(f'/api/v1/portfolio/positions/{target}/income',json=dict(
+            request_id=str(uuid4()),amount=0,currency_code='RUB',quantity='1.123456789012345678',
+            income_kind='reward',destination='position',received_at='2026-09-08'))
+        self.assertEqual(reward.status_code,200,reward.text)
+        stable=await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError,'после просмотра'):
+            async with self.db.transaction():
+                await correct(True,preview2['preview_token'],revision=2,request_id=uuid4())
+        self.assertEqual(stable,await fingerprint(self.db))
+        changes[0]['value']='1'
+        with self.assertRaises(asyncpg.RaiseError):
+            async with self.db.transaction():
+                await correct(revision=2,request_id=uuid4())
+        self.assertEqual(stable,await fingerprint(self.db))
+        changes[0]['value']='300'
+        with self.assertRaisesRegex(asyncpg.RaiseError,'Нет доступа'):
+            async with self.db.transaction():
+                await self.db.fetchval('select budgeting.put__correct_crypto_source($1,$2,2,$3,$4,$5)',
+                    UID,sid,uuid4(),changes,'Другой владелец')
+        self.assertEqual(stable,await fingerprint(self.db))
+        # Nonjournal change on a touched position must not be overwritten.
+        await self.db.execute("update budgeting.portfolio_positions set comment='external edit' where id=$1",target)
+        unchanged=await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError,'вне журнала'):
+            async with self.db.transaction():
+                await correct(revision=2,request_id=uuid4())
+        self.assertEqual(unchanged,await fingerprint(self.db))
+
+    async def test_bank_purchase_revision_lp_sale_and_external_expense_conflict(self):
+        from uuid import uuid4
+        import asyncpg
+        from check_user_history import fingerprint
+        uid,account,asset,other,seed=await self.fresh_crypto()
+        context=await self.db.fetchval("select budgeting.put__register_user_context($1,'RUB')",uid)
+        bank=context['bank_account_id']
+        # Test-only initial cash, before the corrected chain.
+        await self.db.execute("insert into budgeting.current_bank_balances(bank_account_id,currency_code,amount,historical_cost_in_base) values($1,'RUB',20000,20000)",bank)
+        otherpid=await seed(other,'1000','10000')
+        purchase=dict(request_id=str(uuid4()),bank_account_id=bank,from_currency_code='RUB',from_amount='10000',
+                      to_crypto_asset_id=asset,to_amount='100',operated_at='2026-09-08')
+        bought=await self.client.post('/api/v1/operations/exchange',json=purchase)
+        self.assertEqual(bought.status_code,200,bought.text)
+        self.assertEqual(bought.json(),(await self.client.post('/api/v1/operations/exchange',json=purchase)).json())
+        sid=await self.db.fetchval('select max(id) from budgeting.crypto_source_events where anchor_account_id=$1',bank)
+        move=dict(request_id=str(uuid4()),bank_account_id=bank,investment_account_id=account,crypto_asset_id=asset,amount='100',operated_at='2026-09-08')
+        moved=await self.client.post('/api/v1/crypto/transfer-to-investment',json=move)
+        self.assertEqual(moved.status_code,200,moved.text)
+        self.assertEqual(moved.json(),(await self.client.post('/api/v1/crypto/transfer-to-investment',json=move)).json())
+        pid=moved.json()['position_id']
+        lp=await self.client.post('/api/v1/crypto/protocol-positions',json=dict(
+            request_id=str(uuid4()),investment_account_id=account,protocol_name='Correction LP',position_type='liquidity_pool',
+            source_position_id=pid,crypto_asset_id=asset,asset_symbol='PAIR',quantity='50',
+            secondary_source_position_id=otherpid,secondary_quantity='500',deposited_at='2026-09-08'))
+        self.assertEqual(lp.status_code,200,lp.text)
+        body=dict(request_id=str(uuid4()),expected_revision=1,reason='Исправлена сумма банковской покупки',
+                  changes=[dict(command_index=0,field='fiat_amount',value='12000')])
+        before=await fingerprint(self.db)
+        preview=await self.client.post(f'/api/v1/crypto/source-events/{sid}/correct',json=body)
+        self.assertEqual(preview.status_code,200,preview.text)
+        self.assertEqual(before,await fingerprint(self.db))
+        applied=await self.client.post(f'/api/v1/crypto/source-events/{sid}/correct',json={**body,'apply':True,'preview_token':preview.json()['preview_token']})
+        self.assertEqual(applied.status_code,200,applied.text)
+        self.assertEqual(await self.db.fetchval("select amount from budgeting.current_bank_balances where bank_account_id=$1 and currency_code='RUB'",bank),D(8000))
+        self.assertEqual(await self.db.fetchval('select cost_basis_in_base from budgeting.crypto_protocol_positions where id=$1',lp.json()['id']),D(11000))
+        summary=await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)',pid)
+        self.assertEqual(D(str(summary['remaining_cost_basis'])),D(6000))
+        # Manual history shows the corrected version and immutable original input.
+        history=await self.client.get(f'/api/v1/crypto/correction-history?anchor_account_id={account}')
+        self.assertEqual(history.status_code,200,history.text)
+        changed=next(r for r in history.json() if r['id']==sid)
+        self.assertEqual(changed['previous_versions'][0]['commands'][0]['payload']['fiat_amount'],'10000')
+        # Withdraw/sell keeps actual proceeds in the bank, with WAC basis.
+        withdrawal=dict(request_id=str(uuid4()),position_id=pid,bank_account_id=bank,amount='10',operated_at='2026-09-08')
+        out=await self.client.post('/api/v1/crypto/transfer-from-investment',json=withdrawal)
+        self.assertEqual(out.status_code,200,out.text)
+        self.assertEqual(out.json(),(await self.client.post('/api/v1/crypto/transfer-from-investment',json=withdrawal)).json())
+        sale=dict(request_id=str(uuid4()),bank_account_id=bank,from_crypto_asset_id=asset,from_amount='10',
+                  to_currency_code='RUB',to_amount='2000',operated_at='2026-09-08')
+        sold=await self.client.post('/api/v1/operations/exchange',json=sale)
+        self.assertEqual(sold.status_code,200,sold.text)
+        self.assertEqual(D(str(sold.json()['realized_fx_result_in_base'])),D(800))
+        self.assertEqual(sold.json(),(await self.client.post('/api/v1/operations/exchange',json=sale)).json())
+        # Ordinary categorised spending is retained; conflicting bank rewind fails.
+        expense=await self.client.post('/api/v1/operations/expense',json=dict(bank_account_id=bank,
+            category_id=await self.db.fetchval("insert into budgeting.categories(owner_type,owner_user_id,name,kind) values('user',$1,'Test regular','regular') returning id",uid),amount=100,currency_code='RUB',operated_at='2026-09-09'))
+        self.assertEqual(expense.status_code,200,expense.text)
+        before=await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError,'вне журнала'):
+            await self.client.post(f'/api/v1/crypto/source-events/{sid}/correct',json={**body,'request_id':str(uuid4()),'expected_revision':2,
+                'changes':[dict(command_index=0,field='fiat_amount',value='13000')]})
+        self.assertEqual(before,await fingerprint(self.db))
 
 
 if __name__ == '__main__':

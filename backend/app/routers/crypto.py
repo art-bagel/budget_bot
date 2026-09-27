@@ -20,7 +20,7 @@ class CryptoSourceCommand(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
                   'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
-                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'bank_withdraw', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation', 'tag_lending_account']
+                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'bank_withdraw', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation', 'tag_lending_account', 'bank_cash_sell', 'position_income', 'protocol_yield', 'group_lending']
     payload: dict[str, Any]
 
     @field_validator('payload')
@@ -68,6 +68,63 @@ async def get_crypto_source_events(anchor_account_id: int = Query(gt=0),
                                     offset: int = Query(0, ge=0),
                                     user: CurrentUser = Depends(get_current_user)) -> list[dict]:
     return await ledger.get__crypto_source_events(user.user_id, anchor_account_id, limit, offset)
+
+
+class CryptoCorrectionChange(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    command_index: int = Field(ge=0, le=99)
+    field: Literal['from_amount', 'to_amount', 'quantity', 'amount', 'debt_qty',
+                   'interest_qty', 'collateral_qty', 'collateral_fee_qty', 'principal_qty',
+                   'secondary_principal_qty', 'rewards_qty', 'secondary_rewards_qty',
+                   'return_quantity', 'secondary_return_quantity', 'secondary_quantity',
+                   'fiat_amount', 'repay_qty']
+    value: str = Field(min_length=1, max_length=80)
+
+    @field_validator('value')
+    @classmethod
+    def exact_value(cls, value: str) -> str:
+        try:
+            number = Decimal(value)
+        except Exception as exc:
+            raise ValueError('Нужно десятичное количество') from exc
+        if not number.is_finite() or number < 0 or number.as_tuple().exponent < -18:
+            raise ValueError('Неотрицательное количество, не более 18 знаков после запятой')
+        return value
+
+
+class CryptoCorrectionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    expected_revision: int = Field(gt=0)
+    request_id: UUID
+    changes: list[CryptoCorrectionChange] = Field(min_length=1, max_length=30)
+    reason: str = Field(min_length=1, max_length=1000)
+    apply: bool = False
+    preview_token: Optional[str] = Field(default=None, max_length=64)
+
+    @field_validator('reason')
+    @classmethod
+    def reason_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError('Укажите причину исправления')
+        return value.strip()
+
+
+@router.post('/source-events/{source_event_id}/correct')
+async def correct_crypto_source(source_event_id: int, body: CryptoCorrectionRequest,
+                                user: CurrentUser = Depends(get_current_user)) -> dict:
+    return await ledger.put__correct_crypto_source(
+        user.user_id, source_event_id, body.expected_revision, body.request_id,
+        [change.model_dump() for change in body.changes], body.reason,
+        body.apply, body.preview_token,
+    )
+
+
+@router.get('/correction-history')
+async def crypto_correction_history(anchor_account_id: int = Query(gt=0),
+                                    limit: int = Query(30, ge=1, le=100),
+                                    offset: int = Query(0, ge=0),
+                                    user: CurrentUser = Depends(get_current_user)) -> list[dict]:
+    return await ledger.get__crypto_correction_history(user.user_id, anchor_account_id, limit, offset)
 
 
 class PendingFiatExpenseCategory(BaseModel):
@@ -182,6 +239,7 @@ class CryptoOperationResponse(BaseModel):
     base_currency_code: str
 
 class TransferCryptoToInvestmentRequest(BaseModel):
+    request_id: Optional[UUID] = None
     bank_account_id: int
     investment_account_id: int
     crypto_asset_id: int
@@ -193,6 +251,7 @@ class TransferCryptoToInvestmentRequest(BaseModel):
 
 
 class TransferCryptoFromInvestmentRequest(BaseModel):
+    request_id: Optional[UUID] = None
     position_id: int
     bank_account_id: int
     amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
@@ -674,16 +733,9 @@ async def transfer_crypto_to_investment(
     body: TransferCryptoToInvestmentRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
-    result = await ledger.put__transfer_crypto_to_investment(
-        user_id=user.user_id,
-        bank_account_id=body.bank_account_id,
-        investment_account_id=body.investment_account_id,
-        crypto_asset_id=body.crypto_asset_id,
-        amount=body.amount,
-        position_id=body.position_id,
-        title=body.title,
-        comment=body.comment,
-        operated_at=body.operated_at,
+    result = await ledger.put__manual_crypto_movement(
+        user.user_id, body.request_id or uuid4(), 'bank_to_portfolio',
+        body.model_dump(mode='json', exclude_none=True, exclude={'request_id','operated_at'}), body.operated_at,
     )
     return CryptoOperationResponse(**result)
 
@@ -693,14 +745,9 @@ async def transfer_crypto_from_investment(
     body: TransferCryptoFromInvestmentRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
-    result = await ledger.put__transfer_crypto_from_investment(
-        user_id=user.user_id,
-        position_id=body.position_id,
-        bank_account_id=body.bank_account_id,
-        amount=body.amount,
-        value_in_base=body.value_in_base,
-        comment=body.comment,
-        operated_at=body.operated_at,
+    result = await ledger.put__manual_crypto_movement(
+        user.user_id, body.request_id or uuid4(), 'bank_withdraw',
+        body.model_dump(mode='json', exclude_none=True, exclude={'request_id','operated_at'}), body.operated_at,
     )
     return CryptoOperationResponse(**result)
 

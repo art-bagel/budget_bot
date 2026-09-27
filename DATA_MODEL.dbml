@@ -267,6 +267,8 @@ Table crypto_source_events {
   id bigint [pk, increment]
   owner_key text [not null]
   anchor_account_id bigint [not null, ref: > bank_accounts.id]
+  revision integer [not null, default: 1]
+  reversible boolean [not null, default: false]
   source_namespace text [not null]
   source_id text [not null]
   occurred_at timestamptz [not null]
@@ -302,3 +304,32 @@ Table crypto_source_event_links {
 // and holder settlements. Cash basis adjustments are zero-quantity top_up events;
 // these units are not additional assets or liabilities. Per-command owner-locked
 // conservation requires sum(units) = outstanding principal for each component loan.
+
+// Correction journal (043). Reversible is false for legacy envelopes without
+// captured before-images. No inferred baseline is silently invented.
+Table crypto_source_mutations {
+  id bigint [pk, increment]
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  revision integer [not null]
+  command_index integer [not null]
+  table_name text [not null]
+  row_key jsonb [not null]
+  before_row jsonb
+  after_row jsonb
+}
+Table crypto_source_revisions {
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  revision integer [not null]
+  envelope jsonb [not null]
+  superseded_at timestamptz [not null]
+  indexes { (source_event_id, revision) [pk] }
+}
+Table crypto_source_corrections {
+  request_id uuid [pk]
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  actor_user_id bigint [not null, ref: > users.id]
+  reason text [not null]
+  request jsonb [not null]
+  result jsonb [not null]
+  created_at timestamptz [not null]
+}

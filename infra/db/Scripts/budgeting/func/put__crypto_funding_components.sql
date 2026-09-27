@@ -267,7 +267,7 @@ BEGIN
         IF _out<>'{}'::jsonb AND NOT COALESCE((_p->>'defer_manual_expense')::boolean,false) THEN
             RAISE EXCEPTION 'Funded fiat sale requires pending manual settlement tracking';
         END IF;
-    ELSIF _kind NOT IN ('position_income','protocol_yield','fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account','group_lending') THEN
+    ELSIF _kind NOT IN ('position_income','protocol_yield','fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_cash_sell','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account','group_lending') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.
