@@ -1,6 +1,7 @@
+import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues } from '../utils/cryptoProtocolValuation';
 import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
 import RefreshBar from '../components/RefreshBar';
 import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown } from 'lucide-react';
@@ -2326,6 +2327,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     return Array.from(grouped.values());
   }, [filteredOpenPositions]);
 
+  const getProtocolValuation = useCallback((position: CryptoProtocolPosition) =>
+    protocolMarketValue(position, cryptoLivePrices, user.base_currency_code), [cryptoLivePrices, user.base_currency_code]);
+  const getLendingNetValue = useCallback((position: CryptoProtocolPosition): number | null =>
+    getProtocolValuation(position).value, [getProtocolValuation]);
+  const formatProtocolValue = (value: number | null) => value === null ? '—' : formatNumericAmount(value, 0);
+
   const accountTabs = useMemo<PositionAccountTab[]>(() => {
     const getGroupEstimatedValue = (group: PositionAccountGroup): number => {
       const positionsValue = activeAssetTypeCode === 'security'
@@ -2348,7 +2355,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       const existingKeys = new Set(scopedTabs.map((tab) => tab.key));
       const defiOnlyByKey = new Map<string, CryptoProtocolPosition[]>();
       for (const protocol of cryptoProtocolPositions) {
-        if (protocol.status !== 'open') continue;
+        if (protocol.status !== 'open' || isEmptyProtocolPosition(protocol)) continue;
         const key = `${protocol.owner_type}:${protocol.investment_account_id}`;
         if (existingKeys.has(key)) continue;
         const list = defiOnlyByKey.get(key) ?? [];
@@ -2359,9 +2366,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         const head = protocols[0];
         const account = accounts.find((item) => item.account.id === head.investment_account_id)?.account;
         const protocolsValue = protocols.reduce((sum, p) => {
-          const livePrice = p.crypto_asset_id ? cryptoLivePrices.get(p.crypto_asset_id) : null;
-          const quantity = p.current_quantity ?? p.quantity ?? 0;
-          return sum + (livePrice && quantity > 0 ? livePrice.price * quantity : p.current_value_in_base);
+          return sum + (getLendingNetValue(p) ?? 0);
         }, 0);
         scopedTabs.push({
           key,
@@ -2393,6 +2398,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       estimatedValue: filteredOpenPositionGroups.reduce((sum, group) => sum + getGroupEstimatedValue(group), 0),
     }, ...scopedTabs];
   }, [
+    getLendingNetValue,
     accountEstimatedValueById,
     accountOpenPrincipalById,
     accounts,
@@ -2448,7 +2454,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const visibleCryptoProtocolPositions = useMemo(() => {
     if (activeAssetTypeCode !== 'crypto') return [];
-    const openPositions = cryptoProtocolPositions.filter((position) => position.status === 'open' && accounts.some(({ account }) => account.id === position.investment_account_id));
+    const openPositions = cryptoProtocolPositions.filter((position) => position.status === 'open' && !isEmptyProtocolPosition(position) && accounts.some(({ account }) => account.id === position.investment_account_id));
     return activeAccountTabKey === 'all'
       ? openPositions
       : openPositions.filter((position) => {
@@ -2469,60 +2475,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     return grouped;
   }, [visibleCryptoProtocolPositions]);
 
-  const getCryptoProtocolEstimatedValue = (position: CryptoProtocolPosition): number => {
-    if (position.position_type === 'liquidity_pool') {
-      const lp = getLiquidityPoolMetadata(position);
-      const qtyA = position.current_quantity ?? position.quantity ?? 0;
-      const qtyB = lp.token1_quantity ?? 0;
-      const priceA = position.crypto_asset_id ? cryptoLivePrices.get(position.crypto_asset_id)?.price ?? null : null;
-      let assetIdB = lp.token1_crypto_asset_id ?? null;
-      if (assetIdB == null && lp.token1_symbol) {
-        const upperB = lp.token1_symbol.toUpperCase();
-        const matched = cryptoAssets.find((asset) => asset.symbol.toUpperCase() === upperB);
-        if (matched) assetIdB = matched.id;
-      }
-      const priceB = assetIdB != null ? cryptoLivePrices.get(assetIdB)?.price ?? null : null;
-      if (priceA != null && priceB != null && qtyA > 0 && qtyB > 0) {
-        return priceA * qtyA + priceB * qtyB;
-      }
-      if (priceA != null && qtyA > 0) {
-        return priceA * qtyA + (lp.token1_cost_basis_carried ?? 0);
-      }
-      if (priceB != null && qtyB > 0) {
-        const carriedA = typeof position.metadata?.cost_basis_carried === 'number'
-          ? (position.metadata.cost_basis_carried as number)
-          : 0;
-        return carriedA + priceB * qtyB;
-      }
-      return position.current_value_in_base;
-    }
-    const livePrice = position.crypto_asset_id ? cryptoLivePrices.get(position.crypto_asset_id) : null;
-    const quantity = position.current_quantity ?? position.quantity ?? 0;
-    return livePrice && quantity > 0
-      ? livePrice.price * quantity
-      : position.current_value_in_base;
-  };
-
-  const getLendingNetValue = (position: CryptoProtocolPosition): number => {
-    const collateralValue = getCryptoProtocolEstimatedValue(position);
-    if (position.position_type !== 'lending') return collateralValue;
-    const lend = getLendingMetadata(position);
-    const borrowQty = lend.borrowed_quantity ?? 0;
-    if (borrowQty <= 0) return collateralValue;
-    const livePrice = lend.borrowed_crypto_asset_id
-      ? cryptoLivePrices.get(lend.borrowed_crypto_asset_id)?.price ?? null
-      : null;
-    const debtValue = livePrice && livePrice > 0
-      ? livePrice * borrowQty
-      : (lend.borrowed_value_in_base ?? 0);
-    return collateralValue - debtValue;
-  };
-
   const cryptoProtocolValueInBase = useMemo(
     () => visibleCryptoProtocolPositions
       .filter((position) => position.status === 'open')
-      .reduce((sum, position) => sum + getLendingNetValue(position), 0),
-    [visibleCryptoProtocolPositions, cryptoLivePrices],
+      .reduce((sum, position) => sum + (getLendingNetValue(position) ?? 0), 0),
+    [visibleCryptoProtocolPositions, getLendingNetValue],
   );
 
   const visibleOpenPositionGroups = useMemo(
@@ -2685,8 +2642,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
     .some((position) => position.asset_type_code === 'crypto' && !(Number(getCryptoLivePrice(position)?.price) > 0))
-    || visibleCryptoProtocolPositions.some((position) => !(Number(cryptoLivePrices.get(position.crypto_asset_id ?? -1)?.price) > 0)
-      || (position.position_type === 'liquidity_pool' && !(Number(cryptoLivePrices.get(Number(position.metadata.token1_crypto_asset_id))?.price) > 0)));
+    || visibleCryptoProtocolPositions.some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
   const activeScopeBasisPrefix = activeScopeDisplayMetrics.basisEstimated ? '≈ ' : '';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
@@ -3276,7 +3232,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const positionsValue = activeAssetTypeCode === 'security'
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
                 : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
-              const groupValue = positionsValue + getAccountCashValue(group.accountId);
+              const protocolsForAccount = visibleCryptoProtocolPositions.filter((item) => item.investment_account_id === group.accountId);
+              const protocolMarketValue = sumProtocolValues(protocolsForAccount.map(getProtocolValuation));
+              const groupMarketIncomplete = group.positions.some((item) => item.asset_type_code === 'crypto' && !getCryptoLivePrice(item))
+                || protocolMarketValue === null;
+              const groupValue = positionsValue + getAccountCashValue(group.accountId) + (protocolMarketValue ?? 0);
               const groupProtocolPositions = activeAssetTypeCode === 'crypto'
                 ? (visibleCryptoProtocolPositionsByAccountId.get(group.accountId) ?? [])
                 : [];
@@ -3291,7 +3251,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </div>
                     </div>
                     <div className="pf-grp__total">
-                      {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
+                      {groupMarketIncomplete ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
                       <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </div>
                   </div>
@@ -3402,7 +3362,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {groupProtocolPositions.length > 0 ? (
                         groupProtocolPositions.map((position) => {
                           const members = visibleCryptoProtocolPositions.filter((item) => lendingGroupKey(item) === lendingGroupKey(position));
-                          const protocolValue = members.reduce((sum, item) => sum + getLendingNetValue(item), 0);
+                          const protocolValue = sumProtocolValues(members.map(getProtocolValuation));
                           const typeLabel = PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type;
                           let extra = '';
                           if (position.position_type === 'liquidity_pool') {
@@ -3440,9 +3400,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                               </div>
                               <div className="pf-pos__right">
                                 <div className="pf-pos__amount">
-                                  {formatNumericAmount(protocolValue)}
+                                  {formatProtocolValue(protocolValue)}
                                   <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                                 </div>
+                                {protocolValue === null && <div className="pf-pos__sub">Нет оценки</div>}
                               </div>
                             </button>
                           );
@@ -3513,11 +3474,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               <div className="portfolio-analytics-metric">
                 <span className="portfolio-analytics-metric__label">Оценочная стоимость</span>
                 <strong className="portfolio-analytics-metric__value">
-                  {formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
+                  {activeScopeMarketIncomplete ? 'Нет полной оценки' : formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
                 </strong>
               </div>
               <div className="portfolio-analytics-metric">
-                <span className="portfolio-analytics-metric__label">Вложено</span>
+                <span className="portfolio-analytics-metric__label">{activeScopeBasisLabel}</span>
                 <strong className="portfolio-analytics-metric__value">
                   {formatAmount(activeScopeDisplayMetrics.investedPrincipal, user.base_currency_code)}
                 </strong>
@@ -3531,7 +3492,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               <div className="portfolio-analytics-metric">
                 <span className="portfolio-analytics-metric__label">{activeScopeDisplayMetrics.resultLabel}</span>
                 <strong className={`portfolio-analytics-metric__value${activeScopeDisplayMetrics.resultValue >= 0 ? ' portfolio-analytics-metric__value--pos' : ' portfolio-analytics-metric__value--neg'}`}>
-                  {formatAmount(activeScopeDisplayMetrics.resultValue, user.base_currency_code)}
+                  {activeScopeMarketIncomplete || activeScopeDisplayMetrics.basisMissing || activeScopeDisplayMetrics.fundingParts.length > 0 ? '—' : formatAmount(activeScopeDisplayMetrics.resultValue, user.base_currency_code)}
                 </strong>
               </div>
             </div>
@@ -3769,7 +3730,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           </div>
                         </div>
                         <div className="portfolio-analytics-row__side">
-                          <strong>{formatAmount(protocolValue, user.base_currency_code)}</strong>
+                          <strong>{protocolValue === null ? 'Нет оценки' : formatAmount(protocolValue, user.base_currency_code)}</strong>
                         </div>
                       </div>
                       <div className="portfolio-analytics-row__meta portfolio-analytics-row__meta--inline">
@@ -4828,7 +4789,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               <span className="pf-detail-pill">{(PROTOCOL_TYPE_LABELS[selectedProtocolPosition.position_type] ?? selectedProtocolPosition.position_type).toLowerCase()}</span>
             </div>
 
-            <div className={`pf-dstats${selectedLendingGroup.length > 1 ? " pf-dstats--lending-group" : ""}`}>
+            <div className={`pf-dstats${(selectedLendingGroup.length > 1 || selectedProtocolPosition.position_type === 'liquidity_pool') ? " pf-dstats--lending-group" : ""}`}>
               {selectedProtocolPosition.position_type === 'liquidity_pool' ? (() => {
                 const lp = getLiquidityPoolMetadata(selectedProtocolPosition);
                 return (
@@ -4836,18 +4797,18 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <div className="pf-dstats__cell">
                       <span className="pf-dstats__label">{selectedProtocolPosition.asset_symbol}</span>
                       <span className="pf-dstats__value">{formatNumericAmount(selectedProtocolPosition.current_quantity ?? selectedProtocolPosition.quantity ?? 0, 8)}</span>
-                      <span className="pf-dstats__sub">token A</span>
+                      <span className="pf-dstats__sub">по истории</span>
                     </div>
                     {lp.token1_symbol && (
                       <div className="pf-dstats__cell">
                         <span className="pf-dstats__label">{lp.token1_symbol}</span>
                         <span className="pf-dstats__value">{formatNumericAmount(lp.token1_quantity ?? 0, 8)}</span>
-                        <span className="pf-dstats__sub">token B</span>
+                        <span className="pf-dstats__sub">по истории</span>
                       </div>
                     )}
                     <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">Стоимость</span>
-                      <span className="pf-dstats__value">{formatNumericAmount(getCryptoProtocolEstimatedValue(selectedProtocolPosition), 0)}</span>
+                      <span className="pf-dstats__label">Рыночная оценка</span>
+                      <span className="pf-dstats__value">{formatProtocolValue(getLendingNetValue(selectedProtocolPosition))}</span>
                       <span className="pf-dstats__sub">{user.base_currency_code}</span>
                     </div>
                     {lp.fees_earned_in_base != null && (
@@ -4877,23 +4838,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     </div>;
                   })}
                   <div className="pf-dstats__cell">
-                    <span className="pf-dstats__label">Баланс счёта</span>
-                    <span className="pf-dstats__value">{formatNumericAmount(selectedLendingGroup.reduce((sum, item) => sum + getLendingNetValue(item), 0), 0)}</span>
+                    <span className="pf-dstats__label">Залог − долг</span>
+                    <span className="pf-dstats__value">{formatProtocolValue(sumProtocolValues(selectedLendingGroup.map(getProtocolValuation)))}</span>
                     <span className="pf-dstats__sub">{user.base_currency_code}</span>
                   </div>
                 </>
               ) : selectedProtocolPosition.position_type === 'lending' ? (() => {
                 const lend = getLendingMetadata(selectedProtocolPosition);
-                const collateralValue = getCryptoProtocolEstimatedValue(selectedProtocolPosition);
                 const borrowQty = lend.borrowed_quantity ?? 0;
-                const borrowAssetId = lend.borrowed_crypto_asset_id;
-                const borrowLivePrice = borrowAssetId ? cryptoLivePrices.get(borrowAssetId)?.price ?? null : null;
-                const borrowValue = borrowQty > 0
-                  ? (borrowLivePrice && borrowLivePrice > 0
-                      ? borrowLivePrice * borrowQty
-                      : (lend.borrowed_value_in_base ?? 0))
-                  : 0;
-                const netValue = collateralValue - borrowValue;
+                const netValue = getLendingNetValue(selectedProtocolPosition);
                 return (
                   <>
                     <div className="pf-dstats__cell">
@@ -4909,8 +4862,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </div>
                     ) : null}
                     <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">Баланс</span>
-                      <span className="pf-dstats__value">{formatNumericAmount(netValue, 0)}</span>
+                      <span className="pf-dstats__label">Залог − долг</span>
+                      <span className="pf-dstats__value">{formatProtocolValue(netValue)}</span>
                       <span className="pf-dstats__sub">{user.base_currency_code}</span>
                     </div>
                     {lend.apr != null && (
@@ -4930,8 +4883,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <span className="pf-dstats__sub">{selectedProtocolPosition.asset_symbol}</span>
                   </div>
                   <div className="pf-dstats__cell">
-                    <span className="pf-dstats__label">Стоимость</span>
-                    <span className="pf-dstats__value">{formatNumericAmount(getCryptoProtocolEstimatedValue(selectedProtocolPosition), 0)}</span>
+                    <span className="pf-dstats__label">Рыночная оценка</span>
+                    <span className="pf-dstats__value">{formatProtocolValue(getLendingNetValue(selectedProtocolPosition))}</span>
                     <span className="pf-dstats__sub">{user.base_currency_code}</span>
                   </div>
                   <div className="pf-dstats__cell">
@@ -4941,6 +4894,28 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   </div>
                 </>
               )}
+            </div>
+
+            <div className="pf-dcond">
+              <div className="pf-dcond__head"><span className="sec-tag">Себестоимость и оценка</span></div>
+              <div className="pf-dcond__row">
+                <span className="pf-dcond__row-label">Учтённые затраты</span>
+                <span className="pf-dcond__row-value">{selectedProtocolPosition.cost_basis_in_base === null ? 'Не определены' : formatAmount(selectedProtocolPosition.cost_basis_in_base, user.base_currency_code)}</span>
+              </div>
+              {[selectedProtocolPosition.metadata.funding_units0, selectedProtocolPosition.metadata.funding_units1].some((units) =>
+                units && typeof units === 'object' && Object.values(units).some((amount) => Number(amount) > 0)) && (
+                <p className="pf-dstats__sub">Себестоимость не окончательная: часть монет приобретена на открытый заём.</p>
+              )}
+              {getProtocolValuation(selectedProtocolPosition).reason && (
+                <p className="pf-dstats__sub">{getProtocolValuation(selectedProtocolPosition).reason}</p>
+              )}
+              {getProtocolValuation(selectedProtocolPosition).quotes.map((quote) => (
+                <div className="pf-dcond__row" key={quote.crypto_asset_id}>
+                  <span className="pf-dcond__row-label">Курс {quote.symbol} · {quote.source}</span>
+                  <span className="pf-dcond__row-value">{formatAmount(quote.price, user.base_currency_code)}<br />{new Date(quote.fetched_at).toLocaleString('ru-RU')}</span>
+                </div>
+              ))}
+              {getProtocolValuation(selectedProtocolPosition).value !== null && <p className="pf-dstats__sub">Рыночная оценка использует текущие курсы и учётное количество монет. Это не стоимость на дату исторического среза.</p>}
             </div>
 
             {typeof selectedProtocolPosition.metadata?.historical_accrual_note === 'string' && (
