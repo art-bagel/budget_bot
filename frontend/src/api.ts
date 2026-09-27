@@ -1177,3 +1177,14 @@ export async function fetchCryptoProtocolHistory(positionId: number, offset = 0)
 }> {
   return apiFetch(`/crypto/protocol-positions/${positionId}/history?limit=50&offset=${offset}`);
 }
+
+export async function recordLendingDebtEvent(
+  positionId: number,
+  kind: 'accrue-interest' | 'liquidate',
+  data: { request_id: string; operated_at: string; quantity?: string;
+    collateral_qty?: string; debt_qty?: string; interest_qty?: string; collateral_fee_qty?: string },
+): Promise<unknown> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/${kind}`, {
+    method: 'POST', body: JSON.stringify(data),
+  });
+}

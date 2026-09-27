@@ -275,6 +275,108 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.fetchval('select quantity from budgeting.portfolio_positions where id=$1', incoming), D(0))
         self.assertEqual(await self.db.fetchval('select sum(quantity) from budgeting.portfolio_positions where investment_account_id=$1', accounts[1]), D(body['to_amount']))
 
+    async def test_manual_new_lending_borrow_swap_partial_repay_and_retry(self):
+        from uuid import uuid4
+        import asyncpg
+        from backend.app.dependencies import CurrentUser, get_current_user
+        from check_user_history import fingerprint
+        uid = 900000000000 + uuid4().int % 1000000000
+        await self.db.execute("insert into budgeting.users(id,base_currency_code) values($1,'RUB')", uid)
+        account = await self.db.fetchval("""insert into budgeting.bank_accounts
+            (owner_type,owner_user_id,name,account_kind,investment_asset_type)
+            values('user',$1,'Manual lending test','investment','crypto') returning id""", uid)
+        self.app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=uid)
+        asset = self.position['asset_id']
+        debt_asset = await self.db.fetchval('select id from budgeting.crypto_assets where id<>$1 order by id limit 1', asset)
+        collateral = await self.db.fetchval("select budgeting.put__crypto_receive_reward($1,$2,$3,10,NULL,'2026-09-08')", uid, account, asset)
+        await self.db.execute('''insert into budgeting.portfolio_events
+            (position_id,event_type,event_at,quantity,metadata,created_by_user_id)
+            values($1,'top_up','2026-09-08',0,'{"entry_value_in_base":1000}',$2)''', collateral['position_id'], uid)
+        created = await self.client.post('/api/v1/crypto/protocol-positions', json=dict(
+            investment_account_id=account, protocol_name='Test lending', position_type='lending',
+            asset_symbol='JETTON', crypto_asset_id=asset, quantity='10', source_position_id=collateral['position_id'], deposited_at='2026-09-08'))
+        self.assertEqual(created.status_code, 200, created.text)
+        loan = created.json()['id']
+        path = f'/api/v1/crypto/protocol-positions/{loan}'
+        borrow = dict(request_id=str(uuid4()), debt_qty='10.123456789012345678',
+                      borrowed_crypto_asset_id=debt_asset, operated_at='2026-09-08', value_in_base=999999)
+        response = await self.client.post(path+'/take-debt', json=borrow)
+        self.assertEqual(response.status_code, 200, response.text)
+        meta = await self.db.fetchval('select metadata from budgeting.crypto_protocol_positions where id=$1', loan)
+        source = meta['borrowed_position_id']
+        self.assertEqual(meta['funding_policy'], 'components')
+        q = await self.db.fetchval('select quantity from budgeting.portfolio_positions where id=$1', source)
+        self.assertEqual(q, D(borrow['debt_qty']))
+        summary = await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)', source)
+        self.assertEqual(D(str(summary['remaining_cost_basis'])), 0)
+        self.assertEqual(await self.db.fetchval("select (metadata->'funding_units'->>$2)::numeric from budgeting.portfolio_positions where id=$1", source, str(loan)), q)
+        swapped = await self.client.post('/api/v1/crypto/swap-investment-asset', json=dict(
+            request_id=str(uuid4()), position_id=source, from_amount=borrow['debt_qty'],
+            to_crypto_asset_id=asset, to_amount='100', operated_at='2026-09-08'))
+        self.assertEqual(swapped.status_code, 200, swapped.text)
+        target = await self.db.fetchval("select id from budgeting.portfolio_positions where investment_account_id=$1 and status='open' and metadata->>'crypto_asset_id'=$2", account, str(asset))
+        # Purchased repayment coins: controlled fixture with known 1,000 RUB basis.
+        purchased = await self.db.fetchval("select budgeting.put__crypto_receive_reward($1,$2,$3,5,NULL,'2026-09-08')", uid, account, debt_asset)
+        source = purchased['position_id']
+        await self.db.execute("""insert into budgeting.portfolio_events
+            (position_id,event_type,event_at,quantity,metadata,created_by_user_id)
+            values($1,'top_up','2026-09-08',0,'{"entry_value_in_base":1000}',$2)""", source, uid)
+        repay = dict(request_id=str(uuid4()), source_position_id=source, repay_qty='5', operated_at='2026-09-08')
+        before = await fingerprint(self.db)
+        with self.assertRaises(asyncpg.RaiseError):
+            await self.client.post(path+'/repay-debt', json={**repay, 'fee':dict(source_position_id=target,quantity='1000')})
+        self.assertEqual(before, await fingerprint(self.db))
+        paid = await self.client.post(path+'/repay-debt', json=repay)
+        self.assertEqual(paid.status_code, 200, paid.text)
+        summary = await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)', target)
+        self.assertEqual(D(str(summary['remaining_cost_basis'])), D('1000'))
+        self.assertEqual(await self.db.fetchval("select (metadata->'funding_units'->>$2)::numeric from budgeting.portfolio_positions where id=$1", target, str(loan)), q-D(5))
+        self.assertEqual(paid.json(), (await self.client.post(path+'/repay-debt', json=repay)).json())
+        self.assertEqual(response.json(), (await self.client.post(path+'/take-debt', json=borrow)).json())
+        before = await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError, 'другими данными'):
+            await self.client.post(path+'/repay-debt', json={**repay, 'repay_qty':'4'})
+        self.assertEqual(before, await fingerprint(self.db))
+        for qty in ('NaN','Infinity','0','-1','0.0000000000000000001'):
+            bad = await self.client.post(path+'/take-debt', json={**borrow,'debt_qty':qty})
+            self.assertEqual(bad.status_code, 422, bad.text)
+
+        accrued_body = dict(request_id=str(uuid4()), external_id='manual-test-interest', quantity='1', operated_at='2026-09-08')
+        accrued = await self.client.post(path+'/accrue-interest', json=accrued_body)
+        self.assertEqual(accrued.status_code, 200, accrued.text)
+        liquidated_body = dict(request_id=str(uuid4()), collateral_qty='2', debt_qty='1',
+                               interest_qty='0.2', collateral_fee_qty='0.1', operated_at='2026-09-08')
+        liquidated = await self.client.post(path+'/liquidate', json=liquidated_body)
+        self.assertEqual(liquidated.status_code, 200, liquidated.text)
+        summary = await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)', target)
+        self.assertEqual(D(str(summary['remaining_cost_basis'])), D('1152'))
+        units = await self.db.fetchval("select (metadata->'funding_units'->>$2)::numeric from budgeting.portfolio_positions where id=$1", target, str(loan))
+        self.assertEqual(units, q-D('5.8'))
+        self.assertEqual(await self.db.fetchval('select quantity from budgeting.crypto_protocol_positions where id=$1', loan), D(8))
+        self.assertEqual(await self.db.fetchval("select (metadata->>'debt_interest_quantity')::numeric from budgeting.crypto_protocol_positions where id=$1", loan), D('0.8'))
+        self.assertEqual(liquidated.json(), (await self.client.post(path+'/liquidate', json=liquidated_body)).json())
+        self.assertEqual(accrued.json(), (await self.client.post(path+'/accrue-interest', json=accrued_body)).json())
+        self.assertEqual(accrued.json(), (await self.client.post(path+'/accrue-interest', json={**accrued_body, 'request_id':str(uuid4())})).json())
+
+        # Interest is an expense, only principal settles financing at asset holders.
+        purchased = await self.db.fetchval("select budgeting.put__crypto_receive_reward($1,$2,$3,1.8,NULL,'2026-09-08')", uid, account, debt_asset)
+        await self.db.execute('''insert into budgeting.portfolio_events
+            (position_id,event_type,event_at,quantity,metadata,created_by_user_id)
+            values($1,'top_up','2026-09-08',0,'{"entry_value_in_base":180}',$2)''', purchased['position_id'], uid)
+        paid_interest = await self.client.post(path+'/repay-debt', json=dict(
+            request_id=str(uuid4()), source_position_id=purchased['position_id'], repay_qty='1.8',
+            interest_qty='0.8', operated_at='2026-09-08'))
+        self.assertEqual(paid_interest.status_code, 200, paid_interest.text)
+        summary = await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)', target)
+        self.assertEqual(D(str(summary['remaining_cost_basis'])), D('1252'))
+        self.assertEqual(await self.db.fetchval("select (metadata->>'debt_interest_quantity')::numeric from budgeting.crypto_protocol_positions where id=$1", loan), D(0))
+        self.assertEqual(await self.db.fetchval("select (metadata->>'funding_interest_cost')::numeric from budgeting.portfolio_events where position_id=$1 and metadata->>'target_kind'='lending_repay' order by id desc limit 1", purchased['position_id']), D(80))
+        before = await fingerprint(self.db)
+        self.app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=UID)
+        with self.assertRaisesRegex(asyncpg.RaiseError, 'Нет доступа'):
+            await self.client.post(path+'/take-debt', json=borrow)
+        self.assertEqual(before, await fingerprint(self.db))
+
     async def test_exact_balance_read(self):
         from backend.app.routers.portfolio import PortfolioPositionItem
         raw = await self.db.fetchval('select budgeting.get__portfolio_position($1,$2)', UID, self.position['id'])

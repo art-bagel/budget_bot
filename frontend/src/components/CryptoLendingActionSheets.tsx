@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Plus, ArrowDownToLine, X, HandCoins, Wallet, SlidersHorizontal } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
@@ -13,6 +14,7 @@ import {
   partialCloseCryptoProtocolPosition,
   takeLendingDebt,
   repayLendingDebt,
+  recordLendingDebtEvent,
 } from '../api';
 import type {
   CryptoProtocolPosition,
@@ -24,6 +26,15 @@ import { getLendingMetadata } from '../types';
 import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from './DefiFeeField';
 import type { DefiFeeDraft } from './DefiFeeField';
 
+
+function manualFee(draft: DefiFeeDraft, positions: PortfolioPosition[]) {
+  if (!draft.positionId && !draft.quantity.trim()) return undefined;
+  const source = positions.find((p) => String(p.id) === draft.positionId);
+  if (!source || !draft.quantity.trim() || !(Number(draft.quantity) > 0)) {
+    throw new Error('Укажите монету и положительное количество комиссии');
+  }
+  return { source_position_id: source.id, quantity: draft.quantity };
+}
 
 type CommonProps = {
   open: boolean;
@@ -178,6 +189,7 @@ export function LendingTakeDebtSheet({
   baseCurrencyCode: string;
 }) {
   useModalOpen(open);
+  const request = useCryptoRequestKey(`takeLendingDebt:${position.id}`);
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const lockedAssetId = lend.borrowed_crypto_asset_id ?? null;
   const sortedAssets = useMemo(
@@ -221,21 +233,17 @@ export function LendingTakeDebtSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await takeLendingDebt(position.id, {
-        debt_qty: num,
-        value_in_base: valueInBase != null ? Math.round(valueInBase * 100) / 100 : undefined,
+      const payload = {
+        debt_qty: quantity,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
         borrowed_crypto_asset_id: lockedAssetId == null ? effectiveAssetId : undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await takeLendingDebt(position.id, { ...payload, request_id: request.requestId(payload) });
+      request.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -325,6 +333,7 @@ export function LendingRepayDebtSheet({
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[]; cryptoLivePrices: Map<number, CryptoLivePrice>; baseCurrencyCode: string }) {
   useModalOpen(open);
+  const request = useCryptoRequestKey(`repayLendingDebt:${position.id}`);
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const symbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
   const debtQty = lend.borrowed_quantity ?? 0;
@@ -338,6 +347,7 @@ export function LendingRepayDebtSheet({
     : null;
 
   const [quantity, setQuantity] = useState('');
+  const [interest, setInterest] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
   const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
@@ -347,6 +357,7 @@ export function LendingRepayDebtSheet({
   useEffect(() => {
     if (open) {
       setQuantity('');
+      setInterest('');
       setOperatedAt(todayIso());
       setComment('');
       setFeeDraft(EMPTY_FEE_DRAFT);
@@ -368,21 +379,18 @@ export function LendingRepayDebtSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await repayLendingDebt(position.id, {
+      const payload = {
         source_position_id: sourcePosition.id,
-        repay_qty: num,
-        value_in_base: valueInBase != null ? Math.round(valueInBase * 100) / 100 : undefined,
+        repay_qty: quantity,
+        interest_qty: interest || '0',
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await repayLendingDebt(position.id, { ...payload, request_id: request.requestId(payload) });
+      request.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -430,6 +438,12 @@ export function LendingRepayDebtSheet({
         {!sourcePosition && (
           <span className="tok-row__hint tok-row__hint--muted">На счёте нет заёмного актива — сначала пополни баланс.</span>
         )}
+      </div>
+      <div className="apf-field">
+        <label className="apf-label">Из этой суммы — проценты</label>
+        <input className="apf-input" type="text" inputMode="decimal" placeholder="0"
+          value={interest} onChange={(e) => setInterest(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
+        <span className="tok-row__hint">Основной долг переносит затраты на активы, проценты учитываются как расход.</span>
       </div>
       <div className="apf-field">
         <label className="apf-label">Дата</label>
@@ -785,6 +799,80 @@ export function LendingCloseSheet({
       {!hasDebt && (
         <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
       )}
+    </BottomSheet>
+  );
+}
+
+
+export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess }: CommonProps & {
+  kind: 'interest' | 'liquidate';
+}) {
+  useModalOpen(open);
+  const request = useCryptoRequestKey(`lending-${kind}:${position.id}`);
+  const lend = getLendingMetadata(position);
+  const [quantity, setQuantity] = useState('');
+  const [debt, setDebt] = useState('');
+  const [interest, setInterest] = useState('');
+  const [penalty, setPenalty] = useState('');
+  const [day, setDay] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const liquidate = kind === 'liquidate';
+  const debtSymbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
+  const valid = Number(quantity) > 0 && (!liquidate || (
+    Number(debt) > 0 && interest.trim() !== '' && Number(interest) >= 0 && Number(interest) <= Number(debt)
+    && penalty.trim() !== '' && Number(penalty) >= 0 && Number(penalty) <= Number(quantity)
+  ));
+  const submit = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = liquidate
+        ? { operated_at: day, collateral_qty: quantity, debt_qty: debt, interest_qty: interest, collateral_fee_qty: penalty }
+        : { operated_at: day, quantity };
+      await recordLendingDebtEvent(position.id, liquidate ? 'liquidate' : 'accrue-interest', {
+        ...payload, request_id: request.requestId(payload),
+      });
+      request.completed();
+      onSuccess();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setBusy(false); }
+  };
+  const input = (label: string, value: string, setter: (value: string) => void) => (
+    <div className="apf-field">
+      <label className="apf-label">{label}</label>
+      <input className="apf-input" type="text" inputMode="decimal" value={value} placeholder="0"
+        onChange={(e) => setter(sanitizeDecimalInput(e.target.value))} disabled={busy} />
+    </div>
+  );
+  return (
+    <BottomSheet open={open} tag={position.protocol_name}
+      title={liquidate ? 'Учесть ликвидацию' : 'Начислить проценты по долгу'}
+      icon={<SlidersHorizontal size={18} />} iconColor="o" onClose={onClose}
+      actions={<div className="tk-foot pf-sheet-actions">
+        {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
+        <button className="btn btn--primary" type="button" disabled={busy || !valid} onClick={() => void submit()}>
+          {busy ? 'Сохраняем…' : 'Записать в историю'}
+        </button>
+      </div>}
+    >
+      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 12 }}>
+        {liquidate
+          ? 'Укажите фактически списанный залог и погашенный долг по данным протокола. Стоимость основного долга перейдёт к активам, проценты и штраф станут расходом. Здесь учитывается уже произошедшая ликвидация.'
+          : 'Введите только новые проценты, а не весь долг. Долг увеличится; расход определится по стоимости монет при погашении.'}
+      </p>
+      {input(liquidate ? `Всего списано залога, ${position.asset_symbol}` : `Новые проценты, ${debtSymbol}`, quantity, setQuantity)}
+      {liquidate && <>
+        {input(`Всего погашено долга, ${debtSymbol}`, debt, setDebt)}
+        {input(`Из погашенного — проценты, ${debtSymbol} (0, если нет)`, interest, setInterest)}
+        {input(`Из списанного залога — штраф, ${position.asset_symbol} (0, если нет)`, penalty, setPenalty)}
+        <p className="tok-row__hint">Проценты сначала должны быть начислены в истории. Штраф указывайте по данным протокола; неизвестную сумму не заменяйте нулём.</p>
+      </>}
+      <div className="apf-field"><label className="apf-label">Дата</label>
+        <input className="apf-input" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />
+      </div>
     </BottomSheet>
   );
 }

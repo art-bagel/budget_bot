@@ -56,6 +56,7 @@ import {
   LendingTakeDebtSheet,
   LendingRepayDebtSheet,
   LendingAdjustSheet,
+  LendingDebtEventSheet,
   LendingPartialWithdrawSheet,
   LendingCloseSheet,
 } from '../components/CryptoLendingActionSheets';
@@ -736,7 +737,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [cryptoIncomeSheetPosition, setCryptoIncomeSheetPosition] = useState<PortfolioPosition | null>(null);
   const [partialCloseProtocolId, setPartialCloseProtocolId] = useState<number | null>(null);
   const [lpSheet, setLpSheet] = useState<{ kind: 'add' | 'partial' | 'close' | 'claim'; positionId: number } | null>(null);
-  const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close'; positionId: number } | null>(null);
+  const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate'; positionId: number } | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
@@ -5084,13 +5085,20 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const isLending = selectedProtocolPosition.position_type === 'lending';
               const debtPosition = selectedLendingGroup.find((item) => (getLendingMetadata(item).borrowed_quantity ?? 0) > 0) ?? selectedProtocolPosition;
               const hasDebt = (getLendingMetadata(debtPosition).borrowed_quantity ?? 0) > 0;
-              const openLendingSheet = (kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close') => {
+              const openLendingSheet = (kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate') => {
                 setSelectedProtocolPositionId(null);
-                setLendingSheet({ kind, positionId: kind === 'take_debt' || kind === 'repay_debt' ? debtPosition.id : selectedProtocolPosition.id });
+                setLendingSheet({ kind, positionId: kind === 'take_debt' || kind === 'repay_debt' || kind === 'interest' ? debtPosition.id : selectedProtocolPosition.id });
               };
               if (isLending) {
                 return (
                   <div className="pf-sheet-actions">
+                    {hasDebt && <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('interest')}>
+                      Начислить проценты по долгу
+                    </button>}
+                    {(getLendingMetadata(selectedProtocolPosition).borrowed_quantity ?? 0) > 0 &&
+                      <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('liquidate')}>
+                        Учесть ликвидацию
+                      </button>}
                     <button
                       className="btn btn--primary"
                       type="button"
@@ -5980,6 +5988,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         }
         if (lendingSheet.kind === 'repay_debt') {
           return <LendingRepayDebtSheet open position={target} accountPositions={accountPositions} cryptoLivePrices={cryptoLivePrices} baseCurrencyCode={user.base_currency_code} onClose={close} onSuccess={onSuccess} />;
+        }
+        if (lendingSheet.kind === 'interest' || lendingSheet.kind === 'liquidate') {
+          return <LendingDebtEventSheet open position={target} kind={lendingSheet.kind} onClose={close} onSuccess={onSuccess} />;
         }
         if (lendingSheet.kind === 'adjust') {
           return <LendingAdjustSheet open position={target} onClose={close} onSuccess={onSuccess} />;

@@ -1,5 +1,5 @@
 import logging
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional
@@ -337,7 +337,9 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
 
 
 class TakeLendingDebtRequest(BaseModel):
-    debt_qty: Decimal
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
+    debt_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     value_in_base: Optional[float] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
@@ -352,9 +354,11 @@ class TakeLendingDebtRequest(BaseModel):
 
 
 class RepayLendingDebtRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     source_position_id: int
-    repay_qty: Decimal
-    interest_qty: Decimal = Field(default=Decimal('0'), ge=0, allow_inf_nan=False)
+    repay_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    interest_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     value_in_base: Optional[float] = None
     comment: Optional[str] = None
     operated_at: Optional[date] = None
@@ -368,9 +372,10 @@ class RepayLendingDebtRequest(BaseModel):
 
 
 class AccrueLendingInterestRequest(BaseModel):
-    quantity: Decimal = Field(gt=0, allow_inf_nan=False)
+    request_id: Optional[UUID] = None
+    quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     value_in_base: Optional[Decimal] = Field(default=None, ge=0, allow_inf_nan=False)
-    external_id: str = Field(min_length=1)
+    external_id: Optional[str] = Field(default=None, min_length=1)
     operated_at: Optional[date] = None
 
 
@@ -392,19 +397,20 @@ class AccrueLendingRequest(BaseModel):
 
 
 class LiquidateLendingRequest(BaseModel):
+    request_id: Optional[UUID] = None
     collateral_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     debt_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     interest_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     collateral_fee_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     settlement_value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False)
-    external_id: str = Field(min_length=1)
+    external_id: Optional[str] = Field(default=None, min_length=1)
     operated_at: date
     comment: Optional[str] = None
 
     @field_validator('external_id')
     @classmethod
-    def nonempty_source(cls, v: str) -> str:
-        if not v.strip():
+    def nonempty_source(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
             raise ValueError('Нужен идентификатор источника')
         return v
 
@@ -875,14 +881,12 @@ async def take_lending_debt(
     body: TakeLendingDebtRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
-    result = await ledger.put__lending_take_more_debt(
-        user_id=user.user_id,
-        position_id=position_id,
-        debt_qty=body.debt_qty,
-        value_in_base=body.value_in_base,
-        comment=body.comment,
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='borrow',
+        payload={**body.model_dump(mode='json', exclude={'request_id', 'fee', 'operated_at'}, exclude_none=True),
+                 'position_id': position_id},
         operated_at=body.operated_at,
-        borrowed_crypto_asset_id=body.borrowed_crypto_asset_id,
+        fee=body.fee.model_dump(mode='json', exclude_none=True) if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -896,15 +900,12 @@ async def repay_lending_debt(
     body: RepayLendingDebtRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
-    result = await ledger.put__lending_repay_debt(
-        user_id=user.user_id,
-        position_id=position_id,
-        source_position_id=body.source_position_id,
-        repay_qty=body.repay_qty,
-        interest_qty=body.interest_qty,
-        value_in_base=body.value_in_base,
-        comment=body.comment,
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='repay',
+        payload={**body.model_dump(mode='json', exclude={'request_id', 'fee', 'operated_at'}, exclude_none=True),
+                 'position_id': position_id},
         operated_at=body.operated_at,
+        fee=body.fee.model_dump(mode='json', exclude_none=True) if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -914,9 +915,12 @@ async def accrue_lending_interest(
     position_id: int, body: AccrueLendingInterestRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
-    result = await ledger.put__lending_accrue_interest(
-        user_id=user.user_id, position_id=position_id, quantity=body.quantity,
-        value_in_base=body.value_in_base, external_id=body.external_id,
+    request_id = body.request_id or (uuid5(NAMESPACE_URL, f'crypto:{position_id}:accrue_interest:{body.external_id}')
+                                     if body.external_id else uuid4())
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=request_id, kind='accrue_interest',
+        payload={**body.model_dump(mode='json', exclude={'request_id', 'operated_at'}, exclude_none=True),
+                 'position_id': position_id},
         operated_at=body.operated_at,
     )
     return CryptoProtocolPositionItem(**result)
@@ -937,9 +941,15 @@ async def liquidate_lending(
     position_id: int, body: LiquidateLendingRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return await ledger.put__lending_liquidate(
-        user_id=user.user_id, position_id=position_id, **body.model_dump(),
+    request_id = body.request_id or (uuid5(NAMESPACE_URL, f'crypto:{position_id}:liquidate:{body.external_id}')
+                                     if body.external_id else uuid4())
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=request_id, kind='liquidate',
+        payload={**body.model_dump(mode='json', exclude={'request_id', 'operated_at'}, exclude_none=True),
+                 'position_id': position_id},
+        operated_at=body.operated_at,
     )
+    return result
 
 
 @router.post('/asset-positions/{position_id}/pay-fee')

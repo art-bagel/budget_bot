@@ -16,11 +16,15 @@ DECLARE
     _result jsonb;
 BEGIN
     SET search_path TO budgeting;
-    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer') OR _kind IS NULL
+    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer','borrow','repay','accrue_interest','liquidate') OR _kind IS NULL
        OR jsonb_typeof(_payload) IS DISTINCT FROM 'object' THEN
         RAISE EXCEPTION 'Некорректная ручная операция';
     END IF;
-    SELECT * INTO _position FROM portfolio_positions WHERE id=(_payload->>'position_id')::bigint;
+    IF _kind IN ('borrow','repay','accrue_interest','liquidate') THEN
+        SELECT * INTO _position FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint;
+    ELSE
+        SELECT * INTO _position FROM portfolio_positions WHERE id=(_payload->>'position_id')::bigint;
+    END IF;
     IF _position.id IS NULL OR NOT budgeting.has__owner_access(
         _user_id,_position.owner_type,_position.owner_user_id,_position.owner_family_id) THEN
         RAISE EXCEPTION 'Нет доступа к исходной позиции';
@@ -34,11 +38,28 @@ BEGIN
         'requested_date',_operated_at,'fee',_fee);
     SELECT * INTO _prior FROM crypto_source_events WHERE owner_key=_owner_key
         AND source_namespace='manual-portfolio-v1' AND source_id=_request_id::text;
-    IF FOUND THEN
+    IF NOT FOUND AND _kind IN ('accrue_interest','liquidate') AND _payload->>'external_id' IS NOT NULL THEN
+        SELECT * INTO _prior FROM crypto_source_events WHERE owner_key=_owner_key
+            AND source_namespace='manual-portfolio-v1'
+            AND evidence->>'manual_kind'=_kind
+            AND evidence->'request_payload'->>'position_id'=_payload->>'position_id'
+            AND evidence->'request_payload'->>'external_id'=_payload->>'external_id';
+    END IF;
+    IF _prior.id IS NOT NULL THEN
         IF _prior.evidence IS DISTINCT FROM _evidence THEN
             RAISE EXCEPTION 'Этот запрос уже проведён с другими данными. Обновите историю перед исправлением';
         END IF;
         RETURN (_prior.result->'results'->0)||jsonb_build_object('source_event_id',_prior.id);
+    END IF;
+    IF _kind IN ('accrue_interest','liquidate') AND EXISTS (
+        SELECT 1 FROM crypto_liability_events WHERE protocol_position_id=_position.id
+            AND external_id=_payload->>'external_id') THEN
+        RAISE EXCEPTION 'Этот источник уже записан прежним механизмом. Проверьте историю перед повтором';
+    END IF;
+    IF _kind IN ('borrow','repay','accrue_interest','liquidate') AND
+       COALESCE((_position.metadata->>'borrowed_quantity')::numeric,0)>0
+       AND _position.metadata->>'funding_policy' IS DISTINCT FROM 'components' THEN
+        RAISE EXCEPTION 'Существующий долг требует восстановления заёмных единиц перед изменением';
     END IF;
     IF NOT isfinite(_day) THEN RAISE EXCEPTION 'Некорректная дата операции'; END IF;
     IF EXISTS(SELECT 1 FROM portfolio_events e JOIN portfolio_positions p ON p.id=e.position_id
@@ -56,6 +77,10 @@ BEGIN
     _commands:=jsonb_build_array(jsonb_build_object('kind',_kind,'payload',
         CASE WHEN _kind='swap' THEN
             (_payload-'value_in_base'-'valuation_source')||jsonb_build_object('basis_policy','carry')
+        WHEN _kind='borrow' THEN (_payload-'value_in_base')||jsonb_build_object('funding_policy','components')
+        WHEN _kind='repay' THEN _payload-'value_in_base'
+        WHEN _kind='accrue_interest' THEN (_payload-'external_id')||jsonb_build_object('value_in_base',0)
+        WHEN _kind='liquidate' THEN _payload-'external_id'-'settlement_value_in_base'
         ELSE _payload END));
     IF _fee IS NOT NULL THEN
         _commands:=_commands||jsonb_build_array(jsonb_build_object('kind','fee','payload',_fee));

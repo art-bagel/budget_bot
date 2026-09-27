@@ -328,7 +328,9 @@ export interface CreateCryptoProtocolPositionRequest {
 }
 
 export interface TakeLendingDebtRequest {
-  debt_qty: number;
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
+  debt_qty: number | string;
   value_in_base?: number;
   comment?: string;
   operated_at?: string;
@@ -336,8 +338,11 @@ export interface TakeLendingDebtRequest {
 }
 
 export interface RepayLendingDebtRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   source_position_id: number;
-  repay_qty: number;
+  repay_qty: number | string;
+  interest_qty?: string;
   value_in_base?: number;
   comment?: string;
   operated_at?: string;
