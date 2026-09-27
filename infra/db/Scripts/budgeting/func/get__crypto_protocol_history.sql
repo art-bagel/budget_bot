@@ -102,7 +102,8 @@ BEGIN
             _p.asset_symbol,NULL::numeric,'Размещение зарегистрировано; состав первоначальной операции не сохранён.'
         WHERE NOT EXISTS (SELECT 1 FROM asset_rows WHERE kind='stake_to_protocol')
     ), ordered AS (
-        SELECT r.*,COALESCE(s.occurred_at,r.event_at::timestamptz) AS sort_at,
+        SELECT r.*, (r.id NOT LIKE 'asset:%' OR budgeting.is__crypto_audit_comment('portfolio_events', split_part(r.id,':',2)::bigint)) AS comment_is_system,
+            COALESCE(s.occurred_at,r.event_at::timestamptz) AS sort_at,
             COALESCE(s.order_in_timestamp,0) AS sort_order,
             COALESCE(l.command_index,0) AS sort_command
         FROM rows r

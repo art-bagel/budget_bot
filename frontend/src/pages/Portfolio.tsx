@@ -3106,7 +3106,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </div>
                 {activeScopeDisplayMetrics.fundingParts.length > 0 && (
                   <div className="pf-tsum__cell">
-                    <div className="pf-tsum__cell-label">Открытое финансирование · стоимость неокончательная</div>
+                    <div className="pf-tsum__cell-label">Непогашенные займы</div>
                     {activeScopeDisplayMetrics.fundingParts.map((part) => (
                       <div key={part.loan}>+ {formatNumericAmount(part.quantity, 12)} {part.symbol}</div>
                     ))}
@@ -4730,7 +4730,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             ? ` · Результат: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}`
                             : ''}
                           {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
-                          {item.comment ? ` · ${item.comment}` : ''}
+                          {item.comment && !item.comment_is_system ? ` · ${item.comment}` : ''}
                         </div>
                         {item.event_type === 'income' && (
                           <div className="pf-events__actions">
@@ -4797,13 +4797,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <div className="pf-dstats__cell">
                       <span className="pf-dstats__label">{selectedProtocolPosition.asset_symbol}</span>
                       <span className="pf-dstats__value">{formatNumericAmount(selectedProtocolPosition.current_quantity ?? selectedProtocolPosition.quantity ?? 0, 8)}</span>
-                      <span className="pf-dstats__sub">по истории</span>
+                      <span className="pf-dstats__sub">в позиции</span>
                     </div>
                     {lp.token1_symbol && (
                       <div className="pf-dstats__cell">
                         <span className="pf-dstats__label">{lp.token1_symbol}</span>
                         <span className="pf-dstats__value">{formatNumericAmount(lp.token1_quantity ?? 0, 8)}</span>
-                        <span className="pf-dstats__sub">по истории</span>
+                        <span className="pf-dstats__sub">в позиции</span>
                       </div>
                     )}
                     <div className="pf-dstats__cell">
@@ -4904,7 +4904,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               </div>
               {[selectedProtocolPosition.metadata.funding_units0, selectedProtocolPosition.metadata.funding_units1].some((units) =>
                 units && typeof units === 'object' && Object.values(units).some((amount) => Number(amount) > 0)) && (
-                <p className="pf-dstats__sub">Себестоимость не окончательная: часть монет приобретена на открытый заём.</p>
+                <p className="pf-dstats__sub">Есть непогашенный заём</p>
               )}
               {getProtocolValuation(selectedProtocolPosition).reason && (
                 <p className="pf-dstats__sub">{getProtocolValuation(selectedProtocolPosition).reason}</p>
@@ -4915,19 +4915,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <span className="pf-dcond__row-value">{formatAmount(quote.price, user.base_currency_code)}<br />{new Date(quote.fetched_at).toLocaleString('ru-RU')}</span>
                 </div>
               ))}
-              {getProtocolValuation(selectedProtocolPosition).value !== null && <p className="pf-dstats__sub">Рыночная оценка использует текущие курсы и учётное количество монет. Это не стоимость на дату исторического среза.</p>}
             </div>
-
-            {typeof selectedProtocolPosition.metadata?.historical_accrual_note === 'string' && (
-              <div className="pf-dcond">
-                <div className="pf-dcond__head"><span className="sec-tag">Точность исторического остатка</span></div>
-                <p>{selectedProtocolPosition.metadata.historical_accrual_note}</p>
-              </div>
-            )}
 
             {selectedLendingGroup.length > 1 && (
               <div className="pf-dcond">
-                <p>Залоги одного счёта EVAA. Выберите залог для операций и его истории. Общий долг показан выше.</p>
+                <p>Залоги счёта</p>
                 {selectedLendingGroup.map((item) => (
                   <button type="button" className="pf-dcond__row" key={item.id}
                     aria-pressed={item.id === selectedProtocolPosition.id}
@@ -5008,7 +5000,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   </>
                 );
               })()}
-              {selectedProtocolPosition.comment ? (
+              {selectedProtocolPosition.comment && !selectedProtocolPosition.comment_is_system ? (
                 <div className="pf-dcond__row pf-dcond__row--comment">
                   <span className="pf-dcond__row-label">Комментарий</span>
                   <span className="pf-dcond__row-value pf-dcond__row-value--text">{selectedProtocolPosition.comment}</span>

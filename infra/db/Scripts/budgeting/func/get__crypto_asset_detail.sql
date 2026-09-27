@@ -81,6 +81,7 @@ BEGIN
             'amount', pe.amount,
             'currency_code', pe.currency_code,
             'comment', pe.comment,
+                    'comment_is_system', budgeting.is__crypto_audit_comment('portfolio_events', pe.id),
             'linked_operation_id', pe.linked_operation_id,
             'metadata', pe.metadata,
             'entry_value_in_base',

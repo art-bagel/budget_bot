@@ -228,6 +228,7 @@ class OperationBudgetEntry(BaseModel):
 
 
 class OperationPortfolioEvent(BaseModel):
+    comment_is_system: bool = False
     id: int
     position_id: int
     event_type: str
@@ -249,6 +250,7 @@ class OperationPortfolioEvent(BaseModel):
 
 
 class OperationHistoryItem(BaseModel):
+    comment_is_system: bool = False
     operation_id: int
     type: str
     comment: Optional[str] = None

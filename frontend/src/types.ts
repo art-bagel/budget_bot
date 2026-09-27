@@ -203,6 +203,7 @@ export interface CryptoAccountAssetSummary {
 }
 
 export interface CryptoAssetEntry {
+  comment_is_system?: boolean;
   event_id: number;
   event_type: string;
   event_at: string;
@@ -281,6 +282,7 @@ export interface SwapCryptoInvestmentAssetRequest {
 }
 
 export interface CryptoProtocolPosition {
+  comment_is_system?: boolean;
   quantity_exact?: string | null;
   current_quantity_exact?: string | null;
   token1_quantity_exact?: string | null;
@@ -522,6 +524,7 @@ export interface OperationHistoryBudgetEntry {
 }
 
 export interface OperationHistoryPortfolioEvent {
+  comment_is_system?: boolean;
   id: number;
   position_id: number;
   event_type: PortfolioEvent['event_type'];
@@ -543,6 +546,7 @@ export interface OperationHistoryPortfolioEvent {
 }
 
 export interface OperationHistoryItem {
+  comment_is_system?: boolean;
   operation_id: number;
   type: string;
   comment?: string | null;
@@ -802,6 +806,7 @@ export interface PortfolioPosition {
 }
 
 export interface PortfolioEvent {
+  comment_is_system?: boolean;
   id: number;
   position_id: number;
   event_type: 'open' | 'top_up' | 'partial_close' | 'close' | 'income' | 'fee' | 'adjustment' | 'transfer_in' | 'transfer_out' | 'swap_in' | 'swap_out';

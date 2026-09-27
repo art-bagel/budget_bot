@@ -40,6 +40,7 @@ def credentials():
 
 def corrected_plan(original):
     plan = json.loads(json.dumps(original))
+    plan["main_account_name"] = "Основной TON-кошелёк"
     groups = defaultdict(list)
     changes = []
     for row in plan["rows"]:
@@ -295,7 +296,7 @@ async def main():
                 residual,
             )
             telegram = await db.fetchval(
-                "insert into budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type) values ('user',$1,'Telegram — криптоистория','investment','crypto') returning id",
+                "insert into budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type) values ('user',$1,'Telegram Wallet','investment','crypto') returning id",
                 UID,
             )
             assets = {}

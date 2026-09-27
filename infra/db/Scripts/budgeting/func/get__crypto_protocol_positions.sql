@@ -40,6 +40,7 @@ BEGIN
                 'deposited_at', cpp.deposited_at,
                 'withdrawn_at', cpp.withdrawn_at,
                 'comment', cpp.comment,
+                'comment_is_system', budgeting.is__crypto_audit_comment('crypto_protocol_positions',cpp.id,cpp.comment),
                 'metadata', cpp.metadata,
                 'created_by_user_id', cpp.created_by_user_id,
                 'created_at', cpp.created_at,

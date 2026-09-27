@@ -66,11 +66,11 @@ export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,onC
         <label className="tk-field"><span>Счёт</span><select className="tk-input" value={anchorId} disabled={busy} onChange={e=>{setAnchorId(Number(e.target.value));setOffset(0);setError('');}}>
           {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
         </select></label>
-        <p className="tk-hint">Операции владельца выбранного счёта с проверенным журналом. Перед применением бот покажет результат пересчёта всей последующей цепочки. Для ранней операции это может занять несколько минут.</p>
+        <p className="tk-hint">Перед сохранением проверьте изменения остатков. Пересчёт последующих операций может занять несколько минут.</p>
         {!busy&&rows.length===0&&<p>На этой странице нет доступных для исправления операций.</p>}
         {rows.map(row=><button key={row.id} className="btn btn--ghost" type="button" disabled={!row.reversible||busy} onClick={()=>{setSelected(row);setValues({});setReason('');setPreview(null);}}>
           {row.accounting_date} · {row.context} · {row.commands.map(c=>kinds[c.kind]??c.kind).join(' + ')} · версия {row.revision}
-          {!row.reversible?' · нет снимка для пересчёта':''}<br />
+          {!row.reversible?' · исправление недоступно':''}<br />
           {row.commands.flatMap(c=>Object.entries(c.payload).filter(([k])=>c.editable_fields?.includes(k)).map(([k,v])=>`${fields[k]}: ${String(v)}`)).join('; ')}
         </button>)}
         <div className="tk-foot__row"><button type="button" className="btn btn--ghost" disabled={busy||offset===0} onClick={()=>setOffset(Math.max(0,offset-30))}>Новее</button>

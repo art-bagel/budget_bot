@@ -1162,6 +1162,7 @@ export function settlePendingFiatExpense(saleEventId: number, body: {
 }
 
 export interface CryptoProtocolHistoryEntry {
+  comment_is_system?: boolean;
   id: string;
   event_at: string;
   kind: string;

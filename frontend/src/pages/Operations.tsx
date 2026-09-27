@@ -685,7 +685,7 @@ function groupByDate(items: OperationHistoryItem[]): { dateKey: string; dateLabe
 const OP_SYSTEM_COMMENT_PREFIXES = ['Платёж по кредиту', 'Частичное закрытие позиции', 'Пополнение позиции', 'Комиссия по позиции'];
 
 function getOpComment(item: OperationHistoryItem): string | null {
-  if (!item.comment) return null;
+  if (!item.comment || item.comment_is_system) return null;
   if (OP_SYSTEM_COMMENT_PREFIXES.some((p) => item.comment!.includes(p))) return null;
   return item.comment;
 }

@@ -14,7 +14,7 @@ export function protocolMarketValue(
 ): ProtocolValuation {
   const unavailable = (reason: string): ProtocolValuation => ({ value: null, reason, quotes: [] });
   if (position.position_type === 'liquidity_pool') {
-    return unavailable('Нет актуального состава пула. Количество монет показано по учётной истории, рыночная оценка недоступна.');
+    return unavailable('Состав пула не обновлён');
   }
   const quotes: CryptoLivePrice[] = [];
   const priceFor = (id: number | null | undefined): number | null => {
@@ -26,13 +26,13 @@ export function protocolMarketValue(
   };
   const quantity = Number(position.current_quantity ?? position.quantity ?? 0);
   const price = quantity === 0 ? 0 : priceFor(position.crypto_asset_id);
-  if (price === null) return unavailable('Нет актуальной рыночной цены заложенной или размещённой монеты.');
+  if (price === null) return unavailable('Нет котировки');
   let value = quantity * price;
   if (position.position_type === 'lending') {
     const debt = Number(position.metadata.borrowed_quantity ?? 0);
     if (debt > 0) {
       const debtPrice = priceFor(Number(position.metadata.borrowed_crypto_asset_id));
-      if (debtPrice === null) return unavailable('Нет актуальной цены монеты долга. Чистая рыночная оценка недоступна.');
+      if (debtPrice === null) return unavailable('Нет котировки монеты долга');
       value -= debt * debtPrice;
     }
   }

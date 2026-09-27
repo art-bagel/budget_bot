@@ -42,6 +42,7 @@ class PortfolioPositionItem(BaseModel):
 
 
 class PortfolioEventItem(BaseModel):
+    comment_is_system: bool = False
     id: int
     position_id: int
     event_type: Literal['open', 'top_up', 'partial_close', 'close', 'income', 'fee', 'adjustment', 'transfer_in', 'transfer_out', 'swap_in', 'swap_out']

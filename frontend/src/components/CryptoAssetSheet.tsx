@@ -70,8 +70,8 @@ function describeCounterparty(entry: CryptoAssetEntry): string {
 
   if (sourceKind === 'bank') return 'Из банка';
   if (targetKind === 'bank') return 'В банк';
-  if (sourceKind === 'swap') return fromSymbol ? `Swap из ${fromSymbol}` : 'Swap (вход)';
-  if (targetKind === 'swap') return toSymbol ? `Swap в ${toSymbol}` : 'Swap (выход)';
+  if (sourceKind === 'swap') return fromSymbol ? `Обмен из ${fromSymbol}` : 'Обмен (получено)';
+  if (targetKind === 'swap') return toSymbol ? `Обмен в ${toSymbol}` : 'Обмен (списано)';
   if (sourceKind === 'cross_account') return 'Перевод из другого счёта';
   if (targetKind === 'cross_account') return 'Перевод в другой счёт';
   if (sourceKind === 'defi_return') return protocolName ? `Возврат из ${protocolName}` : 'Возврат из DeFi';
@@ -89,7 +89,7 @@ function describeCounterparty(entry: CryptoAssetEntry): string {
     if (incomeKind && INCOME_KIND_LABELS[incomeKind]) return INCOME_KIND_LABELS[incomeKind];
     return 'Зачисление';
   }
-  return entry.event_type;
+  return ({ open: 'Зачисление', top_up: 'Пополнение', fee: 'Комиссия', adjustment: 'Корректировка', transfer_in: 'Входящий перевод', transfer_out: 'Исходящий перевод', swap_in: 'Обмен (получено)', swap_out: 'Обмен (списано)', close: 'Закрытие', partial_close: 'Частичное закрытие' } as Record<string, string>)[entry.event_type] ?? 'Операция';
 }
 
 
@@ -213,14 +213,14 @@ export default function CryptoAssetSheet({
                 {basisUnknown ? '—' : `${basisEstimated ? '≈ ' : ''}${formatNumericAmount(detail.remaining_cost_basis ?? 0)} ${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">
-                {basisUnknown ? 'неизвестна' : basisOpen ? 'Неокончательная: открытое финансирование' : `avg ${formatNumericAmount(detail.avg_cost_per_unit ?? 0, 4)}`}
+                {basisUnknown ? 'неизвестна' : basisOpen ? 'Есть непогашенный заём' : `За монету: ${formatNumericAmount(detail.avg_cost_per_unit ?? 0, 4)}`}
                 {basisOpen && detail.funding_components?.map((part) => (
                   <span key={part.loan_id} style={{ display: 'block' }}>+ {formatNumericAmount(Number(part.quantity), 12)} {part.symbol}</span>
                 ))}
               </span>
             </div>
             <div className="ca-sheet__stat">
-              <span className="ca-sheet__stat-label">Unrealized</span>
+              <span className="ca-sheet__stat-label">Изменение цены</span>
               {unrealized !== null ? (
                 <>
                   <span className={`ca-sheet__stat-val ${unrealized >= 0 ? 'ca-sheet__stat-val--pos' : 'ca-sheet__stat-val--neg'}`}>
@@ -235,16 +235,16 @@ export default function CryptoAssetSheet({
               ) : (
                 <>
                   <span className="ca-sheet__stat-val ca-sheet__stat-val--mute">—</span>
-                  <span className="ca-sheet__stat-sub">нет live-цены</span>
+                  <span className="ca-sheet__stat-sub">нет котировки</span>
                 </>
               )}
             </div>
             <div className="ca-sheet__stat">
-              <span className="ca-sheet__stat-label">Realized</span>
+              <span className="ca-sheet__stat-label">Результат продаж</span>
               <span className={`ca-sheet__stat-val ${detail.realized_pnl_lifetime_in_base !== null && detail.realized_pnl_lifetime_in_base >= 0 ? 'ca-sheet__stat-val--pos' : detail.realized_pnl_lifetime_in_base !== null && detail.realized_pnl_lifetime_in_base < 0 ? 'ca-sheet__stat-val--neg' : 'ca-sheet__stat-val--mute'}`}>
                 {basisUnknown || basisEstimated || detail.realized_pnl_lifetime_in_base === null ? '—' : `${detail.realized_pnl_lifetime_in_base > 0 ? '+' : ''}${formatNumericAmount(detail.realized_pnl_lifetime_in_base)} ${baseSym}`}
               </span>
-              <span className="ca-sheet__stat-sub">lifetime</span>
+              <span className="ca-sheet__stat-sub">за всё время</span>
             </div>
           </div>
 
@@ -342,10 +342,10 @@ export default function CryptoAssetSheet({
                     {entry.is_legacy_no_basis && (
                       <div className="ca-sheet__row-legacy">
                         <Info size={12} strokeWidth={2} />
-                        <span>Cost basis не задан (legacy event)</span>
+                        <span>Себестоимость не указана</span>
                       </div>
                     )}
-                    {entry.comment && (
+                    {entry.comment && !entry.comment_is_system && (
                       <div className="ca-sheet__row-comment">{entry.comment}</div>
                     )}
                   </div>

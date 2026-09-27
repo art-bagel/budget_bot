@@ -321,6 +321,7 @@ class CryptoAccountAssetSummary(BaseModel):
 
 
 class CryptoAssetEntry(BaseModel):
+    comment_is_system: bool = False
     event_id: int
     event_type: str
     event_at: date
@@ -346,6 +347,7 @@ class CryptoAssetDetail(CryptoAccountAssetSummary):
 
 
 class CryptoProtocolPositionItem(BaseModel):
+    comment_is_system: bool = False
     quantity_exact: Optional[str] = None
     current_quantity_exact: Optional[str] = None
     token1_quantity_exact: Optional[str] = None
