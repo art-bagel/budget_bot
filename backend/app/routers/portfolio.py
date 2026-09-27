@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -123,7 +124,7 @@ class RecordPortfolioIncomeRequest(BaseModel):
     amount: float
     currency_code: str
     amount_in_base: float | None = None
-    quantity: float | None = None
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     income_kind: str | None = None
     destination: Literal['account', 'position'] = 'account'
     received_at: date | None = None
@@ -138,7 +139,7 @@ class RecordPortfolioIncomeRequest(BaseModel):
 
     @field_validator('quantity')
     @classmethod
-    def quantity_must_be_positive(cls, v: float | None) -> float | None:
+    def quantity_must_be_positive(cls, v: Decimal | None) -> Decimal | None:
         if v is not None and v <= 0:
             raise ValueError('Количество должно быть положительным')
         return v

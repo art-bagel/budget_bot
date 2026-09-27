@@ -122,7 +122,7 @@ export interface RecordIncomeResponse {
 export interface RecordExpenseRequest {
   bank_account_id: number;
   category_id: number;
-  amount: number;
+  amount: number | string;
   currency_code?: string;
   crypto_asset_id?: number;
   comment?: string;
@@ -832,7 +832,7 @@ export interface RecordPortfolioIncomeRequest {
   amount: number;
   currency_code: string;
   amount_in_base?: number;
-  quantity?: number;
+  quantity?: number | string;
   income_kind?: string;
   destination?: 'account' | 'position';
   received_at?: string;

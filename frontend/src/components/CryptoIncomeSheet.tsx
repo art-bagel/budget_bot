@@ -78,7 +78,7 @@ export default function CryptoIncomeSheet({
       await recordPortfolioIncome(positionId, {
         amount: 0,
         currency_code: baseCurrencyCode,
-        quantity: qtyNum,
+        quantity: quantity,
         income_kind: incomeKind,
         destination: 'position',
         received_at: receivedAt || undefined,
@@ -154,7 +154,7 @@ export default function CryptoIncomeSheet({
         </div>
         {projectedValue !== null && (
           <span className="amt__hint">
-            Текущая оценка: {formatNumericAmount(projectedValue)} {baseSym} (cost basis = 0)
+            Текущая оценка: {formatNumericAmount(projectedValue)} {baseSym} (затраты на получение — 0)
           </span>
         )}
       </div>

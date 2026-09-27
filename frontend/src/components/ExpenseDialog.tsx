@@ -112,7 +112,7 @@ export default function ExpenseDialog({ category, user, familyBankAccountId = nu
       await recordExpense({
         bank_account_id: selectedAccountId,
         category_id: category.category_id,
-        amount: parseFloat(amount),
+        amount: selectedAsset.type === 'crypto' ? amount : parseFloat(amount),
         currency_code: selectedAsset.type === 'fiat' ? selectedAsset.code : undefined,
         crypto_asset_id: selectedAsset.type === 'crypto' ? selectedAsset.id : undefined,
         comment: comment.trim() || undefined,

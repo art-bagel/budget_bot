@@ -15,6 +15,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _manual_carry boolean := NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL;
     _source record;
     _target_account record;
     _from_asset record;
@@ -125,9 +126,10 @@ BEGIN
         ELSE 0
     END;
 
-    -- Historical trade valuation is independent of acquisition cost. Missing
-    -- price leaves the new asset cost and realized result unknown.
-    _resolved_value_in_base := _value_in_base;
+    -- Manual personal accounting carries acquisition cost, as agreed for the
+    -- imported history. A legacy market observation must not reprice capital.
+    -- Journal callers keep their explicit policy and annotate both events there.
+    _resolved_value_in_base := CASE WHEN _manual_carry THEN _consumed_cost_basis ELSE _value_in_base END;
 
     INSERT INTO operations (
         actor_user_id,
@@ -162,7 +164,8 @@ BEGIN
         'to_network_code', _to_asset.network_code,
         'to_contract_address', _to_asset.contract_address,
         'to_amount', _to_amount,
-        'value_at_swap_in_base', _resolved_value_in_base,
+        'value_at_swap_in_base', _value_in_base,
+        'basis_policy', CASE WHEN _manual_carry THEN 'carry' ELSE 'journal' END,
         'valuation_source', NULLIF(btrim(_valuation_source),''),
         'valuation_date', _operated_at
     );
@@ -278,7 +281,7 @@ BEGIN
         _metadata || jsonb_build_object(
             'target_position_id', _target_position_id,
             'entry_value_in_base', _resolved_value_in_base,
-            'basis_quality', CASE WHEN _resolved_value_in_base IS NULL THEN 'unknown' WHEN _resolved_value_in_base=0 THEN 'confirmed_zero' ELSE 'known' END,
+            'basis_quality', CASE WHEN _manual_carry THEN _entry_summary->>'basis_quality' WHEN _resolved_value_in_base IS NULL THEN 'unknown' WHEN _resolved_value_in_base=0 THEN 'confirmed_zero' ELSE 'known' END,
             'source_kind', 'swap',
             'source_position_id', _position_id
         ),

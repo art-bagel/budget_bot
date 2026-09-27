@@ -130,7 +130,7 @@ class Ledger(DataBase):
         amount: float,
         currency_code: str,
         amount_in_base: Optional[float] = None,
-        quantity: Optional[float] = None,
+        quantity: Optional[Decimal] = None,
         income_kind: Optional[str] = None,
         received_at: Optional[str] = None,
         comment: Optional[str] = None,
@@ -346,7 +346,7 @@ class Ledger(DataBase):
         bank_account_id: int,
         category_id: int,
         crypto_asset_id: int,
-        amount: float,
+        amount: Decimal,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
     ) -> dict:

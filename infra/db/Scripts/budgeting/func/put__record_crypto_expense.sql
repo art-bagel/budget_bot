@@ -21,24 +21,25 @@ DECLARE
     _bank_owner_family_id bigint;
     _bank_account_kind text;
     _base_currency_code char(3);
-    _crypto_balance numeric(30, 12);
-    _remaining_to_consume numeric(30, 12);
+    _crypto_balance numeric(50, 18);
+    _remaining_to_consume numeric(50, 18);
     _expense_cost_base numeric(20, 2) := 0;
     _lot_ids bigint[] := '{}';
     _lot_amounts numeric[] := '{}';
     _lot_costs numeric[] := '{}';
     _lot_idx integer;
-    _consume_amount numeric(30, 12);
+    _consume_amount numeric(50, 18);
     _consume_cost numeric(20, 2);
     _lot record;
     _operation_id bigint;
 BEGIN
     SET search_path TO budgeting;
 
-    IF _amount <= 0 THEN
-        RAISE EXCEPTION 'Expense amount must be positive';
+    IF _amount IS NULL OR _amount <= 0
+        OR _amount::text IN ('NaN', 'Infinity', '-Infinity')
+        OR _amount <> round(_amount, 18) THEN
+        RAISE EXCEPTION 'Crypto expense amount must be finite and positive with at most 18 decimals';
     END IF;
-    _amount := round(_amount, 12);
 
     SELECT kind, owner_type, owner_user_id, owner_family_id
     INTO _category_kind, _category_owner_type, _category_owner_user_id, _category_owner_family_id

@@ -41,8 +41,10 @@ BEGIN
         RAISE EXCEPTION 'Unsupported portfolio income destination: %', _destination;
     END IF;
 
-    IF _quantity IS NOT NULL AND _quantity <= 0 THEN
-        RAISE EXCEPTION 'Income quantity must be positive when provided';
+    IF _quantity IS NOT NULL AND (_quantity <= 0
+        OR _quantity::text IN ('NaN', 'Infinity', '-Infinity')
+        OR _quantity <> round(_quantity, 18)) THEN
+        RAISE EXCEPTION 'Income quantity must be finite and positive with at most 18 decimals';
     END IF;
 
     SELECT
@@ -60,7 +62,8 @@ BEGIN
         _asset_type_code,
         _status
     FROM portfolio_positions pp
-    WHERE pp.id = _position_id;
+    WHERE pp.id = _position_id
+    FOR UPDATE;
 
     IF _owner_type IS NULL THEN
         RAISE EXCEPTION 'Unknown portfolio position %', _position_id;
@@ -149,7 +152,8 @@ BEGIN
         _owner_family_id,
         'investment_income',
         _comment,
-        COALESCE(_operation_at::date, CURRENT_DATE)
+        CASE WHEN _asset_type_code = 'crypto' THEN COALESCE(_received_at, _operation_at::date, CURRENT_DATE)
+             ELSE COALESCE(_operation_at::date, CURRENT_DATE) END
     )
     RETURNING id
     INTO _operation_id;

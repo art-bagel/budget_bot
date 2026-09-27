@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
@@ -59,7 +60,7 @@ class RecordIncomeResponse(BaseModel):
 class RecordExpenseRequest(BaseModel):
     bank_account_id: int
     category_id: int
-    amount: float
+    amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     currency_code: Optional[str] = None
     crypto_asset_id: Optional[int] = None
     comment: Optional[str] = None
@@ -67,7 +68,7 @@ class RecordExpenseRequest(BaseModel):
 
     @field_validator('amount')
     @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v

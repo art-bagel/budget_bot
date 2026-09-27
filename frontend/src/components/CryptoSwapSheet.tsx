@@ -5,7 +5,7 @@ import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { swapCryptoInvestmentAsset } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
-import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import {
   formatDraftDecimal,
@@ -41,7 +41,6 @@ export default function CryptoSwapSheet({
   position,
   cryptoAssets,
   accounts,
-  baseCurrencyCode,
   onClose,
   onSuccess,
 }: Props) {
@@ -80,7 +79,6 @@ export default function CryptoSwapSheet({
   );
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
-  const [tradeValue, setTradeValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,10 +88,8 @@ export default function CryptoSwapSheet({
   const toAccount = targetAccounts.find((a) => String(a.id) === targetInvestmentAccountId);
 
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(fromNum) && fromNum > sourceQuantity;
-  const hasTradeValue = tradeValue.trim() !== '';
-  const validTradeValue = !hasTradeValue || (Number.isFinite(Number(tradeValue)) && Number(tradeValue) >= 0);
 
-  const canSubmit = !submitting && validTradeValue && !!operatedAt
+  const canSubmit = !submitting && !!operatedAt
     && !exceedsBalance
     && Number.isFinite(fromNum) && fromNum > 0
     && Number.isFinite(toNum) && toNum > 0
@@ -114,8 +110,6 @@ export default function CryptoSwapSheet({
         target_investment_account_id: Number(targetInvestmentAccountId),
         comment: comment.trim() || undefined,
         operated_at: operatedAt || undefined,
-        value_in_base: hasTradeValue ? tradeValue : undefined,
-        valuation_source: hasTradeValue ? 'user_confirmed_trade_value' : undefined,
       });
       onSuccess();
     } catch (reason: unknown) {
@@ -248,20 +242,9 @@ export default function CryptoSwapSheet({
         </div>
       </div>
 
-      <div className="field">
-        <span className="fl">Стоимость сделки, {currencySymbol(baseCurrencyCode)}</span>
-        <input
-          className="picker-v2"
-          type="text"
-          inputMode="decimal"
-          value={tradeValue}
-          onChange={(event) => setTradeValue(sanitizeDecimalInput(event.target.value))}
-          placeholder="Если известна"
-          disabled={submitting}
-        />
-        <span className="cs-sheet__hint">
-          Укажите стоимость на дату обмена. Если оставить поле пустым, стоимость полученных монет и результат обмена останутся неизвестными.
-        </span>
+      <div className="cs-sheet__hint">
+        Себестоимость списанных монет перейдёт на полученные. Курс для этого не нужен.
+        Если исходная стоимость неизвестна, она останется неизвестной после обмена.
       </div>
 
       {exceedsBalance && (
