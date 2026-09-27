@@ -30,10 +30,10 @@ args = parser.parse_args()
 if args.checkpoint_every < 1:
     parser.error('--checkpoint-every must be positive')
 if args.docker_preview:
-    if str(args.socket) != '127.0.0.1' or args.port != 5432 or args.database != 'crypto_merge_preview' or args.allow_isolated_funding_fixture or not args.state.exists():
+    if str(args.socket) != '127.0.0.1' or args.port != 5432 or args.database not in ('crypto_merge_preview', 'crypto_revision_preview') or args.allow_isolated_funding_fixture or not args.state.exists():
         raise ValueError('Docker replay requires the prepared local preview, existing state, and no income fixture')
     from prepare_docker_history import credentials as docker_credentials
-    credentials = docker_credentials()
+    credentials = {**docker_credentials(), 'database': args.database}
 elif not str(args.socket.resolve()).startswith('/private/tmp/crypto-portfolio-audit.') or not args.database.startswith('boundary_'):
     raise ValueError('Only disposable local boundary dev cluster is supported')
 os.environ.update(APP_ENV='development', APP_PORT='8000', DB_HOST=str(args.socket), DB_PORT=str(args.port),

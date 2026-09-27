@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION budgeting.put__correct_crypto_source(
 DECLARE
  src record; rec record; m record; cmd jsonb; cmds jsonb; change jsonb; idx integer; field text;
  n numeric; assigns text; actual jsonb; report jsonb; before_state jsonb; after_state jsonb;
- token text; req jsonb; prior record; ids bigint[]; t text; old_source text; old_index text;
+ token text; req jsonb; prior record; ids bigint[]; t text; old_source text; old_index text; predicate text;
 BEGIN
  SET search_path TO budgeting;
  SELECT * INTO src FROM crypto_source_events WHERE id=_source_event_id;
@@ -95,6 +95,9 @@ BEGIN
  BEGIN
   CREATE TEMP TABLE IF NOT EXISTS crypto_replay_identity (LIKE budgeting.crypto_source_mutations INCLUDING DEFAULTS) ON COMMIT DROP;
   ALTER TABLE pg_temp.crypto_replay_identity ADD COLUMN IF NOT EXISTS used boolean NOT NULL DEFAULT false;
+  CREATE INDEX IF NOT EXISTS crypto_replay_identity_slot ON pg_temp.crypto_replay_identity(id);
+  CREATE INDEX IF NOT EXISTS crypto_replay_identity_pending ON pg_temp.crypto_replay_identity
+   (source_event_id,command_index,table_name,id) WHERE NOT used;
   TRUNCATE pg_temp.crypto_replay_identity;
   INSERT INTO pg_temp.crypto_replay_identity(id,source_event_id,revision,command_index,table_name,row_key,before_row,after_row)
    SELECT mu.* FROM crypto_source_mutations mu JOIN crypto_source_events e ON e.id=mu.source_event_id AND e.revision=mu.revision
@@ -105,18 +108,23 @@ BEGIN
   -- Any later non-journal edit is a conflict, never silently overwritten.
   FOR m IN SELECT mu.* FROM crypto_source_mutations mu JOIN crypto_source_events e
    ON e.id=mu.source_event_id AND e.revision=mu.revision WHERE e.id=ANY(ids) ORDER BY mu.id DESC LOOP
-   EXECUTE format('SELECT to_jsonb(t) FROM budgeting.%I t WHERE to_jsonb(t) @> $1',m.table_name) INTO actual USING m.row_key;
+   -- Match typed primary-key columns so PostgreSQL can use the PK index.
+   -- JSON containment here scanned the complete ledger for every mutation.
+   SELECT string_agg(format('t.%I=k.%I',key,key),' AND ' ORDER BY key)
+    INTO predicate FROM jsonb_object_keys(m.row_key) key;
+   EXECUTE format('SELECT to_jsonb(t) FROM budgeting.%I t, jsonb_populate_record(NULL::budgeting.%I,$1) k WHERE %s',
+    m.table_name,m.table_name,predicate) INTO actual USING m.row_key;
    IF actual IS DISTINCT FROM m.after_row THEN
     RAISE EXCEPTION 'После этой цепочки есть изменения вне журнала (%). Пересчёт остановлен без потери расходов и категорий',m.table_name;
    END IF;
    IF m.before_row IS NULL THEN
-    EXECUTE format('DELETE FROM budgeting.%I t WHERE to_jsonb(t) @> $1',m.table_name) USING m.row_key;
+    EXECUTE format('DELETE FROM budgeting.%I t USING jsonb_populate_record(NULL::budgeting.%I,$1) k WHERE %s',m.table_name,m.table_name,predicate) USING m.row_key;
    ELSIF m.after_row IS NULL THEN
     EXECUTE format('INSERT INTO budgeting.%I SELECT * FROM jsonb_populate_record(NULL::budgeting.%I,$1)',m.table_name,m.table_name) USING m.before_row;
    ELSE
     SELECT string_agg(format('%I=x.%I',a.attname,a.attname),',') INTO assigns
      FROM pg_attribute a WHERE a.attrelid=('budgeting.'||m.table_name)::regclass AND a.attnum>0 AND NOT a.attisdropped;
-    EXECUTE format('UPDATE budgeting.%I t SET %s FROM jsonb_populate_record(NULL::budgeting.%I,$1) x WHERE to_jsonb(t) @> $2',m.table_name,assigns,m.table_name) USING m.before_row,m.row_key;
+    EXECUTE format('UPDATE budgeting.%I t SET %s FROM jsonb_populate_record(NULL::budgeting.%I,$1) x, jsonb_populate_record(NULL::budgeting.%I,$2) k WHERE %s',m.table_name,assigns,m.table_name,m.table_name,predicate) USING m.before_row,m.row_key;
    END IF;
   END LOOP;
   PERFORM set_config('budgeting.crypto_restoring','off',true);
