@@ -8,6 +8,9 @@ from storage.databases import DataBase
 class Ledger(DataBase):
     SCHEMA = 'budgeting'
 
+    async def set__crypto_asset_hidden(self, user_id: int, account_id: int, asset_id: int, hidden: bool):
+        return await self.call_function(self._fn('set__crypto_asset_hidden'), user_id, account_id, asset_id, hidden)
+
     F_PUT__RECORD_FX_RATE_SNAPSHOT = 'put__record_fx_rate_snapshot'
     F_PUT__RECORD_INCOME = 'put__record_income'
     F_PUT__RECORD_PORTFOLIO_INCOME = 'put__record_portfolio_income'

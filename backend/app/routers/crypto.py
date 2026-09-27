@@ -298,6 +298,7 @@ class SwapCryptoInvestmentAssetRequest(BaseModel):
     valuation_source: Optional[str] = None
 
 class CryptoAccountAssetSummary(BaseModel):
+    is_hidden: bool = False
     crypto_asset_id: int
     symbol: str
     name: Optional[str] = None
@@ -728,6 +729,18 @@ async def get_crypto_asset_detail(
         user.user_id, investment_account_id, crypto_asset_id,
     )
     return CryptoAssetDetail(**item) if item else None
+
+
+class CryptoAssetVisibilityRequest(BaseModel):
+    hidden: bool
+
+
+@router.put('/accounts/{investment_account_id}/assets/{crypto_asset_id}/visibility')
+async def set_crypto_asset_visibility(
+    investment_account_id: int, crypto_asset_id: int, body: CryptoAssetVisibilityRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    return await ledger.set__crypto_asset_hidden(user.user_id, investment_account_id, crypto_asset_id, body.hidden)
 
 
 @router.post('/transfer-to-investment', response_model=CryptoOperationResponse)

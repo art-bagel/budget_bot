@@ -1221,3 +1221,9 @@ export function correctCryptoSource(id:number,payload:{expected_revision:number;
   changes:{command_index:number;field:string;value:string}[];apply:boolean;preview_token?:string}):Promise<CryptoCorrectionResult> {
   return apiFetch(`/crypto/source-events/${id}/correct`,{method:'POST',body:JSON.stringify(payload)});
 }
+
+export function setCryptoAssetHidden(accountId: number, assetId: number, hidden: boolean): Promise<{ hidden: boolean }> {
+  return apiFetch(`/crypto/accounts/${accountId}/assets/${assetId}/visibility`, {
+    method: 'PUT', body: JSON.stringify({ hidden }),
+  });
+}

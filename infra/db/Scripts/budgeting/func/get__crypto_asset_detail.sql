@@ -41,9 +41,8 @@ BEGIN
     FROM portfolio_positions
     WHERE investment_account_id = _investment_account_id
       AND asset_type_code = 'crypto'
-      AND status = 'open'
       AND (metadata ->> 'crypto_asset_id')::bigint = _crypto_asset_id
-    ORDER BY opened_at, id
+    ORDER BY (status = 'open') DESC, opened_at, id
     LIMIT 1;
 
     IF _position.id IS NULL THEN
@@ -55,7 +54,7 @@ BEGIN
     FROM crypto_assets
     WHERE id = _crypto_asset_id;
 
-    _summary := budgeting.get__crypto_position_entry_summary(_position.id);
+    _summary := budgeting.get__crypto_wallet_asset_summary(_investment_account_id, _crypto_asset_id);
 
     SELECT
         CASE WHEN bool_or(pe.metadata ? 'realized_in_base' AND pe.metadata->>'realized_in_base' IS NULL) THEN NULL
@@ -128,7 +127,8 @@ BEGIN
         'position_id', _position.id,
         'investment_account_id', _position.investment_account_id,
         'investment_account_name', _account.name,
-        'quantity', _position.quantity,
+        'quantity', (_summary->>'quantity_now')::numeric,
+        'is_hidden', (_summary->>'quantity_now')::numeric=0 AND EXISTS (SELECT 1 FROM crypto_asset_visibility v WHERE v.user_id=_user_id AND v.investment_account_id=_investment_account_id AND v.crypto_asset_id=_crypto_asset_id),
         'opened_at', _position.opened_at,
         'total_entry_value_in_base', (_summary ->> 'total_entry_value_in_base')::numeric,
         'total_consumed_cost_basis', (_summary ->> 'total_consumed_cost_basis')::numeric,

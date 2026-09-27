@@ -333,3 +333,23 @@ Table crypto_source_corrections {
   result jsonb [not null]
   created_at timestamptz [not null]
 }
+
+Table crypto_asset_visibility {
+  user_id bigint [not null, ref: > users.id]
+  investment_account_id bigint [not null, ref: > bank_accounts.id]
+  crypto_asset_id bigint [not null, ref: > crypto_assets.id]
+  indexes { (user_id, investment_account_id, crypto_asset_id) [pk] }
+  Note: "Personal display preference for empty wallet assets. Positive balances are always shown."
+}
+
+Table crypto_assets {
+  id bigserial [pk]
+  symbol varchar(30) [not null]
+  name varchar(150) [not null]
+  network_code varchar(50) [not null, default: 'manual']
+  contract_address varchar(150) [not null, default: '']
+  decimals smallint [not null, default: 8]
+  metadata jsonb [not null, default: `'{}'::jsonb`]
+  created_at timestamptz [not null, default: `current_timestamp`]
+  indexes { (symbol, network_code, contract_address) [unique] }
+}

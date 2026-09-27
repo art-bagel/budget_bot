@@ -30,6 +30,7 @@ FILES=(
     "budget_entries.sql"
     "current_bank_balances.sql"
     "crypto_assets.sql"
+    "crypto_asset_visibility.sql"
     "current_crypto_balances.sql"
     "crypto_lots.sql"
     "crypto_lot_consumptions.sql"

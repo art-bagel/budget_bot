@@ -20,6 +20,8 @@ interface Props {
   baseCurrencyCode: string;
   livePrice?: CryptoLivePrice | null;
   onClose: () => void;
+  isHidden?: boolean;
+  onChangeHidden?: (hidden: boolean) => Promise<void>;
   onOpenWithdraw?: () => void;
   onOpenSwap?: () => void;
   onOpenTransfer?: () => void;
@@ -105,12 +107,15 @@ export default function CryptoAssetSheet({
   onOpenTransfer,
   onOpenIncome,
   canTransferBetweenAccounts,
+  isHidden,
+  onChangeHidden,
 }: Props) {
   useModalOpen(open);
 
   const [detail, setDetail] = useState<CryptoAssetDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
 
   useEffect(() => {
@@ -248,6 +253,15 @@ export default function CryptoAssetSheet({
             </div>
           </div>
 
+          {!loading && detail?.quantity === 0 && onChangeHidden && (
+            <div className="pf-sheet-actions"><button type="button" className="btn btn--ghost" disabled={visibilitySaving}
+              onClick={async () => {
+                setVisibilitySaving(true);
+                try { await onChangeHidden(!isHidden); } finally { setVisibilitySaving(false); }
+              }}>
+              {isHidden ? 'Показать монету в кошельке' : 'Скрыть пустую монету'}
+            </button></div>
+          )}
           {showActions && (
             <div className="pf-sheet-actions">
               {onOpenIncome && (

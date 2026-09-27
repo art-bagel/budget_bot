@@ -180,6 +180,7 @@ export interface CryptoLivePrice {
 }
 
 export interface CryptoAccountAssetSummary {
+  is_hidden?: boolean;
   crypto_asset_id: number;
   symbol: string;
   name?: string | null;

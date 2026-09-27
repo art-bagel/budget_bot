@@ -1,3 +1,5 @@
+import { walletPositions } from '../utils/cryptoWalletPositions';
+import { setCryptoAssetHidden } from '../api';
 import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues } from '../utils/cryptoProtocolValuation';
 import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
@@ -754,6 +756,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [rateChangeDrafts, setRateChangeDrafts] = useState<Record<number, RateChangeDraft>>({});
   const [assetSwipeStartX, setAssetSwipeStartX] = useState<number | null>(null);
   const [accountSwipeStartX, setAccountSwipeStartX] = useState<number | null>(null);
+  const [showHiddenWallets, setShowHiddenWallets] = useState<Set<number>>(new Set());
+  const [showClosedProtocols, setShowClosedProtocols] = useState(false);
+  const [walletVisibilityError, setWalletVisibilityError] = useState<string | null>(null);
   const [showClosedPositions, setShowClosedPositions] = useState(false);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
   const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
@@ -942,7 +947,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   );
 
   const openPositions = useMemo(
-    () => positions.filter((position) => position.status === 'open'),
+    () => walletPositions(positions),
     [positions],
   );
 
@@ -1061,7 +1066,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   }, [analyticsData]);
 
   const closedPositions = useMemo(
-    () => positions.filter((position) => position.status === 'closed'),
+    () => positions.filter((position) => position.status === 'closed' && position.asset_type_code !== 'crypto'),
     [positions],
   );
 
@@ -2443,6 +2448,30 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     [activeAccountTabKey, filteredClosedPositions],
   );
 
+  const closedCryptoProtocols = cryptoProtocolPositions.filter((p) => p.status === 'closed'
+    && activeAssetTypeCode === 'crypto'
+    && accounts.some(({ account }) => account.id === p.investment_account_id)
+    && (activeAccountTabKey === 'all' || `${p.owner_type}:${p.investment_account_id}` === activeAccountTabKey));
+
+  const isHiddenWalletAsset = (p: PortfolioPosition) => p.asset_type_code === 'crypto'
+    && Number(p.quantity ?? 0) === 0
+    && Boolean(cryptoAssetsByAccount.get(p.investment_account_id)?.find((a) => a.crypto_asset_id === getCryptoAssetId(p))?.is_hidden);
+
+  const changeWalletAssetVisibility = async (accountId: number, assetId: number, hidden: boolean) => {
+    setWalletVisibilityError(null);
+    try {
+      await setCryptoAssetHidden(accountId, assetId, hidden);
+      setCryptoAssetsByAccount((previous) => {
+        const next = new Map(previous);
+        next.set(accountId, (next.get(accountId) ?? []).map((a) => a.crypto_asset_id === assetId ? { ...a, is_hidden: hidden } : a));
+        return next;
+      });
+      setCryptoAssetSheet(null);
+    } catch (error) {
+      setWalletVisibilityError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const visibleAssetPositions = useMemo(() => {
     const typeFiltered = activeAssetTypeCode === 'all'
       ? positions
@@ -2530,7 +2559,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   };
 
   const renderPositionGroups = useMemo(() => {
-    if (activeAssetTypeCode !== 'crypto') {
+    if (activeAssetTypeCode !== 'crypto' && activeAssetTypeCode !== 'all') {
       return visibleOpenPositionGroups;
     }
 
@@ -2641,7 +2670,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     .some((position) => position.asset_type_code === 'crypto')
     || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
-    .some((position) => position.asset_type_code === 'crypto' && !(Number(getCryptoLivePrice(position)?.price) > 0))
+    .some((position) => position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0))
     || visibleCryptoProtocolPositions.some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
   const activeScopeBasisPrefix = activeScopeDisplayMetrics.basisEstimated ? '≈ ' : '';
@@ -3228,13 +3257,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <p className="pf-empty">Открытых позиций нет.</p>
           ) : (
             renderPositionGroups.map((group) => {
-              const sections = getOpenPositionSections(group.positions);
+              const hiddenAssets = group.positions.filter(isHiddenWalletAsset);
+              const showHidden = showHiddenWallets.has(group.accountId);
+              const sections = getOpenPositionSections(group.positions.filter((p) => !isHiddenWalletAsset(p)));
               const positionsValue = activeAssetTypeCode === 'security'
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
                 : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
               const protocolsForAccount = visibleCryptoProtocolPositions.filter((item) => item.investment_account_id === group.accountId);
               const protocolMarketValue = sumProtocolValues(protocolsForAccount.map(getProtocolValuation));
-              const groupMarketIncomplete = group.positions.some((item) => item.asset_type_code === 'crypto' && !getCryptoLivePrice(item))
+              const groupMarketIncomplete = group.positions.some((item) => item.asset_type_code === 'crypto' && Number(item.quantity ?? 0) !== 0 && !getCryptoLivePrice(item))
                 || protocolMarketValue === null;
               const groupValue = positionsValue + getAccountCashValue(group.accountId) + (protocolMarketValue ?? 0);
               const groupProtocolPositions = activeAssetTypeCode === 'crypto'
@@ -3356,6 +3387,21 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       })}
                     </div>
                   ))}
+                  {hiddenAssets.length > 0 && (
+                    <div>
+                      <button type="button" className="pf-closed__toggle" onClick={() => setShowHiddenWallets((previous) => {
+                        const next = new Set(previous);
+                        if (next.has(group.accountId)) next.delete(group.accountId); else next.add(group.accountId);
+                        return next;
+                      })}>{showHidden ? 'Свернуть скрытые монеты' : `Скрытые монеты (${hiddenAssets.length})`}</button>
+                      {showHidden && hiddenAssets.map((p) => (
+                        <div className="pf-pos" key={p.id}>
+                          <button type="button" className="pf-closed__toggle" onClick={() => void handleOpenPositionDetails(p.id)}>{p.title} · 0</button>
+                          <button type="button" className="pf-closed__toggle" onClick={() => { const assetId = getCryptoAssetId(p); if (assetId !== null) void changeWalletAssetVisibility(group.accountId, assetId, false); }}>Показать</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {activeAssetTypeCode === 'crypto' && groupProtocolPositions.length > 0 && (
                     <div>
                       <div className="pf-grp__subhead">DeFi</div>
@@ -3416,6 +3462,24 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             })
           )}
 
+          {walletVisibilityError && <p className="pf-empty" role="alert">{walletVisibilityError}</p>}
+          {closedCryptoProtocols.length > 0 && (
+            <div className="pf-closed">
+              <button type="button" className="pf-closed__toggle" onClick={() => setShowClosedProtocols((value) => !value)}>
+                {showClosedProtocols ? 'Скрыть закрытые DeFi' : `Закрытые DeFi (${closedCryptoProtocols.length})`}
+              </button>
+              {showClosedProtocols && <div className="pf-grp pf-grp--muted">{closedCryptoProtocols.map((p) => (
+                <button type="button" className="pf-pos pf-pos--closed" key={p.id} onClick={() => handleOpenProtocolDetails(p.id)}>
+                  <div className="pf-pos__copy"><div className="pf-pos__title">{protocolDisplayName(p)}</div>
+                    <div className="pf-pos__sub">{p.investment_account_name} · {p.asset_symbol}
+                      {p.position_type === 'liquidity_pool' && getLiquidityPoolMetadata(p).token1_symbol ? `/${getLiquidityPoolMetadata(p).token1_symbol}` : ''}
+                      {` · ${formatDateLabel(p.deposited_at)}`}{p.withdrawn_at ? ` — ${formatDateLabel(p.withdrawn_at)}` : ''}
+                    </div>
+                  </div>
+                </button>
+              ))}</div>}
+            </div>
+          )}
           {visibleClosedPositions.length > 0 && (
             <div className="pf-closed">
               <button
@@ -5816,6 +5880,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             cryptoAssetId={cryptoAssetSheet.cryptoAssetId}
             baseCurrencyCode={user.base_currency_code}
             livePrice={cryptoLivePrices.get(cryptoAssetSheet.cryptoAssetId) ?? null}
+            isHidden={cryptoAssetsByAccount.get(cryptoAssetSheet.investmentAccountId)?.find((a) => a.crypto_asset_id === cryptoAssetSheet.cryptoAssetId)?.is_hidden ?? false}
+            onChangeHidden={(hidden) => changeWalletAssetVisibility(cryptoAssetSheet.investmentAccountId, cryptoAssetSheet.cryptoAssetId, hidden)}
             onClose={() => setCryptoAssetSheet(null)}
             onOpenWithdraw={targetPosition ? () => {
               setCryptoAssetSheet(null);
