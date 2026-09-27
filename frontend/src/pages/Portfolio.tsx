@@ -2,7 +2,7 @@ import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
 import { setCryptoAssetHidden } from '../api';
-import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues } from '../utils/cryptoProtocolValuation';
+import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, walletMarketValue } from '../utils/cryptoProtocolValuation';
 import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -193,6 +193,7 @@ type PortfolioAssetTab = {
   principalInBase: number;
   incomeInBase: number;
   totalInBase: number;
+  valuationIncomplete: boolean;
 };
 
 type PositionAccountGroup = {
@@ -1203,11 +1204,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const getResolvedPositionEstimatedValue = (position: PortfolioPosition) => (
     position.asset_type_code === 'crypto'
-      ? (
-          getCryptoLivePrice(position) && position.quantity
-            ? getCryptoLivePrice(position)!.price * position.quantity
-            : 0
-        )
+      ? (walletMarketValue(Number(position.quantity ?? 0), getCryptoAssetId(position), cryptoLivePrices, user.base_currency_code) ?? 0)
       : (getResolvedPositionQuote(position).currentTotalValue ?? position.amount_in_currency)
   );
 
@@ -1273,6 +1270,17 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     [summaryItems],
   );
 
+  const includedCryptoProtocols = cryptoProtocolPositions.filter((p) =>
+    p.status === 'open' && !isEmptyProtocolPosition(p) && !excludedAccountIds.has(p.investment_account_id));
+  const includedProtocolValues = includedCryptoProtocols.map((p) =>
+    protocolMarketValue(p, cryptoLivePrices, user.base_currency_code));
+  const knownProtocolValue = includedProtocolValues.reduce((sum, p) => sum + (p.value ?? 0), 0);
+  const cryptoValuationIncomplete = includedProtocolValues.some((p) => p.value === null)
+    || openPositions.some((p) => p.asset_type_code === 'crypto'
+      && !excludedAccountIds.has(p.investment_account_id) && Number(p.quantity ?? 0) !== 0 && !getCryptoLivePrice(p));
+  const hasIncludedCrypto = includedCryptoProtocols.length > 0 || openPositions.some((p) =>
+    p.asset_type_code === 'crypto' && !excludedAccountIds.has(p.investment_account_id) && Number(p.quantity ?? 0) !== 0);
+
   const assetTabs = useMemo<PortfolioAssetTab[]>(() => {
     const accountTypeCodes = Array.from(new Set(accounts.map(({ account }) => getInvestmentAccountAssetType(account))));
     const knownCodes = DEFAULT_PORTFOLIO_ASSET_TYPE_CODES.filter((code) => accountTypeCodes.includes(code));
@@ -1302,7 +1310,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         principalInBase: includedPositions
           .reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
         incomeInBase: includedPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
-        totalInBase: currentOpenValueInBase + cashBalanceInBase,
+        totalInBase: currentOpenValueInBase + cashBalanceInBase + (code === 'crypto' ? knownProtocolValue : 0),
+        valuationIncomplete: code === 'crypto' && cryptoValuationIncomplete,
       };
     });
     const allTab: PortfolioAssetTab = {
@@ -1313,9 +1322,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       principalInBase: typeTabs.reduce((s, t) => s + t.principalInBase, 0),
       incomeInBase: typeTabs.reduce((s, t) => s + t.incomeInBase, 0),
       totalInBase: typeTabs.reduce((s, t) => s + t.totalInBase, 0),
+      valuationIncomplete: typeTabs.some((t) => t.valuationIncomplete),
     };
     return [allTab, ...typeTabs];
-  }, [excludedAccountIds, accounts, closedPositions, openPositions, positions, summaryByAccountId, moexPrices, tinkoffLivePrices]);
+  }, [excludedAccountIds, accounts, closedPositions, openPositions, positions, summaryByAccountId, moexPrices, tinkoffLivePrices, cryptoLivePrices, user.base_currency_code, valueMode, knownProtocolValue, cryptoValuationIncomplete]);
 
   useEffect(() => {
     if (activeAssetTypeCode === 'all') return;
@@ -1376,11 +1386,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       totalUnrealizedPnl: unrealized,
       hasPricedPositions: count > 0,
     };
-  }, [excludedAccountIds, openPositions, moexPrices, tinkoffLivePrices]);
+  }, [excludedAccountIds, openPositions, moexPrices, tinkoffLivePrices, cryptoLivePrices, user.base_currency_code]);
 
   // Total = positions at market/cost + uninvested cash
   // Realized income is NOT added separately — it's already in cash or reinvested in positions
-  const totalRealPortfolioValue = totalPositionsValue + totalInvestmentCashInBase;
+  const totalRealPortfolioValue = totalPositionsValue + totalInvestmentCashInBase + knownProtocolValue;
 
   const totalWithPotential = useMemo(
     () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, pos) => {
@@ -1390,9 +1400,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         val += accrued;
       }
       return sum + val;
-    }, totalInvestmentCashInBase),
+    }, totalInvestmentCashInBase + knownProtocolValue),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [excludedAccountIds, openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase],
+    [excludedAccountIds, openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase, cryptoLivePrices, user.base_currency_code, knownProtocolValue],
   );
 
   const totalPortfolioDisplayResult = useMemo(
@@ -1404,7 +1414,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const heroPnlValue = totalPortfolioDisplayResult;
   const heroPnlBase = totalInvestedPrincipalInBase;
   const heroPnlPercent = heroPnlBase > 0 ? (heroPnlValue / heroPnlBase) * 100 : 0;
-  const shouldShowHeroPnl = heroPnlBase > 0;
+  const shouldShowHeroPnl = heroPnlBase > 0 && !hasIncludedCrypto;
 
   const depositAccruedItems = useMemo(
     () => openPositions
@@ -1424,7 +1434,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       acc[position.investment_account_id] = (acc[position.investment_account_id] ?? 0) + getResolvedPositionEstimatedValue(position);
       return acc;
     }, {}),
-    [openPositions, moexPrices, tinkoffLivePrices],
+    [openPositions, moexPrices, tinkoffLivePrices, cryptoLivePrices, user.base_currency_code],
   );
 
   const accountOpenPrincipalById = useMemo(
@@ -1443,7 +1453,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       }
       return acc;
     }, {}),
-    [openPositions, moexPrices, tinkoffLivePrices],
+    [openPositions, moexPrices, tinkoffLivePrices, cryptoLivePrices, user.base_currency_code],
   );
 
   const getConnectedSecurityMetrics = (accountId: number) => {
@@ -2505,6 +2515,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         });
   }, [accounts, activeAccountTabKey, activeAssetTypeCode, cryptoProtocolPositions]);
 
+  const scopedCryptoProtocols = cryptoProtocolPositions.filter((p) =>
+    (activeAssetTypeCode === 'all' || activeAssetTypeCode === 'crypto') && p.status === 'open' && !isEmptyProtocolPosition(p)
+    && accounts.some(({ account }) => account.id === p.investment_account_id)
+    && (activeAccountTabKey === 'all' ? !excludedAccountIds.has(p.investment_account_id)
+      : accounts.some(({ account }) => account.id === p.investment_account_id && `${account.owner_type}:${account.id}` === activeAccountTabKey)));
+
   const visibleCryptoProtocolPositionsByAccountId = useMemo(() => {
     const grouped = new Map<number, CryptoProtocolPosition[]>();
     for (const position of visibleCryptoProtocolPositions) {
@@ -2631,7 +2647,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         basisEstimated ||= entry.basis_quality === 'estimated';
       }
     }
-    for (const protocol of visibleCryptoProtocolPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))) {
+    for (const protocol of scopedCryptoProtocols) {
       addFunding(protocol.metadata.funding_units0);
       addFunding(protocol.metadata.funding_units1);
       if (protocol.cost_basis_in_base === null) basisMissing = true;
@@ -2645,7 +2661,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     ), 0);
     return {
       estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0)
-        + (activeAssetTypeCode === 'crypto' ? cryptoProtocolValueInBase : 0),
+        + scopedCryptoProtocols.reduce((sum, p) => sum + (getLendingNetValue(p) ?? 0), 0),
       investedPrincipal,
       basisMissing,
       basisEstimated,
@@ -2670,6 +2686,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     cryptoAssetsByAccount,
     cryptoLivePrices,
     visibleCryptoProtocolPositions,
+    scopedCryptoProtocols,
     filteredOpenPositionGroups,
     moexPrices,
     tinkoffLivePrices,
@@ -2690,7 +2707,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
     .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0))
-    || visibleCryptoProtocolPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).some((position) => getLendingNetValue(position) === null);
+    || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
   const activeScopeBasisPrefix = activeScopeDisplayMetrics.basisEstimated ? '≈ ' : '';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
@@ -2954,7 +2971,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       <div className="pf-hero">
         <div className="pf-hero__toprow">
           <span className="pf-hero__eyebrow">
-            {valueMode === 'potential' ? 'Потенциал с доходом' : 'Сейчас в портфеле'}
+            {cryptoValuationIncomplete ? 'Известная часть оценки' : valueMode === 'potential' ? 'Потенциал с доходом' : 'Сейчас в портфеле'}
           </span>
           <button
             className={`pf-chiptog${valueMode === 'potential' ? ' pf-chiptog--on' : ''}`}
@@ -2974,6 +2991,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           </strong>
           <span className="pf-hero__sym">{currencySymbol(user.base_currency_code)}</span>
         </div>
+
+        {cryptoValuationIncomplete && <p className="pf-sec__sub">Оценка неполная: для части монет или DeFi нет актуальных данных.</p>}
 
         {shouldShowHeroPnl && (
           <div className={`pf-hero__pnl${heroPnlValue >= 0 ? ' pf-hero__pnl--pos' : ' pf-hero__pnl--neg'}`}>
@@ -3004,7 +3023,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <span className={`pf-hero__row-dot pf-hero__row-dot--${tab.code}`} />
             <span className="pf-hero__row-label">{tab.label}</span>
             <span className="pf-hero__row-value">
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
+              {tab.valuationIncomplete ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
               <span className="pf-hero__row-sym">{currencySymbol(user.base_currency_code)}</span>
             </span>
             <span className="pf-hero__row-chev">›</span>
@@ -3206,7 +3225,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 className="pf-alloc"
               >
                 <div className="pf-alloc__head">
-                  <span className="pf-alloc__tag">Распределение</span>
+                  <span className="pf-alloc__tag">{cryptoValuationIncomplete ? 'Распределение известной оценки' : 'Распределение'}</span>
                   <span className="pf-alloc__meta">{typeTabs.length} {typeTabs.length === 1 ? 'тип' : typeTabs.length < 5 ? 'типа' : 'типов'}</span>
                 </div>
                 <div className="pf-alloc__bar" role="img" aria-label="Распределение по типам активов">
@@ -3282,7 +3301,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const positionsValue = activeAssetTypeCode === 'security'
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
                 : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
-              const protocolsForAccount = visibleCryptoProtocolPositions.filter((item) => item.investment_account_id === group.accountId);
+              const protocolsForAccount = cryptoProtocolPositions.filter((item) => item.status === 'open' && !isEmptyProtocolPosition(item) && item.investment_account_id === group.accountId);
               const protocolMarketValue = sumProtocolValues(protocolsForAccount.map(getProtocolValuation));
               const groupMarketIncomplete = group.positions.some((item) => item.asset_type_code === 'crypto' && Number(item.quantity ?? 0) !== 0 && !getCryptoLivePrice(item))
                 || protocolMarketValue === null;
@@ -3388,9 +3407,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             </div>
                             <div className="pf-pos__right">
                               <div className="pf-pos__amount">
-                                {formatNumericAmount(displayValue)}
+                                {isCrypto && Number(position.quantity ?? 0) !== 0 && !getCryptoLivePrice(position) ? '—' : formatNumericAmount(displayValue)}
                                 <span className="pf-sym">{currencySymbol(displayCurrencyCode)}</span>
                               </div>
+                              {isCrypto && Number(position.quantity ?? 0) !== 0 && !getCryptoLivePrice(position) && <div className="pf-pos__sub">Нет актуальной котировки</div>}
                               {isDeposit && depositAccrued > 0 ? (
                                 <div className="pf-pos__pnl pf-pos__pnl--pos">
                                   +{formatAmount(depositAccrued, position.currency_code)}
@@ -5785,7 +5805,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 const nkdValue = accountOpenPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
                 const netContributed = Number(summary?.net_contributed_in_base ?? 0);
                 const displayIncome = accountOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0);
-                const currentAccountValue = estimatedValue + cashValueInBase;
+                const accountProtocols = cryptoProtocolPositions.filter((p) => p.investment_account_id === account.id && p.status === 'open' && !isEmptyProtocolPosition(p));
+                const protocolValue = sumProtocolValues(accountProtocols.map(getProtocolValuation));
+                const accountIncomplete = protocolValue === null || accountOpenPositions.some((p) => p.asset_type_code === 'crypto' && Number(p.quantity ?? 0) !== 0 && !getCryptoLivePrice(p));
+                const currentAccountValue = estimatedValue + cashValueInBase + (protocolValue ?? 0);
                 const realizedIncome = isSecuritySheet
                   ? currentAccountValue - netContributed - displayIncome
                   : Number(summary?.realized_income_in_base ?? 0);
@@ -5796,6 +5819,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         <div className="pf-sheet-account__name">{account.name}</div>
                         <div className="pf-sheet-account__meta">
                           {account.owner_type === 'family' ? 'Семейный' : 'Личный'}
+                          {account.include_in_statistics === false ? ' · Не входит в общую статистику' : ''}
                           {account.provider_name ? ` · ${account.provider_name}` : ''}
                         </div>
                       </div>
@@ -5830,7 +5854,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(currentAccountValue)} {currencySymbol(user.base_currency_code)}</strong>
                         </div>
                       )}
-                      {estimatedValue > 0 && (
+                      {heroTypeSheetCode === 'crypto' && (
+                        <div className="pf-sheet-account__row">
+                          <span>Рыночная оценка с DeFi</span>
+                          <strong>{accountIncomplete ? 'Нет полной оценки' : formatAmount(currentAccountValue, user.base_currency_code)}</strong>
+                        </div>
+                      )}
+                      {heroTypeSheetCode !== 'crypto' && estimatedValue > 0 && (
                         <div className="pf-sheet-account__row">
                           <span>Оценочная стоимость</span>
                           <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(estimatedValue)} {currencySymbol(user.base_currency_code)}</strong>

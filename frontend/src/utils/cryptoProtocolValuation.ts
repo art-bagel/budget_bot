@@ -66,3 +66,13 @@ export function isEmptyProtocolPosition(position: CryptoProtocolPosition): boole
   return ![position.metadata.funding_units0, position.metadata.funding_units1].some((units) =>
     units && typeof units === 'object' && Object.values(units).some((value) => Number(value) !== 0));
 }
+
+/** A zero balance has a known zero value; an unpriced positive balance does not. */
+export function walletMarketValue(quantity: number, assetId: number | null, prices: ReadonlyMap<number, CryptoLivePrice>, currency: string): number | null {
+  if (!Number.isFinite(quantity)) return null;
+  if (quantity === 0) return 0;
+  const quote = assetId === null ? undefined : prices.get(assetId);
+  if (!quote || quote.is_stale || !Number.isFinite(quote.price) || quote.price <= 0
+    || quote.vs_currency.toUpperCase() !== currency.toUpperCase()) return null;
+  return quantity * quote.price;
+}

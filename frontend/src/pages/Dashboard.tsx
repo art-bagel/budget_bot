@@ -1,3 +1,4 @@
+import { isEmptyProtocolPosition, protocolMarketValue, walletMarketValue } from '../utils/cryptoProtocolValuation';
 import { useEffect, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
 import RefreshBar from '../components/RefreshBar';
@@ -190,6 +191,9 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     }
     for (const protocol of cryptoProtocolPositions) {
       if (typeof protocol.crypto_asset_id === 'number') assetIds.add(protocol.crypto_asset_id);
+      for (const id of [protocol.metadata.borrowed_crypto_asset_id, protocol.metadata.token1_crypto_asset_id]) {
+        if (Number(id) > 0) assetIds.add(Number(id));
+      }
     }
     if (assetIds.size === 0) {
       setCryptoLivePrices(new Map());
@@ -348,10 +352,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   }, {});
   const getResolvedPositionValue = (position: PortfolioPosition): number | null => {
     if (position.asset_type_code === 'crypto') {
-      const cryptoAssetId = position.metadata?.crypto_asset_id;
-      const livePrice = typeof cryptoAssetId === 'number' ? cryptoLivePrices.get(cryptoAssetId) : undefined;
-      // Без живой цены крипта оценивается в 0 (amount_in_currency у крипто-позиций всегда 0).
-      return livePrice && !livePrice.is_stale && livePrice.vs_currency === user.base_currency_code && position.quantity ? livePrice.price * position.quantity : null;
+      return walletMarketValue(Number(position.quantity ?? 0), Number(position.metadata?.crypto_asset_id) || null, cryptoLivePrices, user.base_currency_code);
     }
 
     const tinkoffPrice = tinkoffLivePrices.get(position.id);
@@ -375,17 +376,15 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     investmentBalancesByAccountId[accountId] ?? []
   ).reduce((sum, balance) => sum + balance.historical_cost_in_base, 0);
 
-  // Стоимость DeFi-позиций (стейкинг, лендинг, пулы) по счёту: живая цена ×
-  // количество, иначе зафиксированная оценка в базовой валюте.
-  const getCryptoProtocolsValue = (accountId: number) => cryptoProtocolPositions
-    .filter((protocol) => protocol.investment_account_id === accountId)
-    .reduce((sum, protocol) => {
-      const livePrice = typeof protocol.crypto_asset_id === 'number'
-        ? cryptoLivePrices.get(protocol.crypto_asset_id)
-        : undefined;
-      const quantity = protocol.current_quantity ?? protocol.quantity ?? 0;
-      return sum + (livePrice && quantity > 0 ? livePrice.price * quantity : protocol.current_value_in_base);
-    }, 0);
+  const openProtocols = cryptoProtocolPositions.filter((p) => p.status === 'open' && !isEmptyProtocolPosition(p));
+  const getCryptoProtocolsValue = (accountId: number) => openProtocols
+    .filter((p) => p.investment_account_id === accountId)
+    .reduce((sum, p) => sum + (protocolMarketValue(p, cryptoLivePrices, user.base_currency_code).value ?? 0), 0);
+  const includedAccounts = new Set(investmentAccounts.filter((a) => a.include_in_statistics !== false).map((a) => a.id));
+  const investmentValueIncomplete = openPositions.some((p) => includedAccounts.has(p.investment_account_id)
+    && p.asset_type_code === 'crypto' && getResolvedPositionValue(p) === null)
+    || openProtocols.some((p) => includedAccounts.has(p.investment_account_id)
+      && protocolMarketValue(p, cryptoLivePrices, user.base_currency_code).value === null);
 
   // Market-adjusted value per account:
   // cash + (for each open position: market value if ticker known, else cost basis)
@@ -527,7 +526,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
       {/* Hero — yellow capital card */}
       <article className="hero">
         <div className="hero__head">
-          <span className="hero__eyebrow">Чистый капитал</span>
+          <span className="hero__eyebrow">{investmentValueIncomplete ? 'Капитал · неполная оценка' : 'Чистый капитал'}</span>
           <button
             className={`chiptog${includeCredits ? ' chiptog--on' : ''}`}
             type="button"
@@ -543,6 +542,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           </span>
           <span className="hero__sym">{currencySymbol(overview.base_currency_code)}</span>
         </div>
+        {investmentValueIncomplete && <p className="pf-sec__sub">Учтена известная часть инвестиций. Для части криптоактивов нет актуальной оценки.</p>}
         <dl className="hero__rows">
           <div
             className="hero__row"
@@ -585,7 +585,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
             onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('portfolio'); }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate?.('portfolio'); }}
           >
-            <dt><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</dt>
+            <dt><span className="hero__mark hero__mark--mint" />&nbsp;{investmentValueIncomplete ? 'Инвестиции · известная часть' : 'Инвестиции'}</dt>
             <dd>
               <span className="hero__row-amount">
                 {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investmentBankTotal)}

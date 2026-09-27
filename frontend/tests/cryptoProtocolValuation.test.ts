@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues } from '../src/utils/cryptoProtocolValuation.ts';
+import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, walletMarketValue } from '../src/utils/cryptoProtocolValuation.ts';
 import type { CryptoLivePrice, CryptoProtocolPosition } from '../src/types.ts';
 
 const position = (patch: Partial<CryptoProtocolPosition> = {}) => ({
@@ -55,4 +55,13 @@ test('LP snapshot requires both current quotes and a composition dated today', (
   assert.equal(protocolMarketValue(p, new Map([[1, quote(1, 200)]]), 'RUB').value, null);
   metadata.lp_composition.observed_at = '2000-01-01';
   assert.equal(protocolMarketValue(p, prices, 'RUB').value, null);
+});
+
+test('wallet valuation distinguishes zero balance from unavailable market value', () => {
+  assert.equal(walletMarketValue(0, 1, new Map(), 'RUB'), 0);
+  assert.equal(walletMarketValue(5, 1, new Map(), 'RUB'), null);
+  assert.equal(walletMarketValue(5, 1, prices, 'RUB'), 1000);
+  for (const patch of [{ is_stale: true }, { vs_currency: 'USD' }, { price: NaN }, { price: 0 }]) {
+    assert.equal(walletMarketValue(5, 1, new Map([[1, quote(1, 200, patch)]]), 'RUB'), null);
+  }
 });

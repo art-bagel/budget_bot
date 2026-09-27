@@ -1,3 +1,4 @@
+import { walletMarketValue } from '../utils/cryptoProtocolValuation';
 import { useEffect, useState } from 'react';
 import { AlertCircle, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, Info } from 'lucide-react';
 
@@ -71,6 +72,8 @@ function describeCounterparty(entry: CryptoAssetEntry): string {
   const fromSymbol = typeof meta.from_asset_symbol === 'string' ? meta.from_asset_symbol : null;
   const toSymbol = typeof meta.to_asset_symbol === 'string' ? meta.to_asset_symbol : null;
 
+  if (sourceKind === 'funding_settlement') return 'Себестоимость после погашения займа';
+  if (sourceKind === 'liquidation_funding_settlement') return 'Себестоимость после ликвидации';
   if (sourceKind === 'fee_refund') return 'Возврат комиссии';
   if (sourceKind === 'bank') return 'Из банка';
   if (targetKind === 'bank') return 'В банк';
@@ -146,8 +149,8 @@ export default function CryptoAssetSheet({
   const basisEstimated = basisQuality === 'estimated';
   const basisOpen = detail?.basis_final === false;
 
-  const currentValue = detail && livePrice && !livePrice.is_stale && livePrice.vs_currency === baseCurrencyCode && livePrice.price > 0
-    ? detail.quantity * livePrice.price
+  const currentValue = detail
+    ? walletMarketValue(Number(detail.quantity), cryptoAssetId, new Map(livePrice ? [[cryptoAssetId, livePrice]] : []), baseCurrencyCode)
     : null;
   const unrealized = currentValue !== null && detail && !basisUnknown && !basisOpen && detail.remaining_cost_basis !== null
     ? currentValue - detail.remaining_cost_basis
@@ -244,7 +247,7 @@ export default function CryptoAssetSheet({
               ) : (
                 <>
                   <span className="ca-sheet__stat-val ca-sheet__stat-val--mute">—</span>
-                  <span className="ca-sheet__stat-sub">нет котировки</span>
+                  <span className="ca-sheet__stat-sub">{currentValue === null ? 'нет актуальной котировки' : basisOpen ? 'есть непогашенный заём' : 'себестоимость не определена'}</span>
                 </>
               )}
             </div>
@@ -341,7 +344,7 @@ export default function CryptoAssetSheet({
                           : <ArrowUpRight size={14} strokeWidth={2.4} />}
                       </span>
                       <span className="ca-sheet__row-qty">
-                        {isEntry ? '+' : '−'}{formatNumericAmount(Math.abs(entry.quantity ?? 0), 8)} {detail.symbol}
+                        {entry.source_kind === 'funding_settlement' || entry.source_kind === 'liquidation_funding_settlement' ? 'Уточнение себестоимости' : `${isEntry ? '+' : '−'}${formatNumericAmount(Math.abs(entry.quantity ?? 0), 8)} ${detail.symbol}`}
                       </span>
                       <span className="ca-sheet__row-val">
                         {valueShown !== null && valueShown !== undefined
@@ -351,9 +354,9 @@ export default function CryptoAssetSheet({
                     </div>
                     <div className="ca-sheet__row-meta">
                       <span className="ca-sheet__row-cp">{describeCounterparty(entry)}</span>
-                      {realized !== null && realized !== undefined && Math.abs(realized) > 0.005 && (
+                      {entry.event_type !== 'fee' && realized !== null && realized !== undefined && Math.abs(realized) > 0.005 && (
                         <span className={`ca-sheet__row-real ${realized >= 0 ? 'ca-sheet__row-real--pos' : 'ca-sheet__row-real--neg'}`}>
-                          {realized >= 0 ? '+' : ''}{formatNumericAmount(realized)} real
+                          Результат: {realized >= 0 ? '+' : ''}{formatNumericAmount(realized)} {baseSym}
                         </span>
                       )}
                     </div>
