@@ -59,8 +59,16 @@ BEGIN
         UNION ALL
         SELECT 'liquidation-collateral:'||e.id,e.event_at,e.id,'collateral_liquidation',
             (e.metadata->'result'->>'collateral_quantity')::numeric,_p.asset_symbol,
-            (e.metadata->'result'->>'collateral_cost_consumed_in_base')::numeric,NULL::text
+            (e.metadata->'result'->>'collateral_cost_consumed_in_base')::numeric,
+            'Стоимость на момент изъятия. Часть погашает тело займа и переносится его держателям; вся сумма не является расходом.'::text
         FROM crypto_liability_events e
+        WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
+        UNION ALL
+        SELECT 'liquidation-principal:'||e.id,e.event_at,e.id,'liquidation_principal',
+            abs(e.quantity)-abs(e.interest_quantity),a.symbol,
+            (e.metadata->>'funding_principal_cost')::numeric,
+            'Входит в погашенный долг. Эта стоимость распределена между активами, DeFi и прежними расходами, содержащими единицы займа; это не новый расход. Сумма зафиксирована на дату операции.'::text
+        FROM crypto_liability_events e JOIN crypto_assets a ON a.id=e.crypto_asset_id
         WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
         UNION ALL
         SELECT 'liquidation-interest:'||e.id,e.event_at,e.id,'liquidation_interest',
@@ -101,6 +109,7 @@ BEGIN
             WHEN 'asset' THEN 'portfolio_events' WHEN 'debt' THEN 'crypto_liability_events'
             WHEN 'liquidation-collateral' THEN 'crypto_liability_events'
             WHEN 'liquidation-interest' THEN 'crypto_liability_events'
+            WHEN 'liquidation-principal' THEN 'crypto_liability_events'
             WHEN 'liquidation-fee' THEN 'crypto_liability_events'
             WHEN 'accrual' THEN 'crypto_protocol_accrual_events' END
         LEFT JOIN crypto_source_events s ON s.id=COALESCE(l.source_event_id,

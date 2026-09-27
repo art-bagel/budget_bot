@@ -4949,6 +4949,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               )}
             </div>
 
+            {typeof selectedProtocolPosition.metadata?.historical_accrual_note === 'string' && (
+              <div className="pf-dcond">
+                <div className="pf-dcond__head"><span className="sec-tag">Точность исторического остатка</span></div>
+                <p>{selectedProtocolPosition.metadata.historical_accrual_note}</p>
+              </div>
+            )}
+
             {selectedLendingGroup.length > 1 && (
               <div className="pf-dcond">
                 <p>Залоги одного счёта EVAA. Выберите залог для операций и его истории. Общий долг показан выше.</p>

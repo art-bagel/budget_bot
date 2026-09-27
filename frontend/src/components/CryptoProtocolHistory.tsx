@@ -22,6 +22,7 @@ const LABELS: Record<string, string> = {
   lp_return: 'LP-токены возвращены из фарминга',
   collateral_liquidation: 'Ликвидация: списанный залог',
   liquidation_interest: 'В погашении: проценты',
+  liquidation_principal: 'В погашении: тело займа',
   liquidation_fee: 'В изъятом залоге: штраф / комиссия',
   consume: 'Расход',
   opening: 'Открытие позиции',
