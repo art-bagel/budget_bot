@@ -652,6 +652,7 @@ export interface FamilyInvitation {
 }
 
 export interface BankAccount {
+  include_in_statistics?: boolean;
   id: number;
   name: string;
   owner_type: 'user' | 'family';
@@ -908,6 +909,7 @@ export interface ChangeDepositRateRequest {
 }
 
 export interface PortfolioSummaryItem {
+  include_in_statistics?: boolean;
   investment_account_id: number;
   investment_account_name: string;
   investment_account_owner_type: 'user' | 'family';

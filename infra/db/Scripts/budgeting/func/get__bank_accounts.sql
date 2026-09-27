@@ -45,6 +45,7 @@ BEGIN
                 'provider_name', ba.provider_name,
                 'provider_account_ref', ba.provider_account_ref,
                 'badge_color', ba.badge_color,
+                'include_in_statistics', ba.include_in_statistics,
                 'is_primary', ba.is_primary,
                 'is_active', ba.is_active,
                 'created_at', ba.created_at

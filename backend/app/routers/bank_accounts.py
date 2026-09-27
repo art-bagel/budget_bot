@@ -31,6 +31,7 @@ class BankAccountItem(BaseModel):
     provider_name: Optional[str] = None
     provider_account_ref: Optional[str] = None
     badge_color: Optional[str] = None
+    include_in_statistics: bool = True
     is_primary: bool
     is_active: bool
     created_at: str
@@ -634,3 +635,15 @@ async def get_bank_account_snapshot(
     user: CurrentUser = Depends(get_current_user),
 ) -> list:
     return await reports.get__bank_snapshot(user.user_id, bank_account_id)
+
+
+class AccountStatisticsRequest(BaseModel):
+    include_in_statistics: bool
+
+
+@router.patch('/{bank_account_id}/statistics')
+async def update_account_statistics(
+    bank_account_id: int, body: AccountStatisticsRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await context.set__account_statistics(user.user_id, bank_account_id, body.include_in_statistics)

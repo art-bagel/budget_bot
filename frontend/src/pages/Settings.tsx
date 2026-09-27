@@ -33,6 +33,7 @@ import {
   deleteAccount,
   requestAccountDeletion,
   deleteInvestmentAccount,
+  setAccountStatistics,
   deleteTinkoffConnection,
   dissolveFamily,
   fetchBankAccounts,
@@ -321,6 +322,19 @@ export default function Settings({
       setCreateInvestmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setCreatingInvestmentAccount(false);
+    }
+  };
+
+  const handleAccountStatistics = async (account: BankAccount) => {
+    setDeletingInvestmentAccountId(account.id);
+    setDeleteInvestmentError(null);
+    try {
+      await setAccountStatistics(account.id, account.include_in_statistics === false);
+      await loadAccounts();
+    } catch (reason: unknown) {
+      setDeleteInvestmentError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingInvestmentAccountId(null);
     }
   };
 
@@ -817,6 +831,7 @@ export default function Settings({
                       <span className={`invest-tile__chip ${chipClass}`}>{abbr}</span>
                       <div className="invest-tile__meta">
                         <div className="invest-tile__name">{account.name}</div>
+                        <div className="invest-tile__sub">{account.include_in_statistics === false ? 'Не входит в общую статистику' : 'Входит в общую статистику'}</div>
                         <div className="invest-tile__sub">
                           <span className={`dot ${account.owner_type === 'family' ? 'dot--y' : 'dot--g'}`} />
                           {account.owner_type === 'family' ? 'Семейный' : 'Личный'}
@@ -825,7 +840,14 @@ export default function Settings({
                         </div>
                       </div>
                       <div className="invest-tile__right">
-                        <span className="st-tag">#{account.id}</span>
+                        <button type="button" role="switch"
+                          aria-label={`Включать ${account.name} в общую статистику`}
+                          aria-checked={account.include_in_statistics !== false}
+                          className={`sw${account.include_in_statistics !== false ? ' sw--on' : ''}`}
+                          disabled={deletingInvestmentAccountId !== null}
+                          onClick={() => void handleAccountStatistics(account)}>
+                          <span className="sw__thumb" />
+                        </button>
                         <button
                           type="button"
                           className="ic-btn-xs"

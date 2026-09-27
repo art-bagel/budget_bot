@@ -100,6 +100,7 @@ Table bank_accounts {
   account_kind varchar(20) [not null, default: 'cash', note: "cash | investment"]
   provider_name varchar(150)
   provider_account_ref varchar(150)
+  include_in_statistics boolean [not null, default: true]
   is_primary boolean [not null, default: false]
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]

@@ -1235,3 +1235,9 @@ export function liquidityAction(positionId: number, payload: {
 }): Promise<CryptoProtocolPosition> {
   return apiFetch(`/crypto/protocol-positions/${positionId}/liquidity-action`, { method: 'POST', body: JSON.stringify(payload) });
 }
+
+export async function setAccountStatistics(accountId: number, included: boolean): Promise<void> {
+  await apiFetch(`/bank-accounts/${accountId}/statistics`, {
+    method: 'PATCH', body: JSON.stringify({ include_in_statistics: included }),
+  });
+}

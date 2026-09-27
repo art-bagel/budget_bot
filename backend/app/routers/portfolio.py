@@ -199,6 +199,7 @@ class ChangeDepositRateRequest(BaseModel):
 
 
 class PortfolioSummaryItem(BaseModel):
+    include_in_statistics: bool = True
     investment_account_id: int
     investment_account_name: str
     investment_account_owner_type: Literal['user', 'family']

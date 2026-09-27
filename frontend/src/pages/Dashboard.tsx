@@ -406,7 +406,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     return summary.cash_balance_in_base + marketValue + getCryptoProtocolsValue(accountId);
   };
 
-  const investmentBankTotal = investmentAccounts.reduce(
+  const investmentBankTotal = investmentAccounts.filter((account) => account.include_in_statistics !== false).reduce(
     (sum, account) => sum + getInvestmentAccountMarketTotal(account.id),
     0,
   );

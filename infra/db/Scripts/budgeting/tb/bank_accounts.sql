@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     investment_asset_type varchar(20),
     provider_name varchar(150),
     provider_account_ref varchar(150),
+    include_in_statistics boolean NOT NULL DEFAULT true,
     is_primary boolean NOT NULL DEFAULT false,
     is_active boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT current_timestamp,

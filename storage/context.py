@@ -172,6 +172,9 @@ class Context(DataBase):
             bank_account_id,
         )
 
+    async def set__account_statistics(self, user_id: int, account_id: int, included: bool) -> dict:
+        return await self.call_function(self._fn('set__account_statistics'), user_id, account_id, included)
+
     async def set__delete_investment_account(self, user_id: int, bank_account_id: int) -> dict:
         return await self.call_function(
             self._fn(self.F_SET__DELETE_INVESTMENT_ACCOUNT),

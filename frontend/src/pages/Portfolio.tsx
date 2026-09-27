@@ -941,8 +941,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       });
   }, [positions, cryptoProtocolPositions, user.base_currency_code]);
 
+  const excludedAccountIds = useMemo(() => new Set(accounts
+    .filter(({ account }) => account.include_in_statistics === false)
+    .map(({ account }) => account.id)), [accounts]);
+
   const totalHistoricalInBase = useMemo(
-    () => accounts.reduce(
+    () => accounts.filter(({ account }) => account.include_in_statistics !== false).reduce(
       (sum, item) => sum + item.balances.reduce((accountSum, balance) => accountSum + balance.historical_cost_in_base, 0),
       0,
     ),
@@ -1251,17 +1255,17 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   );
 
   const totalInvestedPrincipalInBase = useMemo(
-    () => openPositions.reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
-    [openPositions],
+    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
+    [openPositions, excludedAccountIds],
   );
 
   const totalRealizedIncomeInBase = useMemo(
-    () => summaryItems.reduce((sum, item) => sum + item.realized_income_in_base, 0),
+    () => summaryItems.filter((item) => item.include_in_statistics !== false).reduce((sum, item) => sum + item.realized_income_in_base, 0),
     [summaryItems],
   );
 
   const totalInvestmentCashInBase = useMemo(
-    () => summaryItems.reduce((sum, item) => sum + item.cash_balance_in_base, 0),
+    () => summaryItems.filter((item) => item.include_in_statistics !== false).reduce((sum, item) => sum + item.cash_balance_in_base, 0),
     [summaryItems],
   );
 
@@ -1277,12 +1281,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       const openCount = code === 'crypto'
         ? new Set(openTypePositions.map((position) => getCryptoPositionGroupingKey(position))).size
         : openTypePositions.length;
-      const currentOpenValueInBase = openTypePositions.reduce(
+      const includedPositions = openTypePositions.filter((p) => !excludedAccountIds.has(p.investment_account_id));
+      const currentOpenValueInBase = includedPositions.reduce(
         (sum, position) => sum + getPositionScopedValue(position),
         0,
       );
       const cashBalanceInBase = accounts
-        .filter(({ account }) => getInvestmentAccountAssetType(account) === code)
+        .filter(({ account }) => getInvestmentAccountAssetType(account) === code && account.include_in_statistics !== false)
         .reduce((sum, { account }) => sum + (summaryByAccountId[account.id]?.cash_balance_in_base ?? 0), 0);
 
       return {
@@ -1290,9 +1295,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         label: assetTypeLabel(code),
         openCount,
         closedCount: closedPositions.filter((position) => position.asset_type_code === code).length,
-        principalInBase: openTypePositions
+        principalInBase: includedPositions
           .reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
-        incomeInBase: openTypePositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
+        incomeInBase: includedPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
         totalInBase: currentOpenValueInBase + cashBalanceInBase,
       };
     });
@@ -1306,7 +1311,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       totalInBase: typeTabs.reduce((s, t) => s + t.totalInBase, 0),
     };
     return [allTab, ...typeTabs];
-  }, [accounts, closedPositions, openPositions, positions, summaryByAccountId, moexPrices, tinkoffLivePrices]);
+  }, [excludedAccountIds, accounts, closedPositions, openPositions, positions, summaryByAccountId, moexPrices, tinkoffLivePrices]);
 
   useEffect(() => {
     if (activeAssetTypeCode === 'all') return;
@@ -1350,7 +1355,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     let pricedEntry = 0;
     let unrealized = 0;
     let count = 0;
-    for (const pos of openPositions) {
+    for (const pos of openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id))) {
       total += getResolvedPositionEstimatedValue(pos);
       const currentResult = getResolvedPositionCurrentResult(pos);
       if (currentResult !== null) {
@@ -1367,14 +1372,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       totalUnrealizedPnl: unrealized,
       hasPricedPositions: count > 0,
     };
-  }, [openPositions, moexPrices, tinkoffLivePrices]);
+  }, [excludedAccountIds, openPositions, moexPrices, tinkoffLivePrices]);
 
   // Total = positions at market/cost + uninvested cash
   // Realized income is NOT added separately — it's already in cash or reinvested in positions
   const totalRealPortfolioValue = totalPositionsValue + totalInvestmentCashInBase;
 
   const totalWithPotential = useMemo(
-    () => openPositions.reduce((sum, pos) => {
+    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, pos) => {
       let val = getResolvedPositionEstimatedValue(pos);
       if (pos.asset_type_code === 'deposit') {
         const accrued = typeof pos.metadata?.accrued_interest === 'number' ? pos.metadata.accrued_interest : 0;
@@ -1383,12 +1388,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       return sum + val;
     }, totalInvestmentCashInBase),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase],
+    [excludedAccountIds, openPositions, moexPrices, tinkoffLivePrices, totalInvestmentCashInBase],
   );
 
   const totalPortfolioDisplayResult = useMemo(
-    () => openPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
-    [moexPrices, openPositions, tinkoffLivePrices, valueMode],
+    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
+    [excludedAccountIds, moexPrices, openPositions, tinkoffLivePrices, valueMode],
   );
 
   const heroDisplayedPortfolioValue = valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue;
@@ -1399,10 +1404,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const depositAccruedItems = useMemo(
     () => openPositions
-      .filter((p) => p.asset_type_code === 'deposit')
+      .filter((p) => p.asset_type_code === 'deposit' && !excludedAccountIds.has(p.investment_account_id))
       .map((p) => ({ title: p.title, accrued: typeof p.metadata?.accrued_interest === 'number' ? p.metadata.accrued_interest as number : 0, currency: p.currency_code }))
       .filter((p) => p.accrued > 0),
-    [openPositions],
+    [excludedAccountIds, openPositions],
   );
 
   const totalDepositAccrued = useMemo(
@@ -2403,10 +2408,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       openCount: activeAssetTypeCode === 'crypto'
         ? new Set(filteredOpenPositions.map((position) => getCryptoPositionGroupingKey(position))).size
         : filteredOpenPositions.length,
-      estimatedValue: filteredOpenPositionGroups.reduce((sum, group) => sum + getGroupEstimatedValue(group), 0),
+      estimatedValue: filteredOpenPositionGroups.filter((g) => !excludedAccountIds.has(g.accountId)).reduce((sum, group) => sum + getGroupEstimatedValue(group), 0),
     }, ...scopedTabs];
   }, [
     getLendingNetValue,
+    excludedAccountIds,
     accountEstimatedValueById,
     accountOpenPrincipalById,
     accounts,
@@ -2509,9 +2515,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const cryptoProtocolValueInBase = useMemo(
     () => visibleCryptoProtocolPositions
-      .filter((position) => position.status === 'open')
+      .filter((position) => position.status === 'open' && (activeAccountTabKey !== 'all' || !excludedAccountIds.has(position.investment_account_id)))
       .reduce((sum, position) => sum + (getLendingNetValue(position) ?? 0), 0),
-    [visibleCryptoProtocolPositions, getLendingNetValue],
+    [visibleCryptoProtocolPositions, getLendingNetValue, activeAccountTabKey, excludedAccountIds],
   );
 
   const visibleOpenPositionGroups = useMemo(
@@ -2590,8 +2596,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   }, [accounts, activeAssetTypeCode, visibleCryptoProtocolPositions, visibleOpenPositionGroups]);
 
   const activeScopeDisplayMetrics = useMemo(() => {
-    const scopedOpenPositions = activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions;
-    const scopedGroups = activeAssetTypeCode === 'all' ? filteredOpenPositionGroups : visibleOpenPositionGroups;
+    const scopedOpenPositions = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
+      .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id));
+    const scopedGroups = (activeAssetTypeCode === 'all' ? filteredOpenPositionGroups : visibleOpenPositionGroups)
+      .filter((g) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId));
     const nkdValue = scopedOpenPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
     const valuedAssets = new Set<string>();
     let cryptoBasis = 0;
@@ -2619,7 +2627,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         basisEstimated ||= entry.basis_quality === 'estimated';
       }
     }
-    for (const protocol of visibleCryptoProtocolPositions) {
+    for (const protocol of visibleCryptoProtocolPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))) {
       addFunding(protocol.metadata.funding_units0);
       addFunding(protocol.metadata.funding_units1);
       if (protocol.cost_basis_in_base === null) basisMissing = true;
@@ -2651,6 +2659,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     };
   }, [
     activeAssetTypeCode,
+    activeAccountTabKey,
+    excludedAccountIds,
     cryptoProtocolValueInBase,
     cryptoProtocolPositions,
     cryptoAssetsByAccount,
@@ -2670,11 +2680,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
   const activeScopeNkdValue = activeScopeDisplayMetrics.nkdValue;
   const activeScopeHasCrypto = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
+    .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'crypto')
     || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
+    .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0))
-    || visibleCryptoProtocolPositions.some((position) => getLendingNetValue(position) === null);
+    || visibleCryptoProtocolPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
   const activeScopeBasisPrefix = activeScopeDisplayMetrics.basisEstimated ? '≈ ' : '';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
@@ -2690,9 +2702,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       return [];
     }
 
-    const totalEstimated = visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+    const totalEstimated = visibleOpenPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
     const buckets = SECURITY_KIND_OPTIONS.map((option) => {
-      const sectionPositions = visibleOpenPositions.filter((position) => getSecurityKindCode(position) === option.value);
+      const sectionPositions = visibleOpenPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).filter((position) => getSecurityKindCode(position) === option.value);
       const estimatedValue = sectionPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
       const investedPrincipal = sectionPositions.reduce((sum, position) => sum + getPositionVisibleInvestedPrincipal(position), 0);
       const nkdValue = sectionPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
@@ -2710,10 +2722,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     }).filter((bucket) => bucket.positionsCount > 0);
 
     return buckets.sort((left, right) => right.estimatedValue - left.estimatedValue);
-  }, [activeAssetTypeCode, moexPrices, tinkoffLivePrices, visibleOpenPositions]);
+  }, [activeAccountTabKey, excludedAccountIds, activeAssetTypeCode, moexPrices, tinkoffLivePrices, visibleOpenPositions]);
 
   const portfolioAnalyticsAccounts = useMemo<PortfolioAnalyticsAccountItem[]>(
-    () => visibleOpenPositionGroups.map((group) => {
+    () => visibleOpenPositionGroups.filter((g) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId)).map((group) => {
       const estimatedValue = group.positions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
       const investedPrincipal = group.positions.reduce((sum, position) => sum + (
         activeAssetTypeCode === 'security'
@@ -2736,12 +2748,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         positionsCount: group.positions.length,
       };
     }).sort((left, right) => right.estimatedValue - left.estimatedValue),
-    [activeAssetTypeCode, moexPrices, summaryByAccountId, tinkoffLivePrices, visibleOpenPositionGroups],
+    [activeAccountTabKey, excludedAccountIds, activeAssetTypeCode, moexPrices, summaryByAccountId, tinkoffLivePrices, visibleOpenPositionGroups],
   );
 
   const portfolioAnalyticsLeaders = useMemo<PortfolioAnalyticsLeader[]>(() => {
-    const totalEstimated = visibleOpenPositions.reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
-    return visibleOpenPositions
+    const totalEstimated = visibleOpenPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getResolvedPositionEstimatedValue(position), 0);
+    return visibleOpenPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
       .map((position) => {
         const logoName = getPositionMetadataText(position, 'logo_name');
         return {
@@ -2758,7 +2770,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       })
       .sort((left, right) => right.estimatedValue - left.estimatedValue)
       .slice(0, 8);
-  }, [moexPrices, tinkoffLivePrices, visibleOpenPositions]);
+  }, [activeAccountTabKey, excludedAccountIds, moexPrices, tinkoffLivePrices, visibleOpenPositions]);
 
   const portfolioAnalyticsScopeLabel = useMemo(() => {
     const assetLabel = activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode);
@@ -3279,6 +3291,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <div className="pf-grp__head">
                     <div>
                       <div className="pf-grp__title">{group.accountName}</div>
+                      {excludedAccountIds.has(group.accountId) && <div className="pf-grp__sub">Не входит в общую статистику</div>}
                     <div className="pf-grp__meta">
                         {group.ownerType === 'family' ? 'Семейный' : 'Личный'} · {group.positions.length} акт.
                         {activeAssetTypeCode === 'crypto' ? ` · ${groupProtocolPositions.length} DeFi` : ''}

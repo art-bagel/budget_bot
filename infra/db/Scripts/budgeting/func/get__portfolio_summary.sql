@@ -17,6 +17,7 @@ BEGIN
         SELECT
             ba.id,
             ba.name,
+            ba.include_in_statistics,
             ba.owner_type,
             ba.owner_user_id,
             ba.owner_family_id,
@@ -196,6 +197,7 @@ BEGIN
         jsonb_agg(
             jsonb_build_object(
                 'investment_account_id', sa.id,
+                'include_in_statistics', sa.include_in_statistics,
                 'investment_account_name', sa.name,
                 'investment_account_owner_type', sa.owner_type,
                 'investment_account_owner_name', sa.owner_name,
