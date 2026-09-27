@@ -33,6 +33,13 @@ class Ledger(DataBase):
     F_PUT__CRYPTO_PAY_FEE = 'put__crypto_pay_fee'
     F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
 
+    async def put__manual_crypto_movement(self, user_id, request_id, kind, payload,
+                                          operated_at=None, fee=None):
+        return await self.call_function(
+            self._fn('put__manual_crypto_movement'), user_id, request_id, kind,
+            payload, operated_at, fee,
+        )
+
     async def put__crypto_source_event(self, user_id, anchor_account_id, source_namespace,
                                        source_id, occurred_at, order_in_timestamp,
                                        accounting_date, commands, evidence):

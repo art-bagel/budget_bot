@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { AlertCircle, ArrowLeftRight } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { transferCryptoBetweenInvestmentAccounts } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import {
-  formatDraftDecimal,
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
@@ -53,7 +53,7 @@ export default function CryptoTransferSheet({
   );
 
   const defaultTarget = targets[0];
-  const defaultAmount = sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 8) : '';
+  const defaultAmount = position.quantity_exact ?? '';
 
   const [targetInvestmentAccountId, setTargetInvestmentAccountId] = useState<string>(
     defaultTarget ? String(defaultTarget.id) : '',
@@ -61,6 +61,8 @@ export default function CryptoTransferSheet({
   const [amount, setAmount] = useState(defaultAmount);
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
+  const request = useCryptoRequestKey(`transfer:${position.id}`);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,13 +80,17 @@ export default function CryptoTransferSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await transferCryptoBetweenInvestmentAccounts({
+      const payload = {
         position_id: position.id,
         target_investment_account_id: Number(targetInvestmentAccountId),
-        amount: amountNum,
+        amount,
         comment: comment.trim() || undefined,
         operated_at: operatedAt || undefined,
-      });
+        fee: feeAmount && Number(feeAmount) > 0
+          ? { source_position_id: position.id, quantity: feeAmount } : undefined,
+      };
+      await transferCryptoBetweenInvestmentAccounts({ ...payload, request_id: request.requestId(payload) });
+      request.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -189,10 +195,18 @@ export default function CryptoTransferSheet({
             <div className="cs-sheet__hint">
               <ArrowLeftRight size={14} strokeWidth={2.2} />
               <span>
-                Cost basis перенесётся пропорционально (weighted-average) на счёт «{targetAccount.name}».
+                Себестоимость и доля заёмного финансирования перейдут на счёт «{targetAccount.name}».
               </span>
             </div>
           )}
+
+          <div className="field">
+            <span className="fl">Комиссия в {symbol} (если есть)</span>
+            <input className="picker-v2" inputMode="decimal" value={feeAmount}
+              onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
+              disabled={submitting} placeholder="0" />
+            <span className="cs-sheet__hint">Списывается дополнительно с исходного счёта.</span>
+          </div>
 
           <div className="field">
             <span className="fl">Комментарий</span>

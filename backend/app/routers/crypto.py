@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID, uuid4
 from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional
@@ -200,7 +201,16 @@ class TransferCryptoFromInvestmentRequest(BaseModel):
     operated_at: Optional[date] = None
 
 
+class ManualCryptoFee(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    source_position_id: int = Field(gt=0)
+    quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    comment: Optional[str] = None
+
+
 class TransferCryptoBetweenInvestmentAccountsRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     position_id: int
     target_investment_account_id: int
     amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
@@ -216,6 +226,8 @@ class TransferCryptoBetweenInvestmentAccountsRequest(BaseModel):
 
 
 class SwapCryptoInvestmentAssetRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     position_id: int
     from_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     to_crypto_asset_id: int
@@ -678,13 +690,10 @@ async def transfer_crypto_between_investment_accounts(
     body: TransferCryptoBetweenInvestmentAccountsRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
-    result = await ledger.put__transfer_crypto_between_investment_accounts(
-        user_id=user.user_id,
-        position_id=body.position_id,
-        target_investment_account_id=body.target_investment_account_id,
-        amount=body.amount,
-        comment=body.comment,
-        operated_at=body.operated_at,
+    result = await ledger.put__manual_crypto_movement(
+        user.user_id, body.request_id or uuid4(), 'transfer',
+        body.model_dump(mode='json', exclude={'request_id', 'operated_at', 'fee'}, exclude_none=True),
+        body.operated_at, body.fee.model_dump(mode='json', exclude_none=True) if body.fee else None,
     )
     return CryptoOperationResponse(**result)
 
@@ -694,17 +703,10 @@ async def swap_crypto_investment_asset(
     body: SwapCryptoInvestmentAssetRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoOperationResponse:
-    result = await ledger.put__swap_crypto_investment_asset(
-        user_id=user.user_id,
-        position_id=body.position_id,
-        from_amount=body.from_amount,
-        to_crypto_asset_id=body.to_crypto_asset_id,
-        to_amount=body.to_amount,
-        target_investment_account_id=body.target_investment_account_id,
-        comment=body.comment,
-        operated_at=body.operated_at,
-        value_in_base=body.value_in_base,
-        valuation_source=body.valuation_source,
+    result = await ledger.put__manual_crypto_movement(
+        user.user_id, body.request_id or uuid4(), 'swap',
+        body.model_dump(mode='json', exclude={'request_id', 'operated_at', 'fee'}, exclude_none=True),
+        body.operated_at, body.fee.model_dump(mode='json', exclude_none=True) if body.fee else None,
     )
     return CryptoOperationResponse(**result)
 

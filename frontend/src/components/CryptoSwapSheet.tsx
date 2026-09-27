@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { AlertCircle, ArrowDown } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { swapCryptoInvestmentAsset } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import {
-  formatDraftDecimal,
   getCryptoAssetId,
   getPositionMetadataText,
   isSameAccountOwner,
@@ -64,7 +64,7 @@ export default function CryptoSwapSheet({
     [accounts, position],
   );
 
-  const defaultAmount = sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 8) : '';
+  const defaultAmount = position.quantity_exact ?? '';
   const defaultTargetAsset = targetAssetCandidates[0];
   const defaultTargetAccount = targetAccounts.find((a) => a.id === position.investment_account_id)
     ?? targetAccounts[0];
@@ -79,6 +79,8 @@ export default function CryptoSwapSheet({
   );
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
+  const request = useCryptoRequestKey(`swap:${position.id}`);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +104,7 @@ export default function CryptoSwapSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await swapCryptoInvestmentAsset({
+      const payload = {
         position_id: position.id,
         from_amount: fromAmount,
         to_crypto_asset_id: Number(toCryptoAssetId),
@@ -110,7 +112,11 @@ export default function CryptoSwapSheet({
         target_investment_account_id: Number(targetInvestmentAccountId),
         comment: comment.trim() || undefined,
         operated_at: operatedAt || undefined,
-      });
+        fee: feeAmount && Number(feeAmount) > 0
+          ? { source_position_id: position.id, quantity: feeAmount } : undefined,
+      };
+      await swapCryptoInvestmentAsset({ ...payload, request_id: request.requestId(payload) });
+      request.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -259,6 +265,14 @@ export default function CryptoSwapSheet({
           <span>Новая позиция {toAsset?.symbol ?? ''} появится на счёте «{toAccount.name}».</span>
         </div>
       )}
+
+      <div className="field">
+        <span className="fl">Комиссия в {sourceSymbol} (если есть)</span>
+        <input className="picker-v2" inputMode="decimal" value={feeAmount}
+          onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
+          disabled={submitting} placeholder="0" />
+        <span className="cs-sheet__hint">Списывается дополнительно с исходного счёта.</span>
+      </div>
 
       <div className="field">
         <span className="fl">Комментарий</span>

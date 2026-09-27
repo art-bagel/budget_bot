@@ -27,6 +27,7 @@ class PortfolioPositionItem(BaseModel):
     title: str
     status: Literal['open', 'closed']
     quantity: float | None = None
+    quantity_exact: str | None = None
     amount_in_currency: float
     currency_code: str
     opened_at: date

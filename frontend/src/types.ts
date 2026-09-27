@@ -254,14 +254,18 @@ export interface TransferCryptoFromInvestmentRequest {
 }
 
 export interface TransferCryptoBetweenInvestmentAccountsRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   position_id: number;
   target_investment_account_id: number;
-  amount: number;
+  amount: number | string;
   comment?: string;
   operated_at?: string;
 }
 
 export interface SwapCryptoInvestmentAssetRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   position_id: number;
   from_amount: number | string;
   to_crypto_asset_id: number;
@@ -763,6 +767,7 @@ export interface PortfolioPosition {
   title: string;
   status: 'open' | 'closed';
   quantity?: number | null;
+  quantity_exact?: string | null;
   amount_in_currency: number;
   currency_code: string;
   opened_at: string;

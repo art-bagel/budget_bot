@@ -36,6 +36,7 @@ BEGIN
                 'title', pp.title,
                 'status', pp.status,
                 'quantity', pp.quantity,
+                'quantity_exact', pp.quantity::text,
                 'amount_in_currency', pp.amount_in_currency,
                 'currency_code', pp.currency_code,
                 'opened_at', pp.opened_at,
