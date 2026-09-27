@@ -20,6 +20,14 @@ BEGIN
         RAISE EXCEPTION 'Sale is not awaiting manual expense';
     END IF;
     _bank:=(_event.metadata->>'target_bank_account_id')::bigint;
+    IF _event.metadata->'manual_expense_settlement' IS NULL
+        AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_source_events WHERE owner_key=_account.owner_type||':'||
+          CASE WHEN _account.owner_type='user' THEN _account.owner_user_id ELSE _account.owner_family_id END) THEN
+        RETURN budgeting.put__journal_bank_operation(_user_id,_investment_account_id,'bank_settle_sale',jsonb_build_object(
+            'investment_account_id',_investment_account_id,'sale_event_id',_sale_event_id,'category_id',_category_id,
+            'comment',_comment,'operated_at',COALESCE(_operated_at,current_date)));
+    END IF;
     -- Same order as the sale, followed by the event and money balances.
     PERFORM id FROM bank_accounts WHERE id IN (_investment_account_id,_bank) ORDER BY id FOR UPDATE;
     SELECT * INTO _event FROM portfolio_events WHERE id=_sale_event_id FOR UPDATE;

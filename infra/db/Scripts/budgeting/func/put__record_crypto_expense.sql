@@ -35,6 +35,12 @@ DECLARE
 BEGIN
     SET search_path TO budgeting;
 
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_source_events s JOIN bank_accounts a ON a.id=_bank_account_id
+        WHERE s.owner_key=a.owner_type||':'||CASE WHEN a.owner_type='user' THEN a.owner_user_id ELSE a.owner_family_id END) THEN
+        RETURN budgeting.put__journal_bank_operation(_user_id,_bank_account_id,'bank_crypto_expense',jsonb_build_object('bank_account_id',_bank_account_id,'category_id',_category_id,'amount',_amount::text,'crypto_asset_id',_crypto_asset_id,'comment',_comment,'operated_at',COALESCE(_operated_at,current_date)));
+    END IF;
+
     IF _amount IS NULL OR _amount <= 0
         OR _amount::text IN ('NaN', 'Infinity', '-Infinity')
         OR _amount <> round(_amount, 18) THEN
@@ -45,7 +51,7 @@ BEGIN
     INTO _category_kind, _category_owner_type, _category_owner_user_id, _category_owner_family_id
     FROM categories
     WHERE id = _category_id
-      AND is_active;
+      AND (is_active OR current_setting('budgeting.crypto_replaying',true)='on');
 
     IF _category_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active category %', _category_id;

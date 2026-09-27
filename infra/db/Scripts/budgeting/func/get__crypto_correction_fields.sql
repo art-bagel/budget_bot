@@ -14,6 +14,7 @@ RETURNS text[] LANGUAGE sql IMMUTABLE AS $f$
  WHEN 'liquidate' THEN ARRAY['collateral_qty','debt_qty','interest_qty','collateral_fee_qty']
  WHEN 'position_income' THEN ARRAY['quantity']
  WHEN 'protocol_yield' THEN ARRAY['quantity']
+ WHEN 'bank_purchase' THEN ARRAY['quantity','fiat_amount']
  WHEN 'bank_buy' THEN ARRAY['quantity','fiat_amount']
  WHEN 'bank_cash_sell' THEN ARRAY['quantity','fiat_amount']
  WHEN 'bank_to_portfolio' THEN ARRAY['quantity']

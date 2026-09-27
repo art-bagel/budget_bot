@@ -10,6 +10,7 @@ RETURNS bigint
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _journal_anchor bigint;
     _base_currency_code char(3);
     _from_kind text;
     _from_name text;
@@ -25,6 +26,16 @@ DECLARE
     _to_owner_family_id bigint;
 BEGIN
     SET search_path TO budgeting;
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL THEN
+        SELECT s.anchor_account_id INTO _journal_anchor FROM crypto_source_events s JOIN categories c ON c.id=_from_category_id
+        WHERE s.owner_key=c.owner_type||':'||CASE WHEN c.owner_type='user' THEN c.owner_user_id ELSE c.owner_family_id END
+        ORDER BY s.id LIMIT 1;
+        IF _journal_anchor IS NOT NULL THEN
+            RETURN (budgeting.put__journal_bank_operation(_user_id,_journal_anchor,'budget_allocate',jsonb_build_object(
+                'from_category_id',_from_category_id,'to_category_id',_to_category_id,'amount',_amount_in_base::text,
+                'comment',_comment,'operated_at',current_date))->>'operation_id')::bigint;
+        END IF;
+    END IF;
 
     IF _from_category_id = _to_category_id THEN
         RAISE EXCEPTION 'Budget source and destination categories must be different';
@@ -38,7 +49,7 @@ BEGIN
     INTO _from_kind, _from_name, _owner_type, _owner_user_id, _owner_family_id
     FROM categories
     WHERE id = _from_category_id
-      AND is_active;
+      AND (is_active OR current_setting('budgeting.crypto_replaying',true)='on');
 
     IF _from_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active source category %', _from_category_id;
@@ -60,7 +71,7 @@ BEGIN
     INTO _to_kind, _to_name, _to_owner_type, _to_owner_user_id, _to_owner_family_id
     FROM categories
     WHERE id = _to_category_id
-      AND is_active;
+      AND (is_active OR current_setting('budgeting.crypto_replaying',true)='on');
 
     IF _to_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active destination category %', _to_category_id;
