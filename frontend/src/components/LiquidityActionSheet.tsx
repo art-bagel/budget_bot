@@ -1,3 +1,4 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useState } from 'react';
 import BottomSheet from './BottomSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
@@ -58,10 +59,10 @@ export default function LiquidityActionSheet({ position, action, assets, account
       </div></div>}>
     {withdraw && field('Доля позиции, %', share, setShare)}
     {reward && <div className="apf-field"><label className="apf-label">Монета награды<select className="apf-input" value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={busy}>
-      <option value="">Выберите монету</option>{assets.map((a) => <option key={a.id} value={a.id}>{a.symbol} · {a.network_code}</option>)}
+      <option value="">Выберите монету</option>{assets.map((a) => <option key={a.id} value={a.id}>{cryptoAssetLabel(a, assets)}</option>)}
     </select></label></div>}
     {action === 'lp_snapshot' && !position.metadata.token1_crypto_asset_id && <div className="apf-field"><label className="apf-label">Вторая монета пула<select className="apf-input" value={secondAssetId} onChange={(e) => setSecondAssetId(e.target.value)} disabled={busy}>
-      <option value="">Выберите монету</option>{assets.filter((a) => a.id !== position.crypto_asset_id).map((a) => <option key={a.id} value={a.id}>{a.symbol} · {a.network_code}</option>)}
+      <option value="">Выберите монету</option>{assets.filter((a) => a.id !== position.crypto_asset_id).map((a) => <option key={a.id} value={a.id}>{cryptoAssetLabel(a, assets)}</option>)}
     </select></label></div>}
     {withdraw && !secondAssetId && <p className="tok-row__hint">Сначала укажите вторую монету через «Обновить состав пула».</p>}
     {field(reward ? 'Полученное количество' : `${position.asset_symbol} — количество`, quantity, setQuantity)}

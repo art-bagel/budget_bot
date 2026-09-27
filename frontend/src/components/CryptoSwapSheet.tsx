@@ -1,3 +1,4 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useMemo, useState } from 'react';
 import { AlertCircle, ArrowDown } from 'lucide-react';
 
@@ -210,7 +211,7 @@ export default function CryptoSwapSheet({
           <option value="">Выберите монету</option>
           {targetAssetCandidates.map((asset) => (
             <option key={asset.id} value={asset.id}>
-              {asset.symbol}{asset.network_code ? ` · ${asset.network_code}` : ''}
+              {cryptoAssetLabel(asset, cryptoAssets)}
             </option>
           ))}
         </select>

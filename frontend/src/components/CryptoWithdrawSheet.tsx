@@ -1,6 +1,6 @@
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useMemo, useState } from 'react';
-import { AlertCircle, Wallet } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -66,7 +66,6 @@ export default function CryptoWithdrawSheet({
     && !!bankAccountId
     && Number.isFinite(amountNum) && amountNum > 0;
 
-  const targetBank = targets.find((a) => String(a.id) === bankAccountId);
 
   const cryptoRequest = useCryptoRequestKey('bank-withdraw');
   const handleSubmit = async () => {
@@ -177,14 +176,6 @@ export default function CryptoWithdrawSheet({
         </div>
       )}
 
-      {targetBank && (
-        <div className="cs-sheet__hint">
-          <Wallet size={14} strokeWidth={2.2} />
-          <span>
-            На счёт «{targetBank.name}» перейдут {symbol} с сохранением стоимости приобретения.
-          </span>
-        </div>
-      )}
 
       <div className="field">
         <span className="fl">Комментарий</span>

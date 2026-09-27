@@ -1,3 +1,4 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -423,7 +424,7 @@ function CurrencyChip({
                     onClick={() => onPick(`crypto:${asset.id}`)}
                   >
                     <span className="fx__cur-opt-code">{asset.symbol}</span>
-                    <span className="fx__cur-opt-name">{asset.network_code}</span>
+                    <span className="fx__cur-opt-name">{cryptoAssetLabel(asset, cryptoAssets).split(' · ').slice(1).join(' · ')}</span>
                   </button>
                 ))}
             </>

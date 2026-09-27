@@ -480,6 +480,9 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(topped.json(),(await self.client.post(f'{url}/{loan}/top-up',json=topup)).json())
 
     async def test_simple_lp_snapshot_partial_reward_topup_and_full_close(self):
+        # Reuse one DB session across wallet and protocol actions (like the API pool).
+        response = await self.reward('1')
+        self.assertEqual(response.status_code, 200, response.text)
         from uuid import uuid4
         from check_user_history import fingerprint
         import asyncpg

@@ -5,6 +5,7 @@ CREATE OR REPLACE FUNCTION budgeting.put__manual_crypto_movement(
 RETURNS jsonb LANGUAGE plpgsql AS $function$
 DECLARE
     _position record;
+    _position_type text;
     _account record;
     _owner_key text;
     _prior record;
@@ -28,8 +29,9 @@ BEGIN
     ELSE
     IF _kind IN ('borrow','repay','accrue_interest','liquidate','top_up_protocol','partial_close_protocol','close_protocol','protocol_yield','group_lending','lp_snapshot','lp_withdraw','lp_reward') THEN
         SELECT * INTO _position FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint;
+        _position_type := _position.position_type;
     ELSE
-        SELECT p.*, NULL::text AS position_type INTO _position FROM portfolio_positions p WHERE id=COALESCE(_payload->>'position_id',_payload->>'source_position_id')::bigint;
+        SELECT p.* INTO _position FROM portfolio_positions p WHERE id=COALESCE(_payload->>'position_id',_payload->>'source_position_id')::bigint;
     END IF;
     IF _position.id IS NULL OR NOT budgeting.has__owner_access(
         _user_id,_position.owner_type,_position.owner_user_id,_position.owner_family_id) THEN
@@ -102,7 +104,7 @@ BEGIN
         WHEN _kind='partial_close_protocol' THEN (_payload-'principal_value_in_base'-'secondary_value_in_base')
             ||jsonb_build_object('rewards_value_in_base',0,'secondary_rewards_value_in_base',0)
         WHEN _kind='close_protocol' THEN (_payload-'return_value_in_base'-'secondary_return_value_in_base')
-            ||CASE WHEN _position.position_type='liquidity_pool' THEN jsonb_build_object('allocation_policy','net_composition') ELSE '{}'::jsonb END
+            ||CASE WHEN _position_type='liquidity_pool' THEN jsonb_build_object('allocation_policy','net_composition') ELSE '{}'::jsonb END
         ELSE _payload END;
     IF _kind='create_protocol' THEN
         IF EXISTS(SELECT 1 FROM jsonb_object_keys(COALESCE(_payload->'metadata','{}'::jsonb)) k WHERE k NOT IN ('apr','pool_name')) THEN
@@ -116,7 +118,7 @@ BEGIN
             RAISE EXCEPTION 'Укажите положительное количество начального займа';
         END IF;
     END IF;
-    IF _kind='partial_close_protocol' AND _position.position_type='liquidity_pool' AND
+    IF _kind='partial_close_protocol' AND _position_type='liquidity_pool' AND
        (COALESCE((_payload->>'principal_qty')::numeric,0)>0 OR COALESCE((_payload->>'secondary_principal_qty')::numeric,0)>0) THEN
         RAISE EXCEPTION 'Частичный выход LP требует доли позиции. Используйте действие вывода ликвидности с указанием процента';
     END IF;

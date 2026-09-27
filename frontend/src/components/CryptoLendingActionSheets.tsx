@@ -1,3 +1,4 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Plus, ArrowDownToLine, X, HandCoins, Wallet, SlidersHorizontal } from 'lucide-react';
 
@@ -270,7 +271,7 @@ export function LendingTakeDebtSheet({
             <option value="">Выберите монету</option>
             {sortedAssets.map((asset) => (
               <option key={asset.id} value={asset.id}>
-                {asset.symbol}{asset.network_code ? ` · ${asset.network_code}` : ''}
+                {cryptoAssetLabel(asset, cryptoAssets)}
               </option>
             ))}
           </select>
@@ -873,8 +874,6 @@ export function LendingGroupSheet({ open, position, candidates, onClose, onSucce
         {busy ? 'Сохраняем…' : 'Подтвердить общий счёт'}
       </button>
     </div>}>
-    <p className="list-row__sub">Выберите другой залог, который относится к тому же счёту протокола и обеспечивает общий долг.
-      EVAA Master и EVAA LP — разные счета. Остатки и себестоимость не изменятся.</p>
     <div className="apf-field"><label className="apf-label">Другой залог</label>
       <select className="picker-v2" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={busy}>
         <option value="">Выберите позицию</option>

@@ -1,3 +1,4 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
@@ -5012,7 +5013,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <div className="pf-dcond">
               <div className="pf-dcond__head"><span className="sec-tag">Себестоимость и оценка</span></div>
               <div className="pf-dcond__row">
-                <span className="pf-dcond__row-label">{selectedProtocolPosition.status === 'closed' ? 'Затраты до закрытия' : 'Учтённые затраты'}</span>
+                <span className="pf-dcond__row-label">{selectedProtocolPosition.status === 'closed' ? 'Затраты до закрытия' : selectedLendingGroup.length > 1 ? `Затраты залога ${selectedProtocolPosition.asset_symbol}` : 'Учтённые затраты'}</span>
                 <span className="pf-dcond__row-value">{selectedProtocolPosition.cost_basis_in_base === null ? 'Не определены' : formatAmount(selectedProtocolPosition.cost_basis_in_base, user.base_currency_code)}</span>
               </div>
               {[selectedProtocolPosition.metadata.funding_units0, selectedProtocolPosition.metadata.funding_units1].some((units) =>
@@ -5670,7 +5671,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                   { value: '', label: 'Без заёма' },
                                   ...sortedAssets.map((asset) => ({
                                     value: String(asset.id),
-                                    label: asset.symbol,
+                                    label: cryptoAssetLabel(asset, sortedAssets),
                                   })),
                                 ]}
                               />
