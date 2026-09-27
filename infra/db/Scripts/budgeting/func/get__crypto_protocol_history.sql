@@ -88,12 +88,18 @@ BEGIN
         FROM crypto_liability_events e LEFT JOIN crypto_assets a ON a.id=(e.metadata->'result'->>'collateral_asset_id')::bigint
         WHERE (e.protocol_position_id=_position_id OR e.metadata->'result'->>'collateral_position_id'=_position_id::text) AND e.event_kind='liquidation'
         UNION ALL
-        SELECT 'custody:'||s.id||':'||c.ordinality,s.accounting_date,s.id,
-            CASE WHEN c.value->'payload'->>'to_custody'='main' THEN 'lp_return' ELSE 'lp_farm' END,
-            (c.value->'payload'->>'quantity')::numeric,'LP',NULL::numeric,NULL::text
+        SELECT 'composition:'||s.id||':'||c.ordinality,s.accounting_date,s.id,'lp_composition',
+            (c.value->'payload'->>'quantity')::numeric,_p.asset_symbol,NULL::numeric,
+            c.value->'payload'->>'comment'
         FROM crypto_source_events s CROSS JOIN LATERAL jsonb_array_elements(s.commands) WITH ORDINALITY c
-        WHERE c.value->>'kind'='lp_custody'
-          AND c.value->'payload'->>'position_id'=_position_id::text
+        WHERE c.value->>'kind'='lp_snapshot' AND c.value->'payload'->>'position_id'=_position_id::text
+          AND s.owner_key=CASE WHEN _p.owner_type='user' THEN 'user:'||_p.owner_user_id ELSE 'family:'||_p.owner_family_id END
+        UNION ALL
+        SELECT 'composition-b:'||s.id||':'||c.ordinality,s.accounting_date,s.id,'lp_composition',
+            (c.value->'payload'->>'secondary_quantity')::numeric,_p.metadata->>'token1_symbol',NULL::numeric,
+            NULL::text
+        FROM crypto_source_events s CROSS JOIN LATERAL jsonb_array_elements(s.commands) WITH ORDINALITY c
+        WHERE c.value->>'kind'='lp_snapshot' AND c.value->'payload'->>'position_id'=_position_id::text
           AND s.owner_key=CASE WHEN _p.owner_type='user' THEN 'user:'||_p.owner_user_id ELSE 'family:'||_p.owner_family_id END
         UNION ALL
         -- Older manually created positions may have no immutable opening link.
@@ -102,7 +108,7 @@ BEGIN
             _p.asset_symbol,NULL::numeric,'Размещение зарегистрировано; состав первоначальной операции не сохранён.'
         WHERE NOT EXISTS (SELECT 1 FROM asset_rows WHERE kind='stake_to_protocol')
     ), ordered AS (
-        SELECT r.*, (r.id NOT LIKE 'asset:%' OR budgeting.is__crypto_audit_comment('portfolio_events', split_part(r.id,':',2)::bigint)) AS comment_is_system,
+        SELECT r.*, (CASE WHEN r.id LIKE 'composition:%' THEN false ELSE r.id NOT LIKE 'asset:%' OR budgeting.is__crypto_audit_comment('portfolio_events', split_part(r.id,':',2)::bigint) END) AS comment_is_system,
             COALESCE(s.occurred_at,r.event_at::timestamptz) AS sort_at,
             COALESCE(s.order_in_timestamp,0) AS sort_order,
             COALESCE(l.command_index,0) AS sort_command
@@ -116,7 +122,7 @@ BEGIN
             WHEN 'liquidation-fee' THEN 'crypto_liability_events'
             WHEN 'accrual' THEN 'crypto_protocol_accrual_events' END
         LEFT JOIN crypto_source_events s ON s.id=COALESCE(l.source_event_id,
-            CASE WHEN r.id LIKE 'custody:%' THEN split_part(r.id,':',2)::bigint END)
+            CASE WHEN (r.id LIKE 'composition:%' OR r.id LIKE 'composition-b:%') THEN split_part(r.id,':',2)::bigint END)
     ), page AS (
         SELECT * FROM ordered ORDER BY event_at DESC,sort_at DESC,sort_order DESC,sort_command DESC,sequence DESC,id DESC
         LIMIT _limit OFFSET _offset

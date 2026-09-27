@@ -186,6 +186,8 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'lp_snapshot','lp_withdraw','lp_reward' THEN
+            _result:=budgeting.put__crypto_lp_action(_user_id,_kind,_payload,_accounting_date);
         WHEN 'bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate' THEN
             _result:=budgeting.put__execute_bank_journal_command(_user_id,_anchor_account_id,_kind,_payload);
         WHEN 'group_lending' THEN

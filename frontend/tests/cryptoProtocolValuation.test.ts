@@ -47,3 +47,12 @@ test('hide only empty positions, retaining dust, debt and unsettled funding', ()
     assert.equal(isEmptyProtocolPosition({ ...empty, ...patch }), false);
   }
 });
+
+test('LP snapshot requires both current quotes and a composition dated today', () => {
+  const metadata = { token1_crypto_asset_id: 2, lp_composition: { quantity0: '10', quantity1: '20', observed_at: new Date().toISOString().slice(0, 10) } };
+  const p = position({ position_type: 'liquidity_pool', metadata });
+  assert.equal(protocolMarketValue(p, prices, 'RUB').value, 3600);
+  assert.equal(protocolMarketValue(p, new Map([[1, quote(1, 200)]]), 'RUB').value, null);
+  metadata.lp_composition.observed_at = '2000-01-01';
+  assert.equal(protocolMarketValue(p, prices, 'RUB').value, null);
+});

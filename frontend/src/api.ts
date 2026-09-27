@@ -1227,3 +1227,11 @@ export function setCryptoAssetHidden(accountId: number, assetId: number, hidden:
     method: 'PUT', body: JSON.stringify({ hidden }),
   });
 }
+
+export function liquidityAction(positionId: number, payload: {
+  request_id: string; action: 'lp_snapshot' | 'lp_withdraw' | 'lp_reward'; quantity: string;
+  secondary_quantity?: string; share_percent?: string; crypto_asset_id?: number; secondary_crypto_asset_id?: number; operated_at?: string;
+  comment?: string; fee?: { source_position_id: number; quantity: string };
+}): Promise<CryptoProtocolPosition> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/liquidity-action`, { method: 'POST', body: JSON.stringify(payload) });
+}

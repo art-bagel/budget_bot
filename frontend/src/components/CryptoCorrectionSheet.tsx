@@ -5,6 +5,7 @@ import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 const fields: Record<string, string> = {
+  share_percent: 'Доля позиции, %',
   from_amount: 'Отдано монет', to_amount: 'Получено монет', quantity: 'Количество', amount: 'Количество',
   debt_qty: 'Тело займа', repay_qty: 'Погашение', interest_qty: 'Проценты', collateral_qty: 'Изъято залога',
   collateral_fee_qty: 'Штраф в монетах залога', principal_qty: 'Возврат основной монеты',
@@ -15,7 +16,7 @@ const fields: Record<string, string> = {
 const kinds: Record<string,string> = { swap:'Обмен',transfer:'Перевод',create_protocol:'Размещение в DeFi',
   top_up_protocol:'Пополнение DeFi',close_protocol:'Закрытие DeFi',partial_close_protocol:'Вывод из DeFi',
   borrow:'Заём',repay:'Погашение',accrue_interest:'Проценты по долгу',liquidate:'Ликвидация',
-  reward:'Награда',expense:'Расход',receive_unknown:'Поступление',fee_refund:'Возврат комиссии',quantity_correction:'Уточнение количества',staking_convert:'Обмен стейкингового токена',accrue:'Начисление',tag_lending_account:'Счёт протокола',buy_fiat:'Покупка',sell_fiat:'Продажа',bank_sell:'Продажа через банк',settle_fiat_sale:'Категория расхода',position_income:'Награда',protocol_yield:'Начисление в DeFi',fee:'Комиссия',group_lending:'Общий счёт протокола',
+  lp_snapshot:'Состав пула',lp_withdraw:'Вывод ликвидности',lp_reward:'Награда пула',reward:'Награда',expense:'Расход',receive_unknown:'Поступление',fee_refund:'Возврат комиссии',quantity_correction:'Уточнение количества',staking_convert:'Обмен стейкингового токена',accrue:'Начисление',tag_lending_account:'Счёт протокола',buy_fiat:'Покупка',sell_fiat:'Продажа',bank_sell:'Продажа через банк',settle_fiat_sale:'Категория расхода',position_income:'Награда',protocol_yield:'Начисление в DeFi',fee:'Комиссия',group_lending:'Общий счёт протокола',
   bank_purchase:'Покупка через банк',bank_settle_sale:'Категория карточной оплаты',budget_allocate:'Распределение бюджета',bank_expense:'Расход',bank_crypto_expense:'Расход в криптовалюте',observation:'Примечание',lp_custody:'Передача LP',bank_buy:'Покупка через банк',bank_to_portfolio:'Ввод в портфель',bank_withdraw:'Вывод в банк',bank_cash_sell:'Продажа в банке' };
 
 type Props = { open:boolean; anchorAccountId:number; accounts:{id:number;name:string}[]; onClose:()=>void; onSuccess:()=>void };

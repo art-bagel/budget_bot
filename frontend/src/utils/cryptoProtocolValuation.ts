@@ -13,9 +13,6 @@ export function protocolMarketValue(
   currency: string,
 ): ProtocolValuation {
   const unavailable = (reason: string): ProtocolValuation => ({ value: null, reason, quotes: [] });
-  if (position.position_type === 'liquidity_pool') {
-    return unavailable('Состав пула не обновлён');
-  }
   const quotes: CryptoLivePrice[] = [];
   const priceFor = (id: number | null | undefined): number | null => {
     const quote = id == null ? undefined : prices.get(id);
@@ -24,6 +21,21 @@ export function protocolMarketValue(
     if (!quotes.some((item) => item.crypto_asset_id === quote.crypto_asset_id)) quotes.push(quote);
     return quote.price;
   };
+  if (position.position_type === 'liquidity_pool') {
+    const snapshot = position.metadata.lp_composition as { quantity0?: string; quantity1?: string; observed_at?: string } | undefined;
+    if (!snapshot) return unavailable('Состав пула не обновлён');
+    if (snapshot.observed_at !== new Date().toISOString().slice(0, 10)) return unavailable('Обновите состав пула');
+    const quantities = [Number(snapshot.quantity0), Number(snapshot.quantity1)];
+    if (quantities.some((q) => !Number.isFinite(q) || q < 0)) return unavailable('Состав пула не определён');
+    const ids = [position.crypto_asset_id, Number(position.metadata.token1_crypto_asset_id)];
+    let value = 0;
+    for (let i = 0; i < 2; i += 1) {
+      const price = quantities[i] === 0 ? 0 : priceFor(ids[i]);
+      if (price === null) return unavailable('Нет котировки монеты пула');
+      value += quantities[i] * price;
+    }
+    return { value, reason: null, quotes };
+  }
   const quantity = Number(position.current_quantity ?? position.quantity ?? 0);
   const price = quantity === 0 ? 0 : priceFor(position.crypto_asset_id);
   if (price === null) return unavailable('Нет котировки');

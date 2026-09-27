@@ -18,6 +18,7 @@ const LABELS: Record<string, string> = {
   fee: 'Комиссия',
   defi_gas_fee: 'Комиссия сети',
   external_expense: 'Расход',
+  lp_composition: 'Состав пула',
   lp_farm: 'LP-токены переданы в фарминг',
   lp_return: 'LP-токены возвращены из фарминга',
   collateral_liquidation: 'Ликвидация: списанный залог',

@@ -163,7 +163,7 @@ BEGIN
     );
 
     IF _existing.position_type='liquidity_pool' AND (_existing.cost_basis_in_base IS NULL
-        OR _consumed_cost_basis IS NULL OR _entry_summary->>'basis_quality'='estimated') THEN
+        OR _consumed_cost_basis IS NULL) THEN
         RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
     END IF;
     _added_basis := _consumed_cost_basis;
@@ -202,8 +202,9 @@ BEGIN
 
         _secondary_remaining_quantity := round(_secondary_source_quantity - _secondary_quantity, 18);
 
-        _secondary_entry_summary := budgeting.get__crypto_position_known_entry_summary(_secondary_source_position_id);
-        _secondary_remaining_basis := COALESCE((_secondary_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+        _secondary_entry_summary := budgeting.get__crypto_position_movable_entry_summary(_secondary_source_position_id);
+        _secondary_remaining_basis := (_secondary_entry_summary ->> 'remaining_cost_basis')::numeric;
+        IF _secondary_remaining_basis IS NULL THEN RAISE EXCEPTION 'Unknown LP component cost'; END IF;
         _secondary_consumed_cost_basis := CASE
             WHEN _secondary_source_quantity > 0
                 THEN round(_secondary_remaining_basis * _secondary_quantity / _secondary_source_quantity, 2)
@@ -250,6 +251,7 @@ BEGIN
                 'protocol_quantity', _secondary_quantity,
                 'value_in_base', _secondary_consumed_cost_basis,
                 'consumed_cost_basis', _secondary_consumed_cost_basis,
+                'basis_quality', _secondary_entry_summary->>'basis_quality',
                 'token_role', 'token_b'
             ),
             _user_id
@@ -289,9 +291,11 @@ BEGIN
 
     UPDATE crypto_protocol_positions SET metadata=metadata || jsonb_build_object('basis_quality',
         CASE WHEN cost_basis_in_base IS NULL THEN 'unknown'
-             WHEN _existing.metadata->>'basis_quality'='estimated' OR _entry_summary->>'basis_quality'='estimated' THEN 'estimated'
+             WHEN _existing.metadata->>'basis_quality'='estimated' OR _entry_summary->>'basis_quality'='estimated' OR _secondary_entry_summary->>'basis_quality'='estimated' THEN 'estimated'
              WHEN cost_basis_in_base=0 THEN 'confirmed_zero' ELSE 'known' END)
         WHERE id=_position_id;
+
+    UPDATE crypto_protocol_positions SET metadata=metadata-'lp_composition' WHERE id=_position_id;
 
     RETURN (
         SELECT item

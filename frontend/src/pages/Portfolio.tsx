@@ -1,3 +1,4 @@
+import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
 import { setCryptoAssetHidden } from '../api';
 import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues } from '../utils/cryptoProtocolValuation';
@@ -52,7 +53,6 @@ import CryptoWithdrawSheet from '../components/CryptoWithdrawSheet';
 import CryptoTransferSheet from '../components/CryptoTransferSheet';
 import {
   LpAddLiquiditySheet,
-  LpPartialWithdrawSheet,
   LpCloseSheet,
   LpClaimFeesSheet,
 } from '../components/CryptoLpActionSheets';
@@ -743,7 +743,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [cryptoTransferSheetPosition, setCryptoTransferSheetPosition] = useState<PortfolioPosition | null>(null);
   const [cryptoIncomeSheetPosition, setCryptoIncomeSheetPosition] = useState<PortfolioPosition | null>(null);
   const [partialCloseProtocolId, setPartialCloseProtocolId] = useState<number | null>(null);
-  const [lpSheet, setLpSheet] = useState<{ kind: 'add' | 'partial' | 'close' | 'claim'; positionId: number } | null>(null);
+  const [lpSheet, setLpSheet] = useState<{ kind: 'add' | 'partial' | 'close' | 'claim' | 'snapshot' | 'reward'; positionId: number } | null>(null);
   const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate' | 'yield' | 'group'; positionId: number } | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
@@ -908,6 +908,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         ...cryptoProtocolPositions
           .filter((position) => position.status === 'open')
           .map((position) => position.crypto_asset_id ?? null),
+        ...cryptoProtocolPositions
+          .filter((position) => position.status === 'open' && position.position_type === 'liquidity_pool')
+          .map((position) => Number(position.metadata.token1_crypto_asset_id) || null),
         ...cryptoProtocolPositions
           .filter((position) => position.status === 'open' && position.position_type === 'lending')
           .map((position) => {
@@ -4856,18 +4859,19 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <div className={`pf-dstats${(selectedLendingGroup.length > 1 || selectedProtocolPosition.position_type === 'liquidity_pool') ? " pf-dstats--lending-group" : ""}`}>
               {selectedProtocolPosition.position_type === 'liquidity_pool' ? (() => {
                 const lp = getLiquidityPoolMetadata(selectedProtocolPosition);
+                const composition = selectedProtocolPosition.metadata.lp_composition as { quantity0: string; quantity1: string; observed_at: string } | undefined;
                 return (
                   <>
                     <div className="pf-dstats__cell">
                       <span className="pf-dstats__label">{selectedProtocolPosition.asset_symbol}</span>
-                      <span className="pf-dstats__value">{formatNumericAmount(selectedProtocolPosition.current_quantity ?? selectedProtocolPosition.quantity ?? 0, 8)}</span>
-                      <span className="pf-dstats__sub">в позиции</span>
+                      <span className="pf-dstats__value">{formatNumericAmount(Number(composition?.quantity0 ?? selectedProtocolPosition.current_quantity ?? selectedProtocolPosition.quantity ?? 0), 8)}</span>
+                      <span className="pf-dstats__sub">{composition ? `на ${formatDateLabel(composition.observed_at)}` : 'по внесениям'}</span>
                     </div>
                     {lp.token1_symbol && (
                       <div className="pf-dstats__cell">
                         <span className="pf-dstats__label">{lp.token1_symbol}</span>
-                        <span className="pf-dstats__value">{formatNumericAmount(lp.token1_quantity ?? 0, 8)}</span>
-                        <span className="pf-dstats__sub">в позиции</span>
+                        <span className="pf-dstats__value">{formatNumericAmount(Number(composition?.quantity1 ?? lp.token1_quantity ?? 0), 8)}</span>
+                        <span className="pf-dstats__sub">{composition ? `на ${formatDateLabel(composition.observed_at)}` : 'по внесениям'}</span>
                       </div>
                     )}
                     <div className="pf-dstats__cell">
@@ -5073,6 +5077,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             </div>
 
             {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type === 'liquidity_pool' && (
+              <div className="pf-sheet-actions"><button type="button" className="btn btn--ghost" onClick={() => setLpSheet({ kind: 'snapshot', positionId: selectedProtocolPosition.id })}>Обновить состав пула</button></div>
+            )}
+            {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type === 'liquidity_pool' && (
               <div className="pf-sheet-actions">
                 <button
                   className="btn btn--primary"
@@ -5084,9 +5091,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <button
                   className="btn btn--ghost"
                   type="button"
-                  onClick={() => setLpSheet({ kind: 'claim', positionId: selectedProtocolPosition.id })}
+                  onClick={() => setLpSheet({ kind: 'reward', positionId: selectedProtocolPosition.id })}
                 >
-                  Заклеймить комиссии
+                  Получить награду
                 </button>
                 <button
                   className="btn btn--ghost"
@@ -5978,8 +5985,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         if (lpSheet.kind === 'add') {
           return <LpAddLiquiditySheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
         }
-        if (lpSheet.kind === 'partial') {
-          return <LpPartialWithdrawSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
+        if (lpSheet.kind === 'partial' || lpSheet.kind === 'snapshot' || lpSheet.kind === 'reward') {
+          return <LiquidityActionSheet key={`${target.id}:${lpSheet.kind}`} position={target} action={lpSheet.kind === 'partial' ? 'lp_withdraw' : lpSheet.kind === 'snapshot' ? 'lp_snapshot' : 'lp_reward'} assets={cryptoAssets} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
         }
         if (lpSheet.kind === 'close') {
           return <LpCloseSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;

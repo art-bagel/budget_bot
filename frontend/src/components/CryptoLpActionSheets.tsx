@@ -1,6 +1,6 @@
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Plus, Coins, ArrowDownToLine, X } from 'lucide-react';
+import { AlertCircle, Plus, Coins, X } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
@@ -196,128 +196,13 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
 }
 
 
-export function LpPartialWithdrawSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
-  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:2`);
-  useModalOpen(open);
-  const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
-  const tokenASymbol = position.asset_symbol;
-  const tokenBSymbol = lp.token1_symbol ?? 'Token B';
-  const maxA = position.current_quantity ?? position.quantity ?? 0;
-  const maxB = lp.token1_quantity ?? 0;
-
-  const [qtyA, setQtyA] = useState('');
-  const [qtyB, setQtyB] = useState('');
-  const [operatedAt, setOperatedAt] = useState(todayIso());
-  const [comment, setComment] = useState('');
-  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setQtyA('');
-      setQtyB('');
-      setOperatedAt(todayIso());
-      setComment('');
-      setFeeDraft(EMPTY_FEE_DRAFT);
-      setError(null);
-    }
-  }, [open]);
-
-  const numA = Number(qtyA);
-  const numB = Number(qtyB);
-  const validA = Number.isFinite(numA) && numA > 0;
-  const validB = Number.isFinite(numB) && numB > 0;
-  const canSubmit = !submitting && validA && validB && false; // A withdrawal share is required for correct LP allocation.
-
-  const submit = async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const payload = {
-        principal_qty: qtyA,
-        secondary_principal_qty: qtyB,
-        returned_at: operatedAt || undefined,
-        comment: comment.trim() || undefined,
-        fee: manualFee(feeDraft, accountPositions),
-      };
-      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
-      manualRequest.completed();
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    onSuccess();
-  };
-
-  return (
-    <BottomSheet
-      open={open}
-      tag="Частичный выход пока недоступен: нужна доля выведенных LP-токенов"
-      title="Частично снять"
-      icon={<ArrowDownToLine size={18} strokeWidth={2.2} />}
-      iconColor="o"
-      onClose={onClose}
-      actions={(
-        <div className="tk-foot pf-sheet-actions">
-          {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
-          <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
-              {submitting ? 'Снимаем…' : 'Снять'}
-            </button>
-          </div>
-        </div>
-      )}
-    >
-      <div className="apf-field">
-        <label className="apf-label">{tokenASymbol} — количество</label>
-        <input
-          className="apf-input"
-          type="text"
-          inputMode="decimal"
-          placeholder="0"
-          value={qtyA}
-          onChange={(e) => setQtyA(sanitizeDecimalInput(e.target.value))}
-          disabled={submitting}
-        />
-        <span className="tok-row__hint">В позиции: {formatNumericAmount(maxA, 8)} {tokenASymbol}</span>
-      </div>
-      <div className="apf-field">
-        <label className="apf-label">{tokenBSymbol} — количество</label>
-        <input
-          className="apf-input"
-          type="text"
-          inputMode="decimal"
-          placeholder="0"
-          value={qtyB}
-          onChange={(e) => setQtyB(sanitizeDecimalInput(e.target.value))}
-          disabled={submitting}
-        />
-        <span className="tok-row__hint">В позиции: {formatNumericAmount(maxB, 8)} {tokenBSymbol}</span>
-      </div>
-      <div className="apf-field">
-        <label className="apf-label">Дата</label>
-        <input className="apf-input" type="date" value={operatedAt} onChange={(e) => setOperatedAt(e.target.value)} disabled={submitting} />
-      </div>
-      <div className="apf-field">
-        <label className="apf-label">Комментарий</label>
-        <input className="apf-input" type="text" placeholder="Необязательно" value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
-      </div>
-      <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
-    </BottomSheet>
-  );
-}
-
-
 export function LpCloseSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
   const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:3`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
   const tokenBSymbol = lp.token1_symbol ?? 'Token B';
+  const composition = position.metadata.lp_composition as { quantity0?: string; quantity1?: string } | undefined;
   const maxA = position.current_quantity ?? position.quantity ?? 0;
   const maxB = lp.token1_quantity ?? 0;
 
@@ -331,14 +216,14 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
   useEffect(() => {
     if (open) {
-      setQtyA(position.current_quantity_exact ?? (maxA > 0 ? String(maxA) : ''));
-      setQtyB(position.token1_quantity_exact ?? (maxB > 0 ? String(maxB) : ''));
+      setQtyA(composition?.quantity0 ?? position.current_quantity_exact ?? (maxA > 0 ? String(maxA) : ''));
+      setQtyB(composition?.quantity1 ?? position.token1_quantity_exact ?? (maxB > 0 ? String(maxB) : ''));
       setOperatedAt(todayIso());
       setComment('');
       setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
-  }, [open, maxA, maxB]);
+  }, [open, maxA, maxB, composition?.quantity0, composition?.quantity1, position.current_quantity_exact, position.token1_quantity_exact]);
 
   const numA = qtyA.trim() ? Number(qtyA) : 0;
   const numB = qtyB.trim() ? Number(qtyB) : 0;

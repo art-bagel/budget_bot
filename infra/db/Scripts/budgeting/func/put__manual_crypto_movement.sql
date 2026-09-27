@@ -18,7 +18,7 @@ DECLARE
     _result_index integer := 0;
 BEGIN
     SET search_path TO budgeting;
-    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer','borrow','repay','accrue_interest','liquidate','create_protocol','top_up_protocol','partial_close_protocol','close_protocol','fee','position_income','protocol_yield','group_lending','bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') OR _kind IS NULL
+    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer','borrow','repay','accrue_interest','liquidate','create_protocol','top_up_protocol','partial_close_protocol','close_protocol','fee','position_income','protocol_yield','group_lending','lp_snapshot','lp_withdraw','lp_reward','bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') OR _kind IS NULL
        OR jsonb_typeof(_payload) IS DISTINCT FROM 'object' THEN
         RAISE EXCEPTION 'Некорректная ручная операция';
     END IF;
@@ -26,7 +26,7 @@ BEGIN
         SELECT * INTO _position FROM crypto_protocol_positions WHERE false;
         SELECT * INTO _account FROM bank_accounts WHERE id=(CASE WHEN _kind IN ('bank_buy','bank_cash_sell') THEN _payload->>'bank_account_id' ELSE _payload->>'investment_account_id' END)::bigint;
     ELSE
-    IF _kind IN ('borrow','repay','accrue_interest','liquidate','top_up_protocol','partial_close_protocol','close_protocol','protocol_yield','group_lending') THEN
+    IF _kind IN ('borrow','repay','accrue_interest','liquidate','top_up_protocol','partial_close_protocol','close_protocol','protocol_yield','group_lending','lp_snapshot','lp_withdraw','lp_reward') THEN
         SELECT * INTO _position FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint;
     ELSE
         SELECT p.*, NULL::text AS position_type INTO _position FROM portfolio_positions p WHERE id=COALESCE(_payload->>'position_id',_payload->>'source_position_id')::bigint;
@@ -118,7 +118,7 @@ BEGIN
     END IF;
     IF _kind='partial_close_protocol' AND _position.position_type='liquidity_pool' AND
        (COALESCE((_payload->>'principal_qty')::numeric,0)>0 OR COALESCE((_payload->>'secondary_principal_qty')::numeric,0)>0) THEN
-        RAISE EXCEPTION 'Частичный выход LP требует доли погашенных LP-токенов. Пока доступен полный выход и отдельное получение наград';
+        RAISE EXCEPTION 'Частичный выход LP требует доли позиции. Используйте действие вывода ликвидности с указанием процента';
     END IF;
     _commands:=jsonb_build_array(jsonb_build_object('kind',_kind,'payload',_command_payload));
     IF _result_index=1 THEN
@@ -129,7 +129,7 @@ BEGIN
     IF _fee IS NOT NULL THEN
         IF _kind='create_protocol' THEN
             _fee:=_fee||jsonb_build_object('link_protocol_position_id_from_command',0);
-        ELSIF _kind IN ('borrow','repay','top_up_protocol','partial_close_protocol','close_protocol') THEN
+        ELSIF _kind IN ('borrow','repay','top_up_protocol','partial_close_protocol','close_protocol','lp_withdraw','lp_reward') THEN
             _fee:=_fee||jsonb_build_object('link_protocol_position_id',_position.id);
         END IF;
         _commands:=_commands||jsonb_build_array(jsonb_build_object('kind','fee','payload',_fee));

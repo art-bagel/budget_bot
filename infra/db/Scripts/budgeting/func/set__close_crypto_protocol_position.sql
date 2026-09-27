@@ -144,8 +144,9 @@ BEGIN
             RAISE EXCEPTION 'Net composition derives allocation; explicit values are not allowed';
         END IF;
         _net_original_secondary:=(_existing.metadata->>'token1_quantity')::numeric;
-        IF COALESCE(_existing.quantity,0)<=0 OR COALESCE(_net_original_secondary,0)<=0 THEN
-            RAISE EXCEPTION 'Net composition requires positive original quantities';
+        IF _existing.quantity IS NULL OR _net_original_secondary IS NULL OR _existing.quantity<0 OR _net_original_secondary<0
+            OR (_existing.quantity=0 AND _net_original_secondary=0) THEN
+            RAISE EXCEPTION 'Net composition requires nonnegative original quantities and a nonempty deposit';
         END IF;
         IF (_resolved_return_quantity<_existing.quantity AND _secondary_return_quantity<=_net_original_secondary)
             OR (_secondary_return_quantity<_net_original_secondary AND _resolved_return_quantity<=_existing.quantity) THEN

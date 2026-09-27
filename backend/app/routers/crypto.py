@@ -20,7 +20,7 @@ class CryptoSourceCommand(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
                   'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
-                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'bank_withdraw', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation', 'tag_lending_account', 'bank_cash_sell', 'position_income', 'protocol_yield', 'group_lending']
+                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'bank_withdraw', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation', 'tag_lending_account', 'bank_cash_sell', 'position_income', 'protocol_yield', 'group_lending', 'lp_snapshot', 'lp_withdraw', 'lp_reward']
     payload: dict[str, Any]
 
     @field_validator('payload')
@@ -893,6 +893,34 @@ async def close_crypto_protocol_position(
         payload={"position_id": position_id, **body.model_dump(mode='json', exclude_none=True,
             exclude={'request_id', 'fee', 'withdrawn_at'})},
         operated_at=body.withdrawn_at, fee=body.fee.model_dump(mode='json') if body.fee else None,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
+class LiquidityActionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: Optional[UUID] = None
+    secondary_crypto_asset_id: Optional[int] = Field(default=None, gt=0)
+    action: Literal['lp_snapshot', 'lp_withdraw', 'lp_reward']
+    quantity: Decimal = Field(ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    secondary_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    share_percent: Optional[Decimal] = Field(default=None, gt=0, le=100, decimal_places=16, allow_inf_nan=False)
+    crypto_asset_id: Optional[int] = Field(default=None, gt=0)
+    operated_at: Optional[date] = None
+    comment: Optional[str] = None
+    fee: Optional[ManualCryptoFee] = None
+
+
+@router.post('/protocol-positions/{position_id}/liquidity-action', response_model=CryptoProtocolPositionItem)
+async def liquidity_action(position_id: int, body: LiquidityActionRequest,
+                           user: CurrentUser = Depends(get_current_user)) -> CryptoProtocolPositionItem:
+    if body.action == 'lp_snapshot' and body.fee:
+        raise HTTPException(status_code=400, detail='Обновление состава не списывает комиссию')
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind=body.action,
+        payload={'position_id': position_id, **body.model_dump(mode='json', exclude_none=True,
+            exclude={'action', 'request_id', 'fee', 'operated_at'})},
+        operated_at=body.operated_at, fee=body.fee.model_dump(mode='json') if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
