@@ -1114,7 +1114,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const getCryptoLivePrice = (position: PortfolioPosition): CryptoLivePrice | null => {
     const cryptoAssetId = getCryptoAssetId(position);
-    return cryptoAssetId !== null ? cryptoLivePrices.get(cryptoAssetId) ?? null : null;
+    const quote = cryptoAssetId !== null ? cryptoLivePrices.get(cryptoAssetId) : null;
+    return quote && !quote.is_stale && quote.vs_currency === user.base_currency_code
+      && Number.isFinite(quote.price) && quote.price > 0 ? quote : null;
   };
 
   const getPositionEntryAmount = (position: PortfolioPosition): number => {
@@ -4121,13 +4123,19 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <>
                         <div className="pf-dcond__row">
                           <span className="pf-dcond__row-label">Текущая оценка</span>
-                          <span className="pf-dcond__row-value">{formatAmount(getResolvedPositionEstimatedValue(selectedPosition), user.base_currency_code)}</span>
+                          <span className="pf-dcond__row-value">{livePrice ? formatAmount(getResolvedPositionEstimatedValue(selectedPosition), user.base_currency_code) : 'Нет свежей котировки'}</span>
                         </div>
-                        {cryptoCurrentRate ? (
+                        {livePrice && (
+                          <div className="pf-dcond__row">
+                            <span className="pf-dcond__row-label">Котировка</span>
+                            <span className="pf-dcond__row-value">{livePrice.source === 'tonapi' ? 'TonAPI' : livePrice.source === 'coingecko' ? 'CoinGecko' : livePrice.source} · {new Date(livePrice.fetched_at).toLocaleString('ru-RU')}</span>
+                          </div>
+                        )}
+                        {livePrice && cryptoCurrentRate ? (
                         <div className="pf-dcond__row">
                           <span className="pf-dcond__row-label">Текущий курс</span>
                           <span className="pf-dcond__row-value">
-                            {cryptoCurrentRate} за {cryptoSymbol}{livePrice ? ' · онлайн' : ''}
+                            {cryptoCurrentRate} за {cryptoSymbol} · онлайн
                           </span>
                         </div>
                       ) : null}

@@ -10,6 +10,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
+from backend.app.ton_prices import token_prices
 
 
 logger = logging.getLogger(__name__)
@@ -620,9 +621,6 @@ async def get_crypto_prices(
         if coingecko_id:
             id_to_assets.setdefault(coingecko_id, []).append(asset)
 
-    if not id_to_assets:
-        return []
-
     now = datetime.now(timezone.utc)
     stale_ids = [
         coingecko_id
@@ -676,7 +674,16 @@ async def get_crypto_prices(
                 is_stale=is_stale,
                 stale_age_seconds=int(age.total_seconds()) if is_stale else None,
             ))
-    return result
+    fresh_ids = {item.crypto_asset_id for item in result if not item.is_stale}
+    ton_quotes = await token_prices([asset for asset in assets if int(asset['id']) not in fresh_ids], normalized_vs)
+    replacements = {item['crypto_asset_id']: CryptoPriceItem(**item) for item in ton_quotes}
+    # Prefer a fresh alternate quote; retain the newer timestamp if both are stale.
+    combined = {item.crypto_asset_id: item for item in result}
+    for asset_id, quote in replacements.items():
+        prior = combined.get(asset_id)
+        if prior is None or not quote.is_stale or quote.fetched_at > prior.fetched_at:
+            combined[asset_id] = quote
+    return list(combined.values())
 
 
 @router.post('/assets', response_model=CryptoAssetItem)

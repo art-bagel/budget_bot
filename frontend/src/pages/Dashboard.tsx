@@ -351,7 +351,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
       const cryptoAssetId = position.metadata?.crypto_asset_id;
       const livePrice = typeof cryptoAssetId === 'number' ? cryptoLivePrices.get(cryptoAssetId) : undefined;
       // Без живой цены крипта оценивается в 0 (amount_in_currency у крипто-позиций всегда 0).
-      return livePrice && position.quantity ? livePrice.price * position.quantity : null;
+      return livePrice && !livePrice.is_stale && livePrice.vs_currency === user.base_currency_code && position.quantity ? livePrice.price * position.quantity : null;
     }
 
     const tinkoffPrice = tinkoffLivePrices.get(position.id);
