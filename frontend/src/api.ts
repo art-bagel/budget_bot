@@ -1180,11 +1180,19 @@ export async function fetchCryptoProtocolHistory(positionId: number, offset = 0)
 
 export async function recordLendingDebtEvent(
   positionId: number,
-  kind: 'accrue-interest' | 'liquidate',
+  kind: 'accrue-interest' | 'liquidate' | 'yield',
   data: { request_id: string; operated_at: string; quantity?: string;
-    collateral_qty?: string; debt_qty?: string; interest_qty?: string; collateral_fee_qty?: string },
+    collateral_position_id?: number; collateral_qty?: string; debt_qty?: string; interest_qty?: string; collateral_fee_qty?: string },
 ): Promise<unknown> {
   return apiFetch(`/crypto/protocol-positions/${positionId}/${kind}`, {
+    method: 'POST', body: JSON.stringify(data),
+  });
+}
+
+export async function groupLendingPositions(positionId: number, data: {
+  request_id: string; other_position_id: number; operated_at: string;
+}): Promise<unknown> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/group-with`, {
     method: 'POST', body: JSON.stringify(data),
   });
 }

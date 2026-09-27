@@ -3,11 +3,13 @@ CREATE FUNCTION budgeting.put__lending_liquidate(
     _user_id bigint, _position_id bigint, _collateral_qty numeric,
     _debt_qty numeric, _external_id text, _operated_at date,
     _interest_qty numeric DEFAULT 0, _collateral_fee_qty numeric DEFAULT 0,
-    _settlement_value_in_base numeric DEFAULT NULL, _comment text DEFAULT NULL
+    _settlement_value_in_base numeric DEFAULT NULL, _comment text DEFAULT NULL,
+    _collateral_position_id bigint DEFAULT NULL
 )
 RETURNS jsonb LANGUAGE plpgsql AS $function$
 DECLARE
     _p record;
+    _c record;
     _prior record;
     _request jsonb;
     _result jsonb;
@@ -37,6 +39,20 @@ BEGIN
     IF NOT budgeting.has__owner_access(_user_id,_p.owner_type,_p.owner_user_id,_p.owner_family_id) THEN
         RAISE EXCEPTION 'Access denied';
     END IF;
+    _collateral_position_id:=COALESCE(_collateral_position_id,_position_id);
+    SELECT * INTO _c FROM crypto_protocol_positions WHERE id=_collateral_position_id FOR UPDATE;
+    IF _c.id IS NULL OR NOT budgeting.has__owner_access(_user_id,_c.owner_type,_c.owner_user_id,_c.owner_family_id) THEN
+        RAISE EXCEPTION 'Нет доступа к залогу';
+    END IF;
+    IF _collateral_position_id<>_position_id AND (
+        NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL
+        OR _p.investment_account_id<>_c.investment_account_id
+        OR _p.network_code IS DISTINCT FROM _c.network_code
+        OR NULLIF(_p.metadata->>'lending_account_key','') IS NULL
+        OR _p.metadata->>'lending_account_key' IS DISTINCT FROM _c.metadata->>'lending_account_key'
+        OR _c.status<>'open' OR _c.position_type<>'lending') THEN
+        RAISE EXCEPTION 'Залог и долг должны принадлежать одному подтверждённому lending-счёту';
+    END IF;
     FOREACH _n IN ARRAY ARRAY[_collateral_qty,_debt_qty,_interest_qty,_collateral_fee_qty] LOOP
         IF _n IS NULL OR _n::text IN ('NaN','Infinity','-Infinity') OR _n<0
             OR _n<>round(_n,18) THEN
@@ -58,6 +74,13 @@ BEGIN
         'debt_quantity',_debt_qty,'interest_quantity',_interest_qty,
         'collateral_fee_quantity',_collateral_fee_qty,'operated_at',_operated_at,
         'settlement_value_in_base',_settlement_value_in_base,'comment',_comment);
+    IF _collateral_position_id<>_position_id THEN
+        _request:=_request||jsonb_build_object('collateral_position_id',_collateral_position_id);
+    END IF;
+    IF EXISTS(SELECT 1 FROM crypto_source_events WHERE id=NULLIF(current_setting('budgeting.crypto_source_event_id',true),'')::bigint
+        AND source_namespace='manual-portfolio-v1') THEN
+        _request:=_request||jsonb_build_object('collateral_fee_known',true);
+    END IF;
     SELECT * INTO _prior FROM crypto_liability_events
         WHERE protocol_position_id=_position_id AND external_id=_external_id;
     IF _prior.id IS NOT NULL THEN
@@ -70,30 +93,30 @@ BEGIN
         OR (_p.metadata->>'debt_accounting_version') IS DISTINCT FROM '2' THEN
         RAISE EXCEPTION 'Liquidation requires an open version-2 loan';
     END IF;
-    IF (_p.metadata->>'basis_quality')='invalid'
-        OR ((_p.metadata->>'basis_quality')='estimated' AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL)
-        OR _p.quantity IS NULL OR _p.current_quantity IS NULL
-        OR _p.quantity<>_p.current_quantity THEN
+    IF (_c.metadata->>'basis_quality')='invalid'
+        OR ((_c.metadata->>'basis_quality')='estimated' AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL)
+        OR _c.quantity IS NULL OR _c.current_quantity IS NULL
+        OR _c.quantity<>_c.current_quantity THEN
         RAISE EXCEPTION 'Reconcile collateral quantity and cost before liquidation';
     END IF;
     PERFORM budgeting.check__crypto_lending_state(_p.metadata);
-    IF _p.metadata->>'basis_quality'='unknown' THEN _p.cost_basis_in_base:=NULL; END IF;
+    IF _c.metadata->>'basis_quality'='unknown' THEN _c.cost_basis_in_base:=NULL; END IF;
     _debt := (_p.metadata->>'borrowed_quantity')::numeric;
     _debt_basis := (_p.metadata->>'debt_cost_basis_in_base')::numeric;
     _interest := COALESCE((_p.metadata->>'debt_interest_quantity')::numeric,0);
     _interest_basis := CASE WHEN _interest=0 THEN 0 ELSE (_p.metadata->>'debt_interest_basis_in_base')::numeric END;
-    FOREACH _n IN ARRAY ARRAY[_debt,_interest,_p.quantity] LOOP
+    FOREACH _n IN ARRAY ARRAY[_debt,_interest,_c.quantity] LOOP
         IF _n IS NULL OR _n<0 OR _n::text IN ('NaN','Infinity','-Infinity') THEN
             RAISE EXCEPTION 'Invalid collateral or historical debt state';
         END IF;
     END LOOP;
-    IF _p.cost_basis_in_base<0 OR _p.cost_basis_in_base::text IN ('NaN','Infinity','-Infinity') THEN
+    IF _c.cost_basis_in_base<0 OR _c.cost_basis_in_base::text IN ('NaN','Infinity','-Infinity') THEN
         RAISE EXCEPTION 'Invalid collateral basis';
     END IF;
     _principal := _debt-_interest;
     IF _interest>_debt OR _interest_basis>_debt_basis OR _debt_qty>_debt
         OR _interest_qty>_interest OR _debt_qty-_interest_qty>_principal
-        OR _collateral_qty>_p.quantity THEN
+        OR _collateral_qty>_c.quantity THEN
         RAISE EXCEPTION 'Liquidation exceeds collateral, principal or accrued interest';
     END IF;
     _interest_consumed := CASE WHEN _interest_qty=0 THEN 0
@@ -102,11 +125,12 @@ BEGIN
     _debt_consumed := _interest_consumed + CASE WHEN _debt_qty=_interest_qty THEN 0
         WHEN _debt_qty-_interest_qty=_principal THEN _debt_basis-_interest_basis
         ELSE round((_debt_basis-_interest_basis)*(_debt_qty-_interest_qty)/_principal,2) END;
-    _collateral_consumed := CASE WHEN _collateral_qty=_p.quantity THEN _p.cost_basis_in_base
-        ELSE round(_p.cost_basis_in_base*_collateral_qty/_p.quantity,2) END;
+    _collateral_consumed := CASE WHEN _collateral_qty=_c.quantity THEN _c.cost_basis_in_base
+        ELSE round(_c.cost_basis_in_base*_collateral_qty/_c.quantity,2) END;
     _fee_basis := CASE WHEN _collateral_fee_qty=0 THEN 0 ELSE round(_collateral_consumed*_collateral_fee_qty/_collateral_qty,2) END;
     _result := jsonb_build_object('protocol_position_id',_position_id,
-        'collateral_asset_id',_p.crypto_asset_id,
+        'collateral_asset_id',_c.crypto_asset_id,
+        'collateral_position_id',_collateral_position_id,
         'debt_asset_id',(_p.metadata->>'borrowed_crypto_asset_id')::bigint,
         'collateral_quantity',_collateral_qty,'debt_quantity',_debt_qty,
         'collateral_cost_consumed_in_base',_collateral_consumed,
@@ -128,9 +152,12 @@ BEGIN
     -- is NOT another expense. Fee is a breakdown of total, not an extra debit.
     UPDATE crypto_protocol_positions SET
         quantity=quantity-_collateral_qty, current_quantity=current_quantity-_collateral_qty,
-        cost_basis_in_base=CASE WHEN quantity=_collateral_qty THEN 0 ELSE _p.cost_basis_in_base-_collateral_consumed END,
+        cost_basis_in_base=CASE WHEN quantity=_collateral_qty THEN 0 ELSE _c.cost_basis_in_base-_collateral_consumed END,
         current_value_in_base=CASE WHEN _collateral_qty=quantity THEN 0
             ELSE round(current_value_in_base*(quantity-_collateral_qty)/quantity,2) END,
+        updated_at=current_timestamp
+    WHERE id=_collateral_position_id;
+    UPDATE crypto_protocol_positions SET
         metadata=metadata || jsonb_build_object(
             'borrowed_quantity',_debt-_debt_qty,
             'borrowed_value_in_base',CASE WHEN _debt=_debt_qty THEN 0 ELSE _debt_basis-_debt_consumed END,

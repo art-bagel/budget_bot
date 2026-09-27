@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
 import RefreshBar from '../components/RefreshBar';
@@ -57,10 +58,11 @@ import {
   LendingRepayDebtSheet,
   LendingAdjustSheet,
   LendingDebtEventSheet,
+  LendingGroupSheet,
   LendingPartialWithdrawSheet,
   LendingCloseSheet,
 } from '../components/CryptoLendingActionSheets';
-import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from '../components/DefiFeeField';
+import { DefiFeeField, EMPTY_FEE_DRAFT, manualFee } from '../components/DefiFeeField';
 import type { DefiFeeDraft } from '../components/DefiFeeField';
 import type {
   BankAccount,
@@ -627,7 +629,7 @@ function createInitialStakingUpdateDraft(position: CryptoProtocolPosition): Stak
 
 function createInitialStakingCloseDraft(position: CryptoProtocolPosition): StakingCloseDraft {
   return {
-    returnQuantity: position.current_quantity != null ? String(position.current_quantity) : '',
+    returnQuantity: position.current_quantity_exact ?? (position.current_quantity != null ? String(position.current_quantity) : ''),
     withdrawnAt: todayIso(),
     comment: '',
   };
@@ -737,7 +739,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [cryptoIncomeSheetPosition, setCryptoIncomeSheetPosition] = useState<PortfolioPosition | null>(null);
   const [partialCloseProtocolId, setPartialCloseProtocolId] = useState<number | null>(null);
   const [lpSheet, setLpSheet] = useState<{ kind: 'add' | 'partial' | 'close' | 'claim'; positionId: number } | null>(null);
-  const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate'; positionId: number } | null>(null);
+  const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate' | 'yield' | 'group'; positionId: number } | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
@@ -1889,6 +1891,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     }
   };
 
+  const createProtocolRequest = useCryptoRequestKey(`create-protocol:${stakingCreateAccountId}`);
+
   const handleSubmitStakingCreate = async (accountId: number, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -1979,18 +1983,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       if (stakingCreateDraft.poolName.trim()) metadata.pool_name = stakingCreateDraft.poolName.trim();
     }
 
-    let createdPosition: CryptoProtocolPosition | null = null;
     try {
-      createdPosition = await createCryptoProtocolPosition({
+      const payload = {
         investment_account_id: accountId,
         protocol_name: stakingCreateDraft.protocolName.trim(),
         position_type: positionType,
         asset_symbol: sourceAssetSymbol,
-        quantity,
-        current_quantity: quantity,
-        rewards_unclaimed_in_base: positionType !== 'lending' && stakingCreateDraft.rewardsUnclaimedInBase.trim()
-          ? Number(stakingCreateDraft.rewardsUnclaimedInBase)
-          : undefined,
+        quantity: stakingCreateDraft.quantity,
+        current_quantity: stakingCreateDraft.quantity,
         crypto_asset_id: getPositionMetadataNumber(sourcePosition, 'crypto_asset_id') ?? undefined,
         network_code: getPositionMetadataText(sourcePosition, 'network_code') ?? undefined,
         deposited_at: stakingCreateDraft.depositedAt || undefined,
@@ -1998,22 +1998,17 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         source_position_id: sourcePosition.id,
         secondary_source_position_id: pairPosition?.id,
-        secondary_quantity: pairPosition ? pairQty : undefined,
+        secondary_quantity: pairPosition ? stakingCreateDraft.pairQuantity : undefined,
         borrowed_crypto_asset_id: borrowedCryptoAssetId,
-        borrowed_quantity: borrowedQuantity,
+        borrowed_quantity: borrowedQuantity ? stakingCreateDraft.borrowedQuantity : undefined,
         borrowed_value_in_base: borrowedValueInBase,
-      });
+        fee: manualFee(stakingCreateFeeDraft, positions.filter((p) => p.investment_account_id === accountId)),
+      };
+      await createCryptoProtocolPosition({ ...payload, request_id: createProtocolRequest.requestId(payload) });
+      createProtocolRequest.completed();
     } catch (reason: unknown) {
       setStakingCreateError(reason instanceof Error ? reason.message : String(reason));
       setSubmittingStakingCreateAccountId(null);
-      return;
-    }
-    const accountFeePositions = positions.filter((p) => p.investment_account_id === accountId);
-    const feeError = await applyDefiFee(stakingCreateFeeDraft, accountFeePositions, createdPosition?.id ?? null, stakingCreateDraft.depositedAt);
-    if (feeError) {
-      setStakingCreateError(feeError);
-      setSubmittingStakingCreateAccountId(null);
-      void loadPortfolio();
       return;
     }
     setStakingCreateAccountId(null);
@@ -2032,19 +2027,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     setSelectedProtocolPositionId(positionId);
     setStakingUpdateError(null);
     setStakingCloseError(null);
-  };
-
-  const handleOpenStakingUpdateForm = (position: CryptoProtocolPosition) => {
-    setStakingUpdateDrafts((prev) => ({
-      ...prev,
-      [position.id]: createInitialStakingUpdateDraft(position),
-    }));
-    setStakingCloseDrafts((prev) => {
-      const next = { ...prev };
-      delete next[position.id];
-      return next;
-    });
-    setStakingUpdateError(null);
   };
 
   const handleOpenStakingCloseForm = (position: CryptoProtocolPosition) => {
@@ -2157,6 +2139,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     }
   };
 
+  const closeProtocolRequest = useCryptoRequestKey(`close-protocol:${selectedProtocolPositionId}`);
+
   const handleSubmitStakingClose = async (position: CryptoProtocolPosition, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const draft = stakingCloseDrafts[position.id];
@@ -2173,12 +2157,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     setStakingCloseError(null);
 
     try {
-      await closeCryptoProtocolPosition(position.id, {
+      const payload = {
         withdrawn_at: draft.withdrawnAt || undefined,
-        current_quantity: draft.returnQuantity.trim() ? Number(draft.returnQuantity) : undefined,
-        return_quantity: Number(draft.returnQuantity),
+        return_quantity: draft.returnQuantity,
         comment: draft.comment.trim() || undefined,
-      });
+      };
+      await closeCryptoProtocolPosition(position.id, { ...payload, request_id: closeProtocolRequest.requestId(payload) });
+      closeProtocolRequest.completed();
       setStakingCloseDrafts((prev) => {
         const next = { ...prev };
         delete next[position.id];
@@ -5085,26 +5070,29 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const isLending = selectedProtocolPosition.position_type === 'lending';
               const debtPosition = selectedLendingGroup.find((item) => (getLendingMetadata(item).borrowed_quantity ?? 0) > 0) ?? selectedProtocolPosition;
               const hasDebt = (getLendingMetadata(debtPosition).borrowed_quantity ?? 0) > 0;
-              const openLendingSheet = (kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate') => {
+              const openLendingSheet = (kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate' | 'yield' | 'group') => {
                 setSelectedProtocolPositionId(null);
-                setLendingSheet({ kind, positionId: kind === 'take_debt' || kind === 'repay_debt' || kind === 'interest' ? debtPosition.id : selectedProtocolPosition.id });
+                setLendingSheet({ kind, positionId: kind === 'take_debt' || kind === 'repay_debt' || kind === 'interest' || kind === 'liquidate' ? debtPosition.id : selectedProtocolPosition.id });
               };
               if (isLending) {
                 return (
                   <div className="pf-sheet-actions">
+                    <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('group')}>
+                      Общий счёт протокола
+                    </button>
                     {hasDebt && <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('interest')}>
                       Начислить проценты по долгу
                     </button>}
-                    {(getLendingMetadata(selectedProtocolPosition).borrowed_quantity ?? 0) > 0 &&
+                    {hasDebt &&
                       <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('liquidate')}>
                         Учесть ликвидацию
                       </button>}
                     <button
                       className="btn btn--primary"
                       type="button"
-                      onClick={() => openLendingSheet('adjust')}
+                      onClick={() => openLendingSheet('yield')}
                     >
-                      Корректировка
+                      Начислить доход на залог
                     </button>
                     <button
                       className="btn btn--ghost"
@@ -5153,9 +5141,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <button
                     className="btn btn--primary"
                     type="button"
-                    onClick={() => handleOpenStakingUpdateForm(selectedProtocolPosition)}
+                    onClick={() => openLendingSheet('yield')}
                   >
-                    Обновить состояние
+                    Начислить монеты
                   </button>
                   <button
                     className="btn btn--ghost"
@@ -5629,20 +5617,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     );
                   })()}
 
-                  {stakingCreateDraft.positionType === 'staking' && (
-                    <div className="apf-field">
-                      <label className="apf-label">Награды к получению</label>
-                      <input
-                        className="apf-input"
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0"
-                        value={stakingCreateDraft.rewardsUnclaimedInBase}
-                        onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, rewardsUnclaimedInBase: sanitizeDecimalInput(event.target.value) }))}
-                        disabled={submittingStakingCreateAccountId !== null}
-                      />
-                    </div>
-                  )}
+
 
                   <div className="apf-field">
                     <label className="apf-label">Дата</label>
@@ -5973,13 +5948,20 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
       {lendingSheet && (() => {
         const target = cryptoProtocolPositions.find((p) => p.id === lendingSheet.positionId);
-        if (!target || target.position_type !== 'lending') return null;
+        if (!target || (target.position_type !== 'lending' && lendingSheet.kind !== 'yield')) return null;
         const accountPositions = positions.filter((p) => p.investment_account_id === target.investment_account_id);
         const close = () => setLendingSheet(null);
         const onSuccess = () => {
           setLendingSheet(null);
           void loadPortfolio();
         };
+        if (lendingSheet.kind === 'group') {
+          const candidates = cryptoProtocolPositions.filter((p) => p.id !== target.id && p.status === 'open'
+            && p.position_type === 'lending' && p.investment_account_id === target.investment_account_id
+            && p.network_code === target.network_code
+            && (!target.metadata.lending_account_key || !p.metadata.lending_account_key || p.metadata.lending_account_key === target.metadata.lending_account_key));
+          return <LendingGroupSheet open position={target} candidates={candidates} onClose={close} onSuccess={onSuccess} />;
+        }
         if (lendingSheet.kind === 'top_up') {
           return <LendingTopUpSheet open position={target} accountPositions={accountPositions} onClose={close} onSuccess={onSuccess} />;
         }
@@ -5989,8 +5971,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         if (lendingSheet.kind === 'repay_debt') {
           return <LendingRepayDebtSheet open position={target} accountPositions={accountPositions} cryptoLivePrices={cryptoLivePrices} baseCurrencyCode={user.base_currency_code} onClose={close} onSuccess={onSuccess} />;
         }
-        if (lendingSheet.kind === 'interest' || lendingSheet.kind === 'liquidate') {
-          return <LendingDebtEventSheet open position={target} kind={lendingSheet.kind} onClose={close} onSuccess={onSuccess} />;
+        if (lendingSheet.kind === 'interest' || lendingSheet.kind === 'liquidate' || lendingSheet.kind === 'yield') {
+          return <LendingDebtEventSheet open position={target} kind={lendingSheet.kind} collateralPositions={cryptoProtocolPositions.filter((p) => p.id === target.id || (p.status === 'open' && p.investment_account_id === target.investment_account_id && p.network_code === target.network_code && !!target.metadata.lending_account_key && p.metadata.lending_account_key === target.metadata.lending_account_key))} onClose={close} onSuccess={onSuccess} />;
         }
         if (lendingSheet.kind === 'adjust') {
           return <LendingAdjustSheet open position={target} onClose={close} onSuccess={onSuccess} />;

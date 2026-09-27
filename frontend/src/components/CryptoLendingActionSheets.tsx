@@ -15,6 +15,7 @@ import {
   takeLendingDebt,
   repayLendingDebt,
   recordLendingDebtEvent,
+  groupLendingPositions,
 } from '../api';
 import type {
   CryptoProtocolPosition,
@@ -23,18 +24,10 @@ import type {
   CryptoAsset,
 } from '../types';
 import { getLendingMetadata } from '../types';
-import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from './DefiFeeField';
+import { DefiFeeField, EMPTY_FEE_DRAFT, manualFee } from './DefiFeeField';
 import type { DefiFeeDraft } from './DefiFeeField';
 
 
-function manualFee(draft: DefiFeeDraft, positions: PortfolioPosition[]) {
-  if (!draft.positionId && !draft.quantity.trim()) return undefined;
-  const source = positions.find((p) => String(p.id) === draft.positionId);
-  if (!source || !draft.quantity.trim() || !(Number(draft.quantity) > 0)) {
-    throw new Error('Укажите монету и положительное количество комиссии');
-  }
-  return { source_position_id: source.id, quantity: draft.quantity };
-}
 
 type CommonProps = {
   open: boolean;
@@ -64,6 +57,7 @@ export function LendingTopUpSheet({
   onClose,
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLendingActionSheets.tsx:${position.id}:1`);
   useModalOpen(open);
   const collateralSymbol = position.asset_symbol;
   const source = useMemo(
@@ -99,20 +93,17 @@ export function LendingTopUpSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await topUpCryptoProtocolPosition(position.id, {
+      const payload = {
         source_position_id: source.id,
-        quantity: num,
+        quantity: quantity,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await topUpCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -588,6 +579,7 @@ export function LendingPartialWithdrawSheet({
   onClose,
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLendingActionSheets.tsx:${position.id}:5`);
   useModalOpen(open);
   const symbol = position.asset_symbol;
   const max = position.current_quantity ?? position.quantity ?? 0;
@@ -618,19 +610,16 @@ export function LendingPartialWithdrawSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await partialCloseCryptoProtocolPosition(position.id, {
-        principal_qty: num,
+      const payload = {
+        principal_qty: quantity,
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -694,6 +683,7 @@ export function LendingCloseSheet({
   onClose,
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLendingActionSheets.tsx:${position.id}:6`);
   useModalOpen(open);
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const symbol = position.asset_symbol;
@@ -727,19 +717,16 @@ export function LendingCloseSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await closeCryptoProtocolPosition(position.id, {
-        return_quantity: num > 0 ? num : undefined,
+      const payload = {
+        return_quantity: num > 0 ? quantity : undefined,
         withdrawn_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await closeCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -804,8 +791,9 @@ export function LendingCloseSheet({
 }
 
 
-export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess }: CommonProps & {
-  kind: 'interest' | 'liquidate';
+export function LendingDebtEventSheet({ open, position, kind, collateralPositions, onClose, onSuccess }: CommonProps & {
+  kind: 'interest' | 'liquidate' | 'yield';
+  collateralPositions?: CryptoProtocolPosition[];
 }) {
   useModalOpen(open);
   const request = useCryptoRequestKey(`lending-${kind}:${position.id}`);
@@ -818,6 +806,8 @@ export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const liquidate = kind === 'liquidate';
+  const [collateralId, setCollateralId] = useState(position.id);
+  const collateral = collateralPositions?.find((p) => p.id === collateralId) ?? position;
   const debtSymbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
   const valid = Number(quantity) > 0 && (!liquidate || (
     Number(debt) > 0 && interest.trim() !== '' && Number(interest) >= 0 && Number(interest) <= Number(debt)
@@ -829,9 +819,9 @@ export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess
     setError(null);
     try {
       const payload = liquidate
-        ? { operated_at: day, collateral_qty: quantity, debt_qty: debt, interest_qty: interest, collateral_fee_qty: penalty }
+        ? { operated_at: day, collateral_position_id: collateral.id, collateral_qty: quantity, debt_qty: debt, interest_qty: interest, collateral_fee_qty: penalty }
         : { operated_at: day, quantity };
-      await recordLendingDebtEvent(position.id, liquidate ? 'liquidate' : 'accrue-interest', {
+      await recordLendingDebtEvent(position.id, liquidate ? 'liquidate' : kind === 'yield' ? 'yield' : 'accrue-interest', {
         ...payload, request_id: request.requestId(payload),
       });
       request.completed();
@@ -849,7 +839,7 @@ export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess
   );
   return (
     <BottomSheet open={open} tag={position.protocol_name}
-      title={liquidate ? 'Учесть ликвидацию' : 'Начислить проценты по долгу'}
+      title={liquidate ? 'Учесть ликвидацию' : kind === 'yield' ? 'Начислить монеты в DeFi' : 'Начислить проценты по долгу'}
       icon={<SlidersHorizontal size={18} />} iconColor="o" onClose={onClose}
       actions={<div className="tk-foot pf-sheet-actions">
         {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
@@ -861,13 +851,19 @@ export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess
       <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 12 }}>
         {liquidate
           ? 'Укажите фактически списанный залог и погашенный долг по данным протокола. Стоимость основного долга перейдёт к активам, проценты и штраф станут расходом. Здесь учитывается уже произошедшая ликвидация.'
-          : 'Введите только новые проценты, а не весь долг. Долг увеличится; расход определится по стоимости монет при погашении.'}
+          : kind === 'yield' ? 'Введите только новые начисленные монеты, оставшиеся внутри протокола. Себестоимость и заёмные единицы не увеличатся.' : 'Введите только новые проценты, а не весь долг. Долг увеличится; расход определится по стоимости монет при погашении.'}
       </p>
-      {input(liquidate ? `Всего списано залога, ${position.asset_symbol}` : `Новые проценты, ${debtSymbol}`, quantity, setQuantity)}
+      {liquidate && collateralPositions && collateralPositions.length > 1 && <div className="apf-field">
+        <label className="apf-label">Из какого залога списаны монеты</label>
+        <select className="picker-v2" value={collateralId} onChange={(e) => setCollateralId(Number(e.target.value))} disabled={busy}>
+          {collateralPositions.map((p) => <option key={p.id} value={p.id}>{p.asset_symbol} · {p.protocol_name} · #{p.id}</option>)}
+        </select>
+      </div>}
+      {input(liquidate ? `Всего списано залога, ${collateral.asset_symbol}` : kind === 'yield' ? `Начислено, ${position.asset_symbol}` : `Новые проценты, ${debtSymbol}`, quantity, setQuantity)}
       {liquidate && <>
         {input(`Всего погашено долга, ${debtSymbol}`, debt, setDebt)}
         {input(`Из погашенного — проценты, ${debtSymbol} (0, если нет)`, interest, setInterest)}
-        {input(`Из списанного залога — штраф, ${position.asset_symbol} (0, если нет)`, penalty, setPenalty)}
+        {input(`Из списанного залога — штраф, ${collateral.asset_symbol} (0, если нет)`, penalty, setPenalty)}
         <p className="tok-row__hint">Проценты сначала должны быть начислены в истории. Штраф указывайте по данным протокола; неизвестную сумму не заменяйте нулём.</p>
       </>}
       <div className="apf-field"><label className="apf-label">Дата</label>
@@ -875,4 +871,47 @@ export function LendingDebtEventSheet({ open, position, kind, onClose, onSuccess
       </div>
     </BottomSheet>
   );
+}
+
+
+export function LendingGroupSheet({ open, position, candidates, onClose, onSuccess }: CommonProps & {
+  candidates: CryptoProtocolPosition[];
+}) {
+  const request = useCryptoRequestKey(`lending-group:${position.id}`);
+  const [selected, setSelected] = useState('');
+  const [day, setDay] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = { other_position_id: Number(selected), operated_at: day };
+      await groupLendingPositions(position.id, { ...payload, request_id: request.requestId(payload) });
+      request.completed();
+      onSuccess();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+  return <BottomSheet open={open} tag={position.protocol_name} title="Общий счёт протокола" onClose={onClose}
+    actions={<div className="tk-foot pf-sheet-actions">
+      {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
+      <button className="btn btn--primary" type="button" disabled={!selected || busy} onClick={() => void submit()}>
+        {busy ? 'Сохраняем…' : 'Подтвердить общий счёт'}
+      </button>
+    </div>}>
+    <p className="list-row__sub">Выберите другой залог, который относится к тому же счёту протокола и обеспечивает общий долг.
+      EVAA Master и EVAA LP — разные счета. Остатки и себестоимость не изменятся.</p>
+    <div className="apf-field"><label className="apf-label">Другой залог</label>
+      <select className="picker-v2" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={busy}>
+        <option value="">Выберите позицию</option>
+        {candidates.map((p) => <option key={p.id} value={p.id}>{p.protocol_name} · {p.asset_symbol} · #{p.id}</option>)}
+      </select>
+      {!candidates.length && <p>Сначала создайте второй залог на этом криптосчёте.</p>}
+    </div>
+    <div className="apf-field"><label className="apf-label">Дата подтверждения</label>
+      <input className="apf-input" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />
+    </div>
+  </BottomSheet>;
 }

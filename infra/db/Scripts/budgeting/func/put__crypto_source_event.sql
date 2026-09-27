@@ -30,6 +30,8 @@ DECLARE
     _funding_audit jsonb;
     _conversion_source record;
     _conversion_target record;
+    _group_peer record;
+    _group_key text;
     _old_source text := current_setting('budgeting.crypto_source_event_id',true);
     _old_index text := current_setting('budgeting.crypto_source_command_index',true);
 BEGIN
@@ -83,14 +85,35 @@ BEGIN
         END IF;
         _kind := _command->>'kind';
         _payload := _command->'payload';
+        -- A create + initial borrowing is one atomic, replayable source.
+        IF _payload ? 'position_id_from_command' THEN
+            IF _kind<>'borrow' OR _payload ? 'position_id'
+                OR (_payload->>'position_id_from_command')::integer<0
+                OR (_payload->>'position_id_from_command')::integer>=_index
+                OR _commands->((_payload->>'position_id_from_command')::integer)->>'kind'<>'create_protocol' THEN
+                RAISE EXCEPTION 'Invalid created protocol reference';
+            END IF;
+            _payload:=(_payload-'position_id_from_command')||jsonb_build_object('position_id',
+                _results->((_payload->>'position_id_from_command')::integer)->'id');
+        END IF;
+        IF _payload ? 'link_protocol_position_id_from_command' THEN
+            IF _kind<>'fee' OR _payload ? 'link_protocol_position_id'
+                OR (_payload->>'link_protocol_position_id_from_command')::integer<0
+                OR (_payload->>'link_protocol_position_id_from_command')::integer>=_index
+                OR _commands->((_payload->>'link_protocol_position_id_from_command')::integer)->>'kind'<>'create_protocol' THEN
+                RAISE EXCEPTION 'Invalid protocol fee reference';
+            END IF;
+            _payload:=(_payload-'link_protocol_position_id_from_command')||jsonb_build_object('link_protocol_position_id',
+                _results->((_payload->>'link_protocol_position_id_from_command')::integer)->'id');
+        END IF;
         PERFORM set_config('budgeting.crypto_source_command_index',_index::text,true);
         -- Every referenced account/position must be in the journal owner scope.
         FOREACH _key IN ARRAY ARRAY['position_id','source_position_id','secondary_source_position_id',
-            'link_protocol_position_id','investment_account_id','target_investment_account_id'] LOOP
+            'link_protocol_position_id','collateral_position_id','other_position_id','investment_account_id','target_investment_account_id'] LOOP
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key='link_protocol_position_id' OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw')) THEN
+            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw','position_income')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -156,6 +179,39 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'group_lending' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN ('position_id','other_position_id'))
+                OR _payload->>'position_id' IS NULL OR _payload->>'other_position_id' IS NULL
+                OR _payload->>'position_id'=_payload->>'other_position_id' THEN
+                RAISE EXCEPTION 'Выберите две разные позиции одного lending-счёта';
+            END IF;
+            SELECT * INTO _resource FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint FOR UPDATE;
+            SELECT * INTO _group_peer FROM crypto_protocol_positions WHERE id=(_payload->>'other_position_id')::bigint FOR UPDATE;
+            IF _resource.position_type<>'lending' OR _group_peer.position_type<>'lending'
+                OR _resource.status<>'open' OR _group_peer.status<>'open'
+                OR _resource.investment_account_id<>_group_peer.investment_account_id
+                OR _resource.network_code IS DISTINCT FROM _group_peer.network_code THEN
+                RAISE EXCEPTION 'Нужны открытые залоги одной сети на одном инвестиционном счёте';
+            END IF;
+            IF NULLIF(_resource.metadata->>'lending_account_key','') IS NOT NULL
+                AND NULLIF(_group_peer.metadata->>'lending_account_key','') IS NOT NULL
+                AND _resource.metadata->>'lending_account_key' IS DISTINCT FROM _group_peer.metadata->>'lending_account_key' THEN
+                RAISE EXCEPTION 'Позиции уже принадлежат разным счетам протокола. Объединение запрещено';
+            END IF;
+            _group_key:=COALESCE(NULLIF(_resource.metadata->>'lending_account_key',''),
+                NULLIF(_group_peer.metadata->>'lending_account_key',''),'manual:'||LEAST(_resource.id,_group_peer.id));
+            IF EXISTS(SELECT 1 FROM crypto_protocol_positions p WHERE p.investment_account_id=_resource.investment_account_id
+                AND p.status='open' AND p.position_type='lending'
+                AND (p.id IN (_resource.id,_group_peer.id) OR p.metadata->>'lending_account_key'=_group_key)
+                AND COALESCE((p.metadata->>'borrowed_quantity')::numeric,0)>0
+                GROUP BY p.metadata->>'borrowed_crypto_asset_id' HAVING count(*)>1) THEN
+                RAISE EXCEPTION 'В выбранных позициях уже два долга одной монеты. Сначала требуется сверка истории';
+            END IF;
+            UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
+                'lending_account_key',_group_key,'lending_group_confirmed_by',_user_id),updated_at=current_timestamp
+                WHERE id IN (_resource.id,_group_peer.id);
+            _result:=jsonb_build_object('position_id',_resource.id,'other_position_id',_group_peer.id,
+                'lending_account_key',_group_key,'economic_change',false);
         WHEN 'tag_lending_account' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN ('position_id','master_contract','user_contract'))
                 OR COALESCE(_payload->>'master_contract','') !~ '^0:[0-9a-f]{64}$'
@@ -411,6 +467,37 @@ BEGIN
                     'source_kind','quantity_correction','correction_evidence',_evidence->'quantity_correction')
                 WHERE id=(_result->>'event_id')::bigint;
             _result:=_result || jsonb_build_object('source_kind','quantity_correction','basis_quality','estimated');
+        WHEN 'protocol_yield' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN ('position_id','quantity'))
+                OR COALESCE((_payload->>'quantity')::numeric,0)<=0 THEN
+                RAISE EXCEPTION 'Укажите положительное начисление монет';
+            END IF;
+            SELECT * INTO _resource FROM crypto_protocol_positions WHERE id=(_payload->>'position_id')::bigint FOR UPDATE;
+            IF _resource.status<>'open' OR _resource.position_type NOT IN ('staking','lending','vault','other') THEN
+                RAISE EXCEPTION 'Начисление доступно для открытого стейкинга или залога';
+            END IF;
+            _numeric:=(_payload->>'quantity')::numeric;
+            UPDATE crypto_protocol_positions SET current_quantity=current_quantity+_numeric,
+                quantity=quantity+CASE WHEN position_type='lending' THEN _numeric ELSE 0 END,
+                updated_at=current_timestamp WHERE id=_resource.id;
+            SELECT item INTO _result FROM jsonb_array_elements(budgeting.get__crypto_protocol_positions(
+                _user_id,_resource.investment_account_id,NULL)) item WHERE (item->>'id')::bigint=_resource.id;
+            INSERT INTO crypto_protocol_accrual_events(protocol_position_id,external_id,event_at,
+                collateral_quantity,interest_quantity,request,result,created_by_user_id)
+            VALUES(_resource.id,_source_namespace||':'||_source_id||':'||_index,_accounting_date,
+                _numeric,0,_payload,_result,_user_id);
+        WHEN 'position_income' THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN
+                ('position_id','amount','currency_code','amount_in_base','quantity','income_kind','destination','comment')) THEN
+                RAISE EXCEPTION 'Unsupported reward argument';
+            END IF;
+            IF NOT EXISTS(SELECT 1 FROM portfolio_positions WHERE id=(_payload->>'position_id')::bigint AND asset_type_code='crypto') THEN
+                RAISE EXCEPTION 'Ручной криптожурнал поддерживает только криптоактивы';
+            END IF;
+            _result:=budgeting.put__record_portfolio_income(_user_id,(_payload->>'position_id')::bigint,
+                COALESCE((_payload->>'amount')::numeric,0),(_payload->>'currency_code')::char(3),
+                (_payload->>'amount_in_base')::numeric,_payload->>'income_kind',_accounting_date,_payload->>'comment',
+                _occurred_at,COALESCE(_payload->>'destination','position'),(_payload->>'quantity')::numeric);
         WHEN 'reward', 'receive_unknown', 'fee_refund' THEN
             IF _payload ? 'basis_assumption' AND (_kind<>'receive_unknown' OR (_payload->>'basis_assumption') IS DISTINCT FROM 'owner_zero' OR NULLIF(btrim(_payload->>'comment'),'') IS NULL) THEN
                 RAISE EXCEPTION 'Zero-basis assumption requires an unclassified receipt and explanation';
@@ -724,7 +811,7 @@ BEGIN
                 _operated_at => _accounting_date
             );
         WHEN 'liquidate' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','collateral_qty','debt_qty','interest_qty','collateral_fee_qty','settlement_value_in_base','comment']::text[]))) THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','collateral_position_id','collateral_qty','debt_qty','interest_qty','collateral_fee_qty','settlement_value_in_base','comment']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for liquidate';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'collateral_qty') OR _payload->'collateral_qty'='null'::jsonb OR NOT (_payload ? 'debt_qty') OR _payload->'debt_qty'='null'::jsonb THEN
@@ -740,7 +827,8 @@ BEGIN
                 _interest_qty => CASE WHEN _payload ? 'interest_qty' THEN (_payload->>'interest_qty')::numeric ELSE 0 END,
                 _collateral_fee_qty => CASE WHEN _payload ? 'collateral_fee_qty' THEN (_payload->>'collateral_fee_qty')::numeric ELSE 0 END,
                 _settlement_value_in_base => CASE WHEN _payload ? 'settlement_value_in_base' THEN (_payload->>'settlement_value_in_base')::numeric ELSE NULL END,
-                _comment => CASE WHEN _payload ? 'comment' THEN (_payload->>'comment')::text ELSE NULL END
+                _comment => CASE WHEN _payload ? 'comment' THEN (_payload->>'comment')::text ELSE NULL END,
+                _collateral_position_id => (_payload->>'collateral_position_id')::bigint
             );        ELSE RAISE EXCEPTION 'Unsupported source command kind';
         END CASE;
         IF _kind IN ('borrow','accrue','repay') AND _payload->>'valuation_quality'='estimated' THEN

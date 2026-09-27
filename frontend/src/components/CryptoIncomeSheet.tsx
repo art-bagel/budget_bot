@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useState } from 'react';
 import { AlertCircle, Gift } from 'lucide-react';
 
@@ -44,6 +45,7 @@ export default function CryptoIncomeSheet({
   onClose,
   onSuccess,
 }: Props) {
+  const manualRequest = useCryptoRequestKey(`CryptoIncomeSheet.tsx:${positionId}:1`);
   useModalOpen(open);
 
   const [quantity, setQuantity] = useState('');
@@ -75,15 +77,17 @@ export default function CryptoIncomeSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await recordPortfolioIncome(positionId, {
+      const payload = {
         amount: 0,
         currency_code: baseCurrencyCode,
         quantity: quantity,
         income_kind: incomeKind,
-        destination: 'position',
+        destination: 'position' as const,
         received_at: receivedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+      };
+      await recordPortfolioIncome(positionId, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));

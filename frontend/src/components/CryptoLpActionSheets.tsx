@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Plus, Coins, ArrowDownToLine, X } from 'lucide-react';
 
@@ -17,7 +18,7 @@ import type {
   PortfolioPosition,
 } from '../types';
 import { getLiquidityPoolMetadata } from '../types';
-import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from './DefiFeeField';
+import { DefiFeeField, EMPTY_FEE_DRAFT, manualFee } from './DefiFeeField';
 import type { DefiFeeDraft } from './DefiFeeField';
 
 
@@ -48,6 +49,7 @@ function findSourceForSymbol(positions: PortfolioPosition[], symbol: string): Po
 
 
 export function LpAddLiquiditySheet({ open, position, accountPositions, onClose, onSuccess }: AddProps) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:1`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -92,22 +94,19 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
     setSubmitting(true);
     setError(null);
     try {
-      await topUpCryptoProtocolPosition(position.id, {
+      const payload = {
         source_position_id: sourceA.id,
-        quantity: numA,
+        quantity: qtyA,
         secondary_source_position_id: sourceB.id,
-        secondary_quantity: numB,
+        secondary_quantity: qtyB,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await topUpCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -198,6 +197,7 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
 
 
 export function LpPartialWithdrawSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:2`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -226,29 +226,26 @@ export function LpPartialWithdrawSheet({ open, position, accountPositions, onClo
 
   const numA = Number(qtyA);
   const numB = Number(qtyB);
-  const validA = Number.isFinite(numA) && numA > 0 && numA <= maxA;
-  const validB = Number.isFinite(numB) && numB > 0 && numB <= maxB;
-  const canSubmit = !submitting && validA && validB;
+  const validA = Number.isFinite(numA) && numA > 0;
+  const validB = Number.isFinite(numB) && numB > 0;
+  const canSubmit = !submitting && validA && validB && false; // A withdrawal share is required for correct LP allocation.
 
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await partialCloseCryptoProtocolPosition(position.id, {
-        principal_qty: numA,
-        secondary_principal_qty: numB,
+      const payload = {
+        principal_qty: qtyA,
+        secondary_principal_qty: qtyB,
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -258,7 +255,7 @@ export function LpPartialWithdrawSheet({ open, position, accountPositions, onClo
   return (
     <BottomSheet
       open={open}
-      tag={position.protocol_name}
+      tag="Частичный выход пока недоступен: нужна доля выведенных LP-токенов"
       title="Частично снять"
       icon={<ArrowDownToLine size={18} strokeWidth={2.2} />}
       iconColor="o"
@@ -316,6 +313,7 @@ export function LpPartialWithdrawSheet({ open, position, accountPositions, onClo
 
 
 export function LpCloseSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:3`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -333,8 +331,8 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
   useEffect(() => {
     if (open) {
-      setQtyA(maxA > 0 ? String(maxA) : '');
-      setQtyB(maxB > 0 ? String(maxB) : '');
+      setQtyA(position.current_quantity_exact ?? (maxA > 0 ? String(maxA) : ''));
+      setQtyB(position.token1_quantity_exact ?? (maxB > 0 ? String(maxB) : ''));
       setOperatedAt(todayIso());
       setComment('');
       setFeeDraft(EMPTY_FEE_DRAFT);
@@ -344,8 +342,8 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
   const numA = qtyA.trim() ? Number(qtyA) : 0;
   const numB = qtyB.trim() ? Number(qtyB) : 0;
-  const aOk = numA === 0 || (Number.isFinite(numA) && numA > 0 && numA <= maxA);
-  const bOk = numB === 0 || (Number.isFinite(numB) && numB > 0 && numB <= maxB);
+  const aOk = numA === 0 || (Number.isFinite(numA) && numA > 0);
+  const bOk = numB === 0 || (Number.isFinite(numB) && numB > 0);
   const canSubmit = !submitting && aOk && bOk && (numA > 0 || numB > 0);
 
   const submit = async () => {
@@ -353,20 +351,17 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
     setSubmitting(true);
     setError(null);
     try {
-      await closeCryptoProtocolPosition(position.id, {
-        return_quantity: numA > 0 ? numA : undefined,
-        secondary_return_quantity: numB > 0 ? numB : undefined,
+      const payload = {
+        return_quantity: qtyA.trim() || "0",
+        secondary_return_quantity: qtyB.trim() || "0",
         withdrawn_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await closeCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -437,6 +432,7 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
 
 export function LpClaimFeesSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:4`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -472,22 +468,19 @@ export function LpClaimFeesSheet({ open, position, accountPositions, onClose, on
     setSubmitting(true);
     setError(null);
     try {
-      await partialCloseCryptoProtocolPosition(position.id, {
+      const payload = {
         principal_qty: 0,
-        rewards_qty: numA > 0 ? numA : 0,
+        rewards_qty: qtyA.trim() || "0",
         secondary_principal_qty: 0,
-        secondary_rewards_qty: numB > 0 ? numB : 0,
+        secondary_rewards_qty: qtyB.trim() || "0",
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }

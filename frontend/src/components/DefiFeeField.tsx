@@ -5,6 +5,15 @@ import { formatNumericAmount } from '../utils/format';
 import { getPositionMetadataText } from '../utils/portfolioPosition';
 import { payCryptoFee } from '../api';
 
+export function manualFee(draft: DefiFeeDraft, positions: PortfolioPosition[]) {
+  if (!draft.positionId && !draft.quantity.trim()) return undefined;
+  const source = positions.find((p) => String(p.id) === draft.positionId);
+  if (!source || !draft.quantity.trim() || !(Number(draft.quantity) > 0)) {
+    throw new Error('Укажите монету и положительное количество комиссии');
+  }
+  return { source_position_id: source.id, quantity: draft.quantity };
+}
+
 export type DefiFeeDraft = {
   positionId: string;
   quantity: string;

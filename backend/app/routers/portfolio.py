@@ -1,3 +1,4 @@
+from uuid import UUID, uuid4
 from datetime import date
 from decimal import Decimal
 from typing import Any, List, Literal, Optional
@@ -122,6 +123,7 @@ class PartialClosePortfolioPositionRequest(BaseModel):
 
 
 class RecordPortfolioIncomeRequest(BaseModel):
+    request_id: UUID | None = None
     amount: float
     currency_code: str
     amount_in_base: float | None = None
@@ -426,6 +428,14 @@ async def record_portfolio_income(
     body: RecordPortfolioIncomeRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> RecordPortfolioIncomeResponse:
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and position.get('asset_type_code') == 'crypto':
+        result = await ledger.put__manual_crypto_movement(
+            user_id=user.user_id, request_id=body.request_id or uuid4(), kind='position_income',
+            payload={'position_id': position_id, **body.model_dump(mode='json', exclude_none=True,
+                exclude={'request_id', 'received_at'})}, operated_at=body.received_at,
+        )
+        return RecordPortfolioIncomeResponse(**result)
     result = await ledger.put__record_portfolio_income(
         user_id=user.user_id,
         position_id=position_id,

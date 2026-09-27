@@ -36,6 +36,13 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF (_quantity IS NOT NULL AND _quantity IS DISTINCT FROM _existing.quantity)
+       OR (_current_quantity IS NOT NULL AND _current_quantity IS DISTINCT FROM _existing.current_quantity)
+       OR (_rewards_claimed_in_base IS NOT NULL AND _rewards_claimed_in_base IS DISTINCT FROM _existing.rewards_claimed_in_base)
+       OR EXISTS(SELECT 1 FROM jsonb_object_keys(COALESCE(_metadata,'{}'::jsonb)) k WHERE k NOT IN ('apr','pool_name')) THEN
+        RAISE EXCEPTION 'Количества, полученные награды и финансирование меняются через операции, а не исправление текущего остатка';
+    END IF;
+
     IF (_existing.metadata ->> 'debt_accounting_version') = '2'
        AND COALESCE(_metadata, '{}'::jsonb) ?| ARRAY[
            'borrowed_quantity', 'borrowed_value_in_base', 'debt_cost_basis_in_base',

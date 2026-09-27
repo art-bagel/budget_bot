@@ -58,11 +58,11 @@ BEGIN
         WHERE e.protocol_position_id=_position_id AND e.collateral_quantity>0
         UNION ALL
         SELECT 'liquidation-collateral:'||e.id,e.event_at,e.id,'collateral_liquidation',
-            (e.metadata->'result'->>'collateral_quantity')::numeric,_p.asset_symbol,
+            (e.metadata->'result'->>'collateral_quantity')::numeric,COALESCE(a.symbol,_p.asset_symbol),
             (e.metadata->'result'->>'collateral_cost_consumed_in_base')::numeric,
             'Стоимость на момент изъятия. Часть погашает тело займа и переносится его держателям; вся сумма не является расходом.'::text
-        FROM crypto_liability_events e
-        WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
+        FROM crypto_liability_events e LEFT JOIN crypto_assets a ON a.id=(e.metadata->'result'->>'collateral_asset_id')::bigint
+        WHERE (e.protocol_position_id=_position_id OR e.metadata->'result'->>'collateral_position_id'=_position_id::text) AND e.event_kind='liquidation'
         UNION ALL
         SELECT 'liquidation-principal:'||e.id,e.event_at,e.id,'liquidation_principal',
             abs(e.quantity)-abs(e.interest_quantity),a.symbol,
@@ -78,13 +78,15 @@ BEGIN
         WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
         UNION ALL
         SELECT 'liquidation-fee:'||e.id,e.event_at,e.id,'liquidation_fee',
-            NULLIF((e.metadata->'request'->>'collateral_fee_quantity')::numeric,0),
-            _p.asset_symbol,NULL::numeric,
+            CASE WHEN e.metadata->'request'->>'collateral_fee_known'='true' THEN (e.metadata->'request'->>'collateral_fee_quantity')::numeric
+                ELSE NULLIF((e.metadata->'request'->>'collateral_fee_quantity')::numeric,0) END,
+            COALESCE(a.symbol,_p.asset_symbol),NULL::numeric,
             CASE WHEN COALESCE((e.metadata->'request'->>'collateral_fee_quantity')::numeric,0)>0
                 THEN 'Входит в изъятый залог; не дополнительное списание.'
+                WHEN e.metadata->'request'->>'collateral_fee_known'='true' THEN 'Нулевой штраф подтверждён при ручном вводе.'
                 ELSE 'Количество отдельно не установлено. Ноль в расчёте не подтверждает отсутствие штрафа; себестоимость распределена условно без отдельной штрафной части.' END
-        FROM crypto_liability_events e
-        WHERE e.protocol_position_id=_position_id AND e.event_kind='liquidation'
+        FROM crypto_liability_events e LEFT JOIN crypto_assets a ON a.id=(e.metadata->'result'->>'collateral_asset_id')::bigint
+        WHERE (e.protocol_position_id=_position_id OR e.metadata->'result'->>'collateral_position_id'=_position_id::text) AND e.event_kind='liquidation'
         UNION ALL
         SELECT 'custody:'||s.id||':'||c.ordinality,s.accounting_date,s.id,
             CASE WHEN c.value->'payload'->>'to_custody'='main' THEN 'lp_return' ELSE 'lp_farm' END,

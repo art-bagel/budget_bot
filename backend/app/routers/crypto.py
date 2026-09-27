@@ -287,6 +287,9 @@ class CryptoAssetDetail(CryptoAccountAssetSummary):
 
 
 class CryptoProtocolPositionItem(BaseModel):
+    quantity_exact: Optional[str] = None
+    current_quantity_exact: Optional[str] = None
+    token1_quantity_exact: Optional[str] = None
     id: int
     investment_account_id: int
     investment_account_name: str
@@ -313,6 +316,8 @@ class CryptoProtocolPositionItem(BaseModel):
 
 
 class CreateCryptoProtocolPositionRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     investment_account_id: int
     protocol_name: str
     position_type: Literal['staking', 'lending', 'liquidity_pool', 'vault', 'other']
@@ -332,7 +337,7 @@ class CreateCryptoProtocolPositionRequest(BaseModel):
     secondary_source_position_id: Optional[int] = None
     secondary_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     borrowed_crypto_asset_id: Optional[int] = None
-    borrowed_quantity: Optional[Decimal] = None
+    borrowed_quantity: Optional[Decimal] = Field(default=None, gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     borrowed_value_in_base: Optional[float] = None
 
 
@@ -397,11 +402,12 @@ class AccrueLendingRequest(BaseModel):
 
 
 class LiquidateLendingRequest(BaseModel):
+    collateral_position_id: Optional[int] = Field(default=None, gt=0)
     request_id: Optional[UUID] = None
     collateral_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     debt_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     interest_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
-    collateral_fee_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    collateral_fee_qty: Decimal = Field(ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     settlement_value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False)
     external_id: Optional[str] = Field(default=None, min_length=1)
     operated_at: date
@@ -416,6 +422,8 @@ class LiquidateLendingRequest(BaseModel):
 
 
 class PayCryptoFeeRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     comment: Optional[str] = None
     operated_at: Optional[date] = None
@@ -440,6 +448,8 @@ class UpdateCryptoProtocolPositionRequest(BaseModel):
 
 
 class CloseCryptoProtocolPositionRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     withdrawn_at: Optional[date] = None
     current_quantity: Optional[Decimal] = Field(default=None, ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     current_value_in_base: Optional[float] = None
@@ -449,7 +459,7 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
     secondary_return_value_in_base: Optional[float] = None
     comment: Optional[str] = None
 
-    @field_validator('return_quantity', 'return_value_in_base', 'secondary_return_quantity', 'secondary_return_value_in_base')
+    @field_validator('return_value_in_base', 'secondary_return_value_in_base')
     @classmethod
     def positive_if_provided(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and v <= 0:
@@ -458,6 +468,8 @@ class CloseCryptoProtocolPositionRequest(BaseModel):
 
 
 class PartialCloseCryptoProtocolPositionRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     principal_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     rewards_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     principal_value_in_base: Optional[float] = None
@@ -485,6 +497,8 @@ class PartialCloseCryptoProtocolPositionRequest(BaseModel):
 
 
 class TopUpCryptoProtocolPositionRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    fee: Optional[ManualCryptoFee] = None
     source_position_id: int
     quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     secondary_source_position_id: Optional[int] = None
@@ -746,29 +760,11 @@ async def create_crypto_protocol_position(
     body: CreateCryptoProtocolPositionRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
-    result = await ledger.put__create_crypto_protocol_position(
-        user_id=user.user_id,
-        investment_account_id=body.investment_account_id,
-        protocol_name=body.protocol_name,
-        position_type=body.position_type,
-        asset_symbol=body.asset_symbol,
-        quantity=body.quantity,
-        cost_basis_in_base=body.cost_basis_in_base,
-        current_quantity=body.current_quantity,
-        current_value_in_base=body.current_value_in_base,
-        rewards_claimed_in_base=body.rewards_claimed_in_base,
-        rewards_unclaimed_in_base=body.rewards_unclaimed_in_base,
-        crypto_asset_id=body.crypto_asset_id,
-        network_code=body.network_code,
-        deposited_at=body.deposited_at,
-        comment=body.comment,
-        metadata=body.metadata,
-        source_position_id=body.source_position_id,
-        secondary_source_position_id=body.secondary_source_position_id,
-        secondary_quantity=body.secondary_quantity,
-        borrowed_crypto_asset_id=body.borrowed_crypto_asset_id,
-        borrowed_quantity=body.borrowed_quantity,
-        borrowed_value_in_base=body.borrowed_value_in_base,
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='create_protocol',
+        payload={**body.model_dump(mode='json', exclude_none=True,
+            exclude={'request_id', 'fee', 'deposited_at'})},
+        operated_at=body.deposited_at, fee=body.fee.model_dump(mode='json') if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -793,23 +789,48 @@ async def update_crypto_protocol_position(
     return CryptoProtocolPositionItem(**result)
 
 
+class GroupLendingRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    other_position_id: int = Field(gt=0)
+    operated_at: date
+
+
+@router.post('/protocol-positions/{position_id}/group-with')
+async def group_lending_positions(position_id: int, body: GroupLendingRequest,
+                                 user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    return await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='group_lending',
+        payload={'position_id': position_id, 'other_position_id': body.other_position_id}, operated_at=body.operated_at,
+    )
+
+
+class ProtocolYieldRequest(BaseModel):
+    request_id: Optional[UUID] = None
+    quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    operated_at: date
+
+
+@router.post('/protocol-positions/{position_id}/yield', response_model=CryptoProtocolPositionItem)
+async def accrue_protocol_yield(position_id: int, body: ProtocolYieldRequest,
+                               user: CurrentUser = Depends(get_current_user)) -> CryptoProtocolPositionItem:
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='protocol_yield',
+        payload={'position_id': position_id, 'quantity': str(body.quantity)}, operated_at=body.operated_at,
+    )
+    return CryptoProtocolPositionItem(**result)
+
+
 @router.post('/protocol-positions/{position_id}/close', response_model=CryptoProtocolPositionItem)
 async def close_crypto_protocol_position(
     position_id: int,
     body: CloseCryptoProtocolPositionRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
-    result = await ledger.set__close_crypto_protocol_position(
-        user_id=user.user_id,
-        position_id=position_id,
-        withdrawn_at=body.withdrawn_at,
-        current_quantity=body.current_quantity,
-        current_value_in_base=body.current_value_in_base,
-        comment=body.comment,
-        return_quantity=body.return_quantity,
-        return_value_in_base=body.return_value_in_base,
-        secondary_return_quantity=body.secondary_return_quantity,
-        secondary_return_value_in_base=body.secondary_return_value_in_base,
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='close_protocol',
+        payload={"position_id": position_id, **body.model_dump(mode='json', exclude_none=True,
+            exclude={'request_id', 'fee', 'withdrawn_at'})},
+        operated_at=body.withdrawn_at, fee=body.fee.model_dump(mode='json') if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -833,19 +854,11 @@ async def partial_close_crypto_protocol_position(
             status_code=400,
             detail='Нужно указать хотя бы одно ненулевое количество',
         )
-    result = await ledger.put__partial_close_crypto_protocol_position(
-        user_id=user.user_id,
-        position_id=position_id,
-        principal_qty=body.principal_qty,
-        rewards_qty=body.rewards_qty,
-        principal_value_in_base=body.principal_value_in_base,
-        rewards_value_in_base=body.rewards_value_in_base,
-        returned_at=body.returned_at,
-        comment=body.comment,
-        secondary_principal_qty=body.secondary_principal_qty if body.secondary_principal_qty > 0 else None,
-        secondary_value_in_base=body.secondary_value_in_base,
-        secondary_rewards_qty=body.secondary_rewards_qty if body.secondary_rewards_qty > 0 else None,
-        secondary_rewards_value_in_base=body.secondary_rewards_value_in_base,
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='partial_close_protocol',
+        payload={"position_id": position_id, **body.model_dump(mode='json', exclude_none=True,
+            exclude={'request_id', 'fee', 'returned_at'})},
+        operated_at=body.returned_at, fee=body.fee.model_dump(mode='json') if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -859,15 +872,11 @@ async def top_up_crypto_protocol_position(
     body: TopUpCryptoProtocolPositionRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> CryptoProtocolPositionItem:
-    result = await ledger.put__top_up_crypto_protocol_position(
-        user_id=user.user_id,
-        position_id=position_id,
-        source_position_id=body.source_position_id,
-        quantity=body.quantity,
-        secondary_source_position_id=body.secondary_source_position_id,
-        secondary_quantity=body.secondary_quantity,
-        operated_at=body.operated_at,
-        comment=body.comment,
+    result = await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='top_up_protocol',
+        payload={"position_id": position_id, **body.model_dump(mode='json', exclude_none=True,
+            exclude={'request_id', 'fee', 'operated_at'})},
+        operated_at=body.operated_at, fee=body.fee.model_dump(mode='json') if body.fee else None,
     )
     return CryptoProtocolPositionItem(**result)
 
@@ -958,11 +967,8 @@ async def pay_crypto_fee(
     body: PayCryptoFeeRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return await ledger.put__crypto_pay_fee(
-        user_id=user.user_id,
-        source_position_id=position_id,
-        quantity=body.quantity,
-        comment=body.comment,
-        operated_at=body.operated_at,
-        link_protocol_position_id=body.link_protocol_position_id,
+    return await ledger.put__manual_crypto_movement(
+        user_id=user.user_id, request_id=body.request_id or uuid4(), kind='fee',
+        payload={'source_position_id': position_id, **body.model_dump(mode='json', exclude_none=True,
+            exclude={'request_id', 'fee', 'operated_at'})}, operated_at=body.operated_at,
     )

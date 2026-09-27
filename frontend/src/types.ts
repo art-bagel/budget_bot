@@ -278,6 +278,9 @@ export interface SwapCryptoInvestmentAssetRequest {
 }
 
 export interface CryptoProtocolPosition {
+  quantity_exact?: string | null;
+  current_quantity_exact?: string | null;
+  token1_quantity_exact?: string | null;
   id: number;
   investment_account_id: number;
   investment_account_name: string;
@@ -304,13 +307,15 @@ export interface CryptoProtocolPosition {
 }
 
 export interface CreateCryptoProtocolPositionRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   investment_account_id: number;
   protocol_name: string;
   position_type: CryptoProtocolPosition['position_type'];
   asset_symbol: string;
-  quantity?: number;
+  quantity?: number | string;
   cost_basis_in_base?: number;
-  current_quantity?: number;
+  current_quantity?: number | string;
   current_value_in_base?: number;
   rewards_claimed_in_base?: number;
   rewards_unclaimed_in_base?: number;
@@ -321,9 +326,9 @@ export interface CreateCryptoProtocolPositionRequest {
   metadata?: Record<string, unknown>;
   source_position_id?: number;
   secondary_source_position_id?: number;
-  secondary_quantity?: number;
+  secondary_quantity?: number | string;
   borrowed_crypto_asset_id?: number;
-  borrowed_quantity?: number;
+  borrowed_quantity?: number | string;
   borrowed_value_in_base?: number;
 }
 
@@ -349,7 +354,9 @@ export interface RepayLendingDebtRequest {
 }
 
 export interface PayCryptoFeeRequest {
-  quantity: number;
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
+  quantity: number | string;
   comment?: string;
   operated_at?: string;
   link_protocol_position_id?: number;
@@ -366,34 +373,40 @@ export interface UpdateCryptoProtocolPositionRequest {
 }
 
 export interface CloseCryptoProtocolPositionRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   withdrawn_at?: string;
-  current_quantity?: number;
+  current_quantity?: number | string;
   current_value_in_base?: number;
-  return_quantity?: number;
+  return_quantity?: number | string;
   return_value_in_base?: number;
-  secondary_return_quantity?: number;
+  secondary_return_quantity?: number | string;
   secondary_return_value_in_base?: number;
   comment?: string;
 }
 
 export interface PartialCloseCryptoProtocolPositionRequest {
-  principal_qty?: number;
-  rewards_qty?: number;
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
+  principal_qty?: number | string;
+  rewards_qty?: number | string;
   principal_value_in_base?: number;
   rewards_value_in_base?: number;
-  secondary_principal_qty?: number;
+  secondary_principal_qty?: number | string;
   secondary_value_in_base?: number;
-  secondary_rewards_qty?: number;
+  secondary_rewards_qty?: number | string;
   secondary_rewards_value_in_base?: number;
   returned_at?: string;
   comment?: string;
 }
 
 export interface TopUpCryptoProtocolPositionRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   source_position_id: number;
-  quantity: number;
+  quantity: number | string;
   secondary_source_position_id?: number;
-  secondary_quantity?: number;
+  secondary_quantity?: number | string;
   operated_at?: string;
   comment?: string;
 }
@@ -839,6 +852,7 @@ export interface PartialClosePortfolioPositionRequest {
 }
 
 export interface RecordPortfolioIncomeRequest {
+  request_id?: string;
   amount: number;
   currency_code: string;
   amount_in_base?: number;

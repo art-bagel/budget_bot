@@ -24,7 +24,7 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         async def rollback():
             await self.tx.rollback()
         self.addAsyncCleanup(rollback)
-        for name in ('put__record_crypto_expense', 'put__record_portfolio_income', 'put__swap_crypto_investment_asset', 'put__manual_crypto_movement', 'get__portfolio_positions', 'get__portfolio_position'):
+        for name in ('put__record_crypto_expense', 'put__record_portfolio_income', 'put__swap_crypto_investment_asset', 'put__manual_crypto_movement', 'put__crypto_source_event', 'put__crypto_funding_components', 'put__partial_close_crypto_protocol_position', 'get__portfolio_positions', 'get__portfolio_position', 'get__crypto_protocol_positions', 'set__update_crypto_protocol_position', 'put__lending_liquidate', 'get__crypto_protocol_history'):
             await self.db.execute((ROOT / f'infra/db/Scripts/budgeting/func/{name}.sql').read_text())
         self.position = await self.db.fetchrow("""select p.id, p.quantity, p.metadata,
             (p.metadata->>'crypto_asset_id')::bigint asset_id
@@ -45,11 +45,14 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
                 return await self.db.fetchval(f'SELECT {function}({placeholders})', *args)
         self.patcher = patch.object(portfolio.ledger, 'call_function', side_effect=call)
         self.patcher.start()
+        self.reports_patcher = patch.object(portfolio.reports, "call_function", side_effect=call)
+        self.reports_patcher.start()
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url='http://test')
 
     async def asyncTearDown(self):
         await self.client.aclose()
         self.patcher.stop()
+        self.reports_patcher.stop()
 
     async def summary(self):
         return await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)', self.position['id'])
@@ -376,6 +379,212 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(asyncpg.RaiseError, 'Нет доступа'):
             await self.client.post(path+'/take-debt', json=borrow)
         self.assertEqual(before, await fingerprint(self.db))
+
+    async def fresh_crypto(self):
+        from uuid import uuid4
+        from backend.app.dependencies import CurrentUser, get_current_user
+        uid = 900000000000 + uuid4().int % 1000000000
+        await self.db.execute("insert into budgeting.users(id,base_currency_code) values($1,'RUB')", uid)
+        account = await self.db.fetchval("""insert into budgeting.bank_accounts
+            (owner_type,owner_user_id,name,account_kind,investment_asset_type)
+            values('user',$1,'Manual lifecycle','investment','crypto') returning id""", uid)
+        self.app.dependency_overrides[get_current_user] = lambda: CurrentUser(user_id=uid)
+        asset = self.position['asset_id']
+        other = await self.db.fetchval('select id from budgeting.crypto_assets where id<>$1 order by id limit 1', asset)
+        async def seed(coin, qty, basis):
+            result = await self.db.fetchval("select budgeting.put__crypto_receive_reward($1,$2,$3,$4,NULL,'2026-09-08')", uid, account, coin, D(qty))
+            await self.db.execute('''insert into budgeting.portfolio_events
+                (position_id,event_type,event_at,quantity,metadata,created_by_user_id)
+                values($1,'top_up','2026-09-08',0,jsonb_build_object('entry_value_in_base',$2::numeric),$3)''', result['position_id'], D(basis), uid)
+            return result['position_id']
+        return uid, account, asset, other, seed
+
+    async def test_create_initial_loan_stake_funded_coins_and_return(self):
+        from uuid import uuid4
+        from check_user_history import fingerprint
+        import asyncpg
+        uid, account, asset, other, seed = await self.fresh_crypto()
+        source = await seed(asset, '20', '2000')
+        payload = dict(request_id=str(uuid4()),investment_account_id=account,protocol_name='Manual loan',
+            position_type='lending',asset_symbol='JETTON',source_position_id=source,quantity='10',
+            deposited_at='2026-09-08',borrowed_crypto_asset_id=other,borrowed_quantity='10.123456789012345678')
+        url='/api/v1/crypto/protocol-positions'
+        before=await fingerprint(self.db)
+        with self.assertRaises(asyncpg.RaiseError):
+            await self.client.post(url,json={**payload,'fee':dict(source_position_id=source,quantity='999')})
+        self.assertEqual(before,await fingerprint(self.db))
+        payload['fee']=dict(source_position_id=source,quantity='0.1')
+        created=await self.client.post(url,json=payload)
+        self.assertEqual(created.status_code,200,created.text)
+        loan=created.json()['id']
+        self.assertEqual(await self.db.fetchval("select count(*) from budgeting.portfolio_events where event_type='fee' and metadata->>'protocol_position_id'=$1",str(loan)),1)
+        self.assertEqual(created.json(),(await self.client.post(url,json=payload)).json())
+        meta=await self.db.fetchval('select metadata from budgeting.crypto_protocol_positions where id=$1',loan)
+        borrowed=meta['borrowed_position_id']
+        self.assertEqual(meta['funding_policy'],'components')
+        qty=D(payload['borrowed_quantity'])
+        self.assertEqual(await self.db.fetchval("select (metadata->'funding_units'->>$2)::numeric from budgeting.portfolio_positions where id=$1",borrowed,str(loan)),qty)
+        staking=dict(request_id=str(uuid4()),investment_account_id=account,protocol_name='Manual stake',
+            position_type='staking',asset_symbol='COIN',source_position_id=borrowed,quantity=str(qty),deposited_at='2026-09-08')
+        opened=await self.client.post(url,json=staking)
+        self.assertEqual(opened.status_code,200,opened.text)
+        stake=opened.json()['id']
+        path=f'{url}/{stake}'
+        withdrawn=dict(request_id=str(uuid4()),principal_qty='1.123456789012345678',returned_at='2026-09-08')
+        returned=await self.client.post(path+'/partial-close',json=withdrawn)
+        self.assertEqual(returned.status_code,200,returned.text)
+        remaining=await self.db.fetchval("select (metadata->'funding_units0'->>$2)::numeric from budgeting.crypto_protocol_positions where id=$1",stake,str(loan))
+        self.assertEqual(remaining,D(9))
+        accrued_body=dict(request_id=str(uuid4()),quantity='2',operated_at='2026-09-08')
+        accrued=await self.client.post(path+'/yield',json=accrued_body)
+        self.assertEqual(accrued.status_code,200,accrued.text)
+        self.assertEqual(accrued.json(),(await self.client.post(path+'/yield',json=accrued_body)).json())
+        self.assertEqual(await self.db.fetchval('select current_quantity from budgeting.crypto_protocol_positions where id=$1',stake),D(11))
+        rewards=await self.client.post(path+'/partial-close',json=dict(request_id=str(uuid4()),rewards_qty='2',returned_at='2026-09-08'))
+        self.assertEqual(rewards.status_code,200,rewards.text)
+        self.assertEqual(await self.db.fetchval("select (metadata->'funding_units0'->>$2)::numeric from budgeting.crypto_protocol_positions where id=$1",stake,str(loan)),D(9))
+        close=dict(request_id=str(uuid4()),return_quantity='9',withdrawn_at='2026-09-08')
+        closed=await self.client.post(path+'/close',json=close)
+        self.assertEqual(closed.status_code,200,closed.text)
+        self.assertEqual(closed.json(),(await self.client.post(path+'/close',json=close)).json())
+        self.assertEqual(returned.json(),(await self.client.post(path+'/partial-close',json=withdrawn)).json())
+        self.assertEqual(opened.json(),(await self.client.post(url,json=staking)).json())
+        self.assertEqual(await self.db.fetchval("select sum((metadata->'funding_units'->>$2)::numeric) from budgeting.portfolio_positions where investment_account_id=$1 and status='open'",account,str(loan)),qty)
+        # Collateral top-up/withdrawals carry historical cost; debt remains independent.
+        topup=dict(request_id=str(uuid4()),source_position_id=source,quantity='5',operated_at='2026-09-08')
+        topped=await self.client.post(f'{url}/{loan}/top-up',json=topup)
+        self.assertEqual(topped.status_code,200,topped.text)
+        self.assertEqual(D(str(topped.json()['cost_basis_in_base'])),D(1500))
+        out=await self.client.post(f'{url}/{loan}/partial-close',json=dict(request_id=str(uuid4()),principal_qty='3',returned_at='2026-09-08'))
+        self.assertEqual(out.status_code,200,out.text)
+        self.assertEqual(D(str(out.json()['cost_basis_in_base'])),D(1200))
+        self.assertEqual(topped.json(),(await self.client.post(f'{url}/{loan}/top-up',json=topup)).json())
+
+    async def test_lp_close_reallocates_20000_and_rewards_do_not_consume_principal(self):
+        from uuid import uuid4
+        from check_user_history import fingerprint
+        import asyncpg
+        uid, account, asset, other, seed=await self.fresh_crypto()
+        a=await seed(asset,'100','10000')
+        b=await seed(other,'1000','10000')
+        url='/api/v1/crypto/protocol-positions'
+        data=dict(request_id=str(uuid4()),investment_account_id=account,protocol_name='Manual LP',position_type='liquidity_pool',
+            asset_symbol='JETTON',source_position_id=a,quantity='100',secondary_source_position_id=b,secondary_quantity='1000',deposited_at='2026-09-08')
+        created=await self.client.post(url,json=data)
+        self.assertEqual(created.status_code,200,created.text)
+        lp=created.json()['id']
+        path=f'{url}/{lp}'
+        # Rewards are outside LP principal, can exceed the deposited token quantity.
+        rewards=dict(request_id=str(uuid4()),rewards_qty='101.123456789012345678',secondary_rewards_qty='2',returned_at='2026-09-08')
+        earned=await self.client.post(path+'/partial-close',json=rewards)
+        self.assertEqual(earned.status_code,200,earned.text)
+        self.assertEqual(D(str(earned.json()['cost_basis_in_base'])),D(20000))
+        before=await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError,'Частичный выход LP'):
+            await self.client.post(path+'/partial-close',json=dict(principal_qty='10',secondary_principal_qty='10',returned_at='2026-09-08'))
+        self.assertEqual(before,await fingerprint(self.db))
+        close=dict(request_id=str(uuid4()),return_quantity='10',secondary_return_quantity='2000',withdrawn_at='2026-09-08',return_value_in_base=999,secondary_return_value_in_base=999)
+        closed=await self.client.post(path+'/close',json=close)
+        self.assertEqual(closed.status_code,200,closed.text)
+        for coin,cost in ((asset,1000),(other,19000)):
+            pid=await self.db.fetchval("select id from budgeting.portfolio_positions where investment_account_id=$1 and status='open' and metadata->>'crypto_asset_id'=$2",account,str(coin))
+            summary=await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)',pid)
+            self.assertEqual(D(str(summary['remaining_cost_basis'])),D(cost))
+        self.assertEqual(closed.json(),(await self.client.post(path+'/close',json=close)).json())
+        self.assertEqual(earned.json(),(await self.client.post(path+'/partial-close',json=rewards)).json())
+
+    async def test_funded_lp_claim_close_and_unsafe_adjustment_rejected(self):
+        from uuid import uuid4
+        from check_user_history import fingerprint
+        import asyncpg
+        uid,account,asset,other,seed=await self.fresh_crypto()
+        collateral=await seed(asset,'20','2000')
+        base='/api/v1/crypto/protocol-positions'
+        response=await self.client.post(base,json=dict(request_id=str(uuid4()),investment_account_id=account,
+            protocol_name='Loan for LP',position_type='lending',asset_symbol='JETTON',quantity='10',
+            source_position_id=collateral,borrowed_crypto_asset_id=other,borrowed_quantity='10',deposited_at='2026-09-08'))
+        self.assertEqual(response.status_code,200,response.text)
+        loan=response.json()['id']
+        borrowed=await self.db.fetchval("select (metadata->>'borrowed_position_id')::bigint from budgeting.crypto_protocol_positions where id=$1",loan)
+        response=await self.client.post(base,json=dict(request_id=str(uuid4()),investment_account_id=account,
+            protocol_name='Funded LP',position_type='liquidity_pool',asset_symbol='COIN',quantity='10',
+            source_position_id=borrowed,secondary_source_position_id=collateral,secondary_quantity='10',deposited_at='2026-09-08'))
+        self.assertEqual(response.status_code,200,response.text)
+        lp=response.json()['id']
+        before=await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError,'через операции'):
+            await self.client.patch(f'{base}/{lp}',json=dict(metadata={'funding_units0':{}}))
+        self.assertEqual(before,await fingerprint(self.db))
+        for qty in ('NaN','Infinity','0.0000000000000000001'):
+            response=await self.client.post(f'{base}/{lp}/top-up',json=dict(source_position_id=borrowed,quantity=qty))
+            self.assertEqual(response.status_code,422,response.text)
+        claimed=await self.client.post(f'{base}/{lp}/partial-close',json=dict(request_id=str(uuid4()),rewards_qty='0.5',secondary_rewards_qty='1',returned_at='2026-09-08'))
+        self.assertEqual(claimed.status_code,200,claimed.text)
+        self.assertEqual(await self.db.fetchval("select (metadata->'funding_units0'->>$2)::numeric from budgeting.crypto_protocol_positions where id=$1",lp,str(loan)),D(10))
+        closed=await self.client.post(f'{base}/{lp}/close',json=dict(request_id=str(uuid4()),return_quantity='5',secondary_return_quantity='15',withdrawn_at='2026-09-08'))
+        self.assertEqual(closed.status_code,200,closed.text)
+        holders=await self.db.fetch("select metadata->>'crypto_asset_id' asset, (metadata->'funding_units'->>$2)::numeric units from budgeting.portfolio_positions where investment_account_id=$1 and status='open'",account,str(loan))
+        self.assertEqual({r['asset']:r['units'] for r in holders if r['asset']},{str(asset):D(5),str(other):D(5)})
+        self.assertEqual(await self.db.fetchval("select metadata->'funding_units0' from budgeting.crypto_protocol_positions where id=$1",lp),{})
+
+    async def test_liquidation_of_other_collateral_in_same_account(self):
+        from uuid import uuid4
+        from check_user_history import fingerprint
+        import asyncpg
+        uid,account,asset,other,seed=await self.fresh_crypto()
+        primary=await seed(asset,'10','1000')
+        third=await self.db.fetchval('select id from budgeting.crypto_assets where id<>$1 and id<>$2 order by id limit 1',asset,other)
+        secondary=await seed(third,'20','2000')
+        base='/api/v1/crypto/protocol-positions'
+        debt=await self.client.post(base,json=dict(investment_account_id=account,protocol_name='Shared',position_type='lending',
+            asset_symbol='JETTON',quantity='10',source_position_id=primary,borrowed_crypto_asset_id=other,borrowed_quantity='10',deposited_at='2026-09-08'))
+        self.assertEqual(debt.status_code,200,debt.text)
+        loan=debt.json()['id']
+        collateral=await self.client.post(base,json=dict(investment_account_id=account,protocol_name='Shared',position_type='lending',
+            asset_symbol='COIN',quantity='20',source_position_id=secondary,deposited_at='2026-09-08'))
+        self.assertEqual(collateral.status_code,200,collateral.text)
+        cid=collateral.json()['id']
+        grouping=dict(request_id=str(uuid4()),other_position_id=cid,operated_at='2026-09-08')
+        grouped=await self.client.post(f'{base}/{loan}/group-with',json=grouping)
+        self.assertEqual(grouped.status_code,200,grouped.text)
+        self.assertEqual(grouped.json(),(await self.client.post(f'{base}/{loan}/group-with',json=grouping)).json())
+        key=grouped.json()['lending_account_key']
+        await self.db.execute("update budgeting.crypto_protocol_positions set metadata=metadata||jsonb_build_object('lending_account_key',$2::text) where id=$1",cid,'lp/user')
+        body=dict(request_id=str(uuid4()),collateral_position_id=cid,collateral_qty='2',debt_qty='1',collateral_fee_qty='0',interest_qty='0',operated_at='2026-09-08')
+        before=await fingerprint(self.db)
+        with self.assertRaisesRegex(asyncpg.RaiseError,'одному подтверждённому'):
+            await self.client.post(f'{base}/{loan}/liquidate',json=body)
+        self.assertEqual(before,await fingerprint(self.db))
+        await self.db.execute("update budgeting.crypto_protocol_positions set metadata=metadata||jsonb_build_object('lending_account_key',$2::text) where id=$1",cid,key)
+        done=await self.client.post(f'{base}/{loan}/liquidate',json=body)
+        self.assertEqual(done.status_code,200,done.text)
+        self.assertEqual(done.json()['collateral_asset_id'],third)
+        self.assertEqual(done.json()['collateral_position_id'],cid)
+        self.assertEqual(await self.db.fetchval('select quantity from budgeting.crypto_protocol_positions where id=$1',loan),D(10))
+        self.assertEqual(await self.db.fetchval('select quantity from budgeting.crypto_protocol_positions where id=$1',cid),D(18))
+        self.assertEqual(await self.db.fetchval('select cost_basis_in_base from budgeting.crypto_protocol_positions where id=$1',cid),D(1800))
+        self.assertEqual(await self.db.fetchval("select (metadata->>'borrowed_quantity')::numeric from budgeting.crypto_protocol_positions where id=$1",loan),D(9))
+        self.assertEqual(done.json(),(await self.client.post(f'{base}/{loan}/liquidate',json=body)).json())
+        history=await self.db.fetchval('select budgeting.get__crypto_protocol_history($1,$2)',uid,cid)
+        self.assertTrue(any(r['kind']=='collateral_liquidation' for r in history['entries']))
+        self.assertTrue(any(r['kind']=='liquidation_fee' and r['quantity']==0 for r in history['entries']))
+
+
+    async def test_reward_and_standalone_fee_retry(self):
+        from uuid import uuid4
+        uid,account,asset,other,seed=await self.fresh_crypto()
+        pid=await seed(asset,'10','1000')
+        reward=dict(request_id=str(uuid4()),amount=0,currency_code='RUB',quantity='1.123456789012345678',destination='position',income_kind='reward',received_at='2026-09-08')
+        url=f'/api/v1/portfolio/positions/{pid}/income'
+        got=await self.client.post(url,json=reward)
+        self.assertEqual(got.status_code,200,got.text)
+        fee=dict(request_id=str(uuid4()),quantity='0.123456789012345678',operated_at='2026-09-08')
+        feeurl=f'/api/v1/crypto/asset-positions/{pid}/pay-fee'
+        paid=await self.client.post(feeurl,json=fee)
+        self.assertEqual(paid.status_code,200,paid.text)
+        self.assertEqual(got.json(),(await self.client.post(url,json=reward)).json())
+        self.assertEqual(paid.json(),(await self.client.post(feeurl,json=fee)).json())
+        self.assertEqual(await self.db.fetchval('select quantity from budgeting.portfolio_positions where id=$1',pid),D(11))
 
     async def test_exact_balance_read(self):
         from backend.app.routers.portfolio import PortfolioPositionItem

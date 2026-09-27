@@ -94,7 +94,7 @@ BEGIN
     IF _existing.metadata->>'basis_quality'='unknown' THEN
         _existing.cost_basis_in_base := NULL;
     END IF;
-    IF _existing.position_type='liquidity_pool' AND (_existing.cost_basis_in_base IS NULL
+    IF _existing.position_type='liquidity_pool' AND (COALESCE(_principal_qty,0)>0 OR COALESCE(_secondary_principal_qty,0)>0) AND (_existing.cost_basis_in_base IS NULL
         OR _existing.metadata->>'basis_quality'='estimated') THEN
         RAISE EXCEPTION 'Uncertain LP leg basis requires per-leg reconstruction';
     END IF;
@@ -129,7 +129,7 @@ BEGIN
     _total_return_qty := _principal_qty_in + _rewards_qty_in;
 
     -- Cap total against current_quantity (what's actually in the position now).
-    IF _total_return_qty > COALESCE(_existing.current_quantity, 0) THEN
+    IF _existing.position_type<>'liquidity_pool' AND _total_return_qty > COALESCE(_existing.current_quantity, 0) THEN
         RAISE EXCEPTION 'Withdrawal qty % exceeds current_quantity %',
             _total_return_qty, COALESCE(_existing.current_quantity, 0);
     END IF;

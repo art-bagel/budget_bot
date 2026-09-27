@@ -36,7 +36,7 @@ BEGIN
             budgeting.calc__crypto_funding_units(COALESCE(metadata->'funding_units','{}'),_moved,-1)) WHERE id=_e.position_id;
         _out:=jsonb_set(_out,ARRAY[_e.position_id::text],_moved);
         UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units_moved',_moved) WHERE id=_e.id;
-        IF _kind IN ('fee','expense','bank_withdraw','bank_sell','sell_fiat') THEN
+        IF _kind IN ('position_income','protocol_yield','fee','expense','bank_withdraw','bank_sell','sell_fiat') THEN
             UPDATE portfolio_events SET metadata=metadata||jsonb_build_object('funding_units',_moved) WHERE id=_e.id;
         END IF;
     END LOOP;
@@ -85,8 +85,13 @@ BEGIN
                     _a:=budgeting.calc__crypto_funding_units(_a0,budgeting.calc__crypto_funding_units(_b0,_b,-1));
                 END IF;
             ELSIF _kind='partial_close_protocol' THEN
-                IF _old->>'position_type'='liquidity_pool' THEN RAISE EXCEPTION 'Partial funded LP exit is not implemented'; END IF;
-                _a:=budgeting.calc__crypto_funding_units('{}',_a0,(_p->>'principal_qty')::numeric/(_old->>'current_quantity')::numeric);
+                IF _old->>'position_type'='liquidity_pool' THEN
+                    IF COALESCE((_p->>'principal_qty')::numeric,0)>0 OR COALESCE((_p->>'secondary_principal_qty')::numeric,0)>0 THEN
+                        RAISE EXCEPTION 'Partial funded LP exit is not implemented';
+                    END IF;
+                    _a:='{}'; _b:='{}';
+                END IF;
+                _a:=budgeting.calc__crypto_funding_units('{}',_a0,COALESCE((_p->>'principal_qty')::numeric,0)/NULLIF((_old->>'quantity')::numeric,0));
             END IF;
             FOR _e IN SELECT e.* FROM portfolio_events e JOIN crypto_source_event_links l
                 ON l.ledger_table='portfolio_events' AND l.ledger_id=e.id
@@ -99,7 +104,7 @@ BEGIN
         END IF;
         UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
             'funding_units0',CASE WHEN _kind='close_protocol' THEN '{}'::jsonb ELSE budgeting.calc__crypto_funding_units(_a0,_a,-1) END,
-            'funding_units1','{}'::jsonb) WHERE id=(_p->>'position_id')::bigint;
+            'funding_units1',CASE WHEN _kind='close_protocol' THEN '{}'::jsonb ELSE budgeting.calc__crypto_funding_units(_b0,_b,-1) END) WHERE id=(_p->>'position_id')::bigint;
     ELSIF _kind='fee_refund' THEN
         SELECT e.* INTO _e FROM portfolio_events e JOIN crypto_source_event_links l
             ON l.ledger_table='portfolio_events' AND l.ledger_id=e.id
@@ -139,7 +144,7 @@ BEGIN
         _self:=round(COALESCE((_map->>_loan)::numeric,0)*_body/(_p->>'repay_qty')::numeric,18);
         IF _self>_body THEN RAISE EXCEPTION 'Return contains more same-loan units than principal repaid'; END IF;
         ELSE
-            _old:=_before->'protocols'->_loan;
+            _old:=_before->'protocols'->COALESCE(_p->>'collateral_position_id',_loan);
             _body:=(_p->>'debt_qty')::numeric-COALESCE((_p->>'interest_qty')::numeric,0);
             _cash:=(_result->>'collateral_cost_consumed_in_base')::numeric;
             IF _cash IS NULL THEN RAISE EXCEPTION 'Cannot settle unknown liquidation cost'; END IF;
@@ -158,7 +163,7 @@ BEGIN
             IF _self>_body THEN RAISE EXCEPTION 'Liquidated self-financing exceeds principal settled'; END IF;
             UPDATE crypto_protocol_positions SET metadata=metadata||jsonb_build_object(
                 'funding_units0',budgeting.calc__crypto_funding_units(metadata->'funding_units0',_map,-1),
-                'cost_basis_carried',cost_basis_in_base) WHERE id=_loan::bigint;
+                'cost_basis_carried',cost_basis_in_base) WHERE id=COALESCE(_p->>'collateral_position_id',_loan)::bigint;
             SELECT id INTO _pid FROM portfolio_positions WHERE investment_account_id=(_old->>'investment_account_id')::bigint
                 AND metadata->>'crypto_asset_id'=_old->>'crypto_asset_id' ORDER BY (status='open') DESC,id DESC LIMIT 1;
             IF _pid IS NULL THEN RAISE EXCEPTION 'Liquidation collateral source position is missing'; END IF;
@@ -262,7 +267,7 @@ BEGIN
         IF _out<>'{}'::jsonb AND NOT COALESCE((_p->>'defer_manual_expense')::boolean,false) THEN
             RAISE EXCEPTION 'Funded fiat sale requires pending manual settlement tracking';
         END IF;
-    ELSIF _kind NOT IN ('fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account') THEN
+    ELSIF _kind NOT IN ('position_income','protocol_yield','fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account','group_lending') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.
