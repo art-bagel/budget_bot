@@ -26,6 +26,7 @@ interface Props {
   onOpenSwap?: () => void;
   onOpenTransfer?: () => void;
   onOpenIncome?: () => void;
+  onRefundFee?: (entry: CryptoAssetEntry, symbol: string) => void;
   canTransferBetweenAccounts?: boolean;
 }
 
@@ -70,6 +71,7 @@ function describeCounterparty(entry: CryptoAssetEntry): string {
   const fromSymbol = typeof meta.from_asset_symbol === 'string' ? meta.from_asset_symbol : null;
   const toSymbol = typeof meta.to_asset_symbol === 'string' ? meta.to_asset_symbol : null;
 
+  if (sourceKind === 'fee_refund') return 'Возврат комиссии';
   if (sourceKind === 'bank') return 'Из банка';
   if (targetKind === 'bank') return 'В банк';
   if (sourceKind === 'swap') return fromSymbol ? `Обмен из ${fromSymbol}` : 'Обмен (получено)';
@@ -106,6 +108,7 @@ export default function CryptoAssetSheet({
   onOpenSwap,
   onOpenTransfer,
   onOpenIncome,
+  onRefundFee,
   canTransferBetweenAccounts,
   isHidden,
   onChangeHidden,
@@ -143,7 +146,7 @@ export default function CryptoAssetSheet({
   const basisEstimated = basisQuality === 'estimated';
   const basisOpen = detail?.basis_final === false;
 
-  const currentValue = detail && livePrice && livePrice.price > 0
+  const currentValue = detail && livePrice && !livePrice.is_stale && livePrice.vs_currency === baseCurrencyCode && livePrice.price > 0
     ? detail.quantity * livePrice.price
     : null;
   const unrealized = currentValue !== null && detail && !basisUnknown && !basisOpen && detail.remaining_cost_basis !== null
@@ -201,7 +204,8 @@ export default function CryptoAssetSheet({
             </div>
             {livePrice && (
               <div className="ca-sheet__hero-price">
-                {formatNumericAmount(livePrice.price, 6)} {currencySymbol(livePrice.vs_currency)} за 1 {detail.symbol}
+                {livePrice.is_stale ? 'Последняя известная цена: ' : ''}{formatNumericAmount(livePrice.price, 6)} {currencySymbol(livePrice.vs_currency)} за 1 {detail.symbol}
+                <span> · {livePrice.source.replace('_stale', '')} · {new Date(livePrice.fetched_at).toLocaleString('ru-RU')}</span>
                 {livePrice.is_stale && (
                   <span className="ca-sheet__hero-stale">
                     {formatStaleAge(livePrice.stale_age_seconds)}
@@ -353,6 +357,7 @@ export default function CryptoAssetSheet({
                         </span>
                       )}
                     </div>
+                    {entry.event_type === 'fee' && entry.position_id && onRefundFee && <button type="button" className="credits-textbtn" onClick={() => onRefundFee(entry, detail.symbol)}>Записать возврат комиссии</button>}
                     {entry.is_legacy_no_basis && (
                       <div className="ca-sheet__row-legacy">
                         <Info size={12} strokeWidth={2} />

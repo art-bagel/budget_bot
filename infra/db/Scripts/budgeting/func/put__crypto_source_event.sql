@@ -525,6 +525,8 @@ BEGIN
                 COALESCE((_payload->>'amount')::numeric,0),(_payload->>'currency_code')::char(3),
                 (_payload->>'amount_in_base')::numeric,_payload->>'income_kind',_accounting_date,_payload->>'comment',
                 _occurred_at,COALESCE(_payload->>'destination','position'),(_payload->>'quantity')::numeric);
+        WHEN 'linked_fee_refund' THEN
+            _result:=budgeting.put__linked_fee_refund(_user_id,_payload,_accounting_date);
         WHEN 'reward', 'receive_unknown', 'fee_refund' THEN
             IF _payload ? 'basis_assumption' AND (_kind<>'receive_unknown' OR (_payload->>'basis_assumption') IS DISTINCT FROM 'owner_zero' OR NULLIF(btrim(_payload->>'comment'),'') IS NULL) THEN
                 RAISE EXCEPTION 'Zero-basis assumption requires an unclassified receipt and explanation';
@@ -838,7 +840,7 @@ BEGIN
                 _operated_at => _accounting_date
             );
         WHEN 'liquidate' THEN
-            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','collateral_position_id','collateral_qty','debt_qty','interest_qty','collateral_fee_qty','settlement_value_in_base','comment']::text[]))) THEN
+            IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE NOT(k=ANY(ARRAY['position_id','collateral_position_id','collateral_qty','debt_qty','interest_qty','collateral_fee_qty','collateral_fee_known','settlement_value_in_base','comment']::text[]))) THEN
                 RAISE EXCEPTION 'Unsupported argument for liquidate';
             END IF;
             IF NOT (_payload ? 'position_id') OR _payload->'position_id'='null'::jsonb OR NOT (_payload ? 'collateral_qty') OR _payload->'collateral_qty'='null'::jsonb OR NOT (_payload ? 'debt_qty') OR _payload->'debt_qty'='null'::jsonb THEN

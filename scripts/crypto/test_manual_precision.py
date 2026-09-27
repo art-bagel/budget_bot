@@ -25,7 +25,7 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
             await self.tx.rollback()
         self.addAsyncCleanup(rollback)
         await self.db.execute((ROOT / 'infra/db/Scripts/budgeting/tb/crypto_source_revisions.sql').read_text())
-        for name in ('is__crypto_audit_comment', 'set__close_crypto_protocol_position', 'put__crypto_lp_action', 'put__top_up_crypto_protocol_position', 'put__buy_crypto_asset','put__journal_bank_operation','put__execute_bank_journal_command','put__record_expense','put__allocate_budget','put__settle_crypto_fiat_sale','capture__crypto_mutation', 'get__crypto_correction_fields', 'get__crypto_correction_state', 'get__crypto_correction_history', 'put__correct_crypto_source', 'put__record_crypto_expense', 'put__record_portfolio_income', 'put__swap_crypto_investment_asset', 'put__manual_crypto_movement', 'put__crypto_source_event', 'put__crypto_funding_components', 'put__partial_close_crypto_protocol_position', 'get__portfolio_positions', 'get__portfolio_position', 'get__crypto_protocol_positions', 'set__update_crypto_protocol_position', 'put__lending_liquidate', 'get__crypto_protocol_history'):
+        for name in ('put__linked_fee_refund', 'get__crypto_asset_detail', 'is__crypto_audit_comment', 'set__close_crypto_protocol_position', 'put__crypto_lp_action', 'put__top_up_crypto_protocol_position', 'put__buy_crypto_asset','put__journal_bank_operation','put__execute_bank_journal_command','put__record_expense','put__allocate_budget','put__settle_crypto_fiat_sale','capture__crypto_mutation', 'get__crypto_correction_fields', 'get__crypto_correction_state', 'get__crypto_correction_history', 'put__correct_crypto_source', 'put__record_crypto_expense', 'put__record_portfolio_income', 'put__swap_crypto_investment_asset', 'put__manual_crypto_movement', 'put__crypto_source_event', 'put__crypto_funding_components', 'put__partial_close_crypto_protocol_position', 'get__portfolio_positions', 'get__portfolio_position', 'get__crypto_protocol_positions', 'set__update_crypto_protocol_position', 'put__lending_liquidate', 'get__crypto_protocol_history'):
             await self.db.execute((ROOT / f'infra/db/Scripts/budgeting/func/{name}.sql').read_text())
         self.position = await self.db.fetchrow("""select p.id, p.quantity, p.metadata,
             (p.metadata->>'crypto_asset_id')::bigint asset_id
@@ -688,6 +688,53 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(r['kind']=='collateral_liquidation' for r in history['entries']))
         self.assertTrue(any(r['kind']=='liquidation_fee' and r['quantity']==0 for r in history['entries']))
 
+
+        unknown={**body,'request_id':str(uuid4()),'collateral_fee_known':False}
+        response=await self.client.post(f'{base}/{loan}/liquidate',json=unknown)
+        self.assertEqual(response.status_code,200,response.text)
+        known=await self.db.fetchval("select metadata->'request'->>'collateral_fee_known' from budgeting.crypto_liability_events where protocol_position_id=$1 and event_kind='liquidation' order by id desc limit 1",loan)
+        self.assertEqual(known,'false')
+        with self.assertRaisesRegex(asyncpg.RaiseError,'неизвестном штрафе'):
+            await self.client.post(f'{base}/{loan}/liquidate',json={**unknown,'request_id':str(uuid4()),'collateral_fee_qty':'1'})
+
+    async def test_linked_fee_refund_cost_funding_and_limits(self):
+        from uuid import uuid4
+        from datetime import date
+        import asyncpg
+        from check_user_history import fingerprint
+        funded = await self.db.fetchrow("""select id,quantity from budgeting.portfolio_positions
+            where owner_user_id=$1 and status='open' and quantity>2
+            and coalesce(metadata->'funding_units','{}')<>'{}'::jsonb order by id limit 1""", UID)
+        self.assertIsNotNone(funded)
+        pid=funded['id']
+        before=await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)',pid)
+        await self.db.fetchval("select budgeting.put__manual_crypto_movement($1,$2,'fee',$3,$4,NULL)",
+            UID,uuid4(),dict(source_position_id=pid,quantity='1'),date(2090,1,1))
+        eid=await self.db.fetchval("select max(id) from budgeting.portfolio_events where position_id=$1 and event_type='fee'",pid)
+        endpoint=f'/api/v1/crypto/fees/{eid}/refund'
+        body=dict(request_id=str(uuid4()),source_position_id=pid,quantity='0.4',operated_at='2090-01-02')
+        first=await self.client.post(endpoint,json=body)
+        self.assertEqual(first.status_code,200,first.text)
+        mark=await fingerprint(self.db)
+        self.assertEqual(first.json(),(await self.client.post(endpoint,json=body)).json())
+        self.assertEqual(mark,await fingerprint(self.db))
+        with self.assertRaisesRegex(asyncpg.RaiseError,'невозвращённую'):
+            await self.client.post(endpoint,json={**body,'request_id':str(uuid4()),'quantity':'0.7'})
+        self.assertEqual(mark,await fingerprint(self.db))
+        final=await self.client.post(endpoint,json={**body,'request_id':str(uuid4()),'quantity':'0.6'})
+        self.assertEqual(final.status_code,200,final.text)
+        after=await self.db.fetchval('select budgeting.get__crypto_position_entry_summary($1)',pid)
+        self.assertEqual(before['remaining_cost_basis'],after['remaining_cost_basis'])
+        self.assertEqual(before['funding_units'],after['funding_units'])
+        self.assertEqual(before['quantity_now'],after['quantity_now'])
+        self.assertEqual(await self.db.fetchval("select coalesce(metadata->'funding_units','{}') from budgeting.portfolio_events where id=$1",eid),{})
+        # Refunds are top-ups with carried basis, not income rewards.
+        self.assertEqual(await self.db.fetchval("select count(*) from budgeting.portfolio_events where metadata->>'fee_event_id'=$1 and event_type='income'",str(eid)),0)
+        mark=await fingerprint(self.db)
+        source=await self.db.fetchrow("select id,revision from budgeting.crypto_source_events where source_id=$1",body['request_id'])
+        await self.db.fetchval('select budgeting.put__correct_crypto_source($1,$2,$3,$4,$5,$6,false)',UID,source['id'],source['revision'],uuid4(),
+            [dict(command_index=0,field='quantity',value='0.3')],'Проверка возврата')
+        self.assertEqual(mark,await fingerprint(self.db))
 
     async def test_reward_and_standalone_fee_retry(self):
         from uuid import uuid4

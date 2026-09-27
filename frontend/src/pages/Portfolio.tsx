@@ -1,3 +1,4 @@
+import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
 import { setCryptoAssetHidden } from '../api';
@@ -745,6 +746,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [partialCloseProtocolId, setPartialCloseProtocolId] = useState<number | null>(null);
   const [lpSheet, setLpSheet] = useState<{ kind: 'add' | 'partial' | 'close' | 'claim' | 'snapshot' | 'reward'; positionId: number } | null>(null);
   const [lendingSheet, setLendingSheet] = useState<{ kind: 'top_up' | 'take_debt' | 'repay_debt' | 'adjust' | 'partial' | 'close' | 'interest' | 'liquidate' | 'yield' | 'group'; positionId: number } | null>(null);
+  const [feeRefund, setFeeRefund] = useState<{eventId: number; positionId: number; symbol: string} | null>(null);
   const [eventsByPosition, setEventsByPosition] = useState<Record<number, PortfolioEvent[]>>({});
   const [eventsLoadingId, setEventsLoadingId] = useState<number | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
@@ -5890,6 +5892,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         />
       )}
 
+      {feeRefund && <FeeRefundSheet {...feeRefund} onClose={() => setFeeRefund(null)} onSuccess={() => { setFeeRefund(null); setEventsByPosition({}); void loadPortfolio(); }} />}
       {cryptoAssetSheet && (() => {
         const targetPosition = positions.find((p) =>
           p.status === 'open'
@@ -5904,6 +5907,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         return (
           <CryptoAssetSheet
             open
+            onRefundFee={(entry, symbol) => { if (entry.position_id) { setCryptoAssetSheet(null); setFeeRefund({ eventId: entry.event_id, positionId: entry.position_id, symbol }); } }}
             investmentAccountId={cryptoAssetSheet.investmentAccountId}
             cryptoAssetId={cryptoAssetSheet.cryptoAssetId}
             baseCurrencyCode={user.base_currency_code}

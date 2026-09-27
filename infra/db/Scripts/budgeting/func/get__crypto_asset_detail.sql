@@ -74,6 +74,7 @@ BEGIN
     FROM (
         SELECT jsonb_build_object(
             'event_id', pe.id,
+            'position_id', pe.position_id,
             'event_type', pe.event_type,
             'event_at', pe.event_at,
             'quantity', pe.quantity,

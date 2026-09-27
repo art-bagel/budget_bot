@@ -21,7 +21,7 @@ class CryptoSourceCommand(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['swap', 'transfer', 'fee', 'create_protocol', 'top_up_protocol',
                   'partial_close_protocol', 'close_protocol', 'borrow', 'repay',
-                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'bank_withdraw', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation', 'tag_lending_account', 'bank_cash_sell', 'position_income', 'protocol_yield', 'group_lending', 'lp_snapshot', 'lp_withdraw', 'lp_reward']
+                  'accrue', 'accrue_interest', 'liquidate', 'reward', 'expense', 'buy_fiat', 'sell_fiat', 'settle_fiat_sale', 'bank_buy', 'bank_to_portfolio', 'bank_sell', 'bank_withdraw', 'lp_custody', 'staking_convert', 'receive_unknown', 'fee_refund', 'quantity_correction', 'observation', 'tag_lending_account', 'bank_cash_sell', 'position_income', 'protocol_yield', 'group_lending', 'lp_snapshot', 'lp_withdraw', 'lp_reward', 'linked_fee_refund']
     payload: dict[str, Any]
 
     @field_validator('payload')
@@ -323,6 +323,7 @@ class CryptoAccountAssetSummary(BaseModel):
 
 
 class CryptoAssetEntry(BaseModel):
+    position_id: Optional[int] = None
     comment_is_system: bool = False
     event_id: int
     event_type: str
@@ -471,6 +472,7 @@ class LiquidateLendingRequest(BaseModel):
     debt_qty: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     interest_qty: Decimal = Field(default=Decimal('0'), ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     collateral_fee_qty: Decimal = Field(ge=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    collateral_fee_known: bool = True
     settlement_value_in_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=20, decimal_places=2, allow_inf_nan=False)
     external_id: Optional[str] = Field(default=None, min_length=1)
     operated_at: date
@@ -1068,4 +1070,23 @@ async def pay_crypto_fee(
         user_id=user.user_id, request_id=body.request_id or uuid4(), kind='fee',
         payload={'source_position_id': position_id, **body.model_dump(mode='json', exclude_none=True,
             exclude={'request_id', 'fee', 'operated_at'})}, operated_at=body.operated_at,
+    )
+
+
+class LinkedFeeRefundRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+    source_position_id: int = Field(gt=0)
+    quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    operated_at: date
+    comment: Optional[str] = None
+
+
+@router.post('/fees/{fee_event_id}/refund')
+async def refund_crypto_fee(fee_event_id: int, body: LinkedFeeRefundRequest,
+                            user: CurrentUser = Depends(get_current_user)):
+    return await ledger.put__manual_crypto_movement(
+        user.user_id, body.request_id, 'linked_fee_refund',
+        {'fee_event_id': fee_event_id, **body.model_dump(mode='json', exclude={'request_id', 'operated_at'}, exclude_none=True)},
+        body.operated_at, None,
     )

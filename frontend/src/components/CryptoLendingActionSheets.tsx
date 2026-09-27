@@ -802,6 +802,7 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
   const [debt, setDebt] = useState('');
   const [interest, setInterest] = useState('');
   const [penalty, setPenalty] = useState('');
+  const [penaltyUnknown, setPenaltyUnknown] = useState(false);
   const [day, setDay] = useState(todayIso());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -811,7 +812,7 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
   const debtSymbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
   const valid = Number(quantity) > 0 && (!liquidate || (
     Number(debt) > 0 && interest.trim() !== '' && Number(interest) >= 0 && Number(interest) <= Number(debt)
-    && penalty.trim() !== '' && Number(penalty) >= 0 && Number(penalty) <= Number(quantity)
+    && (penaltyUnknown || (penalty.trim() !== '' && Number(penalty) >= 0 && Number(penalty) <= Number(quantity)))
   ));
   const submit = async () => {
     if (!valid || busy) return;
@@ -819,7 +820,7 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
     setError(null);
     try {
       const payload = liquidate
-        ? { operated_at: day, collateral_position_id: collateral.id, collateral_qty: quantity, debt_qty: debt, interest_qty: interest, collateral_fee_qty: penalty }
+        ? { operated_at: day, collateral_position_id: collateral.id, collateral_qty: quantity, debt_qty: debt, interest_qty: interest, collateral_fee_qty: penaltyUnknown ? '0' : penalty, collateral_fee_known: !penaltyUnknown }
         : { operated_at: day, quantity };
       await recordLendingDebtEvent(position.id, liquidate ? 'liquidate' : kind === 'yield' ? 'yield' : 'accrue-interest', {
         ...payload, request_id: request.requestId(payload),
@@ -863,7 +864,9 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
       {liquidate && <>
         {input(`Всего погашено долга, ${debtSymbol}`, debt, setDebt)}
         {input(`Из погашенного — проценты, ${debtSymbol} (0, если нет)`, interest, setInterest)}
-        {input(`Из списанного залога — штраф, ${collateral.asset_symbol} (0, если нет)`, penalty, setPenalty)}
+        <label className="apf-label"><input type="checkbox" checked={penaltyUnknown} disabled={busy} onChange={(e) => setPenaltyUnknown(e.target.checked)} /> Размер штрафа неизвестен</label>
+        {!penaltyUnknown && input(`Из списанного залога — штраф, ${collateral.asset_symbol} (0, если нет)`, penalty, setPenalty)}
+        {penaltyUnknown && <p className="tok-row__hint">Общее списание сохранится. Распределение стоимости между погашением и штрафом останется условным до уточнения.</p>}
         <p className="tok-row__hint">Проценты сначала должны быть начислены в истории. Штраф указывайте по данным протокола; неизвестную сумму не заменяйте нулём.</p>
       </>}
       <div className="apf-field"><label className="apf-label">Дата</label>

@@ -1241,3 +1241,7 @@ export async function setAccountStatistics(accountId: number, included: boolean)
     method: 'PATCH', body: JSON.stringify({ include_in_statistics: included }),
   });
 }
+
+export async function refundCryptoFee(eventId: number, data: { request_id: string; source_position_id: number; quantity: string; operated_at: string; comment?: string }): Promise<void> {
+  await apiFetch(`/crypto/fees/${eventId}/refund`, { method: 'POST', body: JSON.stringify(data) });
+}

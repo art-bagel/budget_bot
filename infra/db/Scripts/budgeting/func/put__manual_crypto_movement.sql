@@ -18,7 +18,7 @@ DECLARE
     _result_index integer := 0;
 BEGIN
     SET search_path TO budgeting;
-    IF _request_id IS NULL OR _kind NOT IN ('swap','transfer','borrow','repay','accrue_interest','liquidate','create_protocol','top_up_protocol','partial_close_protocol','close_protocol','fee','position_income','protocol_yield','group_lending','lp_snapshot','lp_withdraw','lp_reward','bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') OR _kind IS NULL
+    IF _request_id IS NULL OR _kind NOT IN ('linked_fee_refund','swap','transfer','borrow','repay','accrue_interest','liquidate','create_protocol','top_up_protocol','partial_close_protocol','close_protocol','fee','position_income','protocol_yield','group_lending','lp_snapshot','lp_withdraw','lp_reward','bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') OR _kind IS NULL
        OR jsonb_typeof(_payload) IS DISTINCT FROM 'object' THEN
         RAISE EXCEPTION 'Некорректная ручная операция';
     END IF;

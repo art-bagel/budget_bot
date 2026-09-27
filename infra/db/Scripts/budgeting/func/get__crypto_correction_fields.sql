@@ -6,6 +6,7 @@ RETURNS text[] LANGUAGE sql IMMUTABLE AS $f$
  WHEN 'lp_reward' THEN ARRAY['quantity']
  WHEN 'swap' THEN ARRAY['from_amount','to_amount']
  WHEN 'transfer' THEN ARRAY['amount']
+ WHEN 'linked_fee_refund' THEN ARRAY['quantity']
  WHEN 'fee' THEN ARRAY['quantity']
  WHEN 'create_protocol' THEN ARRAY['quantity','secondary_quantity']
  WHEN 'top_up_protocol' THEN ARRAY['quantity','secondary_quantity']

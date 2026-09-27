@@ -77,9 +77,21 @@ BEGIN
     IF _collateral_position_id<>_position_id THEN
         _request:=_request||jsonb_build_object('collateral_position_id',_collateral_position_id);
     END IF;
-    IF EXISTS(SELECT 1 FROM crypto_source_events WHERE id=NULLIF(current_setting('budgeting.crypto_source_event_id',true),'')::bigint
-        AND source_namespace='manual-portfolio-v1') THEN
-        _request:=_request||jsonb_build_object('collateral_fee_known',true);
+    -- Explicit field for new commands; preserve the interpretation of old envelopes.
+    SELECT CASE
+        WHEN (s.commands->COALESCE(NULLIF(current_setting('budgeting.crypto_source_command_index',true),'')::integer,0)->'payload') ? 'collateral_fee_known'
+        THEN _request || jsonb_build_object('collateral_fee_known',
+            (s.commands->COALESCE(NULLIF(current_setting('budgeting.crypto_source_command_index',true),'')::integer,0)->'payload'->>'collateral_fee_known')::boolean)
+        WHEN s.source_namespace='manual-portfolio-v1' THEN _request||jsonb_build_object('collateral_fee_known',true)
+        ELSE _request END INTO _request
+        FROM crypto_source_events s WHERE id=NULLIF(current_setting('budgeting.crypto_source_event_id',true),'')::bigint;
+    IF _request IS NULL THEN
+        _request:=jsonb_build_object('collateral_quantity',_collateral_qty,'debt_quantity',_debt_qty,
+            'interest_quantity',_interest_qty,'collateral_fee_quantity',_collateral_fee_qty,
+            'operated_at',_operated_at,'settlement_value_in_base',_settlement_value_in_base,'comment',_comment);
+    END IF;
+    IF _request->>'collateral_fee_known'='false' AND _collateral_fee_qty<>0 THEN
+        RAISE EXCEPTION 'При неизвестном штрафе не указывайте выдуманное количество';
     END IF;
     SELECT * INTO _prior FROM crypto_liability_events
         WHERE protocol_position_id=_position_id AND external_id=_external_id;

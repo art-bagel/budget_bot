@@ -204,6 +204,7 @@ export interface CryptoAccountAssetSummary {
 }
 
 export interface CryptoAssetEntry {
+  position_id?: number;
   comment_is_system?: boolean;
   event_id: number;
   event_type: string;
