@@ -79,3 +79,11 @@ export function walletMarketValue(quantity: number, assetId: number | null, pric
     || quote.vs_currency.toUpperCase() !== currency.toUpperCase()) return null;
   return quantity * quote.price;
 }
+
+/** Aggregate available valuations without dropping priced positions in an incomplete account. */
+export function knownProtocolValues(values: ProtocolValuation[]): { value: number; incomplete: boolean } {
+  return {
+    value: values.reduce((sum, item) => sum + (item.value ?? 0), 0),
+    incomplete: values.some((item) => item.value === null),
+  };
+}

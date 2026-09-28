@@ -3,7 +3,7 @@ import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
 import { setCryptoAssetHidden } from '../api';
-import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, walletMarketValue } from '../utils/cryptoProtocolValuation';
+import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, knownProtocolValues, walletMarketValue } from '../utils/cryptoProtocolValuation';
 import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -3026,7 +3026,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <span className={`pf-hero__row-dot pf-hero__row-dot--${tab.code}`} />
             <span className="pf-hero__row-label">{tab.label}</span>
             <span className="pf-hero__row-value">
-              {tab.valuationIncomplete ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
+              {tab.valuationIncomplete ? '≈ ' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
               <span className="pf-hero__row-sym">{currencySymbol(user.base_currency_code)}</span>
             </span>
             <span className="pf-hero__row-chev">›</span>
@@ -3148,7 +3148,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
                 <div className="pf-tsum__now-row">
                   <div className="pf-tsum__now-value">
-                    {activeScopeMarketIncomplete ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
+                    {activeScopeMarketIncomplete ? '≈ ' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
                   {!activeScopeHasCrypto && activeScopeBaseValue > 0 && (() => {
@@ -3305,10 +3305,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
                 : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
               const protocolsForAccount = cryptoProtocolPositions.filter((item) => item.status === 'open' && !isEmptyProtocolPosition(item) && item.investment_account_id === group.accountId);
-              const protocolMarketValue = sumProtocolValues(protocolsForAccount.map(getProtocolValuation));
+              const protocolMarketValue = knownProtocolValues(protocolsForAccount.map(getProtocolValuation));
               const groupMarketIncomplete = group.positions.some((item) => item.asset_type_code === 'crypto' && Number(item.quantity ?? 0) !== 0 && !getCryptoLivePrice(item))
-                || protocolMarketValue === null;
-              const groupValue = positionsValue + getAccountCashValue(group.accountId) + (protocolMarketValue ?? 0);
+                || protocolMarketValue.incomplete;
+              const groupValue = positionsValue + getAccountCashValue(group.accountId) + protocolMarketValue.value;
               const groupProtocolPositions = activeAssetTypeCode === 'crypto'
                 ? (visibleCryptoProtocolPositionsByAccountId.get(group.accountId) ?? [])
                 : [];
@@ -3324,7 +3324,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </div>
                     </div>
                     <div className="pf-grp__total">
-                      {groupMarketIncomplete ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
+                      {groupMarketIncomplete ? '≈ ' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
                       <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </div>
                   </div>
@@ -3581,7 +3581,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               <div className="portfolio-analytics-metric">
                 <span className="portfolio-analytics-metric__label">Оценочная стоимость</span>
                 <strong className="portfolio-analytics-metric__value">
-                  {activeScopeMarketIncomplete ? 'Нет полной оценки' : formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
+                  {activeScopeMarketIncomplete ? '≈ ' : ''}{formatAmount(activeScopeDisplayMetrics.estimatedValue, user.base_currency_code)}
                 </strong>
               </div>
               <div className="portfolio-analytics-metric">
@@ -5809,9 +5809,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 const netContributed = Number(summary?.net_contributed_in_base ?? 0);
                 const displayIncome = accountOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0);
                 const accountProtocols = cryptoProtocolPositions.filter((p) => p.investment_account_id === account.id && p.status === 'open' && !isEmptyProtocolPosition(p));
-                const protocolValue = sumProtocolValues(accountProtocols.map(getProtocolValuation));
-                const accountIncomplete = protocolValue === null || accountOpenPositions.some((p) => p.asset_type_code === 'crypto' && Number(p.quantity ?? 0) !== 0 && !getCryptoLivePrice(p));
-                const currentAccountValue = estimatedValue + cashValueInBase + (protocolValue ?? 0);
+                const protocolValue = knownProtocolValues(accountProtocols.map(getProtocolValuation));
+                const accountIncomplete = protocolValue.incomplete || accountOpenPositions.some((p) => p.asset_type_code === 'crypto' && Number(p.quantity ?? 0) !== 0 && !getCryptoLivePrice(p));
+                const currentAccountValue = estimatedValue + cashValueInBase + protocolValue.value;
                 const realizedIncome = isSecuritySheet
                   ? currentAccountValue - netContributed - displayIncome
                   : Number(summary?.realized_income_in_base ?? 0);
@@ -5860,7 +5860,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {heroTypeSheetCode === 'crypto' && (
                         <div className="pf-sheet-account__row">
                           <span>Рыночная оценка с DeFi</span>
-                          <strong>{accountIncomplete ? 'Нет полной оценки' : formatAmount(currentAccountValue, user.base_currency_code)}</strong>
+                          <strong>{accountIncomplete ? '≈ ' : ''}{formatAmount(currentAccountValue, user.base_currency_code)}</strong>
                         </div>
                       )}
                       {heroTypeSheetCode !== 'crypto' && estimatedValue > 0 && (

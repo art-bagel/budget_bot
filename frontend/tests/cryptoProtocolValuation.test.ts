@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, walletMarketValue } from '../src/utils/cryptoProtocolValuation.ts';
+import { isEmptyProtocolPosition, knownProtocolValues, protocolMarketValue, sumProtocolValues, walletMarketValue } from '../src/utils/cryptoProtocolValuation.ts';
 import type { CryptoLivePrice, CryptoProtocolPosition } from '../src/types.ts';
 
 const position = (patch: Partial<CryptoProtocolPosition> = {}) => ({
@@ -76,4 +76,13 @@ test('wallet valuation distinguishes zero balance from unavailable market value'
 
 test('closed DeFi has no current market value even when historical quantities remain', () => {
   assert.equal(protocolMarketValue(position({ status: 'closed' }), prices, 'RUB').value, null);
+});
+
+test('account retains priced DeFi when another position has no valuation', () => {
+  assert.deepEqual(knownProtocolValues([
+    { value: 150, reason: null, quotes: [] },
+    { value: null, reason: 'no price', quotes: [] },
+    { value: -20, reason: null, quotes: [] },
+  ]), { value: 130, incomplete: true });
+  assert.deepEqual(knownProtocolValues([{ value: 0, reason: null, quotes: [] }]), { value: 0, incomplete: false });
 });
