@@ -13,6 +13,7 @@ import {
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
+  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -52,7 +53,7 @@ export default function CryptoWithdrawSheet({
   );
 
   const defaultBank = targets.find((a) => a.id === defaultBankAccountId) ?? targets[0];
-  const defaultAmount = position.quantity_exact ?? (sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 18) : '');
+  const defaultAmount = position.quantity_exact ? trimDecimal(position.quantity_exact) : (sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 18) : '');
   const [bankAccountId, setBankAccountId] = useState<string>(defaultBank ? String(defaultBank.id) : '');
   const [amount, setAmount] = useState(defaultAmount);
   const [withdrawnAt, setWithdrawnAt] = useState(todayIso());
@@ -95,7 +96,7 @@ export default function CryptoWithdrawSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
+      tag={position.investment_account_name}
       title={`В банк · ${symbol}`}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : undefined}
       iconColor={iconUrl ? undefined : 'o'}
@@ -109,16 +110,16 @@ export default function CryptoWithdrawSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
             >
-              {submitting ? 'Выводим…' : 'Подтвердить вывод'}
+              {submitting ? 'Выводим…' : 'Вывести'}
             </button>
           </div>
         </div>

@@ -12,6 +12,7 @@ import {
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
+  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -53,7 +54,7 @@ export default function CryptoTransferSheet({
   );
 
   const defaultTarget = targets[0];
-  const defaultAmount = position.quantity_exact ?? '';
+  const defaultAmount = trimDecimal(position.quantity_exact ?? '');
 
   const [targetInvestmentAccountId, setTargetInvestmentAccountId] = useState<string>(
     defaultTarget ? String(defaultTarget.id) : '',
@@ -103,7 +104,7 @@ export default function CryptoTransferSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
+      tag={position.investment_account_name}
       title={`Перевод · ${symbol}`}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : undefined}
       iconColor={iconUrl ? undefined : 'o'}
@@ -117,16 +118,16 @@ export default function CryptoTransferSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
             >
-              {submitting ? 'Переводим…' : 'Подтвердить перевод'}
+              {submitting ? 'Переводим…' : 'Перевести'}
             </button>
           </div>
         </div>
@@ -134,7 +135,7 @@ export default function CryptoTransferSheet({
     >
       {targets.length === 0 ? (
         <div className="cs-sheet__hint">
-          <span>Нет других crypto-счетов с тем же владельцем для перевода.</span>
+          <span>Нет других криптосчетов с тем же владельцем для перевода.</span>
         </div>
       ) : (
         <>
@@ -146,7 +147,7 @@ export default function CryptoTransferSheet({
               onChange={(event) => setTargetInvestmentAccountId(event.target.value)}
               disabled={submitting}
             >
-              <option value="">Выберите crypto-счёт</option>
+              <option value="">Выберите криптосчёт</option>
               {targets.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}

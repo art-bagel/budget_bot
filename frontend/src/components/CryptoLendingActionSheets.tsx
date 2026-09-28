@@ -123,8 +123,8 @@ export function LendingTopUpSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Доливаем…' : 'Долить'}
             </button>
           </div>
@@ -251,8 +251,8 @@ export function LendingTakeDebtSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Берём…' : 'Взять в долг'}
             </button>
           </div>
@@ -395,8 +395,8 @@ export function LendingRepayDebtSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Гасим…' : 'Погасить'}
             </button>
           </div>
@@ -505,8 +505,8 @@ export function LendingAdjustSheet({ open, position, onClose, onSuccess }: Commo
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Сохраняем…' : 'Сохранить'}
             </button>
           </div>
@@ -626,8 +626,8 @@ export function LendingPartialWithdrawSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Снимаем…' : 'Снять'}
             </button>
           </div>
@@ -730,8 +730,8 @@ export function LendingCloseSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Закрываем…' : 'Закрыть'}
             </button>
           </div>
@@ -821,7 +821,7 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
       icon={<SlidersHorizontal size={18} />} iconColor="o" onClose={onClose}
       actions={<div className="tk-foot pf-sheet-actions">
         {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
-        <button className="btn btn--primary" type="button" disabled={busy || !valid} onClick={() => void submit()}>
+        <button className="sh-btn sh-btn--primary" type="button" disabled={busy || !valid} onClick={() => void submit()}>
           {busy ? 'Сохраняем…' : 'Записать в историю'}
         </button>
       </div>}
@@ -829,14 +829,20 @@ export function LendingDebtEventSheet({ open, position, kind, collateralPosition
       {liquidate && collateralPositions && collateralPositions.length > 1 && <div className="apf-field">
         <label className="apf-label">Из какого залога списаны монеты</label>
         <select className="picker-v2" value={collateralId} onChange={(e) => setCollateralId(Number(e.target.value))} disabled={busy}>
-          {collateralPositions.map((p) => <option key={p.id} value={p.id}>{p.asset_symbol} · {p.protocol_name} · #{p.id}</option>)}
+          {collateralPositions.map((p) => <option key={p.id} value={p.id}>{p.asset_symbol} · {formatNumericAmount(p.current_quantity ?? p.quantity ?? 0, 8)}</option>)}
         </select>
       </div>}
       {input(liquidate ? `Всего списано залога, ${collateral.asset_symbol}` : kind === 'yield' ? `Начислено, ${position.asset_symbol}` : `Новые проценты, ${debtSymbol}`, quantity, setQuantity)}
       {liquidate && <>
         {input(`Всего погашено долга, ${debtSymbol}`, debt, setDebt)}
         {input(`Из погашенного — проценты, ${debtSymbol} (0, если нет)`, interest, setInterest)}
-        <label className="apf-label"><input type="checkbox" checked={penaltyUnknown} disabled={busy} onChange={(e) => setPenaltyUnknown(e.target.checked)} /> Размер штрафа неизвестен</label>
+        <div className="pf-toggle-row">
+          <span className="pf-toggle-row__label">Штраф известен</span>
+          <button type="button" role="switch" aria-checked={!penaltyUnknown} className={`sw${!penaltyUnknown ? ' sw--on' : ''}`}
+            disabled={busy} onClick={() => setPenaltyUnknown((value) => !value)}>
+            <span className="sw__thumb" />
+          </button>
+        </div>
         {!penaltyUnknown && input(`Из списанного залога — штраф, ${collateral.asset_symbol} (0, если нет)`, penalty, setPenalty)}
       </>}
       <div className="apf-field"><label className="apf-label">Дата</label>
@@ -870,16 +876,16 @@ export function LendingGroupSheet({ open, position, candidates, onClose, onSucce
   return <BottomSheet open={open} tag={position.protocol_name} title="Общий счёт протокола" onClose={onClose}
     actions={<div className="tk-foot pf-sheet-actions">
       {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
-      <button className="btn btn--primary" type="button" disabled={!selected || busy} onClick={() => void submit()}>
-        {busy ? 'Сохраняем…' : 'Подтвердить общий счёт'}
+      <button className="sh-btn sh-btn--primary" type="button" disabled={!selected || busy} onClick={() => void submit()}>
+        {busy ? 'Сохраняем…' : 'Объединить'}
       </button>
     </div>}>
     <div className="apf-field"><label className="apf-label">Другой залог</label>
       <select className="picker-v2" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={busy}>
         <option value="">Выберите позицию</option>
-        {candidates.map((p) => <option key={p.id} value={p.id}>{p.protocol_name} · {p.asset_symbol} · #{p.id}</option>)}
+        {candidates.map((p) => <option key={p.id} value={p.id}>{p.protocol_name} · {p.asset_symbol} · {formatNumericAmount(p.current_quantity ?? p.quantity ?? 0, 8)}</option>)}
       </select>
-      {!candidates.length && <p>Сначала создайте второй залог на этом криптосчёте.</p>}
+      {!candidates.length && <span className="amt__hint">Сначала создайте второй залог на этом криптосчёте.</span>}
     </div>
     <div className="apf-field"><label className="apf-label">Дата подтверждения</label>
       <input className="apf-input" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />

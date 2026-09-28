@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cryptoAssetLabel } from '../src/utils/cryptoAssetLabel.ts';
+import { cryptoAssetLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel } from '../src/utils/cryptoAssetLabel.ts';
 import type { CryptoAsset } from '../src/types.ts';
 const asset = (id: number, address: string, network = 'ton') => ({ id, symbol: 'USDT', network_code: network, contract_address: address }) as CryptoAsset;
 test('same symbols keep distinct contract and service identities', () => {
@@ -16,5 +16,13 @@ test('abbreviated address collisions remain distinguishable', () => {
 });
 test('different networks need no additional identity label', () => {
   const assets = [asset(1, '', 'ton'), asset(2, '', 'ethereum')];
-  assert.equal(cryptoAssetLabel(assets[0], assets), 'USDT · ton');
+  assert.equal(cryptoAssetLabel(assets[0], assets), 'USDT · TON');
+});
+test('network and price source labels are human readable', () => {
+  assert.equal(cryptoNetworkSuffix('ton', 'TON'), '');
+  assert.equal(cryptoNetworkSuffix('ton', 'USDT'), ' · TON');
+  assert.equal(cryptoNetworkSuffix('arbitrum', 'ETH'), ' · Arbitrum');
+  assert.equal(cryptoNetworkSuffix(null, 'ETH'), '');
+  assert.equal(cryptoPriceSourceLabel('tonapi_stale'), 'TonAPI');
+  assert.equal(cryptoPriceSourceLabel('coingecko'), 'CoinGecko');
 });

@@ -26,6 +26,7 @@ const KIND_OPTIONS: { value: IncomeKind; label: string }[] = [
 interface Props {
   open: boolean;
   positionId: number;
+  accountName?: string;
   symbol: string;
   iconUrl?: string | null;
   livePrice?: CryptoLivePrice | null;
@@ -37,6 +38,7 @@ interface Props {
 
 export default function CryptoIncomeSheet({
   open,
+  accountName,
   positionId,
   symbol,
   iconUrl,
@@ -99,7 +101,7 @@ export default function CryptoIncomeSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
+      tag={accountName}
       title={`Зачислить · ${symbol}`}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : <Gift size={18} strokeWidth={2.2} />}
       iconColor={iconUrl ? undefined : 'o'}
@@ -113,11 +115,11 @@ export default function CryptoIncomeSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}

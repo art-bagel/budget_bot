@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { DashboardBankBalance } from '../types';
 import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { cryptoNetworkSuffix } from '../utils/cryptoAssetLabel';
 import BottomSheet from './BottomSheet';
 
 interface Props {
@@ -79,14 +80,14 @@ export default function AccountDetailSheet({
       : 0;
     const isBase = b.asset_type !== 'crypto' && b.currency_code === baseCurrencyCode;
     const label = b.asset_type === 'crypto'
-      ? `${b.symbol ?? b.currency_code}${b.network_code ? ` · ${b.network_code}` : ''}`
+      ? `${b.symbol ?? b.currency_code}${cryptoNetworkSuffix(b.network_code, b.symbol ?? b.currency_code)}`
       : currencyName(b.currency_code);
     return (
       <li className="comp__row" key={`${b.asset_type ?? 'fiat'}:${b.crypto_asset_id ?? b.currency_code}`}>
         <span className={`comp__dot comp__dot--c${colorIndex}`} />
         <span className="comp__name">{label}</span>
         <span className="comp__native">
-          {formatNumericAmount(b.amount)} {b.symbol ?? currencySymbol(b.currency_code)}
+          {formatNumericAmount(b.amount, b.asset_type === 'crypto' ? 8 : 2)} {b.asset_type === 'crypto' ? (b.symbol ?? b.currency_code) : currencySymbol(b.currency_code)}
           {!isBase && (
             <span className="comp__conv">
               ≈ {formatBase(b.historical_cost_in_base)} {currencySymbol(baseCurrencyCode)}

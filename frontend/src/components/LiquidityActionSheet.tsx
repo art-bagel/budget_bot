@@ -54,8 +54,8 @@ export default function LiquidityActionSheet({ position, action, assets, account
   </div>;
   return <BottomSheet open title={title} tag={position.protocol_name} onClose={onClose} actions={
     <div className="tk-foot pf-sheet-actions">{error && <p className="tk-error" role="alert">{error}</p>}
-      <div className="tk-foot__row"><button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>Отмена</button>
-        <button type="button" className="btn btn--primary" disabled={!valid || busy} onClick={() => void submit()}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>
+      <div className="tk-foot__row"><button type="button" className="sh-btn sh-btn--ghost" onClick={onClose} disabled={busy}>Отмена</button>
+        <button type="button" className="sh-btn sh-btn--primary" disabled={!valid || busy} onClick={() => void submit()}>{busy ? 'Сохраняем…' : 'Сохранить'}</button>
       </div></div>}>
     {withdraw && field('Доля позиции, %', share, setShare)}
     {reward && <div className="apf-field"><label className="apf-label">Монета награды<select className="apf-input" value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={busy}>
