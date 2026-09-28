@@ -178,7 +178,7 @@ class Ledger(DataBase):
         user_id: int,
         from_category_id: int,
         to_category_id: int,
-        amount_in_base: float,
+        amount_in_base: Decimal | float,
         comment: Optional[str] = None,
     ) -> int:
         """
@@ -195,7 +195,7 @@ class Ledger(DataBase):
             user_id,
             from_category_id,
             to_category_id,
-            amount_in_base,
+            Decimal(str(amount_in_base)),
             comment,
         )
 

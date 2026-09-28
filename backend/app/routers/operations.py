@@ -133,13 +133,13 @@ class ExchangeCurrencyResponse(BaseModel):
 class AllocateBudgetRequest(BaseModel):
     from_category_id: int
     to_category_id: int
-    amount_in_base: float
+    amount_in_base: Decimal
     comment: Optional[str] = None
 
     @field_validator('amount_in_base')
     @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
+        if not v.is_finite() or v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
 
