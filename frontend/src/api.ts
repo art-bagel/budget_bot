@@ -1251,3 +1251,9 @@ export async function refundCryptoFee(eventId: number, data: { request_id: strin
 export async function updateCryptoAccountSettings(id: number, data: {name: string; wallet_address: string | null; is_archived: boolean}): Promise<void> {
   await apiFetch(`/bank-accounts/investment/${id}/settings`, { method: 'PATCH', body: JSON.stringify(data) });
 }
+
+export async function mergeBankCryptoAsset(payload: {
+  bank_account_id: number; from_crypto_asset_id: number; to_crypto_asset_id: number; request_id: string;
+}): Promise<unknown> {
+  return apiFetch('/operations/merge-bank-crypto-asset', { method: 'POST', body: JSON.stringify(payload) });
+}

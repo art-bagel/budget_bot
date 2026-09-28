@@ -1116,6 +1116,8 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
 
       {accountSheet && (
         <AccountDetailSheet
+          accountId={accountSheet === 'family' ? overview.family_bank_account_id ?? null : user.bank_account_id}
+          onSuccess={() => { void loadOverview(); }}
           open
           ownerKind={accountSheet}
           accountTitle={accountSheet === 'family' ? 'Семейный счёт' : 'Личный счёт'}

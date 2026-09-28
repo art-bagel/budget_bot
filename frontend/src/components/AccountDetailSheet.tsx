@@ -1,5 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
+import { mergeBankCryptoAsset } from '../api';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { DashboardBankBalance } from '../types';
 import { currencySymbol, formatNumericAmount } from '../utils/format';
@@ -8,6 +10,8 @@ import BottomSheet from './BottomSheet';
 
 interface Props {
   open: boolean;
+  accountId: number | null;
+  onSuccess: () => void;
   accountTitle: string;
   baseCurrencyCode: string;
   balances: DashboardBankBalance[];
@@ -51,6 +55,8 @@ function pluralCurrency(n: number): string {
 
 export default function AccountDetailSheet({
   open,
+  accountId,
+  onSuccess,
   accountTitle,
   baseCurrencyCode,
   balances,
@@ -58,6 +64,27 @@ export default function AccountDetailSheet({
   onClose,
 }: Props) {
   useModalOpen(open);
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const request = useCryptoRequestKey('bank-asset-merge');
+  const duplicate = balances.find(b => b.asset_type === 'crypto' && b.amount > 0 && !b.contract_address
+    && balances.filter(t => t.asset_type === 'crypto' && t.contract_address
+      && t.symbol === b.symbol && t.network_code === b.network_code && t.decimals === b.decimals).length === 1);
+  const target = duplicate && balances.find(t => t.asset_type === 'crypto' && t.contract_address
+    && t.symbol === duplicate.symbol && t.network_code === duplicate.network_code && t.decimals === duplicate.decimals);
+  const handleMerge = async () => {
+    if (!accountId || !duplicate?.crypto_asset_id || !target?.crypto_asset_id || merging) return;
+    setMerging(true);
+    setMergeError(null);
+    try {
+      const payload = { bank_account_id: accountId, from_crypto_asset_id: duplicate.crypto_asset_id, to_crypto_asset_id: target.crypto_asset_id };
+      await mergeBankCryptoAsset({ ...payload, request_id: request.requestId(payload) });
+      request.completed();
+      onSuccess();
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : 'Не удалось объединить');
+    } finally { setMerging(false); }
+  };
 
   const sortedBalances = useMemo(() => {
     const positive = balances.filter((b) => b.historical_cost_in_base > 0);
@@ -113,6 +140,10 @@ export default function AccountDetailSheet({
         </button>
       }
     >
+      {accountId && duplicate && target && <button type="button" className="btn-secondary" disabled={merging} onClick={() => void handleMerge()}>
+        {merging ? 'Объединяем…' : `Объединить записи ${duplicate.symbol}`}
+      </button>}
+      {mergeError && <p className="error-text">{mergeError}</p>}
       {/* Total balance hero */}
       <div className="sheet-stat">
         <span className="sheet-stat__tag">Баланс</span>

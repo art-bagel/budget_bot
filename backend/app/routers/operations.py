@@ -618,3 +618,24 @@ async def get_operations_analytics_details(
         offset=offset,
     )
     return OperationAnalyticsDetailsResponse(**result)
+
+
+class MergeBankCryptoAssetRequest(BaseModel):
+    bank_account_id: int
+    from_crypto_asset_id: int
+    to_crypto_asset_id: int
+    request_id: UUID
+
+
+@router.post('/merge-bank-crypto-asset')
+async def merge_bank_crypto_asset(
+    body: MergeBankCryptoAssetRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> Dict[str, Any]:
+    return await ledger.call_function(
+        'budgeting.put__journal_bank_operation', user.user_id, body.bank_account_id,
+        'bank_asset_merge', dict(bank_account_id=body.bank_account_id,
+            from_crypto_asset_id=body.from_crypto_asset_id,
+            to_crypto_asset_id=body.to_crypto_asset_id, operated_at=date.today().isoformat()),
+        body.request_id,
+    )
