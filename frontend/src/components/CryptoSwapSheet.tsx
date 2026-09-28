@@ -14,6 +14,7 @@ import {
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
+  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -65,7 +66,7 @@ export default function CryptoSwapSheet({
     [accounts, position],
   );
 
-  const defaultAmount = position.quantity_exact ?? '';
+  const defaultAmount = trimDecimal(position.quantity_exact ?? '');
   const defaultTargetAsset = targetAssetCandidates[0];
   const defaultTargetAccount = targetAccounts.find((a) => a.id === position.investment_account_id)
     ?? targetAccounts[0];
@@ -130,8 +131,8 @@ export default function CryptoSwapSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
-      title={`Своп · ${sourceSymbol}`}
+      tag={position.investment_account_name}
+      title={`Обмен · ${sourceSymbol}`}
       icon={sourceIconUrl ? <img src={sourceIconUrl} alt="" /> : undefined}
       iconColor={sourceIconUrl ? undefined : 'o'}
       onClose={onClose}
@@ -144,16 +145,16 @@ export default function CryptoSwapSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
             >
-              {submitting ? 'Обмениваем…' : 'Подтвердить обмен'}
+              {submitting ? 'Обмениваем…' : 'Обменять'}
             </button>
           </div>
         </div>

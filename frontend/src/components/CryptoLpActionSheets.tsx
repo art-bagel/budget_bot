@@ -6,7 +6,7 @@ import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
-import { todayIso } from '../utils/portfolioPosition';
+import { todayIso, trimDecimal } from '../utils/portfolioPosition';
 import { getPositionMetadataText } from '../utils/portfolioPosition';
 import {
   topUpCryptoProtocolPosition,
@@ -125,8 +125,8 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Добавляем…' : 'Добавить'}
             </button>
           </div>
@@ -216,8 +216,8 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
   useEffect(() => {
     if (open) {
-      setQtyA(composition?.quantity0 ?? position.current_quantity_exact ?? (maxA > 0 ? String(maxA) : ''));
-      setQtyB(composition?.quantity1 ?? position.token1_quantity_exact ?? (maxB > 0 ? String(maxB) : ''));
+      setQtyA(trimDecimal(composition?.quantity0 ?? position.current_quantity_exact ?? (maxA > 0 ? String(maxA) : '')));
+      setQtyB(trimDecimal(composition?.quantity1 ?? position.token1_quantity_exact ?? (maxB > 0 ? String(maxB) : '')));
       setOperatedAt(todayIso());
       setComment('');
       setFeeDraft(EMPTY_FEE_DRAFT);
@@ -265,8 +265,8 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Закрываем…' : 'Закрыть'}
             </button>
           </div>
@@ -381,8 +381,8 @@ export function LpClaimFeesSheet({ open, position, accountPositions, onClose, on
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Зачисляем…' : 'Зачислить'}
             </button>
           </div>

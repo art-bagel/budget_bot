@@ -92,6 +92,7 @@ import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils
 import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
+import { trimDecimal } from '../utils/portfolioPosition';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
 import Operations from './Operations';
@@ -639,7 +640,7 @@ function createInitialStakingUpdateDraft(position: CryptoProtocolPosition): Stak
 
 function createInitialStakingCloseDraft(position: CryptoProtocolPosition): StakingCloseDraft {
   return {
-    returnQuantity: position.current_quantity_exact ?? (position.current_quantity != null ? String(position.current_quantity) : ''),
+    returnQuantity: trimDecimal(position.current_quantity_exact ?? (position.current_quantity != null ? String(position.current_quantity) : '')),
     withdrawnAt: todayIso(),
     comment: '',
   };
@@ -6120,6 +6121,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <CryptoIncomeSheet
             open
             positionId={cryptoIncomeSheetPosition.id}
+            accountName={cryptoIncomeSheetPosition.investment_account_name}
             symbol={incomeSymbol}
             iconUrl={iconUrl}
             livePrice={incomeAssetId ? cryptoLivePrices.get(incomeAssetId) ?? null : null}

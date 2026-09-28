@@ -1,11 +1,12 @@
 import { walletMarketValue } from '../utils/cryptoProtocolValuation';
 import { useEffect, useState } from 'react';
-import { AlertCircle, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { AlertCircle, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronDown, ChevronUp, Info, Landmark, Plus, RefreshCw } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { fetchCryptoAssetDetail } from '../api';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
+import { cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
 import { currencySymbol, formatNumericAmount } from '../utils/format';
 import type {
   CryptoAssetDetail,
@@ -33,6 +34,7 @@ interface Props {
 
 
 const ENTRY_TYPES = new Set(['open', 'top_up', 'transfer_in', 'swap_in', 'income']);
+const HISTORY_PAGE = 30;
 
 
 function formatDate(value: string): string {
@@ -51,6 +53,12 @@ function formatStaleAge(seconds: number | null | undefined): string {
   if (hours < 24) return `· обновлено ${hours} ч назад`;
   const days = Math.floor(hours / 24);
   return `· обновлено ${days} дн назад`;
+}
+
+
+/** Stat tiles are narrow: whole rubles for large sums, kopecks only where they matter. */
+function formatStatAmount(value: number): string {
+  return formatNumericAmount(value, Math.abs(value) >= 1000 ? 0 : 2);
 }
 
 
@@ -123,9 +131,13 @@ export default function CryptoAssetSheet({
   const [error, setError] = useState<string | null>(null);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
 
   useEffect(() => {
-    if (open) setHistoryCollapsed(false);
+    if (open) {
+      setHistoryCollapsed(false);
+      setHistoryLimit(HISTORY_PAGE);
+    }
   }, [open]);
 
   useEffect(() => {
@@ -160,9 +172,7 @@ export default function CryptoAssetSheet({
     : null;
 
   const iconUrl = detail ? getCryptoIconUrl(detail.symbol, detail.asset_metadata) : null;
-  const headerTag = detail?.investment_account_name
-    ? `${detail.investment_account_name} · крипто`
-    : 'Крипто-актив';
+  const headerTag = detail?.investment_account_name ?? 'Криптовалюта';
 
   const hasOutflowActions = Boolean(
     (onOpenWithdraw || onOpenSwap || onOpenTransfer) && detail && detail.quantity > 0,
@@ -173,7 +183,7 @@ export default function CryptoAssetSheet({
     <BottomSheet
       open={open}
       tag={headerTag}
-      title={detail ? `${detail.symbol}${detail.network_code ? ` · ${detail.network_code}` : ''}` : 'Загрузка…'}
+      title={detail ? `${detail.symbol}${cryptoNetworkSuffix(detail.network_code, detail.symbol)}` : 'Загрузка…'}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : undefined}
       iconColor={iconUrl ? undefined : 'o'}
       onClose={onClose}
@@ -206,8 +216,8 @@ export default function CryptoAssetSheet({
             </div>
             {livePrice && (
               <div className="ca-sheet__hero-price">
-                {livePrice.is_stale ? 'Последняя известная цена: ' : ''}{formatNumericAmount(livePrice.price, 6)} {currencySymbol(livePrice.vs_currency)} за 1 {detail.symbol}
-                <span> · {livePrice.source.replace('_stale', '')} · {new Date(livePrice.fetched_at).toLocaleString('ru-RU')}</span>
+                {formatNumericAmount(livePrice.price, livePrice.price < 1 ? 6 : 2)} {currencySymbol(livePrice.vs_currency)} за 1 {detail.symbol}
+                {' · '}{cryptoPriceSourceLabel(livePrice.source)}, {cryptoQuoteTime(livePrice.fetched_at)}
                 {livePrice.is_stale && (
                   <span className="ca-sheet__hero-stale">
                     {formatStaleAge(livePrice.stale_age_seconds)}
@@ -221,13 +231,10 @@ export default function CryptoAssetSheet({
             <div className="ca-sheet__stat">
               <span className="ca-sheet__stat-label">{basisOpen ? 'Учтённые затраты' : 'Себестоимость'}</span>
               <span className="ca-sheet__stat-val">
-                {basisUnknown ? '—' : `${basisEstimated ? '≈ ' : ''}${formatNumericAmount(detail.remaining_cost_basis ?? 0)} ${baseSym}`}
+                {basisUnknown ? '—' : `${basisEstimated ? '≈ ' : ''}${formatStatAmount(detail.remaining_cost_basis ?? 0)}\u00a0${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">
-                {basisUnknown ? 'неизвестна' : basisOpen ? 'Есть непогашенный заём' : `За монету: ${formatNumericAmount(detail.avg_cost_per_unit ?? 0, 4)}`}
-                {basisOpen && detail.funding_components?.map((part) => (
-                  <span key={part.loan_id} style={{ display: 'block' }}>+ {formatNumericAmount(Number(part.quantity), 12)} {part.symbol}</span>
-                ))}
+                {basisUnknown ? 'неизвестна' : basisOpen ? 'с займом' : `${formatNumericAmount(detail.avg_cost_per_unit ?? 0, (detail.avg_cost_per_unit ?? 0) < 1 ? 6 : 2)} ${baseSym} за 1 ${detail.symbol}`}
               </span>
             </div>
             <div className="ca-sheet__stat">
@@ -235,7 +242,7 @@ export default function CryptoAssetSheet({
               {unrealized !== null ? (
                 <>
                   <span className={`ca-sheet__stat-val ${unrealized >= 0 ? 'ca-sheet__stat-val--pos' : 'ca-sheet__stat-val--neg'}`}>
-                    {unrealized >= 0 ? '+' : ''}{formatNumericAmount(unrealized)} {baseSym}
+                    {unrealized >= 0 ? '+' : ''}{formatStatAmount(unrealized)}{'\u00a0'}{baseSym}
                   </span>
                   {unrealizedPct !== null && (
                     <span className="ca-sheet__stat-sub">
@@ -246,67 +253,67 @@ export default function CryptoAssetSheet({
               ) : (
                 <>
                   <span className="ca-sheet__stat-val ca-sheet__stat-val--mute">—</span>
-                  <span className="ca-sheet__stat-sub">{currentValue === null ? 'нет актуальной котировки' : basisOpen ? 'есть непогашенный заём' : 'себестоимость не определена'}</span>
+                  <span className="ca-sheet__stat-sub">{currentValue === null ? 'нет курса' : basisOpen ? 'заём не погашен' : 'нет себестоимости'}</span>
                 </>
               )}
             </div>
             <div className="ca-sheet__stat">
               <span className="ca-sheet__stat-label">Результат продаж</span>
               <span className={`ca-sheet__stat-val ${detail.realized_pnl_lifetime_in_base !== null && detail.realized_pnl_lifetime_in_base >= 0 ? 'ca-sheet__stat-val--pos' : detail.realized_pnl_lifetime_in_base !== null && detail.realized_pnl_lifetime_in_base < 0 ? 'ca-sheet__stat-val--neg' : 'ca-sheet__stat-val--mute'}`}>
-                {basisUnknown || basisEstimated || detail.realized_pnl_lifetime_in_base === null ? '—' : `${detail.realized_pnl_lifetime_in_base > 0 ? '+' : ''}${formatNumericAmount(detail.realized_pnl_lifetime_in_base)} ${baseSym}`}
+                {basisUnknown || basisEstimated || detail.realized_pnl_lifetime_in_base === null ? '—' : `${detail.realized_pnl_lifetime_in_base > 0 ? '+' : ''}${formatStatAmount(detail.realized_pnl_lifetime_in_base)}\u00a0${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">за всё время</span>
             </div>
           </div>
 
-          {!loading && detail?.quantity === 0 && onChangeHidden && (
-            <div className="pf-sheet-actions"><button type="button" className="btn btn--ghost" disabled={visibilitySaving}
+          {basisOpen && (detail.funding_components?.length ?? 0) > 0 && (
+            <div className="ca-sheet__funding">
+              <span className="ca-sheet__funding-label">Незакрытое финансирование</span>
+              <span className="ca-sheet__funding-value">
+                {detail.funding_components?.map((part) => (
+                  <span key={part.loan_id}>{formatNumericAmount(Number(part.quantity), 8)} {part.symbol}</span>
+                ))}
+              </span>
+            </div>
+          )}
+
+          {showActions && (
+            <div className="cat-actions cat-actions--crypto" role="group" aria-label={`Действия с ${detail.symbol}`}>
+              {onOpenIncome && (
+                <button className="cat-act cat-act--primary" type="button" onClick={() => { onClose(); onOpenIncome(); }}>
+                  <span className="cat-act__ico"><Plus strokeWidth={2.2} /></span>
+                  <span className="cat-act__label">Зачислить</span>
+                </button>
+              )}
+              {hasOutflowActions && onOpenSwap && (
+                <button className="cat-act" type="button" onClick={() => { onClose(); onOpenSwap(); }}>
+                  <span className="cat-act__ico"><RefreshCw strokeWidth={2} /></span>
+                  <span className="cat-act__label">Обмен</span>
+                </button>
+              )}
+              {hasOutflowActions && onOpenTransfer && canTransferBetweenAccounts && (
+                <button className="cat-act" type="button" onClick={() => { onClose(); onOpenTransfer(); }}>
+                  <span className="cat-act__ico"><ArrowLeftRight strokeWidth={2} /></span>
+                  <span className="cat-act__label">Перевод</span>
+                </button>
+              )}
+              {hasOutflowActions && onOpenWithdraw && (
+                <button className="cat-act" type="button" onClick={() => { onClose(); onOpenWithdraw(); }}>
+                  <span className="cat-act__ico"><Landmark strokeWidth={2} /></span>
+                  <span className="cat-act__label">В банк</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {detail.quantity === 0 && onChangeHidden && (
+            <button type="button" className="credits-textbtn ca-sheet__hide" disabled={visibilitySaving}
               onClick={async () => {
                 setVisibilitySaving(true);
                 try { await onChangeHidden(!isHidden); } finally { setVisibilitySaving(false); }
               }}>
-              {isHidden ? 'Показать монету в кошельке' : 'Скрыть пустую монету'}
-            </button></div>
-          )}
-          {showActions && (
-            <div className="pf-sheet-actions">
-              {onOpenIncome && (
-                <button
-                  className="btn btn--primary"
-                  type="button"
-                  onClick={() => { onClose(); onOpenIncome(); }}
-                >
-                  Зачислить
-                </button>
-              )}
-              {hasOutflowActions && onOpenSwap && (
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => { onClose(); onOpenSwap(); }}
-                >
-                  Свопнуть
-                </button>
-              )}
-              {hasOutflowActions && onOpenTransfer && canTransferBetweenAccounts && (
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => { onClose(); onOpenTransfer(); }}
-                >
-                  На счёт
-                </button>
-              )}
-              {hasOutflowActions && onOpenWithdraw && (
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => { onClose(); onOpenWithdraw(); }}
-                >
-                  В банк
-                </button>
-              )}
-            </div>
+              {isHidden ? 'Показывать в кошельке' : 'Скрыть из кошелька'}
+            </button>
           )}
 
           <div className="ca-sheet__hist">
@@ -328,7 +335,7 @@ export default function CryptoAssetSheet({
               <p className="ca-sheet__hist-empty">Событий пока нет.</p>
             )}
 
-            {!historyCollapsed && detail.entries.map((entry) => {
+            {!historyCollapsed && detail.entries.slice(0, historyLimit).map((entry) => {
               const isEntry = ENTRY_TYPES.has(entry.event_type);
               const valueShown = isEntry ? entry.entry_value_in_base : entry.value_in_base;
               const realized = entry.realized_in_base;
@@ -358,8 +365,12 @@ export default function CryptoAssetSheet({
                           Результат: {realized >= 0 ? '+' : ''}{formatNumericAmount(realized)} {baseSym}
                         </span>
                       )}
+                      {entry.event_type === 'fee' && entry.position_id && onRefundFee && (
+                        <button type="button" className="credits-textbtn ca-sheet__row-link" onClick={() => onRefundFee(entry, detail.symbol)}>
+                          Записать возврат
+                        </button>
+                      )}
                     </div>
-                    {entry.event_type === 'fee' && entry.position_id && onRefundFee && <button type="button" className="credits-textbtn" onClick={() => onRefundFee(entry, detail.symbol)}>Записать возврат комиссии</button>}
                     {entry.is_legacy_no_basis && (
                       <div className="ca-sheet__row-legacy">
                         <Info size={12} strokeWidth={2} />
@@ -373,6 +384,11 @@ export default function CryptoAssetSheet({
                 </div>
               );
             })}
+            {!historyCollapsed && detail.entries.length > historyLimit && (
+              <button type="button" className="pf-closed__toggle" onClick={() => setHistoryLimit((limit) => limit + HISTORY_PAGE * 2)}>
+                Показать ещё
+              </button>
+            )}
           </div>
         </>
       )}
