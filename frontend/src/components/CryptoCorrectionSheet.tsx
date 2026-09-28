@@ -3,6 +3,8 @@ import BottomSheet from './BottomSheet';
 import { correctCryptoSource, fetchCryptoCorrectionHistory, type CryptoCorrectionResult, type CryptoEditableSource } from '../api';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { sanitizeDecimalInput } from '../utils/validation';
+import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const fields: Record<string, string> = {
   share_percent: 'Доля позиции, %',
@@ -19,8 +21,16 @@ const kinds: Record<string,string> = { swap:'Обмен',transfer:'Перево�
   lp_snapshot:'Состав пула',lp_withdraw:'Вывод ликвидности',lp_reward:'Награда пула',reward:'Награда',expense:'Расход',receive_unknown:'Поступление',fee_refund:'Возврат комиссии',quantity_correction:'Уточнение количества',staking_convert:'Обмен стейкингового токена',accrue:'Начисление',tag_lending_account:'Счёт протокола',buy_fiat:'Покупка',sell_fiat:'Продажа',bank_sell:'Продажа через банк',settle_fiat_sale:'Категория расхода',position_income:'Награда',protocol_yield:'Начисление в DeFi',linked_fee_refund:'Возврат комиссии',fee:'Комиссия',group_lending:'Общий счёт протокола',
   bank_purchase:'Покупка через банк',bank_settle_sale:'Категория карточной оплаты',budget_allocate:'Распределение бюджета',bank_expense:'Расход',bank_crypto_expense:'Расход в криптовалюте',observation:'Примечание',lp_custody:'Передача LP',bank_buy:'Покупка через банк',bank_to_portfolio:'Ввод в портфель',bank_withdraw:'Вывод в банк',bank_cash_sell:'Продажа в банке' };
 
-type Props = { open:boolean; anchorAccountId:number; accounts:{id:number;name:string}[]; onClose:()=>void; onSuccess:()=>void };
-export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,onClose,onSuccess}:Props) {
+type Props = { open:boolean; anchorAccountId:number; accounts:{id:number;name:string}[]; baseCurrencyCode:string; onClose:()=>void; onSuccess:()=>void };
+
+const qty=(value:unknown)=>formatNumericAmount(Number(value??0),12);
+const dateLabel=(iso:string)=>new Date(`${iso}T00:00:00`).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'});
+const commandTitle=(commands:{kind:string}[])=>commands.map(c=>kinds[c.kind]??'Операция').join(' + ');
+const editedValues=(row:CryptoEditableSource)=>row.commands.flatMap(c=>Object.entries(c.payload)
+  .filter(([k,v])=>c.editable_fields?.includes(k) && k in fields && v!=null)
+  .map(([k,v])=>`${row.commands.length>1&&(k==='quantity'||k==='amount')?kinds[c.kind]??fields[k]:fields[k]} ${qty(v)}`)).join(' · ');
+
+export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,baseCurrencyCode,onClose,onSuccess}:Props) {
   const [anchorId,setAnchorId]=useState(anchorAccountId);
   const [rows,setRows]=useState<CryptoEditableSource[]>([]);
   const [selected,setSelected]=useState<CryptoEditableSource|null>(null);
@@ -60,51 +70,107 @@ export default function CryptoCorrectionSheet({open,anchorAccountId,accounts,onC
   }
   const changedPositions=preview?.after.positions.filter(p=>JSON.stringify(p)!==JSON.stringify(preview.before.positions.find(b=>b.id===p.id)))??[];
   const changedProtocols=preview?.after.protocols.filter(p=>JSON.stringify(p)!==JSON.stringify(preview.before.protocols.find(b=>b.id===p.id)))??[];
-  return <BottomSheet open={open} title="Исправление криптоопераций" onClose={()=>{if(!busy)onClose();}}>
-    <div className="tk-body">
-      {error&&<p role="alert" className="tk-error">{error}</p>}
-      {!selected ? <>
-        <label className="tk-field"><span>Счёт</span><select className="tk-input" value={anchorId} disabled={busy} onChange={e=>{setAnchorId(Number(e.target.value));setOffset(0);setError('');}}>
+  const sym=currencySymbol(baseCurrencyCode);
+  const money=(value:unknown)=>value==null?'не определена':`${formatNumericAmount(Number(value))} ${sym}`;
+  const changedBank=preview?.after.bank.filter(b=>JSON.stringify(b)!==JSON.stringify(preview.before.bank.find(a=>a.bank_account_id===b.bank_account_id&&a.currency_code===b.currency_code)))??[];
+  const changedBudget=preview?.after.budget.filter(b=>b.amount!==preview.before.budget.find(a=>a.category_id===b.category_id&&a.currency_code===b.currency_code)?.amount)??[];
+  const changedCryptoBank=preview?.after.crypto_bank.filter(b=>JSON.stringify(b)!==JSON.stringify(preview.before.crypto_bank.find(a=>a.bank_account_id===b.bank_account_id&&a.crypto_asset_id===b.crypto_asset_id)))??[];
+  const nothingChanged=preview&&!changedPositions.length&&!changedProtocols.length&&!changedBank.length&&!changedBudget.length&&!changedCryptoBank.length;
+
+  const footer=selected ? (!preview?.applied || error) && <div className="tk-foot pf-sheet-actions">
+    {error&&<div className="tk-error" role="alert"><span>{error}</span></div>}
+    {!preview?.applied&&<button className="sh-btn sh-btn--primary" type="button" disabled={busy||changes.length===0||!reason.trim()} onClick={()=>void submit(!!preview)}>
+      {busy?(preview?'Пересчитываем историю, это займёт пару минут…':'Считаем…'):preview?'Применить исправление':'Посмотреть результат'}
+    </button>}
+  </div> : <div className="tk-foot pf-sheet-actions">
+    {error&&<div className="tk-error" role="alert"><span>{error}</span></div>}
+    {(offset>0||rows.length>=30)&&<div className="tk-foot__row">
+      <button type="button" className="sh-btn sh-btn--ghost cx-page" disabled={busy||offset===0} onClick={()=>setOffset(Math.max(0,offset-30))}><ChevronLeft size={16}/> Новее</button>
+      <button type="button" className="sh-btn sh-btn--ghost cx-page" disabled={busy||rows.length<30} onClick={()=>setOffset(offset+30)}>Старее <ChevronRight size={16}/></button>
+    </div>}
+  </div>;
+
+  return <BottomSheet open={open} tag="Криптовалюта" title={selected?commandTitle(selected.commands):'Исправить операцию'} onClose={()=>{if(!busy)onClose();}}
+    actions={footer||undefined}>
+    {!selected ? <>
+      <div className="field">
+        <span className="fl">Счёт</span>
+        <select className="picker-v2" value={anchorId} disabled={busy} onChange={e=>{setAnchorId(Number(e.target.value));setOffset(0);setError('');}}>
           {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-        </select></label>
-        <p className="tk-hint">Перед сохранением проверьте изменения остатков. Пересчёт последующих операций может занять несколько минут.</p>
-        {!busy&&rows.length===0&&<p>На этой странице нет доступных для исправления операций.</p>}
-        {rows.map(row=><button key={row.id} className="btn btn--ghost" type="button" disabled={!row.reversible||busy} onClick={()=>{setSelected(row);setValues({});setReason('');setPreview(null);}}>
-          {row.accounting_date} · {row.context} · {row.commands.map(c=>kinds[c.kind]??c.kind).join(' + ')} · версия {row.revision}
-          {!row.reversible?' · исправление недоступно':''}<br />
-          {row.commands.flatMap(c=>Object.entries(c.payload).filter(([k])=>c.editable_fields?.includes(k)).map(([k,v])=>`${fields[k]}: ${String(v)}`)).join('; ')}
+        </select>
+      </div>
+      {busy&&rows.length===0&&<p className="ca-sheet__hist-empty" role="status">Загружаем операции…</p>}
+      {!busy&&rows.length===0&&!error&&<p className="ca-sheet__hist-empty">На этой странице нет операций, которые можно исправить.</p>}
+      {rows.length>0&&<div className="cx-list">
+        {rows.map(row=><button key={row.id} className="cx-row" type="button" disabled={!row.reversible||busy}
+          onClick={()=>{setSelected(row);setValues({});setReason('');setPreview(null);setError('');}}>
+          <span className="cx-row__top">
+            <span className="cx-row__title">{commandTitle(row.commands)}</span>
+            <span className="cx-row__date">{dateLabel(row.accounting_date)}</span>
+          </span>
+          <span className="cx-row__sub">{[row.context,editedValues(row)].filter(Boolean).join(' · ')}</span>
+          {(row.revision>1||!row.reversible)&&<span className="cx-row__flags">
+            {row.revision>1&&<span className="pf-grp__flag">исправлена</span>}
+            {!row.reversible&&<span className="pf-grp__flag">недоступно</span>}
+          </span>}
         </button>)}
-        <div className="tk-foot__row"><button type="button" className="btn btn--ghost" disabled={busy||offset===0} onClick={()=>setOffset(Math.max(0,offset-30))}>Новее</button>
-          <button type="button" className="btn btn--ghost" disabled={busy||rows.length<30} onClick={()=>setOffset(offset+30)}>Старее</button></div>
-      </> : <>
-        <button type="button" className="btn btn--ghost" disabled={busy} onClick={()=>{setSelected(null);setPreview(null);}}>К списку операций</button>
-        <p>{selected.accounting_date} · {selected.context} · версия {selected.revision}</p>
-        {editable.map(f=><label className="tk-field" key={`${f.index}:${f.key}`}>
-          <span>{f.label}</span><input className="tk-input" inputMode="decimal" disabled={busy||preview?.applied}
-            value={values[`${f.index}:${f.key}`]??f.value} onChange={e=>{setValues(v=>({...v,[`${f.index}:${f.key}`]:sanitizeDecimalInput(e.target.value)}));setPreview(null);}} />
-        </label>)}
-        <label className="tk-field"><span>Причина исправления</span><input className="tk-input" value={reason} maxLength={1000} disabled={busy||preview?.applied} onChange={e=>{setReason(e.target.value);setPreview(null);}} /></label>
-        {selected.previous_versions.length>0&&<details><summary>Предыдущие версии ({selected.previous_versions.length})</summary>
-          {selected.previous_versions.map(v=><div key={v.revision}><strong>Версия {v.revision}</strong>{v.commands.map((c)=><p key={JSON.stringify(c)}>{kinds[c.kind]??c.kind}: {Object.entries(c.payload).filter(([k])=>k in fields).map(([k,val])=>`${fields[k]} ${String(val)}`).join('; ')}</p>)}</div>)}
-        </details>}
-        {preview&&<section aria-label="Результат пересчёта">
-          <p>{preview.applied?'Исправление применено':'Предварительный результат'} · пересчитано событий: {preview.replayed_sources}</p>
-          {changedPositions.map(p=>{const b=preview.before.positions.find(v=>v.id===p.id);return <p key={p.id}>{p.name}: количество {b?.quantity??'0'} → {p.quantity}; себестоимость {b?.cost??'неизвестна'} → {p.cost??'неизвестна'} в базовой валюте{JSON.stringify(b?.funding)!==JSON.stringify(p.funding)?' · изменилось открытое финансирование':''}</p>;})}
-          {changedProtocols.map(p=>{const b=preview.before.protocols.find(v=>v.id===p.id);return <p key={p.id}>{p.name}: количество {b?.quantity??'0'} → {p.quantity}; себестоимость {b?.cost??'неизвестна'} → {p.cost??'неизвестна'} в базовой валюте. Долг: {String(b?.metadata.borrowed_quantity??'0')} → {String(p.metadata.borrowed_quantity??'0')}.</p>;})}
-          {preview.after.bank.filter(b=>JSON.stringify(b)!==JSON.stringify(preview.before.bank.find(a=>a.bank_account_id===b.bank_account_id&&a.currency_code===b.currency_code))).map(b=>{
-            const old=preview.before.bank.find(a=>a.bank_account_id===b.bank_account_id&&a.currency_code===b.currency_code);
-            return <p key={`${b.bank_account_id}:${b.currency_code}`}>Банковский счёт №{b.bank_account_id}: {old?.amount??0} → {b.amount} {b.currency_code}; себестоимость {old?.historical_cost_in_base??0} → {b.historical_cost_in_base} в базовой валюте.</p>;
-          })}
-          {preview.after.budget.filter(b=>b.amount!==preview.before.budget.find(a=>a.category_id===b.category_id&&a.currency_code===b.currency_code)?.amount).map(b=><p key={`${b.category_id}:${b.currency_code}`}>Категория «{b.name}»: {preview.before.budget.find(a=>a.category_id===b.category_id&&a.currency_code===b.currency_code)?.amount??'0'} → {b.amount} {b.currency_code}</p>)}
-          {preview.after.crypto_bank.filter(b=>JSON.stringify(b)!==JSON.stringify(preview.before.crypto_bank.find(a=>a.bank_account_id===b.bank_account_id&&a.crypto_asset_id===b.crypto_asset_id))).map(b=>{
-            const old=preview.before.crypto_bank.find(a=>a.bank_account_id===b.bank_account_id&&a.crypto_asset_id===b.crypto_asset_id);
-            return <p key={`${b.bank_account_id}:${b.crypto_asset_id}`}>Криптовалюта на банковском счёте №{b.bank_account_id}: {old?.amount??0} → {b.amount} {b.symbol}; себестоимость {old?.cost_base_remaining??0} → {b.cost_base_remaining} в базовой валюте.</p>;
-          })}
-        </section>}
-        {!preview?.applied&&<button className="btn btn--primary" type="button" disabled={busy||changes.length===0||!reason.trim()} onClick={()=>void submit(!!preview)}>
-          {busy?'Пересчитываем…':preview?'Применить исправление':'Посмотреть результат'}
-        </button>}
-      </>}
-    </div>
+      </div>}
+    </> : <>
+      <button type="button" className="credits-textbtn cx-back" disabled={busy} onClick={()=>{setSelected(null);setPreview(null);setError('');}}>
+        <ChevronLeft strokeWidth={2}/> Все операции
+      </button>
+      <div className="cx-meta">{[dateLabel(selected.accounting_date),selected.context].filter(Boolean).join(' · ')}</div>
+      {editable.map(f=><div className="field" key={`${f.index}:${f.key}`}>
+        <span className="fl">{f.label}</span>
+        <input className="inp-v2" inputMode="decimal" disabled={busy||preview?.applied}
+          value={values[`${f.index}:${f.key}`]??f.value} onChange={e=>{setValues(v=>({...v,[`${f.index}:${f.key}`]:sanitizeDecimalInput(e.target.value)}));setPreview(null);}} />
+      </div>)}
+      <div className="field">
+        <span className="fl">Причина исправления</span>
+        <input className="inp-v2" value={reason} maxLength={1000} disabled={busy||preview?.applied} onChange={e=>{setReason(e.target.value);setPreview(null);}} />
+      </div>
+      {selected.previous_versions.length>0&&<details className="cx-versions">
+        <summary>Прошлые версии · {selected.previous_versions.length}</summary>
+        {selected.previous_versions.map(v=><div className="pf-dcond__row" key={v.revision}>
+          <span className="pf-dcond__row-label">Версия {v.revision}</span>
+          <span className="pf-dcond__row-value">{v.commands.map(c=>Object.entries(c.payload).filter(([k])=>k in fields).map(([k,val])=>`${fields[k]} ${qty(val)}`).join(' · ')).filter(Boolean).join('; ')}</span>
+        </div>)}
+      </details>}
+      {preview&&<section className="pf-dcond" aria-label="Результат пересчёта">
+        <div className="pf-dcond__head">
+          <span className="sec-tag">{preview.applied?'Исправление применено':'Что изменится'}</span>
+          <span className="cx-meta">пересчитано {preview.replayed_sources}</span>
+        </div>
+        {nothingChanged&&<div className="pf-dcond__row"><span className="pf-dcond__row-label">Остатки и себестоимость не меняются</span></div>}
+        {changedPositions.map(p=>{const b=preview.before.positions.find(v=>v.id===p.id);return <div className="pf-dcond__row" key={`p${p.id}`}>
+          <span className="pf-dcond__row-label">{p.name}</span>
+          <span className="pf-dcond__row-value">{qty(b?.quantity)} → {qty(p.quantity)}
+            <span className="pf-dcond__row-note">себестоимость {money(b?.cost)} → {money(p.cost)}{JSON.stringify(b?.funding)!==JSON.stringify(p.funding)?' · изменилось финансирование':''}</span>
+          </span>
+        </div>;})}
+        {changedProtocols.map(p=>{const b=preview.before.protocols.find(v=>v.id===p.id);return <div className="pf-dcond__row" key={`d${p.id}`}>
+          <span className="pf-dcond__row-label">{p.name}</span>
+          <span className="pf-dcond__row-value">{qty(b?.quantity)} → {qty(p.quantity)}
+            <span className="pf-dcond__row-note">себестоимость {money(b?.cost)} → {money(p.cost)} · долг {qty(b?.metadata.borrowed_quantity)} → {qty(p.metadata.borrowed_quantity)}</span>
+          </span>
+        </div>;})}
+        {changedBank.map(b=>{const old=preview.before.bank.find(a=>a.bank_account_id===b.bank_account_id&&a.currency_code===b.currency_code);return <div className="pf-dcond__row" key={`b${b.bank_account_id}:${b.currency_code}`}>
+          <span className="pf-dcond__row-label">Банковский счёт, {b.currency_code}</span>
+          <span className="pf-dcond__row-value">{formatNumericAmount(old?.amount??0)} → {formatNumericAmount(b.amount)} {currencySymbol(b.currency_code)}
+            <span className="pf-dcond__row-note">себестоимость {money(old?.historical_cost_in_base??0)} → {money(b.historical_cost_in_base)}</span>
+          </span>
+        </div>;})}
+        {changedBudget.map(b=><div className="pf-dcond__row" key={`c${b.category_id}:${b.currency_code}`}>
+          <span className="pf-dcond__row-label">Категория «{b.name}»</span>
+          <span className="pf-dcond__row-value">{formatNumericAmount(Number(preview.before.budget.find(a=>a.category_id===b.category_id&&a.currency_code===b.currency_code)?.amount??0))} → {formatNumericAmount(Number(b.amount))} {currencySymbol(b.currency_code)}</span>
+        </div>)}
+        {changedCryptoBank.map(b=>{const old=preview.before.crypto_bank.find(a=>a.bank_account_id===b.bank_account_id&&a.crypto_asset_id===b.crypto_asset_id);return <div className="pf-dcond__row" key={`cb${b.bank_account_id}:${b.crypto_asset_id}`}>
+          <span className="pf-dcond__row-label">{b.symbol} на банковском счёте</span>
+          <span className="pf-dcond__row-value">{qty(old?.amount??0)} → {qty(b.amount)}
+            <span className="pf-dcond__row-note">себестоимость {money(old?.cost_base_remaining??0)} → {money(b.cost_base_remaining)}</span>
+          </span>
+        </div>;})}
+      </section>}
+    </>}
   </BottomSheet>;
 }

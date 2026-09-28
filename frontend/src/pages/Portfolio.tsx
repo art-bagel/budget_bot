@@ -3142,6 +3142,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
       {activeAssetTypeCode === 'crypto' && accounts.some(a => a.account.investment_asset_type === 'crypto') && (
         <CryptoCorrectionSheet accounts={accounts.filter(a => a.account.investment_asset_type === 'crypto').map(a => ({id:a.account.id,name:a.account.name}))} open={correctionsOpen} anchorAccountId={accounts.find(a => a.account.investment_asset_type === 'crypto')!.account.id}
+          baseCurrencyCode={user.base_currency_code}
           onClose={() => setCorrectionsOpen(false)} onSuccess={() => void loadPortfolio()} />
       )}
 

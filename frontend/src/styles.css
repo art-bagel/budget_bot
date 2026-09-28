@@ -12463,3 +12463,43 @@ select.dlg-row__ghost option {
 .pf-act-group { display: flex; flex-direction: column; gap: 8px; }
 .pf-act-group .sec-tag { padding-left: 2px; }
 .pf-act-group__tiles { margin-bottom: 0; }
+
+/* Past crypto operation correction */
+.cx-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-inset);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.cx-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+.cx-row:last-child { border-bottom: 0; }
+.cx-row:disabled { cursor: default; opacity: .55; }
+.cx-row:not(:disabled):active { background: var(--line-soft); }
+.cx-row__top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cx-row__title { font-size: 14px; font-weight: 600; }
+.cx-row__date { flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
+.cx-row__sub { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.cx-row__flags { display: flex; gap: 4px; margin-top: 2px; }
+.cx-row__flags .pf-grp__flag { margin-left: 0; }
+.cx-back { align-self: flex-start; margin: 0 -8px; }
+.cx-page { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.cx-meta { font-size: 12.5px; font-weight: 500; color: var(--text-3); }
+.cx-versions summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 4px 0; }
+.cx-versions .pf-dcond__row-value { font-weight: 500; }
+
+/* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
+.pf-view .op-row__top { align-items: flex-start; }
+.pf-view .op-row__name-text { white-space: normal; mask-image: none; line-height: 1.25; }
