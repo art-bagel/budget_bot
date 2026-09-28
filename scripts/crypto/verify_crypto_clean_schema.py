@@ -82,6 +82,7 @@ async def main():
         )
         return row["relname"], definition
 
+    (OUT / "clean-schema.json").write_text(json.dumps(report, indent=2, default=str))
     assert not any(report["columns"].values())
     assert not any(report["indexes"].values())
     assert Counter(map(constraint_key, report["constraints"]["fresh_only"])) == Counter(

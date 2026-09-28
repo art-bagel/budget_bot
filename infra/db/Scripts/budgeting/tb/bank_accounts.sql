@@ -88,3 +88,6 @@ ALTER TABLE budgeting.bank_accounts
 
 ALTER TABLE budgeting.bank_accounts ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
 ALTER TABLE budgeting.bank_accounts ADD COLUMN IF NOT EXISTS wallet_address varchar(256);
+
+-- Keep clean installation equivalent to migration 046.
+ALTER TABLE budgeting.bank_accounts ADD COLUMN IF NOT EXISTS include_in_statistics boolean NOT NULL DEFAULT true;
