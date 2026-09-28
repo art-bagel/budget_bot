@@ -74,7 +74,7 @@ export default function CryptoProtocolHistory({ positionId, baseCurrencyCode }: 
               </div>
               <div className="ca-sheet__row-meta">
                 {entry.quantity === null && entry.kind === 'liquidation_fee' && <span>Сумма не указана</span>}
-                {entry.quantity !== null && <span>{formatNumericAmount(Math.abs(entry.quantity), 9)} {entry.symbol}</span>}
+                {entry.quantity !== null && <span>{formatNumericAmount(Math.abs(entry.quantity), 8)} {entry.symbol}</span>}
                 {entry.cost_basis !== null && <span>Себестоимость: {formatNumericAmount(entry.cost_basis)} {currencySymbol(baseCurrencyCode)}</span>}
               </div>
               {entry.comment && !entry.comment_is_system && <div className="ca-sheet__row-comment">{entry.comment}</div>}

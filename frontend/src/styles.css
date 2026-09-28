@@ -12541,3 +12541,5 @@ select.dlg-row__ghost option {
   cursor: pointer;
 }
 .settings-page .invest-archive-toggle:hover { background: var(--surface-inset); color: var(--text); }
+
+.pf-alloc__t-none { color: var(--text-3); }

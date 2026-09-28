@@ -3158,7 +3158,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <div className="pf-tsum__titlebox">
                   <div className="pf-tsum__title">{activeAssetTab?.label ?? assetTypeLabel(activeAssetTypeCode)}</div>
                   <div className="pf-tsum__meta">
-                    {filteredOpenPositions.length} {pluralRu(filteredOpenPositions.length, ['позиция', 'позиции', 'позиций'])}
+                    {activeAssetTypeCode === 'crypto' ? (() => {
+                      const coins = filteredOpenPositions.filter((p) => !isHiddenWalletAsset(p)).length;
+                      return `${coins} ${pluralRu(coins, ['монета', 'монеты', 'монет'])}`;
+                    })() : `${filteredOpenPositions.length} ${pluralRu(filteredOpenPositions.length, ['позиция', 'позиции', 'позиций'])}`}
                     <span>·</span>
                     {visibleOpenPositionGroups.length} {pluralRu(visibleOpenPositionGroups.length, ['счёт', 'счёта', 'счетов'])}
                   </div>
@@ -3278,12 +3281,21 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <span className="pf-alloc__t-sep" />
                   <div className="pf-alloc__t-cell">
                     <span>Доход</span>
-                    <strong className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                      {activeScopeHasCrypto ? '—' : `${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
-                    </strong>
-                    <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                      {activeScopeHasCrypto ? 'Доход: —' : `${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
-                    </em>
+                    {activeScopeHasCrypto ? (
+                      <>
+                        <strong className="pf-alloc__t-none">—</strong>
+                        <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
+                      </>
+                    ) : (
+                      <>
+                        <strong className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
+                          {`${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                        </strong>
+                        <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
+                          {`${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
+                        </em>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3650,12 +3662,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   {formatAmount(activeScopeDisplayMetrics.investedPrincipal, user.base_currency_code)}
                 </strong>
               </div>
-              <div className="portfolio-analytics-metric">
-                <span className="portfolio-analytics-metric__label">Остаток</span>
-                <strong className="portfolio-analytics-metric__value">
-                  {formatAmount(activeScopeDisplayMetrics.cashValue, user.base_currency_code)}
-                </strong>
-              </div>
+              {(!activeScopeHasCrypto || activeScopeDisplayMetrics.cashValue !== 0) && (
+                <div className="portfolio-analytics-metric">
+                  <span className="portfolio-analytics-metric__label">Остаток</span>
+                  <strong className="portfolio-analytics-metric__value">
+                    {formatAmount(activeScopeDisplayMetrics.cashValue, user.base_currency_code)}
+                  </strong>
+                </div>
+              )}
               <div className="portfolio-analytics-metric">
                 <span className="portfolio-analytics-metric__label">{activeScopeDisplayMetrics.resultLabel}</span>
                 <strong className={`portfolio-analytics-metric__value${activeScopeDisplayMetrics.resultValue >= 0 ? ' portfolio-analytics-metric__value--pos' : ' portfolio-analytics-metric__value--neg'}`}>
@@ -3896,11 +3910,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         <div>
                           <div className="portfolio-analytics-row__title">{protocolDisplayName(position)}</div>
                           <div className="portfolio-analytics-row__meta">
-                            {position.asset_symbol} · {(PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type).toLowerCase()} · {position.status === 'open' ? 'Открыта' : 'Закрыта'}
+                            {PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type} · {position.asset_symbol}{position.status === 'open' ? '' : ' · закрыта'}
                           </div>
                         </div>
                         <div className="portfolio-analytics-row__side">
-                          <strong>{protocolValue === null ? 'Нет оценки' : formatAmount(protocolValue, user.base_currency_code)}</strong>
+                          {protocolValue === null
+                            ? <strong className="pf-alloc__t-none">—</strong>
+                            : <strong>{formatAmount(protocolValue, user.base_currency_code)}</strong>}
                         </div>
                       </div>
                       <div className="portfolio-analytics-row__meta portfolio-analytics-row__meta--inline">
@@ -3913,14 +3929,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           }
                           if (position.position_type === 'lending') {
                             const lend = getLendingMetadata(position);
-                            const qty = position.current_quantity ? `Поставлено ${formatNumericAmount(position.current_quantity)} ${position.asset_symbol}` : position.asset_symbol;
+                            const qty = position.current_quantity ? `Поставлено ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}` : position.asset_symbol;
                             const debt = (lend.borrowed_quantity ?? 0) > 0
-                              ? ` · Долг ${formatNumericAmount(lend.borrowed_quantity ?? 0)} ${lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}`
+                              ? ` · Долг ${formatNumericAmount(lend.borrowed_quantity ?? 0, 8)} ${lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}`
                               : '';
                             const apr = lend.apr != null ? ` · ${lend.apr}% APR` : '';
                             return `${qty}${debt}${apr}`;
                           }
-                          const qty = position.current_quantity ? `Сейчас ${formatNumericAmount(position.current_quantity)} ${position.asset_symbol}` : position.asset_symbol;
+                          const qty = position.current_quantity ? `Сейчас ${formatNumericAmount(position.current_quantity, 8)} ${position.asset_symbol}` : position.asset_symbol;
                           const rewards = position.rewards_unclaimed_in_base > 0 ? ` · Награды ${formatAmount(position.rewards_unclaimed_in_base, user.base_currency_code)}` : '';
                           return `${qty}${rewards}`;
                         })()}
@@ -3946,7 +3962,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     <div>
                       <div className="portfolio-analytics-row__title">{account.accountName}</div>
                       <div className="portfolio-analytics-row__meta">
-                        {account.ownerLabel} · {account.positionsCount} поз. · Остаток {formatAmount(account.cashValue, user.base_currency_code)}
+                        {account.ownerLabel} · {account.positionsCount} поз.{account.isCrypto && account.cashValue === 0 ? '' : ` · Остаток ${formatAmount(account.cashValue, user.base_currency_code)}`}
                       </div>
                     </div>
                     <div className="portfolio-analytics-row__side">
@@ -4960,7 +4976,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         >
           <div className="pf-detail-body">
             <div className="pf-detail-meta-row">
-              <span className="pf-detail-ticker pf-detail-ticker--raw">{selectedLendingGroup.length > 1 ? selectedLendingGroup.map((item) => item.asset_symbol).join(' + ') : selectedProtocolPosition.asset_symbol}</span>
+              <span className="pf-detail-ticker pf-detail-ticker--raw">
+                {selectedLendingGroup.length > 1
+                  ? selectedLendingGroup.map((item) => item.asset_symbol).join(' + ')
+                  : selectedProtocolPosition.position_type === 'liquidity_pool' && getLiquidityPoolMetadata(selectedProtocolPosition).token1_symbol
+                    ? `${selectedProtocolPosition.asset_symbol}/${getLiquidityPoolMetadata(selectedProtocolPosition).token1_symbol}`
+                    : selectedProtocolPosition.asset_symbol}
+              </span>
               {selectedProtocolPosition.network_code && <span className="pf-detail-pill">{cryptoNetworkLabel(selectedProtocolPosition.network_code)}</span>}
               <span className="pf-detail-pill">{(PROTOCOL_TYPE_LABELS[selectedProtocolPosition.position_type] ?? selectedProtocolPosition.position_type).toLowerCase()}</span>
             </div>
@@ -5205,7 +5227,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   </button>
                   <button className="cat-act" type="button" onClick={() => setLpSheet({ kind: 'partial', positionId: selectedProtocolPosition.id })}>
                     <span className="cat-act__ico"><ArrowUpFromLine strokeWidth={2} /></span>
-                    <span className="cat-act__label">Снять часть</span>
+                    <span className="cat-act__label">Снять</span>
                   </button>
                   <button className="cat-act" type="button" onClick={() => setLpSheet({ kind: 'snapshot', positionId: selectedProtocolPosition.id })}>
                     <span className="cat-act__ico"><RefreshCw strokeWidth={2} /></span>
@@ -5235,7 +5257,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="sec-tag">Залог</span>
                       <div className="cat-actions pf-act-group__tiles" role="group" aria-label="Залог">
                         <button className="cat-act cat-act--primary" type="button" onClick={() => openLendingSheet('yield')}>
-                          <span className="cat-act__ico"><Percent strokeWidth={2.2} /></span>
+                          <span className="cat-act__ico"><TrendingUp strokeWidth={2.2} /></span>
                           <span className="cat-act__label">Доход</span>
                         </button>
                         <button className="cat-act" type="button" onClick={() => openLendingSheet('top_up')}>
@@ -5296,7 +5318,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     setPartialCloseProtocolId(selectedProtocolPosition.id);
                   }}>
                     <span className="cat-act__ico"><ArrowUpFromLine strokeWidth={2} /></span>
-                    <span className="cat-act__label">Снять часть</span>
+                    <span className="cat-act__label">Снять</span>
                   </button>
                   <button className="cat-act" type="button" onClick={() => handleOpenStakingCloseForm(selectedProtocolPosition)}>
                     <span className="cat-act__ico"><ArrowDownToLine strokeWidth={2} /></span>
