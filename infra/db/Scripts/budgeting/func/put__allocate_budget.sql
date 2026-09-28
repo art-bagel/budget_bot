@@ -17,6 +17,7 @@ DECLARE
     _to_kind text;
     _to_name text;
     _from_balance numeric(20, 2);
+    _fx_category_id bigint;
     _operation_id bigint;
     _owner_type text;
     _owner_user_id bigint;
@@ -41,7 +42,8 @@ BEGIN
         RAISE EXCEPTION 'Budget source and destination categories must be different';
     END IF;
 
-    IF _amount_in_base <= 0 THEN
+    IF _amount_in_base IS NULL OR _amount_in_base::text IN ('NaN', 'Infinity', '-Infinity')
+       OR round(_amount_in_base, 2) <= 0 THEN
         RAISE EXCEPTION 'Allocated amount must be positive';
     END IF;
 
@@ -93,14 +95,23 @@ BEGIN
 
     _base_currency_code := budgeting.get__owner_base_currency(_owner_type, _owner_user_id, _owner_family_id);
 
+    -- The UI presents Unallocated + FX Result as one spendable envelope.
+    -- Keep FX Result intact as an analytical total; allocations debit only
+    -- Unallocated, so the combined available amount falls exactly once.
+    IF _from_kind = 'system' AND _from_name = 'Unallocated' THEN
+        _fx_category_id := budgeting.get__owner_system_category_id(
+            _owner_type, _owner_user_id, _owner_family_id, 'FX Result');
+    END IF;
+
     PERFORM 1 FROM current_budget_balances
-    WHERE category_id = _from_category_id
+    WHERE category_id IN (_from_category_id, _to_category_id, _fx_category_id)
       AND currency_code = _base_currency_code
+    ORDER BY category_id
     FOR UPDATE;
 
-    SELECT COALESCE(amount, 0) INTO _from_balance
+    SELECT COALESCE(sum(amount), 0) INTO _from_balance
     FROM current_budget_balances
-    WHERE category_id = _from_category_id
+    WHERE category_id IN (_from_category_id, _fx_category_id)
       AND currency_code = _base_currency_code;
 
     IF _from_balance < round(_amount_in_base, 2) THEN

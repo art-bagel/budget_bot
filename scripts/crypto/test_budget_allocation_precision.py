@@ -13,7 +13,7 @@ from fastapi import FastAPI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from check_user_history import fingerprint
-from prepare_docker_history import UID, credentials
+from prepare_docker_history import ROOT, UID, credentials
 
 
 async def main():
@@ -37,12 +37,55 @@ async def main():
         return await db.fetchval(f'SELECT {function}({placeholders})', *args)
 
     try:
+        for name in ('put__allocate_budget', 'put__allocate_group_budget'):
+            await db.execute((ROOT / f'infra/db/Scripts/budgeting/func/{name}.sql').read_text())
         # Choose a funded category owned by this local test user, without
         # manufacturing balances or changing the user's intended allocation.
         source = await db.fetchval("select b.category_id from budgeting.current_budget_balances b join budgeting.categories c on c.id=b.category_id where c.owner_user_id=$1 and c.kind='regular' and c.is_active and b.amount>3000 and b.category_id<>90 order by b.amount desc limit 1", UID)
         assert source
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             with patch.object(operations.ledger, 'call_function', side_effect=call):
+                free_before = await db.fetchval('select sum(amount) from budgeting.current_budget_balances where category_id in(88,89)')
+                fx_before = await db.fetchval('select amount from budgeting.current_budget_balances where category_id=89')
+                banks_before = (await fingerprint(db))['bank_entries']
+                response = await client.post('/api/v1/operations/allocate', json=dict(from_category_id=88, to_category_id=90, amount_in_base=2745.72))
+                assert response.status_code == 200, response.text
+                assert await db.fetchval('select sum(amount) from budgeting.current_budget_balances where category_id in(88,89)') == free_before - Decimal('2745.72')
+                assert await db.fetchval('select amount from budgeting.current_budget_balances where category_id=89') == fx_before
+                assert (await fingerprint(db))['bank_entries'] == banks_before
+                # Group allocation must use the same combined availability.
+                group = await db.fetchval("insert into budgeting.categories(owner_type,owner_user_id,name,kind) values('user',$1,'Rollback FX group','group') returning id", UID)
+                await db.execute('insert into budgeting.group_members(group_id,child_category_id,share) values($1,90,1)', group)
+                await db.fetchval('select budgeting.put__allocate_group_budget($1,88,$2,100,null)', UID, group)
+                assert await db.fetchval('select sum(amount) from budgeting.current_budget_balances where category_id in(88,89)') == free_before - Decimal('2845.72')
+                for from_id, amount in ((88, free_before), (90, Decimal('10000'))):
+                    sp = db.transaction()
+                    await sp.start()
+                    try:
+                        await db.fetchval('select budgeting.put__allocate_budget($1,$2,128,$3,null)', UID, from_id, amount)
+                        raise AssertionError('Insufficient funds were accepted')
+                    except asyncpg.RaiseError as exc:
+                        assert 'Insufficient budget' in str(exc), str(exc)
+                    finally:
+                        await sp.rollback()
+                # An FX loss must reduce availability too, never be ignored.
+                scenario = db.transaction()
+                await scenario.start()
+                try:
+                    await db.execute('update budgeting.current_budget_balances set amount=case category_id when 88 then 100 else -80 end where category_id in(88,89)')
+                    denied = db.transaction()
+                    await denied.start()
+                    try:
+                        await db.fetchval('select budgeting.put__allocate_budget($1,88,90,20.01,null)', UID)
+                        raise AssertionError('Negative FX was ignored')
+                    except asyncpg.RaiseError as exc:
+                        assert 'Insufficient budget' in str(exc)
+                    finally:
+                        await denied.rollback()
+                    await db.fetchval('select budgeting.put__allocate_budget($1,88,90,20,null)', UID)
+                    assert await db.fetchval('select sum(amount) from budgeting.current_budget_balances where category_id in(88,89)') == 0
+                finally:
+                    await scenario.rollback()
                 for amount in (2745.72, 0.88, 1.17, 0.01):
                     response = await client.post('/api/v1/operations/allocate', json=dict(from_category_id=source, to_category_id=90, amount_in_base=amount))
                     assert response.status_code == 200, response.text
@@ -59,7 +102,7 @@ async def main():
         await tx.rollback()
         assert before == await fingerprint(db), 'Test changed financial data'
         await db.close()
-    print('PASS: exact decimal allocations via API/storage; invalid values rejected; all changes rolled back')
+    print('PASS: combined free/FX and group allocations, overdraft rejection; exact decimal allocations via API/storage; invalid values rejected; all changes rolled back')
 
 
 if __name__ == '__main__':
