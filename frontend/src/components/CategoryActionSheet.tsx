@@ -4,7 +4,7 @@ import CurrencyPicker, { type CurrencyPickerOption } from './CurrencyPicker';
 import EmojiPicker from './EmojiPicker';
 import { parseCategoryIcon, buildCategoryName, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
-import { formatAmount, formatNumericAmount } from '../utils/format';
+import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import {
   archiveCategory,
@@ -612,7 +612,7 @@ export default function CategoryActionSheet({
             <span className="sheet-stat__val">
               {formatNumericAmount(category.balance)}
             </span>
-            <span className="sheet-stat__sym">{category.currency_code}</span>
+            <span className="sheet-stat__sym">{currencySymbol(category.currency_code)}</span>
           </div>
         </div>
       )}
@@ -674,7 +674,7 @@ export default function CategoryActionSheet({
                 <option key={a.id} value={a.id}>
                   {a.name}{a.account_kind === 'credit' ? ' · Кредитная карта' : ''}
                   {expBalancesByAccountId[a.id]?.some((b) => b.asset_type === 'crypto' && b.amount > 0)
-                    ? ` · ${expBalancesByAccountId[a.id].filter((b) => b.asset_type === 'crypto' && b.amount > 0).map((b) => b.symbol ?? b.currency_code).join(', ')}`
+                    ? ` · ${[...new Set(expBalancesByAccountId[a.id].filter((b) => b.asset_type === 'crypto' && b.amount > 0).map((b) => b.symbol ?? b.currency_code))].join(', ')}`
                     : ''}
                 </option>
               ))}
