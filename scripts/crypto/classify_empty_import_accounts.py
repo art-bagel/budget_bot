@@ -27,7 +27,7 @@ async def run(database, apply):
             account = await db.fetchrow('select * from budgeting.bank_accounts where id=$1 for update', account_id)
             assert account['owner_user_id'] == UID and account['name'] == key
             assert account['account_kind'] == 'investment' and account['investment_asset_type'] == 'crypto'
-            assert account['provider_name'] in (None, 'reconstruction_internal')
+            assert account['provider_name'] is None
             positions = await db.fetch('select * from budgeting.portfolio_positions where investment_account_id=$1', account_id)
             assert positions
             for pos in positions:
@@ -36,15 +36,15 @@ async def run(database, apply):
                 assert not summary.get('remaining_cost_basis') and not summary.get('funding_units')
             assert not await db.fetchval('select count(*) from budgeting.crypto_protocol_positions where investment_account_id=$1', account_id)
             assert not await db.fetchval('select count(*) from budgeting.bank_entries where bank_account_id=$1', account_id)
-            await db.execute("update budgeting.bank_accounts set provider_name='reconstruction_internal' where id=$1", account_id)
+            await db.execute("update budgeting.bank_accounts set is_archived=true where id=$1", account_id)
             changed.append(account_id)
         after = await fingerprint(db)
         assert all(before[t] == after[t] for t in before if t != 'bank_accounts')
         accounts_after = [dict(r) for r in await db.fetch('select * from budgeting.bank_accounts order by id')]
-        expected = [{**a, **({'provider_name': 'reconstruction_internal'} if a['id'] in changed else {})} for a in accounts_before]
+        expected = [{**a, **({'is_archived': True} if a['id'] in changed else {})} for a in accounts_before]
         assert accounts_after == expected
         visible = json.loads(await db.fetchval('select budgeting.get__bank_accounts($1,NULL,NULL)', UID))
-        assert not set(changed) & {a['id'] for a in visible}
+        assert all(a['is_archived'] for a in visible if a['id'] in changed)
         backup = out / f'{database}-accounts-before.json'
         if not backup.exists():
             backup.write_text(json.dumps(accounts_before, default=str, ensure_ascii=False, indent=2))

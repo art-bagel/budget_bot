@@ -36,8 +36,8 @@ async def run(database, apply):
     await tx.start()
     try:
         before = await fingerprint(db)
-        accounts = {r['id']: r['provider_name'] == 'reconstruction_internal'
-                    for r in await db.fetch('select id,provider_name from budgeting.bank_accounts')}
+        accounts = {r['id']: r['is_archived']
+                    for r in await db.fetch('select id,is_archived from budgeting.bank_accounts')}
         internal = {key for key, value in accounts.items() if value}
         # Independently classify the full ledger in Python; no comment/source-name heuristics.
         movements = {}
@@ -85,7 +85,7 @@ async def run(database, apply):
         positions = await db.fetchval('select budgeting.get__portfolio_positions($1)', UID)
         assert all(p['investment_account_id'] not in internal for p in positions)
         bank_accounts = await db.fetchval('select budgeting.get__bank_accounts($1,NULL,NULL)', UID)
-        assert all(a['id'] not in internal for a in bank_accounts)
+        assert all(a['is_archived'] == (a['id'] in internal) for a in bank_accounts)
         # Run analytics too: no hidden account ids may appear in account-grouped outputs.
         analytics = await db.fetchval('select budgeting.get__portfolio_analytics($1,$2,$3)', UID, date(2024,1,1), date(2026,9,27))
         def check_account_ids(value):

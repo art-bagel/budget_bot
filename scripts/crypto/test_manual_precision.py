@@ -213,7 +213,7 @@ class ManualPrecisionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.db.fetchval("select metadata->'funding_units' from budgeting.portfolio_positions where id=$1", incoming['position_id']))
         account = await self.db.fetchval("""select id from budgeting.bank_accounts where owner_user_id=$1
             and account_kind='investment' and investment_asset_type='crypto'
-            and provider_name is distinct from 'reconstruction_internal' and is_active
+            and not is_archived and is_active
             and id<>$2 order by id limit 1""", UID, funded['investment_account_id'])
         transfer = dict(request_id=str(uuid4()), position_id=incoming['position_id'],
                         target_investment_account_id=account, amount='0.123456789012345678', operated_at='2026-09-08')

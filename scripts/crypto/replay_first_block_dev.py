@@ -124,7 +124,7 @@ async def main():
             async with pool.acquire() as db:
                 name={'exchange_source':'Технический источник покупок (dev)', 'battery':'Батарейка — возврат', 'intermediate':'Промежуточный кошелёк', 'second':'Второй кошелёк', 'fourth':'Четвёртый кошелёк', 'telegram_yield':'Размещения Telegram', 'external_evaa':'Стороннее погашение EVAA — технический счёт'}.get(wallet,wallet)
                 existing = await db.fetchval("SELECT id FROM budgeting.bank_accounts WHERE owner_user_id=$1 AND name=$2 AND account_kind='investment' AND investment_asset_type='crypto'", uid, name)
-                accounts[wallet] = existing or await db.fetchval("INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type,provider_name) VALUES ('user',$1,$2,'investment','crypto',$3) RETURNING id",uid,name,'reconstruction_internal' if wallet in plan.get('internal_accounts',[]) else None)
+                accounts[wallet] = existing or await db.fetchval("INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type,is_archived) VALUES ('user',$1,$2,'investment','crypto',$3) RETURNING id",uid,name,wallet in plan.get('internal_accounts',[]))
                 state['accounts']=accounts
                 save(state)
         state['accounts']=accounts

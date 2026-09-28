@@ -16,13 +16,6 @@ BEGIN
     IF length(trim(_wallet_address)) > 256 OR _archived IS NULL THEN
         RAISE EXCEPTION 'Некорректные параметры счёта';
     END IF;
-    IF _archived AND (
-        EXISTS (SELECT 1 FROM budgeting.portfolio_positions WHERE investment_account_id=_account_id AND quantity<>0)
-        OR EXISTS (SELECT 1 FROM budgeting.crypto_protocol_positions WHERE investment_account_id=_account_id AND status='open')
-        OR EXISTS (SELECT 1 FROM budgeting.current_bank_balances WHERE bank_account_id=_account_id AND (amount<>0 OR historical_cost_in_base<>0))
-    ) THEN
-        RAISE EXCEPTION 'Перед архивацией выведите остатки и закройте DeFi-позиции';
-    END IF;
     UPDATE budgeting.bank_accounts SET name=trim(_name),wallet_address=nullif(trim(_wallet_address),''),is_archived=_archived WHERE id=_account_id;
     RETURN jsonb_build_object('bank_account_id',_account_id,'name',trim(_name),'wallet_address',nullif(trim(_wallet_address),''),'is_archived',_archived);
 END

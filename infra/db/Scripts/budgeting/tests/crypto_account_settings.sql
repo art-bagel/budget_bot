@@ -25,10 +25,12 @@ BEGIN
     ASSERT blocked, 'Empty names must be rejected';
     INSERT INTO budgeting.current_bank_balances(bank_account_id,currency_code,amount,historical_cost_in_base)
     VALUES(aid,'RUB',1,1);
-    blocked := false;
-    BEGIN
-        PERFORM budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,NULL,true);
-    EXCEPTION WHEN raise_exception THEN blocked := true; END;
-    ASSERT blocked, 'A funded account cannot disappear into the archive';
+    PERFORM budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,NULL,true);
+    ASSERT (SELECT is_archived FROM budgeting.bank_accounts WHERE id=aid);
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(budgeting.get__portfolio_summary(uid)) x WHERE (x->>'investment_account_id')::bigint=aid);
+    ASSERT (SELECT amount=1 FROM budgeting.current_bank_balances WHERE bank_account_id=aid AND currency_code='RUB');
+    PERFORM budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,NULL,false);
+    ASSERT (SELECT NOT is_archived FROM budgeting.bank_accounts WHERE id=aid);
+    ASSERT EXISTS (SELECT 1 FROM jsonb_array_elements(budgeting.get__portfolio_summary(uid)) x WHERE (x->>'investment_account_id')::bigint=aid);
 END $$;
 ROLLBACK;

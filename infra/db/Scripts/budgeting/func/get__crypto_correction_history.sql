@@ -37,7 +37,7 @@ BEGIN
        AND c->>'kind' IN ('borrow','repay','liquidate','accrue_interest','protocol_yield','close_protocol','partial_close_protocol','top_up_protocol')),
       (c->'payload'->>'bank_account_id')::bigint)
    WHERE cardinality(budgeting.get__crypto_correction_fields(c->>'kind'))>0
-    AND visible.provider_name IS DISTINCT FROM 'reconstruction_internal'
+    AND NOT visible.is_archived
   )))
  ORDER BY occurred_at DESC,order_in_timestamp DESC LIMIT _limit OFFSET _offset) e);
 END $f$;

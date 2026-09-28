@@ -818,8 +818,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         getTinkoffConnections().catch(() => [] as ExternalConnection[]),
         fetchCryptoAssets().catch(() => [] as CryptoAsset[]),
       ]);
-      const visibleAccounts = investmentAccounts.filter((account) => account.provider_name !== 'reconstruction_internal' && !account.is_archived);
-      const internalAccountIds = new Set(investmentAccounts.filter((account) => (account.provider_name === 'reconstruction_internal' || account.is_archived)).map((account) => account.id));
+      const visibleAccounts = investmentAccounts.filter((account) => !account.is_archived);
+      const archivedAccountIds = new Set(investmentAccounts.filter((account) => account.is_archived).map((account) => account.id));
       const snapshots = await Promise.all(
         visibleAccounts.map(async (account) => ({
           account,
@@ -829,7 +829,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
       setAccounts(snapshots);
       setCashAccounts(loadedCashAccounts);
-      setPositions(loadedPositions.filter((position) => !internalAccountIds.has(position.investment_account_id ?? -1)));
+      setPositions(loadedPositions.filter((position) => !archivedAccountIds.has(position.investment_account_id ?? -1)));
       setCurrencies(loadedCurrencies);
       setSummaryItems(loadedSummary);
       setTinkoffConnections(loadedConnections);
@@ -856,7 +856,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       return;
     }
     void fetchCryptoProtocolPositions()
-      .then(setCryptoProtocolPositions)
+      .then((items) => setCryptoProtocolPositions(items.filter((item) => cryptoAccountIds.includes(item.investment_account_id))))
       .catch(() => setCryptoProtocolPositions([]));
 
     let cancelled = false;

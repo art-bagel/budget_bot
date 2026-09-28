@@ -74,8 +74,8 @@ BEGIN
         SELECT operation_id, bank_account_id FROM crypto_bank_entries
     ), account_visibility AS (
         SELECT am.operation_id,
-               bool_or(ba.provider_name = 'reconstruction_internal') AS has_internal,
-               bool_or(ba.provider_name IS DISTINCT FROM 'reconstruction_internal') AS has_visible
+               bool_or(ba.is_archived) AS has_archived,
+               bool_or(NOT ba.is_archived) AS has_visible
         FROM account_movements am
         JOIN bank_accounts ba ON ba.id = am.account_id
         JOIN operations scoped_operation ON scoped_operation.id = am.operation_id
@@ -116,7 +116,7 @@ BEGIN
           -- Hide only movements entirely inside reconstruction accounts. Bank purchases,
           -- withdrawals and transfers touching a real wallet remain visible.
           -- Apply before pagination so totals and pages agree.
-          AND NOT (COALESCE(av.has_internal, false) AND NOT COALESCE(av.has_visible, false))
+          AND NOT (COALESCE(av.has_archived, false) AND NOT COALESCE(av.has_visible, false))
           AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
           AND (
                 _normalized_operation_type IS NULL
@@ -221,7 +221,7 @@ BEGIN
           ON ba.id = be.bank_account_id
         JOIN selected_operations so
           ON so.id = be.operation_id
-        WHERE ba.provider_name IS DISTINCT FROM 'reconstruction_internal'
+        WHERE NOT ba.is_archived
     ),
     crypto_bank_entries_rows AS (
         SELECT
@@ -245,7 +245,7 @@ BEGIN
           ON ca.id = cbe.crypto_asset_id
         JOIN selected_operations so
           ON so.id = cbe.operation_id
-        WHERE ba.provider_name IS DISTINCT FROM 'reconstruction_internal'
+        WHERE NOT ba.is_archived
     ),
     bank_entry_rows AS (
         SELECT * FROM fiat_bank_entries
@@ -322,7 +322,7 @@ BEGIN
         JOIN selected_operations so
           ON so.id = pe.linked_operation_id
         WHERE pe.linked_operation_id IS NOT NULL
-          AND ba.provider_name IS DISTINCT FROM 'reconstruction_internal'
+          AND NOT ba.is_archived
         GROUP BY pe.linked_operation_id
     ),
     items AS (
