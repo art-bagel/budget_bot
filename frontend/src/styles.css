@@ -12543,3 +12543,5 @@ select.dlg-row__ghost option {
 .settings-page .invest-archive-toggle:hover { background: var(--surface-inset); color: var(--text); }
 
 .pf-alloc__t-none { color: var(--text-3); }
+[data-theme='dark'] .cat-actions--crypto .cat-act:not(.cat-act--primary),
+[data-theme='dark'] .pf-act-group__tiles .cat-act:not(.cat-act--primary) { background: var(--surface); }

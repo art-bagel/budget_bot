@@ -202,7 +202,7 @@ export default function CryptoSwapSheet({
       </div>
 
       <div className="field">
-        <span className="fl">Монета на вход</span>
+        <span className="fl">Получаемая монета</span>
         <select
           className="picker-v2"
           value={toCryptoAssetId}
