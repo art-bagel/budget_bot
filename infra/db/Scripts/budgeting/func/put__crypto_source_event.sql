@@ -307,11 +307,16 @@ BEGIN
                 RAISE EXCEPTION 'Bank withdrawal must stay within source journal owner';
             END IF;
             -- Bank lots do not yet support unsettled loan financing. Allow only
-            -- numeric dust, retaining it in the journal's conservation check.
-            IF EXISTS(SELECT 1 FROM portfolio_positions p,
-                LATERAL jsonb_each_text(COALESCE(p.metadata->'funding_units','{}')) u
+            -- less than one atomic unit of the borrowed asset, retaining it in
+            -- the journal's financing holder and conservation check. A universal
+            -- 1e-12 threshold incorrectly blocks fractional USDC dust.
+            IF EXISTS(SELECT 1 FROM portfolio_positions p
+                CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.metadata->'funding_units','{}')) u
+                LEFT JOIN crypto_protocol_positions loan ON loan.id=u.key::bigint
+                LEFT JOIN crypto_assets borrowed ON borrowed.id=(loan.metadata->>'borrowed_crypto_asset_id')::bigint
                 WHERE p.id=(_payload->>'position_id')::bigint
-                AND abs(u.value::numeric * (_payload->>'quantity')::numeric / p.quantity)>0.000000000001) THEN
+                AND (borrowed.id IS NULL OR abs(u.value::numeric * (_payload->>'quantity')::numeric / p.quantity)
+                    >= power(10::numeric,-borrowed.decimals))) THEN
                 RAISE EXCEPTION 'Settle financing before withdrawing crypto to bank';
             END IF;
             _result:=budgeting.put__transfer_crypto_from_investment(_user_id,

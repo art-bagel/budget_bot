@@ -44,5 +44,5 @@ export function formatDraftDecimal(value: number, fractionDigits = 8): string {
 
 /** Exact decimal strings come padded with zeros (24.815282191000); the value stays exact. */
 export function trimDecimal(value: string): string {
-  return value.includes('.') ? value.replace(/\.?0+$/, '') : value;
+  return /^[-+]?\d+\.\d+$/.test(value) ? value.replace(/\.?0+$/, '') : value;
 }

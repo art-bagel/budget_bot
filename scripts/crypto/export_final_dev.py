@@ -20,10 +20,12 @@ def num(value, places=2):
     return '—' if value is None else f'{D(str(value)):,.{places}f}'.replace(',', ' ')
 
 
-async def run(database):
+async def run(database, history_cutoff, output):
     db = await asyncpg.connect(**{**credentials(), 'database': database})
     await db.set_type_codec('jsonb', encoder=json.dumps, decoder=json.loads, schema='pg_catalog')
-    out = ROOT / 'outputs/crypto-final'
+    out = output
+    if not out.resolve().is_relative_to((ROOT / 'outputs').resolve()):
+        raise ValueError('Private exports must stay under outputs/')
     out.mkdir(parents=True, exist_ok=True)
     try:
         async with db.transaction(isolation='repeatable_read', readonly=True):
@@ -76,13 +78,13 @@ async def run(database):
     assert totals['all'] == totals['included'] + totals['archived'] + totals['excluded']
     data = dict(generated_at=datetime.now(timezone.utc).isoformat(), database=database,
                 base_commit=(await asyncio.to_thread(subprocess.check_output, ['git', 'rev-parse', 'HEAD'], text=True)).strip(),
-                history_cutoff='2026-09-06T18:13:53+03:00', accounts=accounts, wallets=wallets,
+                history_cutoff=history_cutoff, accounts=accounts, wallets=wallets,
                 protocols=protocols, bank=bank, crypto_bank=crypto_bank, summary=summary,
                 prices=prices, fx=fx, totals=totals, financial_fingerprints=before)
     (out / 'snapshot.json').write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str))
     prices_by_id = {p['crypto_asset_id']: D(str(p['price'])) for p in prices if not p['is_stale'] and p['vs_currency'] == 'RUB'}
     usd_rate = D(fx['rub_per_usd']) if 'rub_per_usd' in fx else None
-    lines = ['# Итоговая выгрузка криптоучёта', '', f"Снимок dev: {data['generated_at']}. Исторические количества до 06.09.2026 18:13:53 МСК.",
+    lines = ['# Итоговая выгрузка криптоучёта', '', f"Снимок dev: {data['generated_at']}. Срез истории: {history_cutoff}.",
              'Котировки получены при выгрузке; это не рыночная оценка на дату исторического среза.',
              'USD — справочный перевод рублёвой себестоимости по указанному курсу, а не исторические долларовые затраты.', '',
              f"Курс USD: {json.dumps(fx, ensure_ascii=False)}", '', '| Раздел | Себестоимость RUB |', '|---|---:|']
@@ -108,7 +110,7 @@ async def run(database):
     lines += ['', '## Источники котировок', '', '| ID актива | Монета | RUB | Источник | Время UTC | Устарела |', '|---|---|---:|---|---|---|']
     for p in prices:
         lines.append(f"| {p['crypto_asset_id']} | {p['symbol']} | {p['price']} | {p['source']} | {p['fetched_at']} | {p['is_stale']} |")
-    lines += ['', 'Полные остатки банка, справочники, идентичность активов, протоколы и контрольные суммы находятся в snapshot.json рядом с отчётом. Операции банка после 06.09 включены только в банковский снимок; в историческую себестоимость криптопортфеля не добавлены.', '', 'Результат продаж и общий P&L здесь не вычисляются вычитанием себестоимости из частичной оценки. Допущения и сверка вложений: docs/2026-09-28-crypto-final-acceptance.md.']
+    lines += ['', 'Полные остатки банка, справочники, идентичность активов, протоколы и контрольные суммы находятся в snapshot.json рядом с отчётом. Банковские остатки включают средства вне инвестиционного портфеля, в том числе ещё не распределённые карточные траты. Их нельзя считать свободной криптовалютой биржи.', '', 'Результат продаж и общий P&L здесь не вычисляются вычитанием себестоимости из частичной оценки. Допущения и сверка вложений: docs/2026-09-28-crypto-final-acceptance.md.']
     (out / 'report.md').write_text('\n'.join(lines)+'\n')
     await asyncio.to_thread(subprocess.run, ['node', '--experimental-strip-types', str(ROOT / 'scripts/crypto/export_final_valuation.mjs'), str(out / 'snapshot.json')], check=True)
     print(json.dumps(dict(totals=totals, wallets=len(wallets), protocols=len(open_protocols), quotes=len(prices), fx=fx, output=str(out)),default=str,ensure_ascii=False))
@@ -117,4 +119,10 @@ async def run(database):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--database', choices=['budget_bot','crypto_merge_preview'], default='budget_bot')
-    asyncio.run(run(parser.parse_args().database))
+    parser.add_argument('--history-cutoff', required=True, help='Explicit ISO timestamp of the verified history boundary')
+    parser.add_argument('--output', type=type(ROOT), default=ROOT / 'outputs/crypto-final')
+    args = parser.parse_args()
+    cutoff = datetime.fromisoformat(args.history_cutoff)
+    if cutoff.tzinfo is None:
+        parser.error('History cutoff must include timezone')
+    asyncio.run(run(args.database, cutoff.isoformat(), args.output))

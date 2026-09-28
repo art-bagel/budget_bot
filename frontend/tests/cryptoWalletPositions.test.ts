@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { trimDecimal } from '../src/utils/portfolioPosition.ts';
 import { walletPositions } from '../src/utils/cryptoWalletPositions.ts';
 import type { PortfolioPosition } from '../src/types.ts';
 
@@ -26,4 +27,11 @@ test('same tickers in different wallets or canonical assets remain separate', ()
 test('non-crypto closed positions keep their existing lifecycle', () => {
   const row = { ...position(1, 10, 2, 'closed', 20), asset_type_code: 'deposit' } as PortfolioPosition;
   assert.equal(walletPositions([row]).length, 0);
+});
+
+test('quantity defaults preserve tiny scientific values and integer zeroes', () => {
+  assert.equal(trimDecimal('1.5e-10'), '1.5e-10');
+  assert.equal(trimDecimal('1000'), '1000');
+  assert.equal(trimDecimal('24.815282191000'), '24.815282191');
+  assert.equal(trimDecimal('0.00000000001000'), '0.00000000001');
 });
