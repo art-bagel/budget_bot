@@ -12503,3 +12503,41 @@ select.dlg-row__ghost option {
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
 .pf-view .op-row__top { align-items: flex-start; }
 .pf-view .op-row__name-text { white-space: normal; mask-image: none; line-height: 1.25; }
+
+/* Settings: investment account tiles open a settings sheet */
+.settings-page .invest-tile--btn {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.settings-page .invest-tile--btn .invest-tile__meta { display: flex; flex-direction: column; align-items: flex-start; }
+.settings-page .invest-tile--btn .invest-tile__name { overflow-wrap: anywhere; }
+.settings-page .invest-tile__flag {
+  margin-top: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.settings-page .invest-tile__chev { display: grid; place-items: center; color: var(--text-3); flex-shrink: 0; }
+.settings-page .invest-tile__chev svg { width: 16px; height: 16px; }
+.pf-archive-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.settings-page .invest-archive-toggle {
+  align-self: center;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-page .invest-archive-toggle:hover { background: var(--surface-inset); color: var(--text); }
