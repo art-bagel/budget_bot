@@ -19,18 +19,31 @@ DECLARE
     _target_position_id bigint;
     _base_currency_code char(3);
     _asset_metadata jsonb;
-    _current_borrowed numeric(30, 12);
-    _new_borrowed numeric(30, 12);
+    _current_borrowed numeric(50, 18);
+    _new_borrowed numeric(50, 18);
     _existing_value numeric(20, 2);
     _new_value numeric(20, 2);
     _resolved_value numeric(20, 2);
+    _event_id bigint;
 BEGIN
     SET search_path TO budgeting;
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_protocol_positions WHERE id=_position_id AND
+        (metadata->>'funding_policy'='components' OR COALESCE(metadata->'funding_units0','{}')<>'{}'::jsonb
+            OR COALESCE(metadata->'funding_units1','{}')<>'{}'::jsonb)) THEN
+        RAISE EXCEPTION 'Операции с заёмным финансированием проводятся через журнал криптоистории';
+    END IF;
 
-    IF _debt_qty IS NULL OR _debt_qty <= 0 THEN
+
+    IF _debt_qty IS NULL OR _debt_qty <= 0
+       OR _debt_qty::text IN ('NaN', 'Infinity', '-Infinity') OR _debt_qty<>round(_debt_qty,18) THEN
         RAISE EXCEPTION 'Debt quantity must be positive';
     END IF;
-    _debt_qty := round(_debt_qty, 12);
+    _debt_qty := round(_debt_qty, 18);
+    IF _debt_qty <= 0 OR (_value_in_base IS NOT NULL AND (_value_in_base < 0
+       OR _value_in_base::text IN ('NaN', 'Infinity', '-Infinity'))) THEN
+        RAISE EXCEPTION 'Для займа нужна положительная историческая оценка в базовой валюте';
+    END IF;
 
     SELECT *
     INTO _existing
@@ -54,6 +67,11 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF COALESCE((_existing.metadata ->> 'borrowed_quantity')::numeric, 0) > 0
+       AND (_existing.metadata ->> 'debt_accounting_version') IS DISTINCT FROM '2' THEN
+        RAISE EXCEPTION 'Legacy loan must be reconstructed before changing its debt';
+    END IF;
+
     _borrow_asset_id := NULLIF((_existing.metadata ->> 'borrowed_crypto_asset_id'), '')::bigint;
     IF _borrow_asset_id IS NULL THEN
         IF _borrowed_crypto_asset_id IS NULL THEN
@@ -62,6 +80,19 @@ BEGIN
         _borrow_asset_id := _borrowed_crypto_asset_id;
     ELSIF _borrowed_crypto_asset_id IS NOT NULL AND _borrowed_crypto_asset_id <> _borrow_asset_id THEN
         RAISE EXCEPTION 'Заём по этому лендингу уже идёт в другой монете';
+    END IF;
+
+    -- One live debt per currency within the same on-chain lending account.
+    IF _existing.metadata->>'lending_account_key' IS NOT NULL AND EXISTS (
+        SELECT 1 FROM crypto_protocol_positions p
+        WHERE p.id<>_existing.id AND p.investment_account_id=_existing.investment_account_id
+          AND p.network_code IS NOT DISTINCT FROM _existing.network_code
+          AND p.status='open' AND p.position_type='lending'
+          AND p.metadata->>'lending_account_key'=_existing.metadata->>'lending_account_key'
+          AND (p.metadata->>'borrowed_crypto_asset_id')::bigint=_borrow_asset_id
+          AND COALESCE((p.metadata->>'borrowed_quantity')::numeric,0)>0
+    ) THEN
+        RAISE EXCEPTION 'По этому счёту уже есть долг в данной монете; используйте позицию общего долга';
     END IF;
 
     SELECT *
@@ -95,7 +126,10 @@ BEGIN
     LIMIT 1
     FOR UPDATE;
 
-    _resolved_value := round(COALESCE(_value_in_base, 0), 2);
+    IF COALESCE((_existing.metadata->>'borrowed_quantity')::numeric,0)>0 THEN
+        PERFORM budgeting.check__crypto_lending_state(_existing.metadata);
+    END IF;
+    _resolved_value := round(_value_in_base, 2);
 
     IF _borrow_position.id IS NOT NULL THEN
         UPDATE portfolio_positions
@@ -120,12 +154,15 @@ BEGIN
                 'action', 'lending_take_more_debt',
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
-                'entry_value_in_base', 0,
+                'entry_value_in_base', _resolved_value,
+                'basis_quality', CASE WHEN _resolved_value IS NULL THEN 'unknown' WHEN _resolved_value=0 THEN 'confirmed_zero' ELSE 'known' END,
+                'own_funding_in_base', 0,
+                'debt_accounting_version', 2,
                 'source_kind', 'lending_borrow',
                 'value_in_base', _resolved_value
             ),
             _user_id
-        );
+        ) RETURNING id INTO _event_id;
     ELSE
         INSERT INTO portfolio_positions (
             owner_type, owner_user_id, owner_family_id, investment_account_id,
@@ -158,17 +195,20 @@ BEGIN
                 'action', 'lending_take_more_debt',
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
-                'entry_value_in_base', 0,
+                'entry_value_in_base', _resolved_value,
+                'basis_quality', CASE WHEN _resolved_value IS NULL THEN 'unknown' WHEN _resolved_value=0 THEN 'confirmed_zero' ELSE 'known' END,
+                'own_funding_in_base', 0,
+                'debt_accounting_version', 2,
                 'source_kind', 'lending_borrow',
                 'value_in_base', _resolved_value
             ),
             _user_id
-        );
+        ) RETURNING id INTO _event_id;
     END IF;
 
     _current_borrowed := COALESCE(NULLIF(_existing.metadata ->> 'borrowed_quantity', ''), '0')::numeric;
-    _new_borrowed := round(_current_borrowed + _debt_qty, 12);
-    _existing_value := COALESCE(NULLIF(_existing.metadata ->> 'borrowed_value_in_base', ''), '0')::numeric;
+    _new_borrowed := round(_current_borrowed + _debt_qty, 18);
+    _existing_value := CASE WHEN _current_borrowed=0 THEN 0 ELSE (_existing.metadata ->> 'debt_cost_basis_in_base')::numeric END;
     _new_value := round(_existing_value + _resolved_value, 2);
 
     UPDATE crypto_protocol_positions
@@ -178,10 +218,20 @@ BEGIN
             'borrowed_asset_symbol', _borrow_asset.symbol,
             'borrowed_quantity', _new_borrowed,
             'borrowed_position_id', _target_position_id,
-            'borrowed_value_in_base', _new_value
+            'borrowed_value_in_base', _new_value,
+            'debt_cost_basis_in_base', _new_value,
+            'debt_basis_quality', CASE WHEN _new_value IS NULL THEN 'unknown' WHEN _existing.metadata->>'debt_basis_quality'='estimated' THEN 'estimated' ELSE 'known' END,
+            'debt_accounting_version', 2
         ),
         updated_at = current_timestamp
     WHERE id = _position_id;
+
+    INSERT INTO crypto_liability_events(protocol_position_id, portfolio_event_id,
+        crypto_asset_id, event_kind, event_at, quantity, debt_basis_change_in_base,
+        settlement_value_in_base, created_by_user_id)
+    VALUES (_position_id, _event_id, _borrow_asset.id, 'borrow',
+        COALESCE(_operated_at, current_date), _debt_qty, _resolved_value,
+        _resolved_value, _user_id);
 
     RETURN (
         SELECT item

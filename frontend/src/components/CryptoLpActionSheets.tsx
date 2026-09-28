@@ -1,11 +1,12 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Plus, Coins, ArrowDownToLine, X } from 'lucide-react';
+import { AlertCircle, Plus, Coins, X } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
-import { todayIso } from '../utils/portfolioPosition';
+import { todayIso, trimDecimal } from '../utils/portfolioPosition';
 import { getPositionMetadataText } from '../utils/portfolioPosition';
 import {
   topUpCryptoProtocolPosition,
@@ -17,7 +18,7 @@ import type {
   PortfolioPosition,
 } from '../types';
 import { getLiquidityPoolMetadata } from '../types';
-import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from './DefiFeeField';
+import { DefiFeeField, EMPTY_FEE_DRAFT, manualFee } from './DefiFeeField';
 import type { DefiFeeDraft } from './DefiFeeField';
 
 
@@ -48,6 +49,7 @@ function findSourceForSymbol(positions: PortfolioPosition[], symbol: string): Po
 
 
 export function LpAddLiquiditySheet({ open, position, accountPositions, onClose, onSuccess }: AddProps) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:1`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -92,22 +94,19 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
     setSubmitting(true);
     setError(null);
     try {
-      await topUpCryptoProtocolPosition(position.id, {
+      const payload = {
         source_position_id: sourceA.id,
-        quantity: numA,
+        quantity: qtyA,
         secondary_source_position_id: sourceB.id,
-        secondary_quantity: numB,
+        secondary_quantity: qtyB,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await topUpCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -126,8 +125,8 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Добавляем…' : 'Добавить'}
             </button>
           </div>
@@ -197,129 +196,13 @@ export function LpAddLiquiditySheet({ open, position, accountPositions, onClose,
 }
 
 
-export function LpPartialWithdrawSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
-  useModalOpen(open);
-  const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
-  const tokenASymbol = position.asset_symbol;
-  const tokenBSymbol = lp.token1_symbol ?? 'Token B';
-  const maxA = position.current_quantity ?? position.quantity ?? 0;
-  const maxB = lp.token1_quantity ?? 0;
-
-  const [qtyA, setQtyA] = useState('');
-  const [qtyB, setQtyB] = useState('');
-  const [operatedAt, setOperatedAt] = useState(todayIso());
-  const [comment, setComment] = useState('');
-  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setQtyA('');
-      setQtyB('');
-      setOperatedAt(todayIso());
-      setComment('');
-      setFeeDraft(EMPTY_FEE_DRAFT);
-      setError(null);
-    }
-  }, [open]);
-
-  const numA = Number(qtyA);
-  const numB = Number(qtyB);
-  const validA = Number.isFinite(numA) && numA > 0 && numA <= maxA;
-  const validB = Number.isFinite(numB) && numB > 0 && numB <= maxB;
-  const canSubmit = !submitting && validA && validB;
-
-  const submit = async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await partialCloseCryptoProtocolPosition(position.id, {
-        principal_qty: numA,
-        secondary_principal_qty: numB,
-        returned_at: operatedAt || undefined,
-        comment: comment.trim() || undefined,
-      });
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
-      setSubmitting(false);
-      return;
-    }
-    onSuccess();
-  };
-
-  return (
-    <BottomSheet
-      open={open}
-      tag={position.protocol_name}
-      title="Частично снять"
-      icon={<ArrowDownToLine size={18} strokeWidth={2.2} />}
-      iconColor="o"
-      onClose={onClose}
-      actions={(
-        <div className="tk-foot pf-sheet-actions">
-          {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
-          <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
-              {submitting ? 'Снимаем…' : 'Снять'}
-            </button>
-          </div>
-        </div>
-      )}
-    >
-      <div className="apf-field">
-        <label className="apf-label">{tokenASymbol} — количество</label>
-        <input
-          className="apf-input"
-          type="text"
-          inputMode="decimal"
-          placeholder="0"
-          value={qtyA}
-          onChange={(e) => setQtyA(sanitizeDecimalInput(e.target.value))}
-          disabled={submitting}
-        />
-        <span className="tok-row__hint">В позиции: {formatNumericAmount(maxA, 8)} {tokenASymbol}</span>
-      </div>
-      <div className="apf-field">
-        <label className="apf-label">{tokenBSymbol} — количество</label>
-        <input
-          className="apf-input"
-          type="text"
-          inputMode="decimal"
-          placeholder="0"
-          value={qtyB}
-          onChange={(e) => setQtyB(sanitizeDecimalInput(e.target.value))}
-          disabled={submitting}
-        />
-        <span className="tok-row__hint">В позиции: {formatNumericAmount(maxB, 8)} {tokenBSymbol}</span>
-      </div>
-      <div className="apf-field">
-        <label className="apf-label">Дата</label>
-        <input className="apf-input" type="date" value={operatedAt} onChange={(e) => setOperatedAt(e.target.value)} disabled={submitting} />
-      </div>
-      <div className="apf-field">
-        <label className="apf-label">Комментарий</label>
-        <input className="apf-input" type="text" placeholder="Необязательно" value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} />
-      </div>
-      <DefiFeeField accountPositions={accountPositions} value={feeDraft} onChange={setFeeDraft} disabled={submitting} />
-    </BottomSheet>
-  );
-}
-
-
 export function LpCloseSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:3`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
   const tokenBSymbol = lp.token1_symbol ?? 'Token B';
+  const composition = position.metadata.lp_composition as { quantity0?: string; quantity1?: string } | undefined;
   const maxA = position.current_quantity ?? position.quantity ?? 0;
   const maxB = lp.token1_quantity ?? 0;
 
@@ -333,19 +216,19 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
   useEffect(() => {
     if (open) {
-      setQtyA(maxA > 0 ? String(maxA) : '');
-      setQtyB(maxB > 0 ? String(maxB) : '');
+      setQtyA(trimDecimal(composition?.quantity0 ?? position.current_quantity_exact ?? (maxA > 0 ? String(maxA) : '')));
+      setQtyB(trimDecimal(composition?.quantity1 ?? position.token1_quantity_exact ?? (maxB > 0 ? String(maxB) : '')));
       setOperatedAt(todayIso());
       setComment('');
       setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
-  }, [open, maxA, maxB]);
+  }, [open, maxA, maxB, composition?.quantity0, composition?.quantity1, position.current_quantity_exact, position.token1_quantity_exact]);
 
   const numA = qtyA.trim() ? Number(qtyA) : 0;
   const numB = qtyB.trim() ? Number(qtyB) : 0;
-  const aOk = numA === 0 || (Number.isFinite(numA) && numA > 0 && numA <= maxA);
-  const bOk = numB === 0 || (Number.isFinite(numB) && numB > 0 && numB <= maxB);
+  const aOk = numA === 0 || (Number.isFinite(numA) && numA > 0);
+  const bOk = numB === 0 || (Number.isFinite(numB) && numB > 0);
   const canSubmit = !submitting && aOk && bOk && (numA > 0 || numB > 0);
 
   const submit = async () => {
@@ -353,20 +236,17 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
     setSubmitting(true);
     setError(null);
     try {
-      await closeCryptoProtocolPosition(position.id, {
-        return_quantity: numA > 0 ? numA : undefined,
-        secondary_return_quantity: numB > 0 ? numB : undefined,
+      const payload = {
+        return_quantity: qtyA.trim() || "0",
+        secondary_return_quantity: qtyB.trim() || "0",
         withdrawn_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await closeCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -385,17 +265,14 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Закрываем…' : 'Закрыть'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Можно вернуть только один токен из пары или оба — оставь поле пустым, чтобы не возвращать.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{tokenASymbol} — вернётся</label>
         <input
@@ -437,6 +314,7 @@ export function LpCloseSheet({ open, position, accountPositions, onClose, onSucc
 
 
 export function LpClaimFeesSheet({ open, position, accountPositions, onClose, onSuccess }: LpSheetCommon & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLpActionSheets.tsx:${position.id}:4`);
   useModalOpen(open);
   const lp = useMemo(() => getLiquidityPoolMetadata(position), [position]);
   const tokenASymbol = position.asset_symbol;
@@ -472,22 +350,19 @@ export function LpClaimFeesSheet({ open, position, accountPositions, onClose, on
     setSubmitting(true);
     setError(null);
     try {
-      await partialCloseCryptoProtocolPosition(position.id, {
+      const payload = {
         principal_qty: 0,
-        rewards_qty: numA > 0 ? numA : 0,
+        rewards_qty: qtyA.trim() || "0",
         secondary_principal_qty: 0,
-        secondary_rewards_qty: numB > 0 ? numB : 0,
+        secondary_rewards_qty: qtyB.trim() || "0",
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -506,17 +381,14 @@ export function LpClaimFeesSheet({ open, position, accountPositions, onClose, on
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Зачисляем…' : 'Зачислить'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Введи количество комиссий по одному или обоим токенам — они зачислятся в актив на счёте как доход.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{tokenASymbol} — комиссии</label>
         <input

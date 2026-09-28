@@ -100,6 +100,9 @@ Table bank_accounts {
   account_kind varchar(20) [not null, default: 'cash', note: "cash | investment"]
   provider_name varchar(150)
   provider_account_ref varchar(150)
+  include_in_statistics boolean [not null, default: true]
+  is_archived boolean [not null, default: false]
+  wallet_address varchar(256)
   is_primary boolean [not null, default: false]
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
@@ -260,4 +263,96 @@ Table current_budget_balances {
   indexes {
     (category_id, currency_code) [pk]
   }
+}
+
+// Crypto input journal. Owner scope is derived from anchor account by the posting function.
+Table crypto_source_events {
+  id bigint [pk, increment]
+  owner_key text [not null]
+  anchor_account_id bigint [not null, ref: > bank_accounts.id]
+  revision integer [not null, default: 1]
+  reversible boolean [not null, default: false]
+  source_namespace text [not null]
+  source_id text [not null]
+  occurred_at timestamptz [not null]
+  order_in_timestamp bigint [not null]
+  accounting_date date [not null]
+  commands jsonb [not null]
+  evidence jsonb [not null]
+  result jsonb
+  created_by_user_id bigint [not null, ref: > users.id]
+  created_at timestamptz [not null]
+  indexes {
+    (owner_key, source_namespace, source_id) [unique]
+    (owner_key, occurred_at, order_in_timestamp) [unique]
+  }
+}
+
+Table crypto_source_event_links {
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  command_index integer [not null]
+  ledger_table text [not null]
+  ledger_id bigint [not null]
+  indexes {
+    (ledger_table, ledger_id) [pk]
+    (source_event_id, command_index)
+  }
+  Note: "Links to operations/portfolio_events/liability/accrual ledgers captured atomically by insertion triggers; no amounts duplicated here."
+}
+
+// Component financing (source journal, 2026-09-23): portfolio_positions.metadata.funding_units
+// maps lending protocol ids to decimal units of principal. Protocol metadata holds
+// funding_units0/funding_units1 per leg; expense portfolio_events.metadata.funding_units
+// retains consumed funding until settlement. Source-event result records unit movements
+// and holder settlements. Cash basis adjustments are zero-quantity top_up events;
+// these units are not additional assets or liabilities. Per-command owner-locked
+// conservation requires sum(units) = outstanding principal for each component loan.
+
+// Correction journal (043). Reversible is false for legacy envelopes without
+// captured before-images. No inferred baseline is silently invented.
+Table crypto_source_mutations {
+  id bigint [pk, increment]
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  revision integer [not null]
+  command_index integer [not null]
+  table_name text [not null]
+  row_key jsonb [not null]
+  before_row jsonb
+  after_row jsonb
+}
+Table crypto_source_revisions {
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  revision integer [not null]
+  envelope jsonb [not null]
+  superseded_at timestamptz [not null]
+  indexes { (source_event_id, revision) [pk] }
+}
+Table crypto_source_corrections {
+  request_id uuid [pk]
+  source_event_id bigint [not null, ref: > crypto_source_events.id]
+  actor_user_id bigint [not null, ref: > users.id]
+  reason text [not null]
+  request jsonb [not null]
+  result jsonb [not null]
+  created_at timestamptz [not null]
+}
+
+Table crypto_asset_visibility {
+  user_id bigint [not null, ref: > users.id]
+  investment_account_id bigint [not null, ref: > bank_accounts.id]
+  crypto_asset_id bigint [not null, ref: > crypto_assets.id]
+  indexes { (user_id, investment_account_id, crypto_asset_id) [pk] }
+  Note: "Personal display preference for empty wallet assets. Positive balances are always shown."
+}
+
+Table crypto_assets {
+  id bigserial [pk]
+  symbol varchar(30) [not null]
+  name varchar(150) [not null]
+  network_code varchar(50) [not null, default: 'manual']
+  contract_address varchar(150) [not null, default: '']
+  decimals smallint [not null, default: 8]
+  metadata jsonb [not null, default: `'{}'::jsonb`]
+  created_at timestamptz [not null, default: `current_timestamp`]
+  indexes { (symbol, network_code, contract_address) [unique] }
 }

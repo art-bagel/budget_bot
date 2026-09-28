@@ -856,8 +856,9 @@ export async function createScheduledExpense(
 
 export async function fetchBankAccounts(
   accountKind: 'cash' | 'investment' | 'credit' = 'cash',
+  includeArchived = false,
 ): Promise<BankAccount[]> {
-  return apiFetch<BankAccount[]>(`/bank-accounts?account_kind=${accountKind}`);
+  return apiFetch<BankAccount[]>(`/bank-accounts?account_kind=${accountKind}&include_archived=${includeArchived}`);
 }
 
 export async function createBankAccount(data: CreateBankAccountRequest): Promise<BankAccount> {
@@ -1131,4 +1132,128 @@ export async function applyTinkoffSync(
 
 export async function fetchTinkoffLivePrices(): Promise<TinkoffLivePrice[]> {
   return apiFetch<TinkoffLivePrice[]>('/tinkoff/live-prices');
+}
+
+export interface PendingFiatExpense {
+  sale_event_id: number;
+  investment_account_id: number;
+  sale_date: string;
+  amount: string;
+  currency_code: string;
+  bank_account_id: number;
+  bank_account_name: string;
+  investment_account_name: string;
+  comment: string | null;
+  categories: { id: number; name: string }[];
+}
+
+export function fetchPendingFiatExpenses(limit = 20, offset = 0) {
+  return apiFetch<PendingFiatExpense[]>(`/crypto/pending-fiat-expenses?limit=${limit}&offset=${offset}`);
+}
+
+export function settlePendingFiatExpense(saleEventId: number, body: {
+  investment_account_id: number;
+  category_id: number;
+  operated_at: string;
+}) {
+  return apiFetch<{ operation_id: number }>(`/crypto/pending-fiat-expenses/${saleEventId}/settle`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export interface CryptoProtocolHistoryEntry {
+  comment_is_system?: boolean;
+  id: string;
+  event_at: string;
+  kind: string;
+  quantity: number | null;
+  symbol: string;
+  cost_basis: number | null;
+  comment: string | null;
+}
+
+export async function fetchCryptoProtocolHistory(positionId: number, offset = 0): Promise<{
+  total: number;
+  entries: CryptoProtocolHistoryEntry[];
+}> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/history?limit=50&offset=${offset}`);
+}
+
+export async function recordLendingDebtEvent(
+  positionId: number,
+  kind: 'accrue-interest' | 'liquidate' | 'yield',
+  data: { request_id: string; operated_at: string; quantity?: string;
+    collateral_position_id?: number; collateral_qty?: string; debt_qty?: string; interest_qty?: string; collateral_fee_qty?: string },
+): Promise<unknown> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/${kind}`, {
+    method: 'POST', body: JSON.stringify(data),
+  });
+}
+
+export async function groupLendingPositions(positionId: number, data: {
+  request_id: string; other_position_id: number; operated_at: string;
+}): Promise<unknown> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/group-with`, {
+    method: 'POST', body: JSON.stringify(data),
+  });
+}
+
+export type CryptoEditableSource = {
+  id:number; accounting_date:string; revision:number; reversible:boolean; context:string|null;
+  commands:{kind:string;payload:Record<string,unknown>;editable_fields?:string[]}[];
+  previous_versions:{revision:number;commands:{kind:string;payload:Record<string,unknown>}[]}[];
+};
+type CryptoCorrectionState = {
+  positions:{id:number;name:string;quantity:string;cost:number|null;funding:Record<string,string>|null}[];
+  protocols:{id:number;name:string;quantity:string;cost:string|null;metadata:Record<string,unknown>}[];
+  bank:{bank_account_id:number;currency_code:string;amount:number;historical_cost_in_base:number}[];
+  budget:{category_id:number;name:string;currency_code:string;amount:string}[];
+  crypto_bank:{bank_account_id:number;crypto_asset_id:number;symbol:string;amount:number;cost_base_remaining:number}[];
+};
+export type CryptoCorrectionResult = {
+  source_event_id:number;revision:number;replayed_sources:number;preview_token:string;applied:boolean;
+  before:CryptoCorrectionState;after:CryptoCorrectionState;
+};
+export function fetchCryptoCorrectionHistory(anchorAccountId:number,offset=0):Promise<CryptoEditableSource[]> {
+  return apiFetch(`/crypto/correction-history?anchor_account_id=${anchorAccountId}&limit=30&offset=${offset}`);
+}
+export function correctCryptoSource(id:number,payload:{expected_revision:number;request_id:string;reason:string;
+  changes:{command_index:number;field:string;value:string}[];apply:boolean;preview_token?:string}):Promise<CryptoCorrectionResult> {
+  return apiFetch(`/crypto/source-events/${id}/correct`,{method:'POST',body:JSON.stringify(payload)});
+}
+
+export function setCryptoAssetHidden(accountId: number, assetId: number, hidden: boolean): Promise<{ hidden: boolean }> {
+  return apiFetch(`/crypto/accounts/${accountId}/assets/${assetId}/visibility`, {
+    method: 'PUT', body: JSON.stringify({ hidden }),
+  });
+}
+
+export function liquidityAction(positionId: number, payload: {
+  request_id: string; action: 'lp_snapshot' | 'lp_withdraw' | 'lp_reward'; quantity: string;
+  secondary_quantity?: string; share_percent?: string; crypto_asset_id?: number; secondary_crypto_asset_id?: number; operated_at?: string;
+  comment?: string; fee?: { source_position_id: number; quantity: string };
+}): Promise<CryptoProtocolPosition> {
+  return apiFetch(`/crypto/protocol-positions/${positionId}/liquidity-action`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function setAccountStatistics(accountId: number, included: boolean): Promise<void> {
+  await apiFetch(`/bank-accounts/${accountId}/statistics`, {
+    method: 'PATCH', body: JSON.stringify({ include_in_statistics: included }),
+  });
+}
+
+export async function refundCryptoFee(eventId: number, data: { request_id: string; source_position_id: number; quantity: string; operated_at: string; comment?: string }): Promise<void> {
+  await apiFetch(`/crypto/fees/${eventId}/refund`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+
+export async function updateCryptoAccountSettings(id: number, data: {name: string; wallet_address: string | null; is_archived: boolean}): Promise<void> {
+  await apiFetch(`/bank-accounts/investment/${id}/settings`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function mergeBankCryptoAsset(payload: {
+  bank_account_id: number; from_crypto_asset_id: number; to_crypto_asset_id: number; request_id: string;
+}): Promise<unknown> {
+  return apiFetch('/operations/merge-bank-crypto-asset', { method: 'POST', body: JSON.stringify(payload) });
 }

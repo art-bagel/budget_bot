@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from storage.databases import DataBase
@@ -6,6 +7,9 @@ from storage.databases import DataBase
 
 class Ledger(DataBase):
     SCHEMA = 'budgeting'
+
+    async def set__crypto_asset_hidden(self, user_id: int, account_id: int, asset_id: int, hidden: bool):
+        return await self.call_function(self._fn('set__crypto_asset_hidden'), user_id, account_id, asset_id, hidden)
 
     F_PUT__RECORD_FX_RATE_SNAPSHOT = 'put__record_fx_rate_snapshot'
     F_PUT__RECORD_INCOME = 'put__record_income'
@@ -31,6 +35,51 @@ class Ledger(DataBase):
     F_PUT__LENDING_REPAY_DEBT = 'put__lending_repay_debt'
     F_PUT__CRYPTO_PAY_FEE = 'put__crypto_pay_fee'
     F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
+
+    async def put__manual_crypto_movement(self, user_id, request_id, kind, payload,
+                                          operated_at=None, fee=None):
+        return await self.call_function(
+            self._fn('put__manual_crypto_movement'), user_id, request_id, kind,
+            payload, operated_at, fee,
+        )
+
+    async def put__crypto_source_event(self, user_id, anchor_account_id, source_namespace,
+                                       source_id, occurred_at, order_in_timestamp,
+                                       accounting_date, commands, evidence):
+        return await self.call_function(
+            self._fn('put__crypto_source_event'), user_id, anchor_account_id,
+            source_namespace, source_id, occurred_at, order_in_timestamp,
+            accounting_date, commands, evidence,
+        )
+
+    async def get__crypto_source_events(self, user_id, anchor_account_id, limit=50, offset=0):
+        return await self.call_function(
+            self._fn('get__crypto_source_events'), user_id, anchor_account_id, limit, offset,
+        )
+
+    async def put__correct_crypto_source(self, user_id, source_event_id, expected_revision,
+                                          request_id, changes, reason, apply=False, preview_token=None):
+        return await self.call_function(
+            self._fn('put__correct_crypto_source'), user_id, source_event_id,
+            expected_revision, request_id, changes, reason, apply, preview_token,
+        )
+
+    async def get__crypto_correction_history(self, user_id, anchor_account_id, limit=30, offset=0):
+        return await self.call_function(
+            self._fn('get__crypto_correction_history'), user_id, anchor_account_id, limit, offset,
+        )
+
+    async def get__pending_crypto_fiat_expenses(self, user_id, limit=50, offset=0):
+        return await self.call_function(
+            self._fn('get__pending_crypto_fiat_expenses'), user_id, limit, offset,
+        )
+
+    async def put__settle_crypto_fiat_sale(self, user_id, investment_account_id,
+                                          sale_event_id, category_id, operated_at):
+        return await self.call_function(
+            self._fn('put__settle_crypto_fiat_sale'), user_id, investment_account_id,
+            sale_event_id, category_id, None, operated_at,
+        )
 
     async def put__record_fx_rate_snapshot(
         self,
@@ -103,7 +152,7 @@ class Ledger(DataBase):
         amount: float,
         currency_code: str,
         amount_in_base: Optional[float] = None,
-        quantity: Optional[float] = None,
+        quantity: Optional[Decimal] = None,
         income_kind: Optional[str] = None,
         received_at: Optional[str] = None,
         comment: Optional[str] = None,
@@ -129,7 +178,7 @@ class Ledger(DataBase):
         user_id: int,
         from_category_id: int,
         to_category_id: int,
-        amount_in_base: float,
+        amount_in_base: Decimal | float,
         comment: Optional[str] = None,
     ) -> int:
         """
@@ -146,7 +195,7 @@ class Ledger(DataBase):
             user_id,
             from_category_id,
             to_category_id,
-            amount_in_base,
+            Decimal(str(amount_in_base)),
             comment,
         )
 
@@ -319,7 +368,7 @@ class Ledger(DataBase):
         bank_account_id: int,
         category_id: int,
         crypto_asset_id: int,
-        amount: float,
+        amount: Decimal,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
     ) -> dict:
@@ -340,7 +389,7 @@ class Ledger(DataBase):
         bank_account_id: int,
         investment_account_id: int,
         crypto_asset_id: int,
-        amount: float,
+        amount: Decimal,
         position_id: Optional[int] = None,
         title: Optional[str] = None,
         comment: Optional[str] = None,
@@ -364,8 +413,8 @@ class Ledger(DataBase):
         user_id: int,
         position_id: int,
         bank_account_id: int,
-        amount: float,
-        value_in_base: float,
+        amount: Decimal,
+        value_in_base: Optional[Decimal] = None,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
     ) -> dict:
@@ -410,6 +459,7 @@ class Ledger(DataBase):
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
         value_in_base: Optional[float] = None,
+        valuation_source: Optional[str] = None,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__SWAP_CRYPTO_INVESTMENT_ASSET),
@@ -422,6 +472,7 @@ class Ledger(DataBase):
             comment,
             operated_at,
             value_in_base,
+            valuation_source,
         )
 
     async def put__create_crypto_protocol_position(
@@ -505,6 +556,7 @@ class Ledger(DataBase):
         value_in_base: Optional[float] = None,
         comment: Optional[str] = None,
         operated_at: Optional[date] = None,
+        interest_qty: float = 0,
     ) -> dict:
         return await self.call_function(
             self._fn(self.F_PUT__LENDING_REPAY_DEBT),
@@ -515,6 +567,39 @@ class Ledger(DataBase):
             value_in_base,
             comment,
             operated_at,
+            interest_qty,
+        )
+
+    async def put__lending_accrue_interest(
+        self, user_id: int, position_id: int, quantity, value_in_base,
+        external_id: str, operated_at: Optional[date] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('put__lending_accrue_interest'), user_id, position_id,
+            quantity, value_in_base, external_id, operated_at,
+        )
+
+    async def put__lending_accrue(
+        self, user_id: int, position_id: int, collateral_qty, interest_qty,
+        interest_value_in_base, collateral_before, debt_before,
+        external_id: str, operated_at: date,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('put__lending_accrue'), user_id, position_id,
+            collateral_qty, interest_qty, interest_value_in_base,
+            collateral_before, debt_before, external_id, operated_at,
+        )
+
+    async def put__lending_liquidate(
+        self, user_id: int, position_id: int, collateral_qty, debt_qty,
+        external_id: str, operated_at: date, interest_qty=0,
+        collateral_fee_qty=0, settlement_value_in_base=None,
+        comment: Optional[str] = None,
+    ) -> dict:
+        return await self.call_function(
+            self._fn('put__lending_liquidate'), user_id, position_id,
+            collateral_qty, debt_qty, external_id, operated_at, interest_qty,
+            collateral_fee_qty, settlement_value_in_base, comment,
         )
 
     async def put__crypto_pay_fee(

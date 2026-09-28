@@ -21,7 +21,7 @@ import type {
   OperationHistoryPortfolioEvent,
   UserContext,
 } from '../types';
-import { formatAmount } from '../utils/format';
+import { currencySymbol, formatAmount, pluralRu } from '../utils/format';
 
 
 const HISTORY_PAGE_SIZE = 20;
@@ -334,16 +334,16 @@ function formatDateTime(value: string): string {
 
 function formatSignedAmount(amount: number, currencyCode: string): string {
   const absAmount = Math.abs(amount);
-  const prefix = amount > 0 ? '+' : amount < 0 ? '-' : '';
+  const prefix = amount > 0 ? '+' : amount < 0 ? '−' : '';
   return prefix + new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: 2,
-  }).format(absAmount) + ' ' + currencyCode;
+  }).format(absAmount) + ' ' + currencySymbol(currencyCode);
 }
 
 
 function formatSignedQuantity(amount: number, symbol: string): string {
   const absAmount = Math.abs(amount);
-  const prefix = amount > 0 ? '+' : amount < 0 ? '-' : '';
+  const prefix = amount > 0 ? '+' : amount < 0 ? '−' : '';
   return prefix + new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: 8,
   }).format(absAmount) + ' ' + symbol;
@@ -685,7 +685,7 @@ function groupByDate(items: OperationHistoryItem[]): { dateKey: string; dateLabe
 const OP_SYSTEM_COMMENT_PREFIXES = ['Платёж по кредиту', 'Частичное закрытие позиции', 'Пополнение позиции', 'Комиссия по позиции'];
 
 function getOpComment(item: OperationHistoryItem): string | null {
-  if (!item.comment) return null;
+  if (!item.comment || item.comment_is_system) return null;
   if (OP_SYSTEM_COMMENT_PREFIXES.some((p) => item.comment!.includes(p))) return null;
   return item.comment;
 }
@@ -1529,7 +1529,7 @@ export default function Operations({
                   <div className="ana-hero">
                     <div className="ana-hero__val">
                       <span className="ana-hero__num">{formatBigNumber(analyticsData.total_amount)}</span>
-                      <span className="ana-hero__sym">{analyticsData.base_currency_code}</span>
+                      <span className="ana-hero__sym">{currencySymbol(analyticsData.base_currency_code)}</span>
                     </div>
                     <div className="ana-hero__meta">
                       <span>{analyticsTypeFilter === 'expense' ? 'Траты' : 'Доходы'}</span>
@@ -1592,7 +1592,7 @@ export default function Operations({
                                 <div className={`ana-cat__fill ana-cat__fill--${colorKey}`} style={{ width: `${Math.round(segment.share * 100)}%` }} />
                               </div>
                               <div className="ana-cat__foot">
-                                <span>{segment.operationsCount} операций</span>
+                                <span>{segment.operationsCount} {pluralRu(segment.operationsCount, ['операция', 'операции', 'операций'])}</span>
                                 <span>{formatPercent(segment.share)}</span>
                               </div>
                               {expanded && (

@@ -15,6 +15,7 @@ DECLARE
     _source_name text;
     _group_kind text;
     _from_balance numeric(20, 2);
+    _fx_category_id bigint;
     _source_credit numeric(20, 2) := 0;
     _source_debit numeric(20, 2);
     _operation_id bigint;
@@ -32,7 +33,8 @@ DECLARE
 BEGIN
     SET search_path TO budgeting;
 
-    IF _amount_in_base <= 0 THEN
+    IF _amount_in_base IS NULL OR _amount_in_base::text IN ('NaN', 'Infinity', '-Infinity')
+       OR round(_amount_in_base, 2) <= 0 THEN
         RAISE EXCEPTION 'Allocated amount must be positive';
     END IF;
 
@@ -146,14 +148,23 @@ BEGIN
 
     _source_debit := round(_amount_in_base, 2) - _source_credit;
 
+    -- The UI presents Unallocated + FX Result as one spendable envelope.
+    -- Keep FX Result intact as an analytical total; allocations debit only
+    -- Unallocated, so the combined available amount falls exactly once.
+    IF _source_kind = 'system' AND _source_name = 'Unallocated' THEN
+        _fx_category_id := budgeting.get__owner_system_category_id(
+            _owner_type, _owner_user_id, _owner_family_id, 'FX Result');
+    END IF;
+
     PERFORM 1 FROM current_budget_balances
-    WHERE category_id = _from_category_id
+    WHERE (category_id IN (_from_category_id, _fx_category_id) OR category_id IN (SELECT child_category_id FROM _group_leaf_members))
       AND currency_code = _base_currency_code
+    ORDER BY category_id
     FOR UPDATE;
 
-    SELECT COALESCE(amount, 0) INTO _from_balance
+    SELECT COALESCE(sum(amount), 0) INTO _from_balance
     FROM current_budget_balances
-    WHERE category_id = _from_category_id
+    WHERE category_id IN (_from_category_id, _fx_category_id)
       AND currency_code = _base_currency_code;
 
     IF _from_balance < _source_debit THEN

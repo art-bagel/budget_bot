@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useState } from 'react';
 import { AlertCircle, Gift } from 'lucide-react';
 
@@ -25,6 +26,7 @@ const KIND_OPTIONS: { value: IncomeKind; label: string }[] = [
 interface Props {
   open: boolean;
   positionId: number;
+  accountName?: string;
   symbol: string;
   iconUrl?: string | null;
   livePrice?: CryptoLivePrice | null;
@@ -36,6 +38,7 @@ interface Props {
 
 export default function CryptoIncomeSheet({
   open,
+  accountName,
   positionId,
   symbol,
   iconUrl,
@@ -44,6 +47,7 @@ export default function CryptoIncomeSheet({
   onClose,
   onSuccess,
 }: Props) {
+  const manualRequest = useCryptoRequestKey(`CryptoIncomeSheet.tsx:${positionId}:1`);
   useModalOpen(open);
 
   const [quantity, setQuantity] = useState('');
@@ -75,15 +79,17 @@ export default function CryptoIncomeSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await recordPortfolioIncome(positionId, {
+      const payload = {
         amount: 0,
         currency_code: baseCurrencyCode,
-        quantity: qtyNum,
+        quantity: quantity,
         income_kind: incomeKind,
-        destination: 'position',
+        destination: 'position' as const,
         received_at: receivedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+      };
+      await recordPortfolioIncome(positionId, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -95,7 +101,7 @@ export default function CryptoIncomeSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
+      tag={accountName}
       title={`Зачислить · ${symbol}`}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : <Gift size={18} strokeWidth={2.2} />}
       iconColor={iconUrl ? undefined : 'o'}
@@ -109,11 +115,11 @@ export default function CryptoIncomeSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
@@ -154,7 +160,7 @@ export default function CryptoIncomeSheet({
         </div>
         {projectedValue !== null && (
           <span className="amt__hint">
-            Текущая оценка: {formatNumericAmount(projectedValue)} {baseSym} (cost basis = 0)
+            Текущая оценка: {formatNumericAmount(projectedValue)} {baseSym} (затраты на получение — 0)
           </span>
         )}
       </div>

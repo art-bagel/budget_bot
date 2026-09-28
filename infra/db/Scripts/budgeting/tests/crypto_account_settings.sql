@@ -1,0 +1,35 @@
+-- Self-contained, so CI can run it on an empty schema. All fixtures and changes are rolled back.
+BEGIN;
+DO $$
+DECLARE uid bigint := 990000000501; aid bigint; result jsonb; blocked boolean;
+BEGIN
+    PERFORM budgeting.put__register_user_context(uid, 'RUB', NULL, 'Account', 'Settings');
+    INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type)
+    VALUES ('user',uid,'archive-test-' || txid_current(),'investment','crypto') RETURNING id INTO aid;
+    result := budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,'0x1234',true);
+    ASSERT (result->>'is_archived')::boolean;
+    ASSERT result->>'wallet_address'='0x1234';
+    ASSERT result->>'name'='Renamed-' || aid;
+    PERFORM budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,NULL,false);
+    ASSERT (SELECT NOT is_archived AND wallet_address IS NULL FROM budgeting.bank_accounts WHERE id=aid);
+    blocked := false;
+    BEGIN
+        PERFORM budgeting.set__crypto_account_settings(-1,aid,'Unauthorized',NULL,true);
+    EXCEPTION WHEN raise_exception THEN blocked := true; END;
+    ASSERT blocked, 'Another user cannot edit the account';
+    blocked := false;
+    BEGIN
+        PERFORM budgeting.set__crypto_account_settings(uid,aid,' ',NULL,true);
+    EXCEPTION WHEN raise_exception THEN blocked := true; END;
+    ASSERT blocked, 'Empty names must be rejected';
+    INSERT INTO budgeting.current_bank_balances(bank_account_id,currency_code,amount,historical_cost_in_base)
+    VALUES(aid,'RUB',1,1);
+    PERFORM budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,NULL,true);
+    ASSERT (SELECT is_archived FROM budgeting.bank_accounts WHERE id=aid);
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(budgeting.get__portfolio_summary(uid)) x WHERE (x->>'investment_account_id')::bigint=aid);
+    ASSERT (SELECT amount=1 FROM budgeting.current_bank_balances WHERE bank_account_id=aid AND currency_code='RUB');
+    PERFORM budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,NULL,false);
+    ASSERT (SELECT NOT is_archived FROM budgeting.bank_accounts WHERE id=aid);
+    ASSERT EXISTS (SELECT 1 FROM jsonb_array_elements(budgeting.get__portfolio_summary(uid)) x WHERE (x->>'investment_account_id')::bigint=aid);
+END $$;
+ROLLBACK;

@@ -25,7 +25,8 @@ BEGIN
         '[]'::jsonb
     )
     INTO _result
-    FROM crypto_assets;
+    FROM crypto_assets
+    WHERE NOT (metadata ? 'canonical_asset_id');
 
     RETURN _result;
 END

@@ -36,6 +36,7 @@ BEGIN
                 'title', pp.title,
                 'status', pp.status,
                 'quantity', pp.quantity,
+                'quantity_exact', pp.quantity::text,
                 'amount_in_currency', pp.amount_in_currency,
                 'currency_code', pp.currency_code,
                 'opened_at', pp.opened_at,
@@ -43,7 +44,8 @@ BEGIN
                 'close_amount_in_currency', pp.close_amount_in_currency,
                 'close_currency_code', pp.close_currency_code,
                 'comment', pp.comment,
-                'metadata', pp.metadata,
+                'metadata', CASE WHEN pp.asset_type_code='crypto' THEN pp.metadata || jsonb_build_object(
+                    'basis_quality',budgeting.get__crypto_position_entry_summary(pp.id)->>'basis_quality') ELSE pp.metadata END,
                 'created_by_user_id', pp.created_by_user_id,
                 'created_at', pp.created_at
             )
@@ -62,7 +64,8 @@ BEGIN
       ON u.id = ba.owner_user_id
     LEFT JOIN families f
       ON f.id = ba.owner_family_id
-    WHERE (
+    WHERE NOT ba.is_archived
+      AND (
             (pp.owner_type = 'user' AND pp.owner_user_id = _user_id)
             OR
             (pp.owner_type = 'family' AND pp.owner_family_id = _family_id)

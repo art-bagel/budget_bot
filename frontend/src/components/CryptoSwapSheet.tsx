@@ -1,18 +1,20 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, Repeat } from 'lucide-react';
+import { AlertCircle, ArrowDown } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { swapCryptoInvestmentAsset } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
-import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import {
-  formatDraftDecimal,
   getCryptoAssetId,
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
+  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -41,8 +43,6 @@ export default function CryptoSwapSheet({
   position,
   cryptoAssets,
   accounts,
-  livePrice,
-  baseCurrencyCode,
   onClose,
   onSuccess,
 }: Props) {
@@ -66,7 +66,7 @@ export default function CryptoSwapSheet({
     [accounts, position],
   );
 
-  const defaultAmount = sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 8) : '';
+  const defaultAmount = trimDecimal(position.quantity_exact ?? '');
   const defaultTargetAsset = targetAssetCandidates[0];
   const defaultTargetAccount = targetAccounts.find((a) => a.id === position.investment_account_id)
     ?? targetAccounts[0];
@@ -81,20 +81,18 @@ export default function CryptoSwapSheet({
   );
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
+  const request = useCryptoRequestKey(`swap:${position.id}`);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fromNum = Number(fromAmount);
   const toNum = Number(toAmount);
   const toAsset = cryptoAssets.find((a) => String(a.id) === toCryptoAssetId);
-  const toAccount = targetAccounts.find((a) => String(a.id) === targetInvestmentAccountId);
 
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(fromNum) && fromNum > sourceQuantity;
-  const valueInBase = livePrice && livePrice.price > 0 && Number.isFinite(fromNum) && fromNum > 0
-    ? Number((livePrice.price * fromNum).toFixed(2))
-    : null;
 
-  const canSubmit = !submitting
+  const canSubmit = !submitting && !!operatedAt
     && !exceedsBalance
     && Number.isFinite(fromNum) && fromNum > 0
     && Number.isFinite(toNum) && toNum > 0
@@ -107,16 +105,19 @@ export default function CryptoSwapSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await swapCryptoInvestmentAsset({
+      const payload = {
         position_id: position.id,
-        from_amount: fromNum,
+        from_amount: fromAmount,
         to_crypto_asset_id: Number(toCryptoAssetId),
-        to_amount: toNum,
+        to_amount: toAmount,
         target_investment_account_id: Number(targetInvestmentAccountId),
         comment: comment.trim() || undefined,
         operated_at: operatedAt || undefined,
-        value_in_base: valueInBase ?? undefined,
-      });
+        fee: feeAmount && Number(feeAmount) > 0
+          ? { source_position_id: position.id, quantity: feeAmount } : undefined,
+      };
+      await swapCryptoInvestmentAsset({ ...payload, request_id: request.requestId(payload) });
+      request.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -130,8 +131,8 @@ export default function CryptoSwapSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
-      title={`Своп · ${sourceSymbol}`}
+      tag={position.investment_account_name}
+      title={`Обмен · ${sourceSymbol}`}
       icon={sourceIconUrl ? <img src={sourceIconUrl} alt="" /> : undefined}
       iconColor={sourceIconUrl ? undefined : 'o'}
       onClose={onClose}
@@ -144,16 +145,16 @@ export default function CryptoSwapSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
             >
-              {submitting ? 'Обмениваем…' : 'Подтвердить обмен'}
+              {submitting ? 'Обмениваем…' : 'Обменять'}
             </button>
           </div>
         </div>
@@ -201,7 +202,7 @@ export default function CryptoSwapSheet({
       </div>
 
       <div className="field">
-        <span className="fl">Монета на вход</span>
+        <span className="fl">Получаемая монета</span>
         <select
           className="picker-v2"
           value={toCryptoAssetId}
@@ -211,7 +212,7 @@ export default function CryptoSwapSheet({
           <option value="">Выберите монету</option>
           {targetAssetCandidates.map((asset) => (
             <option key={asset.id} value={asset.id}>
-              {asset.symbol}{asset.network_code ? ` · ${asset.network_code}` : ''}
+              {cryptoAssetLabel(asset, cryptoAssets)}
             </option>
           ))}
         </select>
@@ -248,15 +249,6 @@ export default function CryptoSwapSheet({
         </div>
       </div>
 
-      {valueInBase !== null && (
-        <div className="cs-sheet__hint">
-          <Repeat size={14} strokeWidth={2.2} />
-          <span>
-            Снимок курса: {formatNumericAmount(valueInBase)} {currencySymbol(baseCurrencyCode)}{' '}
-            <em>(live × количество)</em>
-          </span>
-        </div>
-      )}
 
       {exceedsBalance && (
         <div className="tk-error">
@@ -265,11 +257,13 @@ export default function CryptoSwapSheet({
         </div>
       )}
 
-      {toAccount && toAccount.id !== position.investment_account_id && (
-        <div className="cs-sheet__hint">
-          <span>Новая позиция {toAsset?.symbol ?? ''} появится на счёте «{toAccount.name}».</span>
-        </div>
-      )}
+
+      <div className="field">
+        <span className="fl">Комиссия в {sourceSymbol} (если есть)</span>
+        <input className="picker-v2" inputMode="decimal" value={feeAmount}
+          onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
+          disabled={submitting} placeholder="0" />
+      </div>
 
       <div className="field">
         <span className="fl">Комментарий</span>

@@ -1,3 +1,5 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 
 import { exchangeCurrency, fetchCryptoAssets, fetchCurrencies } from '../api';
@@ -182,20 +184,23 @@ export default function ExchangeSheet({
     hapticRigid();
   };
 
+  const cryptoRequest = useCryptoRequestKey('bank-exchange');
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await exchangeCurrency({
+      const payload = {
         bank_account_id: bankAccountId,
         from_currency_code: fromAsset.type === 'fiat' ? fromAsset.code : undefined,
-        from_amount: fromVal,
+        from_amount: fromAmount,
         to_currency_code: toAsset.type === 'fiat' ? toAsset.code : undefined,
-        to_amount: toVal,
+        to_amount: toAmount,
         from_crypto_asset_id: fromAsset.type === 'crypto' ? fromAsset.id : undefined,
         to_crypto_asset_id: toAsset.type === 'crypto' ? toAsset.id : undefined,
-      });
+      };
+      await exchangeCurrency({...payload, request_id: cryptoRequest.requestId(payload)});
+      cryptoRequest.completed();
       hapticRigid();
       setFromAmount('');
       setToAmount('');
@@ -419,7 +424,7 @@ function CurrencyChip({
                     onClick={() => onPick(`crypto:${asset.id}`)}
                   >
                     <span className="fx__cur-opt-code">{asset.symbol}</span>
-                    <span className="fx__cur-opt-name">{asset.network_code}</span>
+                    <span className="fx__cur-opt-name">{cryptoAssetLabel(asset, cryptoAssets).split(' · ').slice(1).join(' · ')}</span>
                   </button>
                 ))}
             </>

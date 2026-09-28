@@ -29,8 +29,9 @@ BEGIN
           ON u.id = ba.owner_user_id
         LEFT JOIN families f
           ON f.id = ba.owner_family_id
-        WHERE ba.is_active
+        WHERE ba.is_active AND ba.include_in_statistics
           AND ba.account_kind = 'investment'
+          AND NOT ba.is_archived
           AND (
                 (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
                 OR

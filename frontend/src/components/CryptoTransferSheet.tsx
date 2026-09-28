@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, ArrowLeftRight } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { transferCryptoBetweenInvestmentAccounts } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import {
-  formatDraftDecimal,
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
+  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -53,7 +54,7 @@ export default function CryptoTransferSheet({
   );
 
   const defaultTarget = targets[0];
-  const defaultAmount = sourceQuantity > 0 ? formatDraftDecimal(sourceQuantity, 8) : '';
+  const defaultAmount = trimDecimal(position.quantity_exact ?? '');
 
   const [targetInvestmentAccountId, setTargetInvestmentAccountId] = useState<string>(
     defaultTarget ? String(defaultTarget.id) : '',
@@ -61,6 +62,8 @@ export default function CryptoTransferSheet({
   const [amount, setAmount] = useState(defaultAmount);
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
+  const request = useCryptoRequestKey(`transfer:${position.id}`);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,20 +74,23 @@ export default function CryptoTransferSheet({
     && !!targetInvestmentAccountId
     && Number.isFinite(amountNum) && amountNum > 0;
 
-  const targetAccount = targets.find((a) => String(a.id) === targetInvestmentAccountId);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await transferCryptoBetweenInvestmentAccounts({
+      const payload = {
         position_id: position.id,
         target_investment_account_id: Number(targetInvestmentAccountId),
-        amount: amountNum,
+        amount,
         comment: comment.trim() || undefined,
         operated_at: operatedAt || undefined,
-      });
+        fee: feeAmount && Number(feeAmount) > 0
+          ? { source_position_id: position.id, quantity: feeAmount } : undefined,
+      };
+      await transferCryptoBetweenInvestmentAccounts({ ...payload, request_id: request.requestId(payload) });
+      request.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -98,7 +104,7 @@ export default function CryptoTransferSheet({
   return (
     <BottomSheet
       open={open}
-      tag="Криптовалюта"
+      tag={position.investment_account_name}
       title={`Перевод · ${symbol}`}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : undefined}
       iconColor={iconUrl ? undefined : 'o'}
@@ -112,16 +118,16 @@ export default function CryptoTransferSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
             >
-              {submitting ? 'Переводим…' : 'Подтвердить перевод'}
+              {submitting ? 'Переводим…' : 'Перевести'}
             </button>
           </div>
         </div>
@@ -129,7 +135,7 @@ export default function CryptoTransferSheet({
     >
       {targets.length === 0 ? (
         <div className="cs-sheet__hint">
-          <span>Нет других crypto-счетов с тем же владельцем для перевода.</span>
+          <span>Нет других криптосчетов с тем же владельцем для перевода.</span>
         </div>
       ) : (
         <>
@@ -141,7 +147,7 @@ export default function CryptoTransferSheet({
               onChange={(event) => setTargetInvestmentAccountId(event.target.value)}
               disabled={submitting}
             >
-              <option value="">Выберите crypto-счёт</option>
+              <option value="">Выберите криптосчёт</option>
               {targets.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
@@ -185,14 +191,13 @@ export default function CryptoTransferSheet({
             </div>
           )}
 
-          {targetAccount && (
-            <div className="cs-sheet__hint">
-              <ArrowLeftRight size={14} strokeWidth={2.2} />
-              <span>
-                Cost basis перенесётся пропорционально (weighted-average) на счёт «{targetAccount.name}».
-              </span>
-            </div>
-          )}
+
+          <div className="field">
+            <span className="fl">Комиссия в {symbol} (если есть)</span>
+            <input className="picker-v2" inputMode="decimal" value={feeAmount}
+              onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
+              disabled={submitting} placeholder="0" />
+              </div>
 
           <div className="field">
             <span className="fl">Комментарий</span>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import BottomSheet from './BottomSheet';
 import { parseCategoryIcon, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
-import { formatAmount } from '../utils/format';
+import { formatAmount, currencySymbol } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { allocateBudget } from '../api';
 import type { TransferSource } from './TransferDialog';
@@ -119,7 +119,7 @@ export default function FreeBudgetActionSheet({ personal, family, sources, baseC
           <span className="sheet-stat__val">
             {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeTarget.balance)}
           </span>
-          <span className="sheet-stat__sym">{activeTarget.currency_code}</span>
+          <span className="sheet-stat__sym">{currencySymbol(activeTarget.currency_code)}</span>
         </div>
       </div>
 

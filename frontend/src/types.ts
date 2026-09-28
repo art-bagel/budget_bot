@@ -122,7 +122,7 @@ export interface RecordIncomeResponse {
 export interface RecordExpenseRequest {
   bank_account_id: number;
   category_id: number;
-  amount: number;
+  amount: number | string;
   currency_code?: string;
   crypto_asset_id?: number;
   comment?: string;
@@ -136,11 +136,12 @@ export interface RecordExpenseResponse {
 }
 
 export interface ExchangeCurrencyRequest {
+  request_id?: string;
   bank_account_id: number;
   from_currency_code?: string;
-  from_amount: number;
+  from_amount: number | string;
   to_currency_code?: string;
-  to_amount: number;
+  to_amount: number | string;
   from_crypto_asset_id?: number;
   to_crypto_asset_id?: number;
   comment?: string;
@@ -179,6 +180,7 @@ export interface CryptoLivePrice {
 }
 
 export interface CryptoAccountAssetSummary {
+  is_hidden?: boolean;
   crypto_asset_id: number;
   symbol: string;
   name?: string | null;
@@ -189,15 +191,21 @@ export interface CryptoAccountAssetSummary {
   position_id: number;
   quantity: number;
   opened_at?: string | null;
-  total_entry_value_in_base: number;
-  total_consumed_cost_basis: number;
-  remaining_cost_basis: number;
-  avg_cost_per_unit: number;
-  realized_pnl_lifetime_in_base: number;
+  total_entry_value_in_base: number | null;
+  total_consumed_cost_basis: number | null;
+  basis_quality: 'known' | 'confirmed_zero' | 'estimated' | 'unknown' | 'invalid';
+  remaining_cost_basis: number | null;
+  basis_final?: boolean;
+  funding_units?: Record<string, number | string>;
+  funding_components?: Array<{ loan_id: string; quantity: string; symbol: string }>;
+  avg_cost_per_unit: number | null;
+  realized_pnl_lifetime_in_base: number | null;
   last_event_at?: string | null;
 }
 
 export interface CryptoAssetEntry {
+  position_id?: number;
+  comment_is_system?: boolean;
   event_id: number;
   event_type: string;
   event_at: string;
@@ -230,10 +238,11 @@ export interface CryptoOperationResponse {
 }
 
 export interface TransferCryptoToInvestmentRequest {
+  request_id?: string;
   bank_account_id: number;
   investment_account_id: number;
   crypto_asset_id: number;
-  amount: number;
+  amount: number | string;
   position_id?: number;
   title?: string;
   comment?: string;
@@ -241,34 +250,44 @@ export interface TransferCryptoToInvestmentRequest {
 }
 
 export interface TransferCryptoFromInvestmentRequest {
+  request_id?: string;
   position_id: number;
   bank_account_id: number;
-  amount: number;
-  value_in_base: number;
+  amount: number | string;
+  value_in_base?: number;
   comment?: string;
   operated_at?: string;
 }
 
 export interface TransferCryptoBetweenInvestmentAccountsRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   position_id: number;
   target_investment_account_id: number;
-  amount: number;
+  amount: number | string;
   comment?: string;
   operated_at?: string;
 }
 
 export interface SwapCryptoInvestmentAssetRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   position_id: number;
-  from_amount: number;
+  from_amount: number | string;
   to_crypto_asset_id: number;
-  to_amount: number;
+  to_amount: number | string;
   target_investment_account_id?: number;
   comment?: string;
   operated_at?: string;
-  value_in_base?: number;
+  value_in_base?: number | string;
+  valuation_source?: string;
 }
 
 export interface CryptoProtocolPosition {
+  comment_is_system?: boolean;
+  quantity_exact?: string | null;
+  current_quantity_exact?: string | null;
+  token1_quantity_exact?: string | null;
   id: number;
   investment_account_id: number;
   investment_account_name: string;
@@ -280,7 +299,7 @@ export interface CryptoProtocolPosition {
   network_code?: string | null;
   asset_symbol: string;
   quantity?: number | null;
-  cost_basis_in_base: number;
+  cost_basis_in_base: number | null;
   current_quantity?: number | null;
   current_value_in_base: number;
   rewards_claimed_in_base: number;
@@ -295,13 +314,15 @@ export interface CryptoProtocolPosition {
 }
 
 export interface CreateCryptoProtocolPositionRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   investment_account_id: number;
   protocol_name: string;
   position_type: CryptoProtocolPosition['position_type'];
   asset_symbol: string;
-  quantity?: number;
+  quantity?: number | string;
   cost_basis_in_base?: number;
-  current_quantity?: number;
+  current_quantity?: number | string;
   current_value_in_base?: number;
   rewards_claimed_in_base?: number;
   rewards_unclaimed_in_base?: number;
@@ -312,14 +333,16 @@ export interface CreateCryptoProtocolPositionRequest {
   metadata?: Record<string, unknown>;
   source_position_id?: number;
   secondary_source_position_id?: number;
-  secondary_quantity?: number;
+  secondary_quantity?: number | string;
   borrowed_crypto_asset_id?: number;
-  borrowed_quantity?: number;
+  borrowed_quantity?: number | string;
   borrowed_value_in_base?: number;
 }
 
 export interface TakeLendingDebtRequest {
-  debt_qty: number;
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
+  debt_qty: number | string;
   value_in_base?: number;
   comment?: string;
   operated_at?: string;
@@ -327,15 +350,20 @@ export interface TakeLendingDebtRequest {
 }
 
 export interface RepayLendingDebtRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   source_position_id: number;
-  repay_qty: number;
+  repay_qty: number | string;
+  interest_qty?: string;
   value_in_base?: number;
   comment?: string;
   operated_at?: string;
 }
 
 export interface PayCryptoFeeRequest {
-  quantity: number;
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
+  quantity: number | string;
   comment?: string;
   operated_at?: string;
   link_protocol_position_id?: number;
@@ -352,34 +380,40 @@ export interface UpdateCryptoProtocolPositionRequest {
 }
 
 export interface CloseCryptoProtocolPositionRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   withdrawn_at?: string;
-  current_quantity?: number;
+  current_quantity?: number | string;
   current_value_in_base?: number;
-  return_quantity?: number;
+  return_quantity?: number | string;
   return_value_in_base?: number;
-  secondary_return_quantity?: number;
+  secondary_return_quantity?: number | string;
   secondary_return_value_in_base?: number;
   comment?: string;
 }
 
 export interface PartialCloseCryptoProtocolPositionRequest {
-  principal_qty?: number;
-  rewards_qty?: number;
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
+  principal_qty?: number | string;
+  rewards_qty?: number | string;
   principal_value_in_base?: number;
   rewards_value_in_base?: number;
-  secondary_principal_qty?: number;
+  secondary_principal_qty?: number | string;
   secondary_value_in_base?: number;
-  secondary_rewards_qty?: number;
+  secondary_rewards_qty?: number | string;
   secondary_rewards_value_in_base?: number;
   returned_at?: string;
   comment?: string;
 }
 
 export interface TopUpCryptoProtocolPositionRequest {
+  request_id?: string;
+  fee?: { source_position_id: number; quantity: string };
   source_position_id: number;
-  quantity: number;
+  quantity: number | string;
   secondary_source_position_id?: number;
-  secondary_quantity?: number;
+  secondary_quantity?: number | string;
   operated_at?: string;
   comment?: string;
 }
@@ -492,6 +526,7 @@ export interface OperationHistoryBudgetEntry {
 }
 
 export interface OperationHistoryPortfolioEvent {
+  comment_is_system?: boolean;
   id: number;
   position_id: number;
   event_type: PortfolioEvent['event_type'];
@@ -513,6 +548,7 @@ export interface OperationHistoryPortfolioEvent {
 }
 
 export interface OperationHistoryItem {
+  comment_is_system?: boolean;
   operation_id: number;
   type: string;
   comment?: string | null;
@@ -617,6 +653,9 @@ export interface FamilyInvitation {
 }
 
 export interface BankAccount {
+  is_archived?: boolean;
+  wallet_address?: string | null;
+  include_in_statistics?: boolean;
   id: number;
   name: string;
   owner_type: 'user' | 'family';
@@ -758,6 +797,7 @@ export interface PortfolioPosition {
   title: string;
   status: 'open' | 'closed';
   quantity?: number | null;
+  quantity_exact?: string | null;
   amount_in_currency: number;
   currency_code: string;
   opened_at: string;
@@ -771,6 +811,7 @@ export interface PortfolioPosition {
 }
 
 export interface PortfolioEvent {
+  comment_is_system?: boolean;
   id: number;
   position_id: number;
   event_type: 'open' | 'top_up' | 'partial_close' | 'close' | 'income' | 'fee' | 'adjustment' | 'transfer_in' | 'transfer_out' | 'swap_in' | 'swap_out';
@@ -824,10 +865,11 @@ export interface PartialClosePortfolioPositionRequest {
 }
 
 export interface RecordPortfolioIncomeRequest {
+  request_id?: string;
   amount: number;
   currency_code: string;
   amount_in_base?: number;
-  quantity?: number;
+  quantity?: number | string;
   income_kind?: string;
   destination?: 'account' | 'position';
   received_at?: string;
@@ -870,6 +912,7 @@ export interface ChangeDepositRateRequest {
 }
 
 export interface PortfolioSummaryItem {
+  include_in_statistics?: boolean;
   investment_account_id: number;
   investment_account_name: string;
   investment_account_owner_type: 'user' | 'family';

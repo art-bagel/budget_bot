@@ -66,7 +66,7 @@ BEGIN
         _normalized_network,
         _normalized_contract,
         COALESCE(_decimals, 8),
-        COALESCE(_metadata, '{}'::jsonb)
+        COALESCE(_metadata, '{}'::jsonb) - 'canonical_asset_id'
     )
     ON CONFLICT (symbol, network_code, contract_address) DO NOTHING;
 
@@ -86,6 +86,10 @@ BEGIN
       AND network_code = _normalized_network
       AND contract_address = _normalized_contract;
 
+    -- Only administrator-maintained aliases may redirect a legacy identity.
+    IF _result->'metadata' ? 'canonical_asset_id' THEN
+        _result := budgeting.get__crypto_asset((_result#>>'{metadata,canonical_asset_id}')::bigint);
+    END IF;
     RETURN _result;
 END
 $function$;

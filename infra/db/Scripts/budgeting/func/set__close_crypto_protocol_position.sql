@@ -9,38 +9,62 @@ CREATE FUNCTION budgeting.set__close_crypto_protocol_position(
     _return_quantity numeric DEFAULT NULL,
     _return_value_in_base numeric DEFAULT NULL,
     _secondary_return_quantity numeric DEFAULT NULL,
-    _secondary_return_value_in_base numeric DEFAULT NULL
+    _secondary_return_value_in_base numeric DEFAULT NULL,
+    _allocation_policy text DEFAULT 'per_leg'
 )
 RETURNS jsonb
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    _input_qty numeric;
     _existing record;
     _asset record;
     _target_position_id bigint;
-    _resolved_return_quantity numeric(30, 12);
+    _resolved_return_quantity numeric(50, 18);
     _base_currency_code char(3);
     _asset_symbol text;
     _asset_name text;
     _asset_network_code text;
     _asset_contract_address text;
-    _original_quantity numeric(30, 12);
+    _original_quantity numeric(50, 18);
     _carried_cost numeric(20, 2);
-    _principal_qty numeric(30, 12);
-    _rewards_qty numeric(30, 12);
+    _principal_qty numeric(50, 18);
+    _rewards_qty numeric(50, 18);
     _principal_entry_value numeric(20, 2);
-    _secondary_qty numeric(30, 12);
+    _secondary_qty numeric(50, 18);
     _secondary_value numeric(20, 2);
     _secondary_position_id bigint;
     _secondary_symbol text;
-    _secondary_existing_qty numeric(30, 12);
+    _secondary_existing_qty numeric(50, 18);
     _secondary_existing_basis numeric(20, 2);
     _secondary_target_position_id bigint;
     _secondary_event_type text;
     _operated_on date;
     _comment_clean text;
+    _primary_quality text;
+    _secondary_quality text;
+    _secondary_asset_id bigint;
+    _net_primary numeric;
+    _net_secondary numeric;
+    _net_original_secondary numeric;
 BEGIN
     SET search_path TO budgeting;
+    IF NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL AND EXISTS(
+        SELECT 1 FROM crypto_protocol_positions WHERE id=_position_id AND
+        (metadata->>'funding_policy'='components' OR COALESCE(metadata->'funding_units0','{}')<>'{}'::jsonb
+            OR COALESCE(metadata->'funding_units1','{}')<>'{}'::jsonb)) THEN
+        RAISE EXCEPTION 'Операции с заёмным финансированием проводятся через журнал криптоистории';
+    END IF;
+
+    IF _allocation_policy IS NULL OR _allocation_policy NOT IN ('per_leg','equal','net_composition') THEN
+        RAISE EXCEPTION 'Unknown LP cost allocation policy';
+    END IF;
+    FOREACH _input_qty IN ARRAY ARRAY[_current_quantity,_return_quantity,_secondary_return_quantity] LOOP
+        IF _input_qty IS NOT NULL AND (_input_qty < 0 OR _input_qty::text IN ('NaN','Infinity','-Infinity') OR _input_qty<>round(_input_qty,18)) THEN
+            RAISE EXCEPTION 'Quantity must be finite, nonnegative and have at most 18 decimal places';
+        END IF;
+    END LOOP;
+
 
     SELECT *
     INTO _existing
@@ -56,14 +80,102 @@ BEGIN
         RAISE EXCEPTION 'Access denied to protocol position %', _position_id;
     END IF;
 
+    IF (_existing.metadata->>'basis_quality')='invalid' THEN
+        RAISE EXCEPTION 'Себестоимость протокольной позиции не подтверждена';
+    END IF;
+
+
+    -- The row lock above also serializes concurrent close requests. A retry
+    -- must never credit collateral or its cost basis a second time.
+    IF _existing.cost_basis_in_base < 0 OR _existing.cost_basis_in_base::text IN ('NaN','Infinity','-Infinity') THEN
+        RAISE EXCEPTION 'Invalid collateral cost basis';
+    END IF;
+    IF _existing.metadata->>'basis_quality'='unknown' THEN
+        _existing.cost_basis_in_base := NULL;
+    END IF;
+
+
+    IF _existing.status <> 'open' THEN
+        RAISE EXCEPTION 'Closed protocol position cannot be closed again';
+    END IF;
+
     IF _existing.position_type = 'lending'
        AND COALESCE(NULLIF(_existing.metadata ->> 'borrowed_quantity', ''), '0')::numeric > 0
     THEN
         RAISE EXCEPTION 'Нельзя закрыть лендинг, пока долг не погашен';
     END IF;
 
-    _resolved_return_quantity := round(COALESCE(_return_quantity, _current_quantity, _existing.current_quantity, 0), 12);
+    _resolved_return_quantity := round(COALESCE(_return_quantity, _current_quantity, _existing.current_quantity, 0), 18);
     _base_currency_code := budgeting.get__owner_base_currency(_existing.owner_type, _existing.owner_user_id, _existing.owner_family_id);
+    _primary_quality := COALESCE(_existing.metadata->>'token0_basis_quality',_existing.metadata->>'basis_quality','known');
+    _secondary_quality := COALESCE(_existing.metadata->>'token1_basis_quality','known');
+    IF _allocation_policy IN ('equal','net_composition') AND _existing.position_type<>'liquidity_pool' THEN
+        RAISE EXCEPTION 'Equal allocation applies only to LP';
+    END IF;
+    IF _existing.position_type='liquidity_pool' THEN
+        IF _secondary_return_quantity IS NULL
+            OR _resolved_return_quantity+_secondary_return_quantity<=0
+            OR ((_resolved_return_quantity=0 OR _secondary_return_quantity=0) AND _allocation_policy<>'net_composition')
+            OR _existing.metadata->>'token1_crypto_asset_id' IS NULL THEN
+            RAISE EXCEPTION 'Full LP close requires explicit quantities for both assets; one-sided redemption requires net composition';
+        END IF;
+        IF _return_value_in_base IS NOT NULL OR _secondary_return_value_in_base IS NOT NULL THEN
+            IF _existing.cost_basis_in_base IS NULL OR _return_value_in_base IS NULL
+                OR _secondary_return_value_in_base IS NULL
+                OR _return_value_in_base<0 OR _secondary_return_value_in_base<0
+                OR _return_value_in_base::text IN ('NaN','Infinity','-Infinity')
+                OR _secondary_return_value_in_base::text IN ('NaN','Infinity','-Infinity')
+                OR _return_value_in_base<>round(_return_value_in_base,2)
+                OR _secondary_return_value_in_base<>round(_secondary_return_value_in_base,2)
+                OR _return_value_in_base+_secondary_return_value_in_base<>_existing.cost_basis_in_base THEN
+                RAISE EXCEPTION 'LP allocation must preserve the full known carried cost';
+            END IF;
+            IF _allocation_policy='equal' AND (_return_value_in_base<>round(_existing.cost_basis_in_base/2,2)
+                OR _secondary_return_value_in_base<>_existing.cost_basis_in_base-round(_existing.cost_basis_in_base/2,2)) THEN
+                RAISE EXCEPTION 'Explicit values conflict with equal LP allocation';
+            END IF;
+            _primary_quality := _existing.metadata->>'basis_quality';
+            _secondary_quality := _primary_quality;
+        END IF;
+    END IF;
+
+    IF _allocation_policy='net_composition' THEN
+        IF _return_value_in_base IS NOT NULL OR _secondary_return_value_in_base IS NOT NULL THEN
+            RAISE EXCEPTION 'Net composition derives allocation; explicit values are not allowed';
+        END IF;
+        _net_original_secondary:=(_existing.metadata->>'token1_quantity')::numeric;
+        IF _existing.quantity IS NULL OR _net_original_secondary IS NULL OR _existing.quantity<0 OR _net_original_secondary<0
+            OR (_existing.quantity=0 AND _net_original_secondary=0) THEN
+            RAISE EXCEPTION 'Net composition requires nonnegative original quantities and a nonempty deposit';
+        END IF;
+        IF (_resolved_return_quantity<_existing.quantity AND _secondary_return_quantity<=_net_original_secondary)
+            OR (_secondary_return_quantity<_net_original_secondary AND _resolved_return_quantity<=_existing.quantity) THEN
+            RAISE EXCEPTION 'Unexplained LP quantity loss requires explicit classification';
+        END IF;
+        _net_secondary:=(_existing.metadata->>'token1_cost_basis_carried')::numeric;
+        _net_primary:=_existing.cost_basis_in_base-_net_secondary;
+        IF _existing.cost_basis_in_base IS NULL OR _primary_quality='unknown' OR _secondary_quality='unknown'
+            OR _net_primary IS NULL OR _net_secondary IS NULL THEN
+            _net_primary:=NULL;
+            _net_secondary:=NULL;
+            _primary_quality:='unknown';
+            _secondary_quality:='unknown';
+        ELSE
+            IF _net_primary<0 OR _net_secondary<0 THEN
+                RAISE EXCEPTION 'Invalid original LP component cost';
+            END IF;
+            IF _resolved_return_quantity<_existing.quantity THEN
+                _net_primary:=round(_net_primary*_resolved_return_quantity/_existing.quantity,2);
+                _net_secondary:=_existing.cost_basis_in_base-_net_primary;
+            ELSIF _secondary_return_quantity<_net_original_secondary THEN
+                _net_secondary:=round(_net_secondary*_secondary_return_quantity/_net_original_secondary,2);
+                _net_primary:=_existing.cost_basis_in_base-_net_secondary;
+            END IF;
+            -- The net-change convention is explicit, not a market valuation.
+            _primary_quality:=CASE WHEN _net_primary=0 THEN 'confirmed_zero' ELSE 'estimated' END;
+            _secondary_quality:=CASE WHEN _net_secondary=0 THEN 'confirmed_zero' ELSE 'estimated' END;
+        END IF;
+    END IF;
 
     UPDATE crypto_protocol_positions
     SET status = 'closed',
@@ -72,7 +184,8 @@ BEGIN
         current_value_in_base = COALESCE(_current_value_in_base, current_value_in_base),
         comment = COALESCE(NULLIF(btrim(_comment), ''), comment),
         metadata = metadata || jsonb_build_object(
-            'return_quantity', _resolved_return_quantity
+            'return_quantity', _resolved_return_quantity,
+            'return_basis_allocation_policy', _allocation_policy
         ),
         updated_at = current_timestamp
     WHERE id = _position_id;
@@ -98,7 +211,7 @@ BEGIN
 
         -- Split returned quantity into principal (carries cost basis) and rewards (zero cost).
         _original_quantity := COALESCE(_existing.quantity, 0);
-        _carried_cost := COALESCE(_existing.cost_basis_in_base, 0);
+        _carried_cost := _existing.cost_basis_in_base;
         _principal_qty := LEAST(_resolved_return_quantity, _original_quantity);
         _rewards_qty := GREATEST(_resolved_return_quantity - _original_quantity, 0);
         _principal_entry_value := CASE
@@ -106,6 +219,27 @@ BEGIN
                 THEN round(_carried_cost * _principal_qty / _original_quantity, 2)
             ELSE 0
         END;
+
+        IF _existing.position_type='liquidity_pool' THEN
+            -- Changes in pool composition are not zero-cost staking rewards.
+            -- Full redemption returns ALL capital even if a leg shrank.
+            _principal_qty := _resolved_return_quantity;
+            _rewards_qty := 0;
+            _principal_entry_value := COALESCE(_return_value_in_base,
+                CASE WHEN _existing.cost_basis_in_base IS NOT NULL THEN
+                    _existing.cost_basis_in_base-(_existing.metadata->>'token1_cost_basis_carried')::numeric
+                ELSE (_existing.metadata->>'cost_basis_carried')::numeric END);
+            IF _primary_quality='unknown' THEN _principal_entry_value:=NULL; END IF;
+            IF _allocation_policy='net_composition' THEN
+                _principal_entry_value:=_net_primary;
+            END IF;
+            IF _allocation_policy='equal' THEN
+                _principal_entry_value:=round(_existing.cost_basis_in_base/2,2);
+                _primary_quality:=CASE WHEN _existing.cost_basis_in_base IS NULL THEN 'unknown'
+                    WHEN _existing.cost_basis_in_base=0 THEN 'confirmed_zero' ELSE 'estimated' END;
+                _secondary_quality:=_primary_quality;
+            END IF;
+        END IF;
 
         SELECT id
         INTO _target_position_id
@@ -185,6 +319,7 @@ BEGIN
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _principal_entry_value,
+                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE _primary_quality END,
                     'source_kind', 'defi_return',
                     'source_protocol_position_id', _position_id
                 ),
@@ -223,6 +358,7 @@ BEGIN
                     'protocol_position_id', _position_id,
                     'protocol_name', _existing.protocol_name,
                     'entry_value_in_base', _principal_entry_value,
+                    'basis_quality', CASE WHEN _principal_entry_value IS NULL THEN 'unknown' ELSE _primary_quality END,
                     'source_kind', 'defi_return',
                     'source_protocol_position_id', _position_id
                 ),
@@ -277,7 +413,7 @@ BEGIN
     END IF;
 
     -- Token B return (LP only).
-    _secondary_qty := round(COALESCE(_secondary_return_quantity, 0), 12);
+    _secondary_qty := round(COALESCE(_secondary_return_quantity, 0), 18);
     IF _secondary_qty > 0 THEN
         IF _existing.position_type <> 'liquidity_pool' THEN
             RAISE EXCEPTION 'Secondary return is only allowed for liquidity_pool positions';
@@ -290,7 +426,8 @@ BEGIN
         _secondary_position_id := (_existing.metadata ->> 'token1_position_id')::bigint;
         _secondary_symbol := COALESCE(NULLIF(btrim(_existing.metadata ->> 'token1_symbol'), ''), 'TOKEN_B');
         _secondary_existing_qty := COALESCE((_existing.metadata ->> 'token1_quantity')::numeric, 0);
-        _secondary_existing_basis := COALESCE((_existing.metadata ->> 'token1_cost_basis_carried')::numeric, 0);
+        _secondary_existing_basis := (_existing.metadata ->> 'token1_cost_basis_carried')::numeric;
+        _secondary_asset_id := (_existing.metadata->>'token1_crypto_asset_id')::bigint;
 
         IF _secondary_return_value_in_base IS NULL THEN
             _secondary_value := _secondary_existing_basis;
@@ -298,6 +435,12 @@ BEGIN
             _secondary_value := round(_secondary_return_value_in_base, 2);
         END IF;
 
+        IF _allocation_policy='net_composition' THEN
+            _secondary_value:=_net_secondary;
+        END IF;
+        IF _allocation_policy='equal' THEN
+            _secondary_value:=_existing.cost_basis_in_base-_principal_entry_value;
+        END IF;
         SELECT id
         INTO _secondary_target_position_id
         FROM portfolio_positions
@@ -312,7 +455,7 @@ BEGIN
             WHERE investment_account_id = _existing.investment_account_id
               AND status = 'open'
               AND asset_type_code = 'crypto'
-              AND COALESCE(NULLIF(btrim(metadata ->> 'asset_symbol'), ''), title) = _secondary_symbol
+              AND (metadata->>'crypto_asset_id')::bigint = _secondary_asset_id
             ORDER BY id
             LIMIT 1
             FOR UPDATE;
@@ -332,7 +475,10 @@ BEGIN
                 COALESCE(_comment_clean, 'Возврат token B из DeFi-протокола'),
                 jsonb_build_object(
                     'crypto_kind', 'spot',
-                    'asset_symbol', _secondary_symbol
+                    'asset_symbol', _secondary_symbol,
+                    'crypto_asset_id', _secondary_asset_id,
+                    'network_code', (SELECT network_code FROM crypto_assets WHERE id=_secondary_asset_id),
+                    'contract_address', (SELECT contract_address FROM crypto_assets WHERE id=_secondary_asset_id)
                 ),
                 _user_id
             )
@@ -362,6 +508,7 @@ BEGIN
                 'protocol_position_id', _position_id,
                 'protocol_name', _existing.protocol_name,
                 'entry_value_in_base', _secondary_value,
+                'basis_quality', CASE WHEN _secondary_value IS NULL THEN 'unknown' ELSE _secondary_quality END,
                 'source_kind', 'defi_return',
                 'source_protocol_position_id', _position_id,
                 'token_role', 'token_b'

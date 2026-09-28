@@ -30,6 +30,7 @@ FILES=(
     "budget_entries.sql"
     "current_bank_balances.sql"
     "crypto_assets.sql"
+    "crypto_asset_visibility.sql"
     "current_crypto_balances.sql"
     "crypto_lots.sql"
     "crypto_lot_consumptions.sql"
@@ -45,6 +46,10 @@ FILES=(
     "crypto_protocol_positions.sql"
     "credit_payment_events.sql"
     "external_connections.sql"
+    "crypto_liability_events.sql"
+    "crypto_protocol_accrual_events.sql"
+    "crypto_source_events.sql"
+    "crypto_source_revisions.sql"
 )
 
 # Порядок здесь значим — таблицы ссылаются друг на друга внешними ключами,

@@ -33,8 +33,8 @@ BEGIN
     DELETE FROM current_crypto_balances
     WHERE bank_account_id = _bank_account_id
       AND crypto_asset_id = _crypto_asset_id
-      AND abs(amount) < 0.000000000001
-      AND abs(cost_base_remaining) < 0.01;
+      AND amount = 0
+      AND cost_base_remaining = 0;
 END
 $function$;
 

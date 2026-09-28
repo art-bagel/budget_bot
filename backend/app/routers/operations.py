@@ -1,3 +1,5 @@
+from uuid import UUID, uuid4
+from decimal import Decimal
 from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
@@ -59,7 +61,7 @@ class RecordIncomeResponse(BaseModel):
 class RecordExpenseRequest(BaseModel):
     bank_account_id: int
     category_id: int
-    amount: float
+    amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     currency_code: Optional[str] = None
     crypto_asset_id: Optional[int] = None
     comment: Optional[str] = None
@@ -67,7 +69,7 @@ class RecordExpenseRequest(BaseModel):
 
     @field_validator('amount')
     @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
@@ -90,11 +92,12 @@ class RecordExpenseResponse(BaseModel):
 
 
 class ExchangeCurrencyRequest(BaseModel):
+    request_id: Optional[UUID] = None
     bank_account_id: int
     from_currency_code: Optional[str] = None
-    from_amount: float
+    from_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     to_currency_code: Optional[str] = None
-    to_amount: float
+    to_amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     from_crypto_asset_id: Optional[int] = None
     to_crypto_asset_id: Optional[int] = None
     comment: Optional[str] = None
@@ -102,7 +105,7 @@ class ExchangeCurrencyRequest(BaseModel):
 
     @field_validator('from_amount', 'to_amount')
     @classmethod
-    def amounts_must_be_positive(cls, v: float) -> float:
+    def amounts_must_be_positive(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
@@ -130,13 +133,13 @@ class ExchangeCurrencyResponse(BaseModel):
 class AllocateBudgetRequest(BaseModel):
     from_category_id: int
     to_category_id: int
-    amount_in_base: float
+    amount_in_base: Decimal
     comment: Optional[str] = None
 
     @field_validator('amount_in_base')
     @classmethod
-    def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
+    def amount_must_be_positive(cls, v: Decimal) -> Decimal:
+        if not v.is_finite() or v <= 0:
             raise ValueError('Сумма должна быть положительной')
         return v
 
@@ -225,6 +228,7 @@ class OperationBudgetEntry(BaseModel):
 
 
 class OperationPortfolioEvent(BaseModel):
+    comment_is_system: bool = False
     id: int
     position_id: int
     event_type: str
@@ -246,6 +250,7 @@ class OperationPortfolioEvent(BaseModel):
 
 
 class OperationHistoryItem(BaseModel):
+    comment_is_system: bool = False
     operation_id: int
     type: str
     comment: Optional[str] = None
@@ -453,15 +458,11 @@ async def exchange_currency(
     if to_is_crypto:
         if body.from_currency_code is None:
             raise HTTPException(status_code=422, detail='from_currency_code is required when buying crypto')
-        result = await ledger.put__buy_crypto_asset(
-            user_id=user.user_id,
-            bank_account_id=body.bank_account_id,
-            fiat_currency_code=body.from_currency_code,
-            fiat_amount=body.from_amount,
-            crypto_asset_id=body.to_crypto_asset_id,
-            crypto_amount=body.to_amount,
-            comment=body.comment,
-            operated_at=body.operated_at,
+        result = await ledger.put__manual_crypto_movement(
+            user.user_id, body.request_id or uuid4(), 'bank_buy', dict(
+                bank_account_id=body.bank_account_id, fiat_currency_code=body.from_currency_code,
+                fiat_amount=str(body.from_amount), crypto_asset_id=body.to_crypto_asset_id,
+                quantity=str(body.to_amount), comment=body.comment), body.operated_at,
         )
         result = {
             **result,
@@ -471,15 +472,11 @@ async def exchange_currency(
     elif from_is_crypto:
         if body.to_currency_code is None:
             raise HTTPException(status_code=422, detail='to_currency_code is required when selling crypto')
-        result = await ledger.put__sell_crypto_asset(
-            user_id=user.user_id,
-            bank_account_id=body.bank_account_id,
-            crypto_asset_id=body.from_crypto_asset_id,
-            crypto_amount=body.from_amount,
-            fiat_currency_code=body.to_currency_code,
-            fiat_amount=body.to_amount,
-            comment=body.comment,
-            operated_at=body.operated_at,
+        result = await ledger.put__manual_crypto_movement(
+            user.user_id, body.request_id or uuid4(), 'bank_cash_sell', dict(
+                bank_account_id=body.bank_account_id, crypto_asset_id=body.from_crypto_asset_id,
+                quantity=str(body.from_amount), fiat_currency_code=body.to_currency_code,
+                fiat_amount=str(body.to_amount), comment=body.comment), body.operated_at,
         )
         result = {
             **result,
@@ -621,3 +618,24 @@ async def get_operations_analytics_details(
         offset=offset,
     )
     return OperationAnalyticsDetailsResponse(**result)
+
+
+class MergeBankCryptoAssetRequest(BaseModel):
+    bank_account_id: int
+    from_crypto_asset_id: int
+    to_crypto_asset_id: int
+    request_id: UUID
+
+
+@router.post('/merge-bank-crypto-asset')
+async def merge_bank_crypto_asset(
+    body: MergeBankCryptoAssetRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> Dict[str, Any]:
+    return await ledger.call_function(
+        'budgeting.put__journal_bank_operation', user.user_id, body.bank_account_id,
+        'bank_asset_merge', dict(bank_account_id=body.bank_account_id,
+            from_crypto_asset_id=body.from_crypto_asset_id,
+            to_crypto_asset_id=body.to_crypto_asset_id, operated_at=date.today().isoformat()),
+        body.request_id,
+    )

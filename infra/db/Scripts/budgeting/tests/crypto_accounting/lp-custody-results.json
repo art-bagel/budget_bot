@@ -1,0 +1,44 @@
+{
+  "status": "contiguous_1_7_passed",
+  "dev_user_id": 1000003,
+  "main_events": 7,
+  "source_events": 22,
+  "old_21_source_inputs_unchanged": true,
+  "lp_receipt_quantity": "0.081245847",
+  "main_TON": "0.383920988",
+  "lp_basis_RUB": "2636.28",
+  "fee_TON": "0.104529001",
+  "fee_basis_RUB": "29.45",
+  "cost_reconciliation": {
+    "funding": "48508.00",
+    "held": "44758.26",
+    "protocol": "2636.28",
+    "disposed": "1113.46",
+    "difference": "0.00"
+  },
+  "checks": [
+    "original ledger checkpoint7",
+    "receipt removed from main, still held in farm",
+    "LP principal/basis unchanged",
+    "repeat stable",
+    "invalid custody/partial quantity rejected",
+    "fee failure rolls back custody",
+    "return to main preserves quantity and basis",
+    "7 compiler checks",
+    "bank-journal regression",
+    "ruff backend storage"
+  ],
+  "limitations": [
+    "first hundred still incomplete: 93 events remain",
+    "event8 rounded Telegram purchase quantity requires explicit precision policy in bank lots",
+    "unknown historical swap valuations remain unknown",
+    "DeFi in All tab explicitly deferred"
+  ],
+  "sha256": {
+    "scripts/crypto/build_first_block_replay.py": "fa5eeec6f34004ff6b60229bfa01972c6268f61c13f969ee13572cc61df971e9",
+    "scripts/crypto/replay_first_block_dev.py": "40b9ede5cbb40172d83f7231d7626c48539ead9a0ea5b8c13552ca6aa874ca1a",
+    "infra/db/Scripts/budgeting/func/put__crypto_source_event.sql": "ce786812fd424b0917255d28d66c65dc79719ad0021b9850f69b7f3ed62cefec",
+    "backend/tests/test_crypto_bank_journal_api.py": "a1432288322547e5519198045496ca6d62e4393fcfb9614b11e1ca08b02a8abc",
+    "outputs/crypto-first-block-dev/plan-bank-v2.json": "a6f9dd5513df098bfce54e501980a6115ae1725f99290c74fd730fe48a04218a"
+  }
+}

@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS budgeting.crypto_lot_consumptions (
     id bigserial PRIMARY KEY,
     operation_id bigint NOT NULL REFERENCES budgeting.operations(id) ON DELETE CASCADE,
     lot_id bigint NOT NULL REFERENCES budgeting.crypto_lots(id),
-    amount numeric(30, 12) NOT NULL,
+    amount numeric(50, 18) NOT NULL,
     cost_base numeric(20, 2) NOT NULL
 );
 

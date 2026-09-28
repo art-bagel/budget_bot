@@ -1,0 +1,1934 @@
+{
+  "scope": "Isolated actual SQL functions; simplified identity/bank fixture; no production access",
+  "checks": [
+    {
+      "name": "collateral_cost_carried",
+      "actual": 10000.0,
+      "expected": 10000,
+      "passed": true
+    },
+    {
+      "name": "collateral_round_trip",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "repeat_close_does_not_mint_assets",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "borrow_quantity",
+      "actual": 200.0,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "loan_round_trip_preserves_own_cost",
+      "actual": [
+        100.0,
+        10000.0
+      ],
+      "expected": [
+        100,
+        10000
+      ],
+      "passed": true
+    },
+    {
+      "name": "closed_debt_zero_quantity_and_value",
+      "actual": [
+        0.0,
+        0.0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "collateral_after_loan_round_trip",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "partial_debt_basis_independent_of_quote",
+      "actual": [
+        150.0,
+        22500.0
+      ],
+      "expected": [
+        150,
+        22500
+      ],
+      "passed": true
+    },
+    {
+      "name": "repayment_price_components",
+      "actual": [
+        2333.33,
+        -1500.0,
+        833.33
+      ],
+      "expected": [
+        2333.33,
+        -1500,
+        833.33
+      ],
+      "passed": true
+    },
+    {
+      "name": "full_debt_clears_despite_different_quote",
+      "actual": [
+        0.0,
+        0.0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "debt_journal_balances",
+      "actual": [
+        0.0,
+        0.0,
+        4
+      ],
+      "expected": [
+        0,
+        0,
+        4
+      ],
+      "passed": true
+    },
+    {
+      "name": "new_asset_borrow_has_acquisition_cost",
+      "actual": 10000.0,
+      "expected": 10000,
+      "passed": true
+    },
+    {
+      "name": "borrowed_asset_swap_carries_trade_value",
+      "actual": 22000.0,
+      "expected": 22000,
+      "passed": true
+    },
+    {
+      "name": "borrowed_asset_swap_realizes_gain",
+      "actual": 2000.0,
+      "expected": 2000,
+      "passed": true
+    },
+    {
+      "name": "debt_projection_cannot_bypass_journal",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "initial_borrow_acquisition_cost",
+      "actual": 20000.0,
+      "expected": 20000,
+      "passed": true
+    },
+    {
+      "name": "initial_borrow_round_trip_cost",
+      "actual": 10000.0,
+      "expected": 10000,
+      "passed": true
+    },
+    {
+      "name": "initial_borrow_journal_balances",
+      "actual": [
+        0.0,
+        0.0,
+        2
+      ],
+      "expected": [
+        0,
+        0,
+        2
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_loan_keeps_quantity_and_unknown_basis",
+      "actual": [
+        200.0,
+        null
+      ],
+      "expected": [
+        200,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "legacy_loan_not_silently_revalued",
+      "actual": [
+        true,
+        100.0
+      ],
+      "expected": [
+        true,
+        100
+      ],
+      "passed": true
+    },
+    {
+      "name": "interest_retry_is_idempotent",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "name": "conflicting_interest_retry_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "principal_and_interest_fully_settled",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "interest_not_counted_twice",
+      "actual": -5.12,
+      "expected": -5.12,
+      "passed": true
+    },
+    {
+      "name": "real_TON_repayment_preserves_nine_decimals",
+      "actual": "99.948833277000000000",
+      "expected": "99.948833277000000000",
+      "passed": true
+    },
+    {
+      "name": "interest_only_payment_preserves_principal",
+      "actual": [
+        101.0,
+        10100.0,
+        1.0,
+        100.0
+      ],
+      "expected": [
+        101,
+        10100,
+        1,
+        100
+      ],
+      "passed": true
+    },
+    {
+      "name": "interest_cannot_be_mislabeled_principal",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "unpaid_interest_blocks_close",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "partial_interest_journal_balances",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -200.0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        -200
+      ],
+      "passed": true
+    },
+    {
+      "name": "ETH_lending_eighteen_decimals",
+      "actual": "0.123456789123456789",
+      "expected": "0.123456789123456789",
+      "passed": true
+    },
+    {
+      "name": "reward_preserves_cost_and_increases_quantity",
+      "actual": [
+        120.0,
+        10000
+      ],
+      "expected": [
+        120,
+        10000
+      ],
+      "passed": true
+    },
+    {
+      "name": "TON_nine_decimals_preserved",
+      "actual": "1.000000001000000000",
+      "expected": "1.000000001000000000",
+      "passed": true
+    },
+    {
+      "name": "missing_basis_distinguished_from_zero",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "unknown_summary_quality",
+      "actual": "unknown",
+      "expected": "unknown",
+      "passed": true
+    },
+    {
+      "name": "unknown_read_API_preserves_null",
+      "actual": [
+        null,
+        null,
+        null
+      ],
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_source_swap_known_trade_prices_destination",
+      "actual": [
+        90.0,
+        21000.0
+      ],
+      "expected": [
+        90,
+        21000
+      ],
+      "passed": true
+    },
+    {
+      "name": "explicit_zero_is_not_unknown",
+      "actual": [
+        0,
+        "confirmed_zero"
+      ],
+      "expected": [
+        0,
+        "confirmed_zero"
+      ],
+      "passed": true
+    },
+    {
+      "name": "estimate_keeps_label_and_amount",
+      "actual": [
+        1000,
+        "estimated"
+      ],
+      "expected": [
+        1000,
+        "estimated"
+      ],
+      "passed": true
+    },
+    {
+      "name": "json_null_is_unknown",
+      "actual": "unknown",
+      "expected": "unknown",
+      "passed": true
+    },
+    {
+      "name": "nonfinite_cost_is_invalid",
+      "actual": [
+        "invalid",
+        null
+      ],
+      "expected": [
+        "invalid",
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "overconsumption_not_clamped_to_zero",
+      "actual": [
+        "invalid",
+        null
+      ],
+      "expected": [
+        "invalid",
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "positive_balance_without_entries_is_unknown",
+      "actual": "unknown",
+      "expected": "unknown",
+      "passed": true
+    },
+    {
+      "name": "network_fee_reduces_remaining_basis",
+      "actual": [
+        199.0,
+        19900.0
+      ],
+      "expected": [
+        199,
+        19900
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_basis_survives_two_transfers_and_fee",
+      "actual": [
+        [
+          150.0,
+          "unknown",
+          null
+        ],
+        [
+          30.0,
+          "unknown",
+          null
+        ],
+        [
+          19.0,
+          "unknown",
+          null
+        ]
+      ],
+      "expected": [
+        [
+          150,
+          "unknown",
+          null
+        ],
+        [
+          30,
+          "unknown",
+          null
+        ],
+        [
+          19,
+          "unknown",
+          null
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_fee_cost_and_result_not_zero",
+      "actual": [
+        null,
+        null
+      ],
+      "expected": [
+        null,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_full_transfer_closes_quantity",
+      "actual": 0.0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "estimated_transfer_preserves_label_and_cost",
+      "actual": [
+        "estimated",
+        5000.0
+      ],
+      "expected": [
+        "estimated",
+        5000
+      ],
+      "passed": true
+    },
+    {
+      "name": "zero_transfer_stays_confirmed_zero",
+      "actual": [
+        "confirmed_zero",
+        0.0
+      ],
+      "expected": [
+        "confirmed_zero",
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "invalid_basis_still_blocks_transfer",
+      "actual": [
+        true,
+        200.0
+      ],
+      "expected": [
+        true,
+        200
+      ],
+      "passed": true
+    },
+    {
+      "name": "invalid_basis_still_blocks_fee",
+      "actual": [
+        true,
+        200.0
+      ],
+      "expected": [
+        true,
+        200
+      ],
+      "passed": true
+    },
+    {
+      "name": "fee_keeps_18_decimal_quantity",
+      "actual": "199.999999999999999999",
+      "expected": "199.999999999999999999",
+      "passed": true
+    },
+    {
+      "name": "accrual_exact_repeat",
+      "actual": {
+        "debt_after": 105,
+        "debt_before": 100,
+        "accrual_event_id": 1,
+        "collateral_after": 110,
+        "collateral_before": 100,
+        "liability_event_id": 2,
+        "protocol_position_id": 1,
+        "interest_expense_in_base": 500,
+        "collateral_cost_added_in_base": 0
+      },
+      "expected": {
+        "debt_after": 105,
+        "debt_before": 100,
+        "accrual_event_id": 1,
+        "collateral_after": 110,
+        "collateral_before": 100,
+        "liability_event_id": 2,
+        "protocol_position_id": 1,
+        "interest_expense_in_base": 500,
+        "collateral_cost_added_in_base": 0
+      },
+      "passed": true
+    },
+    {
+      "name": "accrual_collateral_basis_preserved",
+      "actual": [
+        110.0,
+        110.0,
+        10000.0,
+        105.0,
+        10500.0
+      ],
+      "expected": [
+        110,
+        110,
+        10000,
+        105,
+        10500
+      ],
+      "passed": true
+    },
+    {
+      "name": "accrual_spot_untouched",
+      "actual": [
+        {
+          "quantity_now": 100.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 10000.0,
+          "total_consumed_cost_basis": 10000.0,
+          "total_entry_value_in_base": 20000
+        },
+        {
+          "quantity_now": 200.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 20000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 20000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 100.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 10000.0,
+          "total_consumed_cost_basis": 10000.0,
+          "total_entry_value_in_base": 20000
+        },
+        {
+          "quantity_now": 200.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 20000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 20000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "accrual_interest_once",
+      "actual": [
+        1,
+        -500.0
+      ],
+      "expected": [
+        1,
+        -500
+      ],
+      "passed": true
+    },
+    {
+      "name": "accrual_rejects_conflict",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "accrual_rejects_wrong_opening",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "accrual_rejects_no_access",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "accrual_rejects_manual_quantity",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "accrual_both_legs_rollback",
+      "actual": [
+        true,
+        "{\"id\": 1, \"status\": \"open\", \"comment\": null, \"metadata\": {\"basis_quality\": \"known\", \"borrowed_asset\": \"USDT\", \"borrowed_quantity\": 105.000000000000000000, \"cost_basis_carried\": 10000.00, \"debt_basis_quality\": \"known\", \"source_position_id\": 1, \"source_asset_symbol\": \"TON\", \"source_network_code\": \"ton\", \"borrowed_position_id\": 2, \"borrowed_asset_symbol\": \"USDT\", \"borrowed_value_in_base\": 10500.00, \"debt_interest_quantity\": 5.000000000000000000, \"debt_accounting_version\": 2, \"debt_cost_basis_in_base\": 10500.00, \"borrowed_crypto_asset_id\": 2, \"debt_interest_basis_in_base\": 500.00}, \"quantity\": 110.000000000000000000, \"created_at\": \"2026-09-23T02:27:41.481544+03:00\", \"owner_type\": \"user\", \"updated_at\": \"2026-09-23T02:27:41.551721+03:00\", \"asset_symbol\": \"TON\", \"deposited_at\": \"2024-12-31\", \"network_code\": \"ton\", \"withdrawn_at\": null, \"owner_user_id\": 1, \"position_type\": \"lending\", \"protocol_name\": \"EVAA audit\", \"crypto_asset_id\": 1, \"owner_family_id\": null, \"current_quantity\": 110.000000000000000000, \"cost_basis_in_base\": 10000.00, \"created_by_user_id\": 1, \"current_value_in_base\": 10000.00, \"investment_account_id\": 1, \"rewards_claimed_in_base\": 0.00, \"rewards_unclaimed_in_base\": 0.00}"
+      ],
+      "expected": [
+        true,
+        "{\"id\": 1, \"status\": \"open\", \"comment\": null, \"metadata\": {\"basis_quality\": \"known\", \"borrowed_asset\": \"USDT\", \"borrowed_quantity\": 105.000000000000000000, \"cost_basis_carried\": 10000.00, \"debt_basis_quality\": \"known\", \"source_position_id\": 1, \"source_asset_symbol\": \"TON\", \"source_network_code\": \"ton\", \"borrowed_position_id\": 2, \"borrowed_asset_symbol\": \"USDT\", \"borrowed_value_in_base\": 10500.00, \"debt_interest_quantity\": 5.000000000000000000, \"debt_accounting_version\": 2, \"debt_cost_basis_in_base\": 10500.00, \"borrowed_crypto_asset_id\": 2, \"debt_interest_basis_in_base\": 500.00}, \"quantity\": 110.000000000000000000, \"created_at\": \"2026-09-23T02:27:41.481544+03:00\", \"owner_type\": \"user\", \"updated_at\": \"2026-09-23T02:27:41.551721+03:00\", \"asset_symbol\": \"TON\", \"deposited_at\": \"2024-12-31\", \"network_code\": \"ton\", \"withdrawn_at\": null, \"owner_user_id\": 1, \"position_type\": \"lending\", \"protocol_name\": \"EVAA audit\", \"crypto_asset_id\": 1, \"owner_family_id\": null, \"current_quantity\": 110.000000000000000000, \"cost_basis_in_base\": 10000.00, \"created_by_user_id\": 1, \"current_value_in_base\": 10000.00, \"investment_account_id\": 1, \"rewards_claimed_in_base\": 0.00, \"rewards_unclaimed_in_base\": 0.00}"
+      ],
+      "passed": true
+    },
+    {
+      "name": "accrual_failed_interest_not_recorded",
+      "actual": 0,
+      "expected": 0,
+      "passed": true
+    },
+    {
+      "name": "liquidation_after_accrual_uses_diluted_basis",
+      "actual": [
+        5000.0,
+        5250.0,
+        250.0
+      ],
+      "expected": [
+        5000,
+        5250,
+        250
+      ],
+      "passed": true
+    },
+    {
+      "name": "collateral_only_accrual_does_not_invent_known_basis",
+      "actual": [
+        101.0,
+        10000.0,
+        "unknown"
+      ],
+      "expected": [
+        101,
+        10000,
+        "unknown"
+      ],
+      "passed": true
+    },
+    {
+      "name": "collateral_only_accrual_has_no_interest_expense",
+      "actual": [
+        0,
+        null
+      ],
+      "expected": [
+        0,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "concurrent_accrual_once",
+      "actual": [
+        true,
+        [
+          101.0,
+          101.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          101,
+          101
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_742_accrual_exact_opening",
+      "actual": [
+        678.257892103,
+        1574.332708,
+        10000.0
+      ],
+      "expected": [
+        678.257892103,
+        1574.332708,
+        10000
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_cost_debt_fee_and_result",
+      "actual": [
+        4000.0,
+        4500.0,
+        500.0,
+        200.0,
+        700.0,
+        500.0,
+        1200.0,
+        -500.0
+      ],
+      "expected": [
+        4000,
+        4500,
+        500,
+        200,
+        700,
+        500,
+        1200,
+        -500
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_does_not_touch_spot",
+      "actual": [
+        {
+          "quantity_now": 100.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 10000.0,
+          "total_consumed_cost_basis": 10000.0,
+          "total_entry_value_in_base": 20000
+        },
+        {
+          "quantity_now": 200.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 90.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 18000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 18000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 100.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 10000.0,
+          "total_consumed_cost_basis": 10000.0,
+          "total_entry_value_in_base": 20000
+        },
+        {
+          "quantity_now": 200.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 90.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 18000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 18000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_exact_retry",
+      "actual": {
+        "debt_asset_id": 2,
+        "debt_quantity": 55,
+        "fee_cost_in_base": 200.0,
+        "realized_in_base": 500.0,
+        "liability_event_id": 3,
+        "collateral_asset_id": 1,
+        "collateral_quantity": 40,
+        "protocol_position_id": 1,
+        "liability_realized_in_base": -500.0,
+        "debt_basis_released_in_base": 4500.0,
+        "realized_before_fee_in_base": 700.0,
+        "interest_basis_released_in_base": 500.0,
+        "collateral_cost_consumed_in_base": 4000.0,
+        "asset_realized_before_fee_in_base": 1200.0
+      },
+      "expected": {
+        "debt_asset_id": 2,
+        "debt_quantity": 55,
+        "fee_cost_in_base": 200.0,
+        "realized_in_base": 500.0,
+        "liability_event_id": 3,
+        "collateral_asset_id": 1,
+        "collateral_quantity": 40,
+        "protocol_position_id": 1,
+        "liability_realized_in_base": -500.0,
+        "debt_basis_released_in_base": 4500.0,
+        "realized_before_fee_in_base": 700.0,
+        "interest_basis_released_in_base": 500.0,
+        "collateral_cost_consumed_in_base": 4000.0,
+        "asset_realized_before_fee_in_base": 1200.0
+      },
+      "passed": true
+    },
+    {
+      "name": "partial_liquidation_remaining",
+      "actual": [
+        60.0,
+        6000.0,
+        55.0,
+        4500.0,
+        5.0
+      ],
+      "expected": [
+        60,
+        6000,
+        55,
+        4500,
+        5
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_conflicting_retry",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_access_denied",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_excess_collateral",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_excess_principal",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_nan",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_precision",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_rolls_back_projection_on_ledger_failure",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "expected": [
+        true,
+        [
+          60.0,
+          6000.0,
+          55.0,
+          4500.0,
+          5.0
+        ]
+      ],
+      "passed": true
+    },
+    {
+      "name": "full_liquidation_zero_residual",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0,
+        0.0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_settlement_does_not_invent_components",
+      "actual": [
+        -1500.0,
+        null,
+        null
+      ],
+      "expected": [
+        -1500,
+        null,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_total_includes_interest_once",
+      "actual": [
+        -2000.0,
+        10000.0,
+        0.0
+      ],
+      "expected": [
+        -2000,
+        10000,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "retry_after_close",
+      "actual": {
+        "debt_asset_id": 2,
+        "debt_quantity": 55,
+        "fee_cost_in_base": 200.0,
+        "realized_in_base": 500.0,
+        "liability_event_id": 3,
+        "collateral_asset_id": 1,
+        "collateral_quantity": 40,
+        "protocol_position_id": 1,
+        "liability_realized_in_base": -500.0,
+        "debt_basis_released_in_base": 4500.0,
+        "realized_before_fee_in_base": 700.0,
+        "interest_basis_released_in_base": 500.0,
+        "collateral_cost_consumed_in_base": 4000.0,
+        "asset_realized_before_fee_in_base": 1200.0
+      },
+      "expected": {
+        "debt_asset_id": 2,
+        "debt_quantity": 55,
+        "fee_cost_in_base": 200.0,
+        "realized_in_base": 500.0,
+        "liability_event_id": 3,
+        "collateral_asset_id": 1,
+        "collateral_quantity": 40,
+        "protocol_position_id": 1,
+        "liability_realized_in_base": -500.0,
+        "debt_basis_released_in_base": 4500.0,
+        "realized_before_fee_in_base": 700.0,
+        "interest_basis_released_in_base": 500.0,
+        "collateral_cost_consumed_in_base": 4000.0,
+        "asset_realized_before_fee_in_base": 1200.0
+      },
+      "passed": true
+    },
+    {
+      "name": "close_after_full_liquidation_does_not_mint",
+      "actual": [
+        {
+          "quantity_now": 100.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 10000.0,
+          "total_consumed_cost_basis": 10000.0,
+          "total_entry_value_in_base": 20000
+        },
+        {
+          "quantity_now": 200.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 90.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 18000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 18000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 100.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 100.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 10000.0,
+          "total_consumed_cost_basis": 10000.0,
+          "total_entry_value_in_base": 20000
+        },
+        {
+          "quantity_now": 200.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 90.0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 18000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 18000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_February-2025_exact_quantity_remainders",
+      "actual": [
+        "1051.985516169",
+        "2796.090211"
+      ],
+      "expected": [
+        "1051.985516169",
+        "2796.090211"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_February-2025_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_February-2025_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 3032.626398,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 36.27218970082974,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 3032.626398,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 36.27218970082974,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_740_exact_quantity_remainders",
+      "actual": [
+        "520.808821137",
+        "849.708977"
+      ],
+      "expected": [
+        "520.808821137",
+        "849.708977"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_740_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_740_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 952.48067,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 115.48790801182348,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 952.48067,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 115.48790801182348,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_741_exact_quantity_remainders",
+      "actual": [
+        "678.257870828",
+        "1574.332244"
+      ],
+      "expected": [
+        "678.257870828",
+        "1574.332244"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_741_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_741_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 2278.438927,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 48.27866952959587,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 2278.438927,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 48.27866952959587,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_742_exact_quantity_remainders",
+      "actual": [
+        "452.864321581",
+        "1150.623444"
+      ],
+      "expected": [
+        "452.864321581",
+        "1150.623444"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_742_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_742_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1674.332708,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 65.69781470219,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1674.332708,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 65.69781470219,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_743_exact_quantity_remainders",
+      "actual": [
+        "302.371873298",
+        "873.123783"
+      ],
+      "expected": [
+        "302.371873298",
+        "873.123783"
+      ],
+      "passed": true
+    },
+    {
+      "name": "historical_743_synthetic_basis_result",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "historical_743_spot_unchanged",
+      "actual": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1250.624175,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 87.9560800110073,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "expected": [
+        {
+          "quantity_now": 0.0,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 0,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 0.0,
+          "total_consumed_cost_basis": 100000.0,
+          "total_entry_value_in_base": 100000
+        },
+        {
+          "quantity_now": 1250.624175,
+          "basis_quality": "known",
+          "avg_cost_per_unit": 87.9560800110073,
+          "invalid_cost_fields": 0,
+          "missing_cost_fields": 0,
+          "remaining_cost_basis": 110000.0,
+          "total_consumed_cost_basis": 0,
+          "total_entry_value_in_base": 110000.0
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "swap_without_quote_keeps_source_cost_and_unknown_destination",
+      "actual": [
+        15000.0,
+        null
+      ],
+      "expected": [
+        15000,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_swap_realized_not_hidden_by_SUM",
+      "actual": [
+        null,
+        null
+      ],
+      "expected": [
+        null,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "swap_rejects_no_source",
+      "actual": [
+        true,
+        200.0
+      ],
+      "expected": [
+        true,
+        200
+      ],
+      "passed": true
+    },
+    {
+      "name": "swap_rejects_no_date",
+      "actual": [
+        true,
+        200.0
+      ],
+      "expected": [
+        true,
+        200
+      ],
+      "passed": true
+    },
+    {
+      "name": "swap_rejects_nan",
+      "actual": [
+        true,
+        200.0
+      ],
+      "expected": [
+        true,
+        200
+      ],
+      "passed": true
+    },
+    {
+      "name": "full_swap_closes_source_and_records_gain",
+      "actual": [
+        0.0,
+        32000.0
+      ],
+      "expected": [
+        0,
+        32000
+      ],
+      "passed": true
+    },
+    {
+      "name": "swap_price_provenance_stored",
+      "actual": [
+        "receipt",
+        "2025-01-01",
+        2000.0
+      ],
+      "expected": [
+        "receipt",
+        "2025-01-01",
+        2000
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_collateral_is_SQL_null",
+      "actual": [
+        null,
+        "unknown"
+      ],
+      "expected": [
+        null,
+        "unknown"
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_top_up_does_not_reset_cost",
+      "actual": [
+        110.0,
+        null
+      ],
+      "expected": [
+        110,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_partial_return_preserves_quantities",
+      "actual": [
+        60.0,
+        140.0,
+        null
+      ],
+      "expected": [
+        60,
+        140,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_collateral_round_trip",
+      "actual": [
+        200.0,
+        null
+      ],
+      "expected": [
+        200,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "known_collateral_plus_unknown_becomes_unknown",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "unknown_debt_not_overwritten_by_known_topup",
+      "actual": [
+        150.0,
+        null,
+        null
+      ],
+      "expected": [
+        150,
+        null,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_interest_exact_retry_once",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "name": "unknown_interest_cannot_be_silently_revalued_on_retry",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "unknown_partial_debt_repayment",
+      "actual": [
+        80.0,
+        null
+      ],
+      "expected": [
+        80,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_debt_full_closure_known_zero_residual",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_debt_disposals_do_not_fabricate_realized",
+      "actual": 2,
+      "expected": 2,
+      "passed": true
+    },
+    {
+      "name": "unknown_loan_does_not_destroy_known_collateral",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_interest_in_atomic_accrual",
+      "actual": [
+        101.0,
+        10000.0,
+        102.0,
+        null
+      ],
+      "expected": [
+        101,
+        10000,
+        102,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_liquidation_True_False",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0,
+        null
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_liquidation_False_True",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0,
+        null
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_liquidation_True_True",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0,
+        null
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "initial_unknown_borrow_recorded_once",
+      "actual": [
+        200.0,
+        null,
+        1
+      ],
+      "expected": [
+        200,
+        null,
+        1
+      ],
+      "passed": true
+    },
+    {
+      "name": "negative_debt_basis_still_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "create_collateral_asset_mismatch_rejected",
+      "actual": [
+        true,
+        true
+      ],
+      "expected": [
+        true,
+        true
+      ],
+      "passed": true
+    },
+    {
+      "name": "top_up_collateral_asset_mismatch_rejected",
+      "actual": [
+        true,
+        true
+      ],
+      "expected": [
+        true,
+        true
+      ],
+      "passed": true
+    },
+    {
+      "name": "partial_close_nonfinite_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "full_close_excess_precision_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "borrow_excess_precision_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "negative_collateral_topup_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "negative_collateral_partial_return_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "negative_collateral_return_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "liquidation_concurrent_retry_once",
+      "actual": [
+        true,
+        [
+          60.0,
+          6000.0,
+          50.0,
+          4000.0,
+          0
+        ],
+        1
+      ],
+      "expected": [
+        true,
+        [
+          60,
+          6000,
+          50,
+          4000,
+          0
+        ],
+        1
+      ],
+      "passed": true
+    },
+    {
+      "name": "liquidation_migration_preserves_ledger",
+      "actual": "[{\"id\": 1, \"event_at\": \"2026-09-23\", \"metadata\": {}, \"quantity\": 100.000000000000000000, \"created_at\": \"2026-09-23T02:27:45.229858+03:00\", \"event_kind\": \"borrow\", \"external_id\": null, \"crypto_asset_id\": 2, \"realized_in_base\": null, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": 4, \"protocol_position_id\": 1, \"settlement_value_in_base\": 8000.00, \"debt_basis_change_in_base\": 8000.00, \"asset_cost_consumed_in_base\": null, \"interest_basis_change_in_base\": 0.00}, {\"id\": 2, \"event_at\": \"2025-01-02\", \"metadata\": {\"result\": {\"debt_asset_id\": 2, \"debt_quantity\": 50, \"fee_cost_in_base\": 0, \"realized_in_base\": 0.00, \"collateral_asset_id\": 1, \"collateral_quantity\": 40, \"protocol_position_id\": 1, \"liability_realized_in_base\": null, \"debt_basis_released_in_base\": 4000.00, \"realized_before_fee_in_base\": 0.00, \"interest_basis_released_in_base\": 0, \"collateral_cost_consumed_in_base\": 4000.00, \"asset_realized_before_fee_in_base\": null}, \"request\": {\"comment\": null, \"operated_at\": \"2025-01-02\", \"debt_quantity\": 50, \"interest_quantity\": 0, \"collateral_quantity\": 40, \"collateral_fee_quantity\": 0, \"settlement_value_in_base\": null}}, \"quantity\": -50.000000000000000000, \"created_at\": \"2026-09-23T02:27:45.263109+03:00\", \"event_kind\": \"liquidation\", \"external_id\": \"concurrent\", \"crypto_asset_id\": 2, \"realized_in_base\": 0.00, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": null, \"protocol_position_id\": 1, \"settlement_value_in_base\": null, \"debt_basis_change_in_base\": -4000.00, \"asset_cost_consumed_in_base\": 4000.00, \"interest_basis_change_in_base\": 0.00}]",
+      "expected": "[{\"id\": 1, \"event_at\": \"2026-09-23\", \"metadata\": {}, \"quantity\": 100.000000000000000000, \"created_at\": \"2026-09-23T02:27:45.229858+03:00\", \"event_kind\": \"borrow\", \"external_id\": null, \"crypto_asset_id\": 2, \"realized_in_base\": null, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": 4, \"protocol_position_id\": 1, \"settlement_value_in_base\": 8000.00, \"debt_basis_change_in_base\": 8000.00, \"asset_cost_consumed_in_base\": null, \"interest_basis_change_in_base\": 0.00}, {\"id\": 2, \"event_at\": \"2025-01-02\", \"metadata\": {\"result\": {\"debt_asset_id\": 2, \"debt_quantity\": 50, \"fee_cost_in_base\": 0, \"realized_in_base\": 0.00, \"collateral_asset_id\": 1, \"collateral_quantity\": 40, \"protocol_position_id\": 1, \"liability_realized_in_base\": null, \"debt_basis_released_in_base\": 4000.00, \"realized_before_fee_in_base\": 0.00, \"interest_basis_released_in_base\": 0, \"collateral_cost_consumed_in_base\": 4000.00, \"asset_realized_before_fee_in_base\": null}, \"request\": {\"comment\": null, \"operated_at\": \"2025-01-02\", \"debt_quantity\": 50, \"interest_quantity\": 0, \"collateral_quantity\": 40, \"collateral_fee_quantity\": 0, \"settlement_value_in_base\": null}}, \"quantity\": -50.000000000000000000, \"created_at\": \"2026-09-23T02:27:45.263109+03:00\", \"event_kind\": \"liquidation\", \"external_id\": \"concurrent\", \"crypto_asset_id\": 2, \"realized_in_base\": 0.00, \"interest_quantity\": 0.000000000000000000, \"created_by_user_id\": 1, \"portfolio_event_id\": null, \"protocol_position_id\": 1, \"settlement_value_in_base\": null, \"debt_basis_change_in_base\": -4000.00, \"asset_cost_consumed_in_base\": 4000.00, \"interest_basis_change_in_base\": 0.00}]",
+      "passed": true
+    }
+  ],
+  "passed": 132,
+  "total": 132,
+  "source_sha256": {
+    "infra/db/Scripts/budgeting/tb/crypto_assets.sql": "f56cffb759916312de1d19919428065dfe6d4017c563b2378dcffec388ce5ede",
+    "infra/db/Scripts/budgeting/tb/portfolio_positions.sql": "322479fec836f36579b6e39ffddf636611137b8af91f4caf6122dbe8b90e8605",
+    "infra/db/Scripts/budgeting/tb/portfolio_events.sql": "4efa36c45652486f60d6314ae7e873a6dac504e4e30ef9cb2666a1276be34cbb",
+    "infra/db/Scripts/budgeting/tb/crypto_protocol_positions.sql": "c286b4d0b8f5707eafbf067598e4d33e7b4bd3234ccdcbfe38e469895555622a",
+    "infra/db/Scripts/budgeting/tb/crypto_liability_events.sql": "f5bf9a30d9adcc6612e9fee7d4180d89a8cbea62800f0e67d0efbfdb5c5852c3",
+    "infra/db/Scripts/budgeting/tb/crypto_protocol_accrual_events.sql": "fa2e05a2e92d7363302aa1ad8b7c849796ede621527228c48fc0bef89daec96a",
+    "infra/db/Scripts/budgeting/func/get__crypto_position_entry_summary.sql": "c753b8a9180db6a6eb7eb620d8e56eb80cd2e417f9b69b7ce33e20ce5a6d2ad0",
+    "infra/db/Scripts/budgeting/func/get__crypto_position_known_entry_summary.sql": "e62f6a0762533f4027b45bd2862a641cfbd2c92e0ef568354f932d56680183c1",
+    "infra/db/Scripts/budgeting/func/get__crypto_position_movable_entry_summary.sql": "98addb285b52504cdbffd85a52e101211c61e861efe72f9d5971232e69036ae0",
+    "infra/db/Scripts/budgeting/func/check__crypto_lending_state.sql": "0d435a2f25ec003fc7e31ab0fd918f1fcdf7d7464abe305030669e8a86558441",
+    "infra/db/Scripts/budgeting/func/get__crypto_account_assets.sql": "25c39c1edb23cba09104f14ae7abe503896571956ca483b7c14557792b4cdee1",
+    "infra/db/Scripts/budgeting/func/get__crypto_asset_detail.sql": "087d24d342ccde0491c1f96427c2b8eeddec79eb8e06780125d2ec081cc544de",
+    "infra/db/Scripts/budgeting/func/put__crypto_pay_fee.sql": "c62c34437d878b9c94dba6f50a6cdf4fd80baa7ad975d8c69ee6c89551b53954",
+    "infra/db/Scripts/budgeting/func/get__crypto_protocol_positions.sql": "b51791f53a1ae29d7e14be4c347be87e5b898d90840b7b41efcb0fdfc94b5b1a",
+    "infra/db/Scripts/budgeting/func/put__create_crypto_protocol_position.sql": "5e9cbe88cad77b75e1dc0d2fd1a289068b25bb1d3ed12fdf5af12dd1e09fc895",
+    "infra/db/Scripts/budgeting/func/put__lending_take_more_debt.sql": "4d8c61f198d75f16973b0eb3885097c46b00a1576fbe7851dcaaada9a1a8fb97",
+    "infra/db/Scripts/budgeting/func/put__lending_repay_debt.sql": "274476ba7f9781d8b1385976fc580c5764133168b63a1e64803f2ddcb5b631da",
+    "infra/db/Scripts/budgeting/func/set__close_crypto_protocol_position.sql": "843ab3bba940d40153b0ae559e8fb21aaba74fe9b002496e38737ea86516e3e4",
+    "infra/db/Scripts/budgeting/func/put__record_portfolio_income.sql": "a22f7c8d538057505cefb6c777b73666e83b947dc48ed42d7a8dd4cde445f9d2",
+    "infra/db/Scripts/budgeting/func/put__swap_crypto_investment_asset.sql": "6b159545599a99b0caf64bb8c869be1cc70393bd2290a4590f9b77167cac9459",
+    "infra/db/Scripts/budgeting/func/set__update_crypto_protocol_position.sql": "30e4f5d54d35ab061313ed7674d63285aedaf16fecdd366767121e38564299e8",
+    "infra/db/Scripts/budgeting/func/put__lending_accrue_interest.sql": "7dffcee27ec8ebc870f36cdd39a7bfdb46437340695e2d5e8e53ff3e73cd1760",
+    "infra/db/Scripts/budgeting/func/put__lending_liquidate.sql": "a3d7053ee4930753a592bcb4de68550dccc4c245403b3a3720e8802b4262d044",
+    "infra/db/Scripts/budgeting/func/put__lending_accrue.sql": "280b7ab0b41a5bf673d5476ffc4c3f6348fec893d90f4b0b7417845262e09528",
+    "infra/db/Scripts/budgeting/func/put__transfer_crypto_between_investment_accounts.sql": "9d3ee52492ffc9a098f4c7113b52479f09b118e69316c3b2152947f6abc1b94f",
+    "infra/db/Scripts/budgeting/func/put__top_up_crypto_protocol_position.sql": "f82dac91cfa37ec154495d7da54a4ae4a6f6572c28c67d940995f417d3b3a735",
+    "infra/db/Scripts/budgeting/func/put__partial_close_crypto_protocol_position.sql": "4ec4f7e7fcccdd323c33ac1fc0fa5253ff491606962344a7a5c5553899809f63",
+    "infra/db/Scripts/budgeting/tests/crypto_accounting/evaa-liquidation-quantities.json": "e8f98a052cb982dae59571e11f44e913bb1cfbc2399d60c0a44ba21ece2270fa",
+    "infra/db/Scripts/budgeting/migrations/038_crypto_liquidations.sql": "ffd8438ee7752a309b490ad6c7e3b359f61c3956ab8334a00aef0fdfcb515add"
+  }
+}

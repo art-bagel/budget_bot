@@ -63,7 +63,26 @@ BEGIN
 
     -- total_count is computed once via a window function to avoid a second
     -- full-scan query for pagination metadata.
-    WITH selected_operations AS (
+    WITH account_movements AS (
+        SELECT pe.linked_operation_id AS operation_id, pp.investment_account_id AS account_id
+        FROM portfolio_events pe
+        JOIN portfolio_positions pp ON pp.id = pe.position_id
+        WHERE pe.linked_operation_id IS NOT NULL
+        UNION ALL
+        SELECT operation_id, bank_account_id FROM bank_entries
+        UNION ALL
+        SELECT operation_id, bank_account_id FROM crypto_bank_entries
+    ), account_visibility AS (
+        SELECT am.operation_id,
+               bool_or(ba.is_archived) AS has_archived,
+               bool_or(NOT ba.is_archived) AS has_visible
+        FROM account_movements am
+        JOIN bank_accounts ba ON ba.id = am.account_id
+        JOIN operations scoped_operation ON scoped_operation.id = am.operation_id
+        WHERE (scoped_operation.owner_type = 'user' AND scoped_operation.owner_user_id = _user_id)
+           OR (scoped_operation.owner_type = 'family' AND scoped_operation.owner_family_id = _family_id)
+        GROUP BY am.operation_id
+    ), selected_operations AS (
         SELECT
             o.id,
             o.type,
@@ -84,6 +103,7 @@ BEGIN
             ins.name AS income_source_name,
             count(*) OVER () AS total_count
         FROM operations o
+        LEFT JOIN account_visibility av ON av.operation_id = o.id
         LEFT JOIN users actor
           ON actor.id = o.actor_user_id
         LEFT JOIN income_sources ins
@@ -93,6 +113,10 @@ BEGIN
                 OR
                 (o.owner_type = 'family' AND o.owner_family_id = _family_id)
               )
+          -- Hide only movements entirely inside reconstruction accounts. Bank purchases,
+          -- withdrawals and transfers touching a real wallet remain visible.
+          -- Apply before pagination so totals and pages agree.
+          AND NOT (COALESCE(av.has_archived, false) AND NOT COALESCE(av.has_visible, false))
           AND (_normalized_operation_type IS NOT NULL OR o.type <> 'reversal')
           AND (
                 _normalized_operation_type IS NULL
@@ -197,6 +221,7 @@ BEGIN
           ON ba.id = be.bank_account_id
         JOIN selected_operations so
           ON so.id = be.operation_id
+        WHERE NOT ba.is_archived
     ),
     crypto_bank_entries_rows AS (
         SELECT
@@ -220,6 +245,7 @@ BEGIN
           ON ca.id = cbe.crypto_asset_id
         JOIN selected_operations so
           ON so.id = cbe.operation_id
+        WHERE NOT ba.is_archived
     ),
     bank_entry_rows AS (
         SELECT * FROM fiat_bank_entries
@@ -275,6 +301,7 @@ BEGIN
                     'currency_code', pe.currency_code,
                     'linked_operation_id', pe.linked_operation_id,
                     'comment', pe.comment,
+                    'comment_is_system', budgeting.is__crypto_audit_comment('portfolio_events', pe.id),
                     'metadata', pe.metadata,
                     'position_title', pp.title,
                     'position_asset_type_code', pp.asset_type_code,
@@ -295,6 +322,7 @@ BEGIN
         JOIN selected_operations so
           ON so.id = pe.linked_operation_id
         WHERE pe.linked_operation_id IS NOT NULL
+          AND NOT ba.is_archived
         GROUP BY pe.linked_operation_id
     ),
     items AS (
@@ -303,6 +331,7 @@ BEGIN
                 'operation_id', so.id,
                 'type', so.type,
                 'comment', so.comment,
+                'comment_is_system', budgeting.is__crypto_audit_comment('operations', so.id),
                 'operated_at', so.operated_on,
                 'created_at', so.created_at,
                 'reversal_of_operation_id', so.reversal_of_operation_id,

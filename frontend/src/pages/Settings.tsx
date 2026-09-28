@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import SecuritySection from '../components/SecuritySection';
+import BottomSheet from '../components/BottomSheet';
 import { useTheme } from '../hooks/useTheme';
 import type { Theme } from '../hooks/useTheme';
 import { useHints } from '../hooks/useHints';
@@ -33,6 +34,8 @@ import {
   deleteAccount,
   requestAccountDeletion,
   deleteInvestmentAccount,
+  setAccountStatistics,
+  updateCryptoAccountSettings,
   deleteTinkoffConnection,
   dissolveFamily,
   fetchBankAccounts,
@@ -130,9 +133,14 @@ export default function Settings({
   const [dissolveInProgress, setDissolveInProgress] = useState(false);
   const [dissolveError, setDissolveError] = useState<string | null>(null);
 
+  const [showArchivedAccounts, setShowArchivedAccounts] = useState(false);
+  const [settingsAccountId, setSettingsAccountId] = useState<number | null>(null);
+  const [accountName, setAccountName] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+  const settingsAccount = investmentAccounts.find((account) => account.id === settingsAccountId) ?? null;
   const [showCreateInvestmentForm, setShowCreateInvestmentForm] = useState(false);
   const [newInvestmentName, setNewInvestmentName] = useState('');
   const [newInvestmentOwnerType, setNewInvestmentOwnerType] = useState<'user' | 'family'>('user');
@@ -176,7 +184,7 @@ export default function Settings({
     setAccountsLoading(true);
     setAccountsError(null);
     try {
-      const items = await fetchBankAccounts('investment');
+      const items = await fetchBankAccounts('investment', true);
       setInvestmentAccounts(items);
     } catch (reason: unknown) {
       setAccountsError(reason instanceof Error ? reason.message : String(reason));
@@ -324,6 +332,33 @@ export default function Settings({
     }
   };
 
+  const saveCryptoAccount = async (account: BankAccount, archived: boolean, name = account.name, address = account.wallet_address ?? '') => {
+    setDeletingInvestmentAccountId(account.id);
+    setDeleteInvestmentError(null);
+    try {
+      await updateCryptoAccountSettings(account.id, { name, wallet_address: address.trim() || null, is_archived: archived });
+      setSettingsAccountId(null);
+      await loadAccounts();
+    } catch (reason: unknown) {
+      setDeleteInvestmentError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingInvestmentAccountId(null);
+    }
+  };
+
+  const handleAccountStatistics = async (account: BankAccount) => {
+    setDeletingInvestmentAccountId(account.id);
+    setDeleteInvestmentError(null);
+    try {
+      await setAccountStatistics(account.id, account.include_in_statistics === false);
+      await loadAccounts();
+    } catch (reason: unknown) {
+      setDeleteInvestmentError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeletingInvestmentAccountId(null);
+    }
+  };
+
   const handleDeleteInvestmentAccount = async (account: BankAccount) => {
     if (!window.confirm(
       `Удалить инвестиционный счёт «${account.name}»? Это сработает только если счёт пустой и без остатка.`,
@@ -333,6 +368,7 @@ export default function Settings({
     setDeleteInvestmentError(null);
     try {
       await deleteInvestmentAccount(account.id);
+      setSettingsAccountId(null);
       await loadAccounts();
     } catch (reason: unknown) {
       setDeleteInvestmentError(reason instanceof Error ? reason.message : String(reason));
@@ -705,7 +741,7 @@ export default function Settings({
                 <span className="st-card-sec__ico st-card-sec__ico--trend"><IconTrendUp /></span>
                 <div className="st-card-sec__title-meta">
                   <h3 className="st-card-sec__title">Инвестиционные счета</h3>
-                  <span className="st-card-sec__sub">Отдельные счета и переводы cash ↔ investment</span>
+                  <span className="st-card-sec__sub">{showArchivedAccounts ? 'Архив' : 'Брокерские, депозитные и криптосчета'}</span>
                 </div>
               </div>
               <button
@@ -796,15 +832,15 @@ export default function Settings({
             )}
 
             {accountsError && <div className="danger-card__error">{accountsError}</div>}
-            {deleteInvestmentError && <div className="danger-card__error">{deleteInvestmentError}</div>}
+            {deleteInvestmentError && settingsAccountId === null && <div className="danger-card__error">{deleteInvestmentError}</div>}
 
             {accountsLoading ? (
               <div className="row__sub">Загружаем счета…</div>
-            ) : investmentAccounts.length === 0 ? (
-              <div className="row__sub">Инвестиционных счетов пока нет.</div>
+            ) : investmentAccounts.filter(a => Boolean(a.is_archived) === showArchivedAccounts).length === 0 ? (
+              <div className="row__sub">{showArchivedAccounts ? 'Архив пуст.' : 'Инвестиционных счетов пока нет.'}</div>
             ) : (
               <ul className="invest-list">
-                {investmentAccounts.map((account) => {
+                {investmentAccounts.filter(a => Boolean(a.is_archived) === showArchivedAccounts).map((account) => {
                   const tone = account.investment_asset_type
                     ? ASSET_CHIP[account.investment_asset_type]
                     : null;
@@ -813,35 +849,45 @@ export default function Settings({
                     ?? '••';
                   const chipClass = tone?.tone ?? 'invest-tile__chip--g';
                   return (
-                    <li key={account.id} className="invest-tile">
-                      <span className={`invest-tile__chip ${chipClass}`}>{abbr}</span>
-                      <div className="invest-tile__meta">
-                        <div className="invest-tile__name">{account.name}</div>
-                        <div className="invest-tile__sub">
-                          <span className={`dot ${account.owner_type === 'family' ? 'dot--y' : 'dot--g'}`} />
-                          {account.owner_type === 'family' ? 'Семейный' : 'Личный'}
-                          {tone && <><em>·</em>{tone.label}</>}
-                          {account.provider_name && <><em>·</em>{account.provider_name}</>}
-                        </div>
-                      </div>
-                      <div className="invest-tile__right">
-                        <span className="st-tag">#{account.id}</span>
-                        <button
-                          type="button"
-                          className="ic-btn-xs"
-                          aria-label="Удалить"
-                          disabled={deletingInvestmentAccountId === account.id}
-                          onClick={() => void handleDeleteInvestmentAccount(account)}
-                        >
-                          <IconTrash />
-                        </button>
-                      </div>
+                    <li key={account.id}>
+                      <button
+                        type="button"
+                        className="invest-tile invest-tile--btn"
+                        onClick={() => {
+                          setDeleteInvestmentError(null);
+                          setSettingsAccountId(account.id);
+                          setAccountName(account.name);
+                          setWalletAddress(account.wallet_address ?? '');
+                        }}
+                      >
+                        <span className={`invest-tile__chip ${chipClass}`}>{abbr}</span>
+                        <span className="invest-tile__meta">
+                          <span className="invest-tile__name">{account.name}</span>
+                          <span className="invest-tile__sub">
+                            <span className={`dot ${account.owner_type === 'family' ? 'dot--y' : 'dot--g'}`} />
+                            {account.owner_type === 'family' ? 'Семейный' : 'Личный'}
+                            {tone && <><em>·</em>{tone.label}</>}
+                            {account.provider_name && <><em>·</em>{account.provider_name}</>}
+                          </span>
+                          {account.include_in_statistics === false && <span className="invest-tile__flag">вне статистики</span>}
+                        </span>
+                        <span className="invest-tile__chev" aria-hidden="true"><IconChevronRight /></span>
+                      </button>
                     </li>
                   );
                 })}
               </ul>
             )}
+
+            {(showArchivedAccounts || investmentAccounts.some((a) => a.is_archived)) && (
+              <button type="button" className="invest-archive-toggle" onClick={() => setShowArchivedAccounts(!showArchivedAccounts)}>
+                {showArchivedAccounts
+                  ? 'Активные счета'
+                  : `Архив · ${investmentAccounts.filter((a) => a.is_archived).length}`}
+              </button>
+            )}
           </section>
+
         </div>
       )}
 
@@ -993,6 +1039,58 @@ export default function Settings({
           </section>
         </div>
       )}
+
+      {settingsAccount && (() => {
+        const isCrypto = settingsAccount.investment_asset_type === 'crypto';
+        const tone = settingsAccount.investment_asset_type ? ASSET_CHIP[settingsAccount.investment_asset_type] : null;
+        const busy = deletingInvestmentAccountId !== null;
+        const included = settingsAccount.include_in_statistics !== false;
+        return (
+          <BottomSheet
+            open
+            tag={[settingsAccount.owner_type === 'family' ? 'Семейный' : 'Личный', tone?.label].filter(Boolean).join(' · ')}
+            title={settingsAccount.name}
+            onClose={() => { if (!busy) setSettingsAccountId(null); }}
+            actions={isCrypto ? (
+              <>
+                <button type="button" className="sh-btn sh-btn--ghost" disabled={busy}
+                  onClick={() => void saveCryptoAccount(settingsAccount, !settingsAccount.is_archived, accountName, walletAddress)}>
+                  {settingsAccount.is_archived ? 'Восстановить' : 'В архив'}
+                </button>
+                <button type="button" className="sh-btn sh-btn--primary" disabled={busy || !accountName.trim()}
+                  onClick={() => void saveCryptoAccount(settingsAccount, Boolean(settingsAccount.is_archived), accountName, walletAddress)}>
+                  Сохранить
+                </button>
+              </>
+            ) : undefined}
+          >
+            {isCrypto && (
+              <>
+                <div className="field">
+                  <span className="fl">Название</span>
+                  <input className="inp-v2" value={accountName} maxLength={100} disabled={busy} onChange={(e) => setAccountName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <span className="fl">Адрес кошелька</span>
+                  <input className="inp-v2" value={walletAddress} maxLength={256} placeholder="Необязательно" autoCapitalize="none" spellCheck={false} disabled={busy} onChange={(e) => setWalletAddress(e.target.value)} />
+                </div>
+              </>
+            )}
+            <div className="pf-toggle-row">
+              <span className="pf-toggle-row__label">В общей статистике</span>
+              <button type="button" role="switch" aria-checked={included} aria-label="Учитывать счёт в общей статистике"
+                className={`sw${included ? ' sw--on' : ''}`} disabled={busy}
+                onClick={() => void handleAccountStatistics(settingsAccount)}>
+                <span className="sw__thumb" />
+              </button>
+            </div>
+            {deleteInvestmentError && <div className="tk-error" role="alert"><span>{deleteInvestmentError}</span></div>}
+            <button type="button" className="pf-archive-btn" disabled={busy} onClick={() => void handleDeleteInvestmentAccount(settingsAccount)}>
+              <IconTrash /> Удалить счёт
+            </button>
+          </BottomSheet>
+        );
+      })()}
     </div>
   );
 }

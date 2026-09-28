@@ -30,49 +30,17 @@ BEGIN
         RAISE EXCEPTION 'Access denied to investment account %', _investment_account_id;
     END IF;
 
-    SELECT COALESCE(jsonb_agg(item ORDER BY (item ->> 'symbol')), '[]'::jsonb)
+    SELECT COALESCE(jsonb_agg(detail - 'entries' ORDER BY detail->>'symbol'), '[]'::jsonb)
     INTO _result
     FROM (
-        SELECT jsonb_build_object(
-            'crypto_asset_id', ca.id,
-            'symbol', ca.symbol,
-            'name', ca.name,
-            'network_code', ca.network_code,
-            'contract_address', ca.contract_address,
-            'decimals', ca.decimals,
-            'asset_metadata', ca.metadata,
-            'position_id', pp.id,
-            'quantity', pp.quantity,
-            'opened_at', pp.opened_at,
-            'total_entry_value_in_base', (s.summary ->> 'total_entry_value_in_base')::numeric,
-            'total_consumed_cost_basis', (s.summary ->> 'total_consumed_cost_basis')::numeric,
-            'remaining_cost_basis', (s.summary ->> 'remaining_cost_basis')::numeric,
-            'avg_cost_per_unit', (s.summary ->> 'avg_cost_per_unit')::numeric,
-            'realized_pnl_lifetime_in_base', COALESCE(realized.total, 0),
-            'last_event_at', last_event.event_at
-        ) AS item
-        FROM portfolio_positions pp
-        JOIN crypto_assets ca
-          ON ca.id = (pp.metadata ->> 'crypto_asset_id')::bigint
-        CROSS JOIN LATERAL (
-            SELECT budgeting.get__crypto_position_entry_summary(pp.id) AS summary
-        ) AS s
-        LEFT JOIN LATERAL (
-            SELECT SUM((pe.metadata ->> 'realized_in_base')::numeric) AS total
-            FROM portfolio_events pe
-            WHERE pe.position_id = pp.id
-              AND pe.metadata ? 'realized_in_base'
-        ) AS realized ON TRUE
-        LEFT JOIN LATERAL (
-            SELECT MAX(pe.event_at) AS event_at
-            FROM portfolio_events pe
-            WHERE pe.position_id = pp.id
-        ) AS last_event ON TRUE
-        WHERE pp.investment_account_id = _investment_account_id
-          AND pp.asset_type_code = 'crypto'
-          AND pp.status = 'open'
-          AND pp.metadata ->> 'crypto_asset_id' ~ '^[0-9]+$'
-    ) sub;
+        SELECT budgeting.get__crypto_asset_detail(_user_id, _investment_account_id, asset_id) detail
+        FROM (
+            SELECT DISTINCT (metadata->>'crypto_asset_id')::bigint asset_id
+            FROM portfolio_positions
+            WHERE investment_account_id=_investment_account_id AND asset_type_code='crypto'
+                AND metadata->>'crypto_asset_id' ~ '^[0-9]+$'
+        ) assets
+    ) details;
 
     RETURN _result;
 END

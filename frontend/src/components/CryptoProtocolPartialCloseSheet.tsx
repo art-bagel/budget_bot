@@ -1,3 +1,4 @@
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 
@@ -5,7 +6,7 @@ import BottomSheet from './BottomSheet';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { partialCloseCryptoProtocolPosition } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
-import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { formatNumericAmount } from '../utils/format';
 import { todayIso } from '../utils/portfolioPosition';
 import type { CryptoProtocolPosition } from '../types';
 
@@ -19,38 +20,22 @@ interface Props {
 }
 
 
-function suggestValue(qty: number, refQty: number, refValue: number): string {
-  if (!Number.isFinite(qty) || qty <= 0) return '';
-  if (!Number.isFinite(refQty) || refQty <= 0) return '';
-  if (!Number.isFinite(refValue) || refValue <= 0) return '';
-  const value = (qty * refValue) / refQty;
-  return String(Number(value.toFixed(2)));
-}
-
-
 export default function CryptoProtocolPartialCloseSheet({
   open,
   position,
-  baseCurrencyCode,
   onClose,
   onSuccess,
 }: Props) {
+  const manualRequest = useCryptoRequestKey(`CryptoProtocolPartialCloseSheet.tsx:${position.id}:1`);
   useModalOpen(open);
 
   const symbol = position.asset_symbol;
-  const baseSym = currencySymbol(baseCurrencyCode);
 
   const principalRemaining = position.quantity ?? 0;
   const currentQuantity = position.current_quantity ?? principalRemaining;
-  const currentValue = position.current_value_in_base ?? 0;
-  const unclaimedRewards = position.rewards_unclaimed_in_base ?? 0;
 
   const [principalQty, setPrincipalQty] = useState('');
-  const [principalValue, setPrincipalValue] = useState('');
-  const [principalValueTouched, setPrincipalValueTouched] = useState(false);
   const [rewardsQty, setRewardsQty] = useState('');
-  const [rewardsValue, setRewardsValue] = useState('');
-  const [rewardsValueTouched, setRewardsValueTouched] = useState(false);
   const [returnedAt, setReturnedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -59,34 +44,15 @@ export default function CryptoProtocolPartialCloseSheet({
   useEffect(() => {
     if (open) {
       setPrincipalQty('');
-      setPrincipalValue('');
-      setPrincipalValueTouched(false);
       setRewardsQty('');
-      setRewardsValue('');
-      setRewardsValueTouched(false);
       setReturnedAt(todayIso());
       setComment('');
       setError(null);
     }
   }, [open]);
 
-  // Auto-suggest principal value as user types qty (proportional split of current_value).
-  useEffect(() => {
-    if (principalValueTouched) return;
-    setPrincipalValue(suggestValue(Number(principalQty), currentQuantity, currentValue));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [principalQty, currentQuantity, currentValue]);
-
-  useEffect(() => {
-    if (rewardsValueTouched) return;
-    setRewardsValue(suggestValue(Number(rewardsQty), currentQuantity, currentValue));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rewardsQty, currentQuantity, currentValue]);
-
   const principalQtyNum = Number(principalQty);
   const rewardsQtyNum = Number(rewardsQty);
-  const principalValueNum = Number(principalValue);
-  const rewardsValueNum = Number(rewardsValue);
 
   const principalQtyValid = principalQty === '' || (Number.isFinite(principalQtyNum) && principalQtyNum >= 0);
   const rewardsQtyValid = rewardsQty === '' || (Number.isFinite(rewardsQtyNum) && rewardsQtyNum >= 0);
@@ -116,20 +82,14 @@ export default function CryptoProtocolPartialCloseSheet({
     setSubmitting(true);
     setError(null);
     try {
-      const principalValForApi = principalQtyNum > 0
-        ? (Number.isFinite(principalValueNum) && principalValueNum > 0 ? principalValueNum : undefined)
-        : undefined;
-      const rewardsValForApi = rewardsQtyNum > 0
-        ? (Number.isFinite(rewardsValueNum) && rewardsValueNum > 0 ? rewardsValueNum : undefined)
-        : undefined;
-      await partialCloseCryptoProtocolPosition(position.id, {
-        principal_qty: principalQtyNum > 0 ? principalQtyNum : 0,
-        rewards_qty: rewardsQtyNum > 0 ? rewardsQtyNum : 0,
-        principal_value_in_base: principalValForApi,
-        rewards_value_in_base: rewardsValForApi,
+      const payload = {
+        principal_qty: principalQty.trim() || "0",
+        rewards_qty: rewardsQty.trim() || "0",
         returned_at: returnedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+      };
+      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -153,11 +113,11 @@ export default function CryptoProtocolPartialCloseSheet({
             </div>
           )}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>
               Отмена
             </button>
             <button
-              className="btn btn--primary"
+              className="sh-btn sh-btn--primary"
               type="button"
               onClick={() => void handleSubmit()}
               disabled={!canSubmit}
@@ -174,22 +134,16 @@ export default function CryptoProtocolPartialCloseSheet({
           <strong>{formatNumericAmount(currentQuantity, 8)} {symbol}</strong>
         </div>
         <div className="ppc-sheet__summary-row">
-          <span>Из них principal</span>
+          <span>Основная сумма</span>
           <strong>{formatNumericAmount(principalRemaining, 8)} {symbol}</strong>
         </div>
-        <div className="ppc-sheet__summary-row">
-          <span>Текущая оценка</span>
-          <strong>{formatNumericAmount(currentValue, 2)} {baseSym}</strong>
-        </div>
-        <div className="ppc-sheet__summary-row">
-          <span>Награды нереализованные</span>
-          <strong>{formatNumericAmount(unclaimedRewards, 2)} {baseSym}</strong>
-        </div>
+
+
       </div>
 
-      <h4 className="ppc-sheet__section">Principal</h4>
+      <h4 className="ppc-sheet__section">Основная сумма</h4>
       <p className="ppc-sheet__hint">
-        Принципал переносит cost basis из DeFi (макс. {formatNumericAmount(principalRemaining, 8)} {symbol}).
+        Себестоимость основной суммы переносится из DeFi (макс. {formatNumericAmount(principalRemaining, 8)} {symbol}).
       </p>
       <div className="apf-row">
         <div className="apf-field" style={{ flex: 1 }}>
@@ -207,29 +161,12 @@ export default function CryptoProtocolPartialCloseSheet({
             <span className="amt__cur">{symbol}</span>
           </div>
         </div>
-        <div className="apf-field" style={{ flex: 1 }}>
-          <label className="apf-label">Оценка в {baseCurrencyCode}</label>
-          <div className="amt">
-            <input
-              className="amt__inp"
-              type="text"
-              inputMode="decimal"
-              placeholder="0"
-              value={principalValue}
-              onChange={(event) => {
-                setPrincipalValueTouched(true);
-                setPrincipalValue(sanitizeDecimalInput(event.target.value));
-              }}
-              disabled={submitting}
-            />
-            <span className="amt__cur">{baseSym}</span>
-          </div>
-        </div>
+
       </div>
 
       <h4 className="ppc-sheet__section">Награды</h4>
       <p className="ppc-sheet__hint">
-        Награды зачисляются с zero-cost (income event). На P&L влияют только при выводе в банк.
+        Награды зачисляются с нулевой себестоимостью. Предварительно учтите начисленные монеты в карточке DeFi.
       </p>
       <div className="apf-row">
         <div className="apf-field" style={{ flex: 1 }}>
@@ -247,24 +184,7 @@ export default function CryptoProtocolPartialCloseSheet({
             <span className="amt__cur">{symbol}</span>
           </div>
         </div>
-        <div className="apf-field" style={{ flex: 1 }}>
-          <label className="apf-label">Оценка в {baseCurrencyCode}</label>
-          <div className="amt">
-            <input
-              className="amt__inp"
-              type="text"
-              inputMode="decimal"
-              placeholder="0"
-              value={rewardsValue}
-              onChange={(event) => {
-                setRewardsValueTouched(true);
-                setRewardsValue(sanitizeDecimalInput(event.target.value));
-              }}
-              disabled={submitting}
-            />
-            <span className="amt__cur">{baseSym}</span>
-          </div>
-        </div>
+
       </div>
 
       <div className="apf-field">

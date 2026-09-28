@@ -17,6 +17,7 @@ BEGIN
         SELECT
             ba.id,
             ba.name,
+            ba.include_in_statistics,
             ba.owner_type,
             ba.owner_user_id,
             ba.owner_family_id,
@@ -31,6 +32,7 @@ BEGIN
           ON f.id = ba.owner_family_id
         WHERE ba.is_active
           AND ba.account_kind = 'investment'
+          AND NOT ba.is_archived
           AND (
                 (ba.owner_type = 'user' AND ba.owner_user_id = _user_id)
                 OR
@@ -195,6 +197,7 @@ BEGIN
         jsonb_agg(
             jsonb_build_object(
                 'investment_account_id', sa.id,
+                'include_in_statistics', sa.include_in_statistics,
                 'investment_account_name', sa.name,
                 'investment_account_owner_type', sa.owner_type,
                 'investment_account_owner_name', sa.owner_name,

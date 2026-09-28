@@ -50,6 +50,11 @@ BEGIN
         RAISE EXCEPTION 'Reversal operation cannot be reversed';
     END IF;
 
+    IF EXISTS (SELECT 1 FROM portfolio_events WHERE
+        metadata->'manual_expense_settlement'->'result'->>'operation_id'=_operation_id::text) THEN
+        RAISE EXCEPTION 'Linked card allocation reversal requires historical correction';
+    END IF;
+
     IF _original_type IN ('investment_trade', 'investment_income', 'investment_adjustment') THEN
         RAISE EXCEPTION 'Investment operations reversal is not supported yet';
     END IF;

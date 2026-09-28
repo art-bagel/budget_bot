@@ -1,7 +1,9 @@
+import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Plus, ArrowDownToLine, X, HandCoins, Wallet, SlidersHorizontal } from 'lucide-react';
 
 import BottomSheet from './BottomSheet';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
@@ -13,6 +15,8 @@ import {
   partialCloseCryptoProtocolPosition,
   takeLendingDebt,
   repayLendingDebt,
+  recordLendingDebtEvent,
+  groupLendingPositions,
 } from '../api';
 import type {
   CryptoProtocolPosition,
@@ -21,8 +25,9 @@ import type {
   CryptoAsset,
 } from '../types';
 import { getLendingMetadata } from '../types';
-import { DefiFeeField, EMPTY_FEE_DRAFT, applyDefiFee } from './DefiFeeField';
+import { DefiFeeField, EMPTY_FEE_DRAFT, manualFee } from './DefiFeeField';
 import type { DefiFeeDraft } from './DefiFeeField';
+
 
 
 type CommonProps = {
@@ -53,6 +58,7 @@ export function LendingTopUpSheet({
   onClose,
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLendingActionSheets.tsx:${position.id}:1`);
   useModalOpen(open);
   const collateralSymbol = position.asset_symbol;
   const source = useMemo(
@@ -88,20 +94,17 @@ export function LendingTopUpSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await topUpCryptoProtocolPosition(position.id, {
+      const payload = {
         source_position_id: source.id,
-        quantity: num,
+        quantity: quantity,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await topUpCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -120,17 +123,14 @@ export function LendingTopUpSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Доливаем…' : 'Долить'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Снимет монеты со счёта и добавит в лендинг.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{sourceSymbol} — количество</label>
         <input
@@ -178,6 +178,7 @@ export function LendingTakeDebtSheet({
   baseCurrencyCode: string;
 }) {
   useModalOpen(open);
+  const request = useCryptoRequestKey(`takeLendingDebt:${position.id}`);
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const lockedAssetId = lend.borrowed_crypto_asset_id ?? null;
   const sortedAssets = useMemo(
@@ -221,21 +222,17 @@ export function LendingTakeDebtSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await takeLendingDebt(position.id, {
-        debt_qty: num,
-        value_in_base: valueInBase != null ? Math.round(valueInBase * 100) / 100 : undefined,
+      const payload = {
+        debt_qty: quantity,
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
         borrowed_crypto_asset_id: lockedAssetId == null ? effectiveAssetId : undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await takeLendingDebt(position.id, { ...payload, request_id: request.requestId(payload) });
+      request.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -254,17 +251,14 @@ export function LendingTakeDebtSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Берём…' : 'Взять в долг'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Заёмные монеты прибавятся к активу на счёте, долг увеличится на ту же сумму.
-      </p>
       {lockedAssetId == null && (
         <div className="apf-field">
           <label className="apf-label">Какую монету занимаем</label>
@@ -277,7 +271,7 @@ export function LendingTakeDebtSheet({
             <option value="">Выберите монету</option>
             {sortedAssets.map((asset) => (
               <option key={asset.id} value={asset.id}>
-                {asset.symbol}{asset.network_code ? ` · ${asset.network_code}` : ''}
+                {cryptoAssetLabel(asset, cryptoAssets)}
               </option>
             ))}
           </select>
@@ -325,6 +319,7 @@ export function LendingRepayDebtSheet({
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[]; cryptoLivePrices: Map<number, CryptoLivePrice>; baseCurrencyCode: string }) {
   useModalOpen(open);
+  const request = useCryptoRequestKey(`repayLendingDebt:${position.id}`);
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const symbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
   const debtQty = lend.borrowed_quantity ?? 0;
@@ -338,6 +333,7 @@ export function LendingRepayDebtSheet({
     : null;
 
   const [quantity, setQuantity] = useState('');
+  const [interest, setInterest] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
   const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
@@ -347,6 +343,7 @@ export function LendingRepayDebtSheet({
   useEffect(() => {
     if (open) {
       setQuantity('');
+      setInterest('');
       setOperatedAt(todayIso());
       setComment('');
       setFeeDraft(EMPTY_FEE_DRAFT);
@@ -368,21 +365,18 @@ export function LendingRepayDebtSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await repayLendingDebt(position.id, {
+      const payload = {
         source_position_id: sourcePosition.id,
-        repay_qty: num,
-        value_in_base: valueInBase != null ? Math.round(valueInBase * 100) / 100 : undefined,
+        repay_qty: quantity,
+        interest_qty: interest || '0',
         operated_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await repayLendingDebt(position.id, { ...payload, request_id: request.requestId(payload) });
+      request.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -401,17 +395,14 @@ export function LendingRepayDebtSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Гасим…' : 'Погасить'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Спишет монеты со счёта и уменьшит долг лендинга.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{symbol || 'Заём'} — погасить</label>
         <input
@@ -430,6 +421,11 @@ export function LendingRepayDebtSheet({
         {!sourcePosition && (
           <span className="tok-row__hint tok-row__hint--muted">На счёте нет заёмного актива — сначала пополни баланс.</span>
         )}
+      </div>
+      <div className="apf-field">
+        <label className="apf-label">Из этой суммы — проценты</label>
+        <input className="apf-input" type="text" inputMode="decimal" placeholder="0"
+          value={interest} onChange={(e) => setInterest(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
       </div>
       <div className="apf-field">
         <label className="apf-label">Дата</label>
@@ -509,17 +505,14 @@ export function LendingAdjustSheet({ open, position, onClose, onSuccess }: Commo
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Сохраняем…' : 'Сохранить'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Меняет цифры в позиции без движения по активу — для учёта набежавших процентов.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{collateralSymbol} в лендинге</label>
         <input
@@ -574,6 +567,7 @@ export function LendingPartialWithdrawSheet({
   onClose,
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLendingActionSheets.tsx:${position.id}:5`);
   useModalOpen(open);
   const symbol = position.asset_symbol;
   const max = position.current_quantity ?? position.quantity ?? 0;
@@ -604,19 +598,16 @@ export function LendingPartialWithdrawSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await partialCloseCryptoProtocolPosition(position.id, {
-        principal_qty: num,
+      const payload = {
+        principal_qty: quantity,
         returned_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await partialCloseCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -635,17 +626,14 @@ export function LendingPartialWithdrawSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Снимаем…' : 'Снять'}
             </button>
           </div>
         </div>
       )}
     >
-      <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-        Часть залога вернётся на счёт. Долг при этом не меняется.
-      </p>
       <div className="apf-field">
         <label className="apf-label">{symbol} — снять</label>
         <input
@@ -680,6 +668,7 @@ export function LendingCloseSheet({
   onClose,
   onSuccess,
 }: CommonProps & { accountPositions: PortfolioPosition[] }) {
+  const manualRequest = useCryptoRequestKey(`CryptoLendingActionSheets.tsx:${position.id}:6`);
   useModalOpen(open);
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const symbol = position.asset_symbol;
@@ -713,19 +702,16 @@ export function LendingCloseSheet({
     setSubmitting(true);
     setError(null);
     try {
-      await closeCryptoProtocolPosition(position.id, {
-        return_quantity: num > 0 ? num : undefined,
+      const payload = {
+        return_quantity: num > 0 ? quantity : undefined,
         withdrawn_at: operatedAt || undefined,
         comment: comment.trim() || undefined,
-      });
+        fee: manualFee(feeDraft, accountPositions),
+      };
+      await closeCryptoProtocolPosition(position.id, { ...payload, request_id: manualRequest.requestId(payload) });
+      manualRequest.completed();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
-      setSubmitting(false);
-      return;
-    }
-    const feeError = await applyDefiFee(feeDraft, accountPositions, position.id, operatedAt);
-    if (feeError) {
-      setError(feeError);
       setSubmitting(false);
       return;
     }
@@ -744,23 +730,15 @@ export function LendingCloseSheet({
         <div className="tk-foot pf-sheet-actions">
           {error && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>{error}</span></div>}
           <div className="tk-foot__row">
-            <button className="btn btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
-            <button className="btn btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
+            <button className="sh-btn sh-btn--ghost" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={() => void submit()} disabled={!canSubmit}>
               {submitting ? 'Закрываем…' : 'Закрыть'}
             </button>
           </div>
         </div>
       )}
     >
-      {hasDebt ? (
-        <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-          Сначала погаси долг {formatNumericAmount(debtQty, 8)} {lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}, после этого позицию можно закрыть.
-        </p>
-      ) : (
-        <p className="list-row__sub" style={{ lineHeight: 1.5, marginBottom: 6 }}>
-          Залог вернётся на счёт. Можно подкрутить количество, если оно отличается от того, что в позиции.
-        </p>
-      )}
+      {hasDebt && <div className="tk-error"><AlertCircle strokeWidth={2} /><span>Сначала погасите долг: {formatNumericAmount(debtQty, 8)} {lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? ''}</span></div>}
       <div className="apf-field">
         <label className="apf-label">{symbol} — вернётся</label>
         <input
@@ -787,4 +765,130 @@ export function LendingCloseSheet({
       )}
     </BottomSheet>
   );
+}
+
+
+export function LendingDebtEventSheet({ open, position, kind, collateralPositions, onClose, onSuccess }: CommonProps & {
+  kind: 'interest' | 'liquidate' | 'yield';
+  collateralPositions?: CryptoProtocolPosition[];
+}) {
+  useModalOpen(open);
+  const request = useCryptoRequestKey(`lending-${kind}:${position.id}`);
+  const lend = getLendingMetadata(position);
+  const [quantity, setQuantity] = useState('');
+  const [debt, setDebt] = useState('');
+  const [interest, setInterest] = useState('');
+  const [penalty, setPenalty] = useState('');
+  const [penaltyUnknown, setPenaltyUnknown] = useState(false);
+  const [day, setDay] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const liquidate = kind === 'liquidate';
+  const [collateralId, setCollateralId] = useState(position.id);
+  const collateral = collateralPositions?.find((p) => p.id === collateralId) ?? position;
+  const debtSymbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
+  const valid = Number(quantity) > 0 && (!liquidate || (
+    Number(debt) > 0 && interest.trim() !== '' && Number(interest) >= 0 && Number(interest) <= Number(debt)
+    && (penaltyUnknown || (penalty.trim() !== '' && Number(penalty) >= 0 && Number(penalty) <= Number(quantity)))
+  ));
+  const submit = async () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = liquidate
+        ? { operated_at: day, collateral_position_id: collateral.id, collateral_qty: quantity, debt_qty: debt, interest_qty: interest, collateral_fee_qty: penaltyUnknown ? '0' : penalty, collateral_fee_known: !penaltyUnknown }
+        : { operated_at: day, quantity };
+      await recordLendingDebtEvent(position.id, liquidate ? 'liquidate' : kind === 'yield' ? 'yield' : 'accrue-interest', {
+        ...payload, request_id: request.requestId(payload),
+      });
+      request.completed();
+      onSuccess();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setBusy(false); }
+  };
+  const input = (label: string, value: string, setter: (value: string) => void) => (
+    <div className="apf-field">
+      <label className="apf-label">{label}</label>
+      <input className="apf-input" type="text" inputMode="decimal" value={value} placeholder="0"
+        onChange={(e) => setter(sanitizeDecimalInput(e.target.value))} disabled={busy} />
+    </div>
+  );
+  return (
+    <BottomSheet open={open} tag={position.protocol_name}
+      title={liquidate ? 'Учесть ликвидацию' : kind === 'yield' ? 'Начислить монеты в DeFi' : 'Начислить проценты по долгу'}
+      icon={<SlidersHorizontal size={18} />} iconColor="o" onClose={onClose}
+      actions={<div className="tk-foot pf-sheet-actions">
+        {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
+        <button className="sh-btn sh-btn--primary" type="button" disabled={busy || !valid} onClick={() => void submit()}>
+          {busy ? 'Сохраняем…' : 'Записать в историю'}
+        </button>
+      </div>}
+    >
+      {liquidate && collateralPositions && collateralPositions.length > 1 && <div className="apf-field">
+        <label className="apf-label">Из какого залога списаны монеты</label>
+        <select className="picker-v2" value={collateralId} onChange={(e) => setCollateralId(Number(e.target.value))} disabled={busy}>
+          {collateralPositions.map((p) => <option key={p.id} value={p.id}>{p.asset_symbol} · {formatNumericAmount(p.current_quantity ?? p.quantity ?? 0, 8)}</option>)}
+        </select>
+      </div>}
+      {input(liquidate ? `Всего списано залога, ${collateral.asset_symbol}` : kind === 'yield' ? `Начислено, ${position.asset_symbol}` : `Новые проценты, ${debtSymbol}`, quantity, setQuantity)}
+      {liquidate && <>
+        {input(`Всего погашено долга, ${debtSymbol}`, debt, setDebt)}
+        {input(`Из погашенного — проценты, ${debtSymbol} (0, если нет)`, interest, setInterest)}
+        <div className="pf-toggle-row">
+          <span className="pf-toggle-row__label">Штраф известен</span>
+          <button type="button" role="switch" aria-checked={!penaltyUnknown} className={`sw${!penaltyUnknown ? ' sw--on' : ''}`}
+            disabled={busy} onClick={() => setPenaltyUnknown((value) => !value)}>
+            <span className="sw__thumb" />
+          </button>
+        </div>
+        {!penaltyUnknown && input(`Из списанного залога — штраф, ${collateral.asset_symbol} (0, если нет)`, penalty, setPenalty)}
+      </>}
+      <div className="apf-field"><label className="apf-label">Дата</label>
+        <input className="apf-input" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />
+      </div>
+    </BottomSheet>
+  );
+}
+
+
+export function LendingGroupSheet({ open, position, candidates, onClose, onSuccess }: CommonProps & {
+  candidates: CryptoProtocolPosition[];
+}) {
+  const request = useCryptoRequestKey(`lending-group:${position.id}`);
+  const [selected, setSelected] = useState('');
+  const [day, setDay] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = { other_position_id: Number(selected), operated_at: day };
+      await groupLendingPositions(position.id, { ...payload, request_id: request.requestId(payload) });
+      request.completed();
+      onSuccess();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+  return <BottomSheet open={open} tag={position.protocol_name} title="Общий счёт протокола" onClose={onClose}
+    actions={<div className="tk-foot pf-sheet-actions">
+      {error && <div className="tk-error"><AlertCircle /><span>{error}</span></div>}
+      <button className="sh-btn sh-btn--primary" type="button" disabled={!selected || busy} onClick={() => void submit()}>
+        {busy ? 'Сохраняем…' : 'Объединить'}
+      </button>
+    </div>}>
+    <div className="apf-field"><label className="apf-label">Другой залог</label>
+      <select className="picker-v2" value={selected} onChange={(e) => setSelected(e.target.value)} disabled={busy}>
+        <option value="">Выберите позицию</option>
+        {candidates.map((p) => <option key={p.id} value={p.id}>{p.protocol_name} · {p.asset_symbol} · {formatNumericAmount(p.current_quantity ?? p.quantity ?? 0, 8)}</option>)}
+      </select>
+      {!candidates.length && <span className="amt__hint">Сначала создайте второй залог на этом криптосчёте.</span>}
+    </div>
+    <div className="apf-field"><label className="apf-label">Дата подтверждения</label>
+      <input className="apf-input" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />
+    </div>
+  </BottomSheet>;
 }

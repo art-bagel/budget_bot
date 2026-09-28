@@ -1,0 +1,446 @@
+{
+  "scope": "Isolated actual SQL functions; simplified identity/bank fixture; no production access",
+  "checks": [
+    {
+      "name": "collateral_cost_carried",
+      "actual": 10000.0,
+      "expected": 10000,
+      "passed": true
+    },
+    {
+      "name": "collateral_round_trip",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "repeat_close_does_not_mint_assets",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "borrow_quantity",
+      "actual": 200.0,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "name": "loan_round_trip_preserves_own_cost",
+      "actual": [
+        100.0,
+        10000.0
+      ],
+      "expected": [
+        100,
+        10000
+      ],
+      "passed": true
+    },
+    {
+      "name": "closed_debt_zero_quantity_and_value",
+      "actual": [
+        0.0,
+        0.0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "collateral_after_loan_round_trip",
+      "actual": [
+        200.0,
+        20000.0
+      ],
+      "expected": [
+        200,
+        20000
+      ],
+      "passed": true
+    },
+    {
+      "name": "partial_debt_basis_independent_of_quote",
+      "actual": [
+        150.0,
+        22500.0
+      ],
+      "expected": [
+        150,
+        22500
+      ],
+      "passed": true
+    },
+    {
+      "name": "repayment_price_components",
+      "actual": [
+        2333.33,
+        -1500.0,
+        833.33
+      ],
+      "expected": [
+        2333.33,
+        -1500,
+        833.33
+      ],
+      "passed": true
+    },
+    {
+      "name": "full_debt_clears_despite_different_quote",
+      "actual": [
+        0.0,
+        0.0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "debt_journal_balances",
+      "actual": [
+        0.0,
+        0.0,
+        4
+      ],
+      "expected": [
+        0,
+        0,
+        4
+      ],
+      "passed": true
+    },
+    {
+      "name": "new_asset_borrow_has_acquisition_cost",
+      "actual": 10000.0,
+      "expected": 10000,
+      "passed": true
+    },
+    {
+      "name": "borrowed_asset_swap_carries_trade_value",
+      "actual": 22000.0,
+      "expected": 22000,
+      "passed": true
+    },
+    {
+      "name": "borrowed_asset_swap_realizes_gain",
+      "actual": 2000.0,
+      "expected": 2000,
+      "passed": true
+    },
+    {
+      "name": "debt_projection_cannot_bypass_journal",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "initial_borrow_acquisition_cost",
+      "actual": 20000.0,
+      "expected": 20000,
+      "passed": true
+    },
+    {
+      "name": "initial_borrow_round_trip_cost",
+      "actual": 10000.0,
+      "expected": 10000,
+      "passed": true
+    },
+    {
+      "name": "initial_borrow_journal_balances",
+      "actual": [
+        0.0,
+        0.0,
+        2
+      ],
+      "expected": [
+        0,
+        0,
+        2
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_loan_valuation_rejected_atomically",
+      "actual": [
+        true,
+        100.0
+      ],
+      "expected": [
+        true,
+        100
+      ],
+      "passed": true
+    },
+    {
+      "name": "legacy_loan_not_silently_revalued",
+      "actual": [
+        true,
+        100.0
+      ],
+      "expected": [
+        true,
+        100
+      ],
+      "passed": true
+    },
+    {
+      "name": "interest_retry_is_idempotent",
+      "actual": 1,
+      "expected": 1,
+      "passed": true
+    },
+    {
+      "name": "conflicting_interest_retry_rejected",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "principal_and_interest_fully_settled",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "passed": true
+    },
+    {
+      "name": "interest_not_counted_twice",
+      "actual": -5.12,
+      "expected": -5.12,
+      "passed": true
+    },
+    {
+      "name": "real_TON_repayment_preserves_nine_decimals",
+      "actual": "99.948833277000000000",
+      "expected": "99.948833277000000000",
+      "passed": true
+    },
+    {
+      "name": "interest_only_payment_preserves_principal",
+      "actual": [
+        101.0,
+        10100.0,
+        1.0,
+        100.0
+      ],
+      "expected": [
+        101,
+        10100,
+        1,
+        100
+      ],
+      "passed": true
+    },
+    {
+      "name": "interest_cannot_be_mislabeled_principal",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "unpaid_interest_blocks_close",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "name": "partial_interest_journal_balances",
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -200.0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        -200
+      ],
+      "passed": true
+    },
+    {
+      "name": "ETH_lending_eighteen_decimals",
+      "actual": "0.123456789123456789",
+      "expected": "0.123456789123456789",
+      "passed": true
+    },
+    {
+      "name": "reward_preserves_cost_and_increases_quantity",
+      "actual": [
+        120.0,
+        10000
+      ],
+      "expected": [
+        120,
+        10000
+      ],
+      "passed": true
+    },
+    {
+      "name": "TON_nine_decimals_preserved",
+      "actual": "1.000000001000000000",
+      "expected": "1.000000001000000000",
+      "passed": true
+    },
+    {
+      "name": "missing_basis_distinguished_from_zero",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "name": "unknown_summary_quality",
+      "actual": "unknown",
+      "expected": "unknown",
+      "passed": true
+    },
+    {
+      "name": "unknown_read_API_preserves_null",
+      "actual": [
+        null,
+        null,
+        null
+      ],
+      "expected": [
+        null,
+        null,
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "unknown_swap_blocked_without_mutation",
+      "actual": [
+        true,
+        100.0
+      ],
+      "expected": [
+        true,
+        100
+      ],
+      "passed": true
+    },
+    {
+      "name": "explicit_zero_is_not_unknown",
+      "actual": [
+        0,
+        "confirmed_zero"
+      ],
+      "expected": [
+        0,
+        "confirmed_zero"
+      ],
+      "passed": true
+    },
+    {
+      "name": "estimate_keeps_label_and_amount",
+      "actual": [
+        1000,
+        "estimated"
+      ],
+      "expected": [
+        1000,
+        "estimated"
+      ],
+      "passed": true
+    },
+    {
+      "name": "json_null_is_unknown",
+      "actual": "unknown",
+      "expected": "unknown",
+      "passed": true
+    },
+    {
+      "name": "nonfinite_cost_is_invalid",
+      "actual": [
+        "invalid",
+        null
+      ],
+      "expected": [
+        "invalid",
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "overconsumption_not_clamped_to_zero",
+      "actual": [
+        "invalid",
+        null
+      ],
+      "expected": [
+        "invalid",
+        null
+      ],
+      "passed": true
+    },
+    {
+      "name": "positive_balance_without_entries_is_unknown",
+      "actual": "unknown",
+      "expected": "unknown",
+      "passed": true
+    },
+    {
+      "name": "network_fee_reduces_remaining_basis",
+      "actual": [
+        199.0,
+        19900.0
+      ],
+      "expected": [
+        199,
+        19900
+      ],
+      "passed": true
+    }
+  ],
+  "passed": 43,
+  "total": 43,
+  "source_sha256": {
+    "infra/db/Scripts/budgeting/tb/crypto_assets.sql": "f56cffb759916312de1d19919428065dfe6d4017c563b2378dcffec388ce5ede",
+    "infra/db/Scripts/budgeting/tb/portfolio_positions.sql": "322479fec836f36579b6e39ffddf636611137b8af91f4caf6122dbe8b90e8605",
+    "infra/db/Scripts/budgeting/tb/portfolio_events.sql": "4efa36c45652486f60d6314ae7e873a6dac504e4e30ef9cb2666a1276be34cbb",
+    "infra/db/Scripts/budgeting/tb/crypto_protocol_positions.sql": "3e1b7c6ec1be003ec499ad49d21ab17620164c79ae4b47efcd02f287445f190b",
+    "infra/db/Scripts/budgeting/tb/crypto_liability_events.sql": "8ca19bba43f5243f4b452b3655cec5c7dc1ecfff9fe98aba344f2e4e798c67fa",
+    "infra/db/Scripts/budgeting/func/get__crypto_position_entry_summary.sql": "c753b8a9180db6a6eb7eb620d8e56eb80cd2e417f9b69b7ce33e20ce5a6d2ad0",
+    "infra/db/Scripts/budgeting/func/get__crypto_position_known_entry_summary.sql": "e62f6a0762533f4027b45bd2862a641cfbd2c92e0ef568354f932d56680183c1",
+    "infra/db/Scripts/budgeting/func/get__crypto_account_assets.sql": "73b8dd73e1536d1a0c9fb70d32a74bbb7bb85f044adb274aa77c81bc97986420",
+    "infra/db/Scripts/budgeting/func/get__crypto_asset_detail.sql": "149b9d629527e3b707771ab2dfd4d90b6c34ca7667cb8cdd41eca7272094343f",
+    "infra/db/Scripts/budgeting/func/put__crypto_pay_fee.sql": "d7cac51bf11f3ea1f4f6eab7ffbc0a80516f3784a70e1999d0314b7ceedd063b",
+    "infra/db/Scripts/budgeting/func/get__crypto_protocol_positions.sql": "b51791f53a1ae29d7e14be4c347be87e5b898d90840b7b41efcb0fdfc94b5b1a",
+    "infra/db/Scripts/budgeting/func/put__create_crypto_protocol_position.sql": "87c0b1434a76a0561fc9cfbfef72f8f565142e4351298add61ac015a3056f61b",
+    "infra/db/Scripts/budgeting/func/put__lending_take_more_debt.sql": "0e023b3a16aeac683b6d1e825347f8ad6c0c86a2909766649bffc6a31c975afe",
+    "infra/db/Scripts/budgeting/func/put__lending_repay_debt.sql": "7375450906188542dac7a98da0c6249c5d50e9d3bfd363353239ec87340f8bc7",
+    "infra/db/Scripts/budgeting/func/set__close_crypto_protocol_position.sql": "addb05e7af88b62b0d516971fd716d3e7607fd4cad19cd84e3645c1af891cd86",
+    "infra/db/Scripts/budgeting/func/put__record_portfolio_income.sql": "a22f7c8d538057505cefb6c777b73666e83b947dc48ed42d7a8dd4cde445f9d2",
+    "infra/db/Scripts/budgeting/func/put__swap_crypto_investment_asset.sql": "b04ccc7e2966524e1afa89ff1b364fe3292e58fcebe93abc4b968446d09f4ff7",
+    "infra/db/Scripts/budgeting/func/set__update_crypto_protocol_position.sql": "d8a12831cf62fb42c959e83123e032f0756639e7d52f7b844c24a68941bc0259",
+    "infra/db/Scripts/budgeting/func/put__lending_accrue_interest.sql": "93a3d438899697c9a491348709f5cf4ba8478c15b378c01326244f28f6caad14"
+  }
+}

@@ -1051,7 +1051,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
                                   <span className="tile__name">{item.account.name}</span>
                                 </div>
                                 <div className="tile__amount">
-                                  <span className="tile__debt">−{formatAmount(debt, user.base_currency_code)}</span>
+                                  <span className="tile__debt">{debt > 0 ? '−' : ''}{formatAmount(debt, user.base_currency_code)}</span>
                                   <span className="tile__debt-label">{kind === 'credit_card' ? 'использовано' : 'остаток долга'}</span>
                                 </div>
                               </div>

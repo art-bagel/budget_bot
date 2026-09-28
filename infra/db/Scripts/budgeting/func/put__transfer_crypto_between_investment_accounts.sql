@@ -15,8 +15,8 @@ DECLARE
     _target_account record;
     _asset record;
     _crypto_asset_id bigint;
-    _source_quantity numeric(30, 12);
-    _remaining_quantity numeric(30, 12);
+    _source_quantity numeric(50, 18);
+    _remaining_quantity numeric(50, 18);
     _target_position_id bigint;
     _operation_id bigint;
     _metadata jsonb;
@@ -26,10 +26,11 @@ DECLARE
 BEGIN
     SET search_path TO budgeting;
 
-    IF _amount <= 0 THEN
-        RAISE EXCEPTION 'Amount must be positive';
+    IF _amount IS NULL OR _amount <= 0
+        OR _amount::text IN ('NaN','Infinity','-Infinity')
+        OR _amount <> round(_amount,18) THEN
+        RAISE EXCEPTION 'Quantity must be finite, positive, with at most 18 decimals';
     END IF;
-    _amount := round(_amount, 12);
 
     SELECT *
     INTO _source
@@ -92,7 +93,11 @@ BEGIN
 
     -- Compute weighted-average consumed cost basis to carry over to target.
     _entry_summary := budgeting.get__crypto_position_entry_summary(_position_id);
-    _remaining_basis := COALESCE((_entry_summary ->> 'remaining_cost_basis')::numeric, 0);
+    IF (_entry_summary->>'basis_quality') = 'invalid' THEN
+        RAISE EXCEPTION 'Invalid source cost ledger; reconstruct it before consumption';
+    END IF;
+    -- Unknown is a valid missing valuation, never a zero-price acquisition.
+    _remaining_basis := (_entry_summary ->> 'remaining_cost_basis')::numeric;
     _consumed_cost_basis := CASE
         WHEN _source_quantity > 0
             THEN round(_remaining_basis * _amount / _source_quantity, 2)
@@ -175,6 +180,9 @@ BEGIN
         )
         RETURNING id INTO _target_position_id;
     ELSE
+        IF (budgeting.get__crypto_position_entry_summary(_target_position_id)->>'basis_quality') = 'invalid' THEN
+            RAISE EXCEPTION 'Invalid target cost ledger; reconstruct it before transfer';
+        END IF;
         UPDATE portfolio_positions
         SET quantity = COALESCE(quantity, 0) + _amount,
             amount_in_currency = 0,
@@ -208,6 +216,7 @@ BEGIN
             'target_position_id', _target_position_id,
             'value_in_base', _consumed_cost_basis,
             'consumed_cost_basis', _consumed_cost_basis,
+            'basis_quality', _entry_summary->>'basis_quality',
             'realized_in_base', 0,
             'target_kind', 'cross_account'
         ),
@@ -225,6 +234,7 @@ BEGIN
         _metadata || jsonb_build_object(
             'target_position_id', _target_position_id,
             'entry_value_in_base', _consumed_cost_basis,
+            'basis_quality', _entry_summary->>'basis_quality',
             'source_kind', 'cross_account',
             'source_position_id', _position_id
         ),
@@ -234,6 +244,7 @@ BEGIN
     IF _amount = _source_quantity THEN
         UPDATE portfolio_positions
         SET status = 'closed',
+            quantity = 0,
             closed_at = COALESCE(_operated_at, current_date),
             close_amount_in_currency = 0,
             close_currency_code = currency_code

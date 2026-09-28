@@ -1,4 +1,6 @@
+from uuid import UUID, uuid4
 from datetime import date
+from decimal import Decimal
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +28,7 @@ class PortfolioPositionItem(BaseModel):
     title: str
     status: Literal['open', 'closed']
     quantity: float | None = None
+    quantity_exact: str | None = None
     amount_in_currency: float
     currency_code: str
     opened_at: date
@@ -39,6 +42,7 @@ class PortfolioPositionItem(BaseModel):
 
 
 class PortfolioEventItem(BaseModel):
+    comment_is_system: bool = False
     id: int
     position_id: int
     event_type: Literal['open', 'top_up', 'partial_close', 'close', 'income', 'fee', 'adjustment', 'transfer_in', 'transfer_out', 'swap_in', 'swap_out']
@@ -120,10 +124,11 @@ class PartialClosePortfolioPositionRequest(BaseModel):
 
 
 class RecordPortfolioIncomeRequest(BaseModel):
+    request_id: UUID | None = None
     amount: float
     currency_code: str
     amount_in_base: float | None = None
-    quantity: float | None = None
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     income_kind: str | None = None
     destination: Literal['account', 'position'] = 'account'
     received_at: date | None = None
@@ -138,7 +143,7 @@ class RecordPortfolioIncomeRequest(BaseModel):
 
     @field_validator('quantity')
     @classmethod
-    def quantity_must_be_positive(cls, v: float | None) -> float | None:
+    def quantity_must_be_positive(cls, v: Decimal | None) -> Decimal | None:
         if v is not None and v <= 0:
             raise ValueError('Количество должно быть положительным')
         return v
@@ -194,6 +199,7 @@ class ChangeDepositRateRequest(BaseModel):
 
 
 class PortfolioSummaryItem(BaseModel):
+    include_in_statistics: bool = True
     investment_account_id: int
     investment_account_name: str
     investment_account_owner_type: Literal['user', 'family']
@@ -424,6 +430,14 @@ async def record_portfolio_income(
     body: RecordPortfolioIncomeRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> RecordPortfolioIncomeResponse:
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and position.get('asset_type_code') == 'crypto':
+        result = await ledger.put__manual_crypto_movement(
+            user_id=user.user_id, request_id=body.request_id or uuid4(), kind='position_income',
+            payload={'position_id': position_id, **body.model_dump(mode='json', exclude_none=True,
+                exclude={'request_id', 'received_at'})}, operated_at=body.received_at,
+        )
+        return RecordPortfolioIncomeResponse(**result)
     result = await ledger.put__record_portfolio_income(
         user_id=user.user_id,
         position_id=position_id,

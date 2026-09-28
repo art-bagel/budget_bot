@@ -40,3 +40,9 @@ export function todayIso(): string {
 export function formatDraftDecimal(value: number, fractionDigits = 8): string {
   return value.toFixed(fractionDigits).replace(/\.?0+$/, '');
 }
+
+
+/** Exact decimal strings come padded with zeros (24.815282191000); the value stays exact. */
+export function trimDecimal(value: string): string {
+  return /^[-+]?\d+\.\d+$/.test(value) ? value.replace(/\.?0+$/, '') : value;
+}
