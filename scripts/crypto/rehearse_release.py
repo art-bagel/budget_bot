@@ -162,12 +162,16 @@ async def main(verify_only=False):
             assert code_after == code_before, ("Replay must end on the branch SQL functions",
                                                sorted(k for k in set(code_before) | set(code_after) if code_before.get(k) != code_after.get(k)))
             # Presentation settings are ordinary account settings, not balances.
+            # Accounts that already exist in production keep their production
+            # names (owner's decision 29.09); new accounts take the review names.
             for row in await journal.fetch(
                 "select id,name,is_archived,include_in_statistics,wallet_address from budgeting.bank_accounts where investment_asset_type='crypto' and owner_user_id=$1",
                 prep.UID,
             ):
                 await db.execute(
-                    "update budgeting.bank_accounts set name=$2,is_archived=$3,include_in_statistics=$4,wallet_address=$5 where id=$1", *row)
+                    """update budgeting.bank_accounts set name=case when id=any($6::bigint[]) then name else $2 end,
+                    is_archived=$3,include_in_statistics=$4,wallet_address=$5 where id=$1""",
+                    *row, [a["id"] for a in original["bank_accounts"]])
             # Catalogue alias set outside the journal in review by merge_usdt_dev.py.
             assert not await db.fetchval(
                 "select exists(select 1 from budgeting.current_crypto_balances where crypto_asset_id=2 and amount<>0)")
@@ -340,7 +344,7 @@ async def verify(db, journal, snapshot, base, original, mapping, sources):
     # replayed card payments consume. Everything else must be byte-identical.
     for row in changed.pop("bank_accounts", []):
         assert row["after"] and row["before"]["investment_asset_type"] == "crypto" and row["before"]["owner_user_id"] == prep.UID, row
-        assert {k for k in row["before"] if row["before"][k] != row["after"][k]} <= {"name", "is_archived", "include_in_statistics", "wallet_address"}, row
+        assert {k for k in row["before"] if row["before"][k] != row["after"][k]} <= {"is_archived", "include_in_statistics", "wallet_address"}, row
     for row in changed.pop("crypto_assets", []):
         assert row["before"]["id"] == 2 and row["after"]["metadata"] == {"canonical_asset_id": 15}, row
     for row in changed.pop("fx_lots", []):
