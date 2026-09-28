@@ -26,8 +26,15 @@ test('missing, stale or wrong-currency debt quote cannot fall back to historical
   }
   assert.equal(protocolMarketValue(position(), new Map([[1, quote(1, 200)]]), 'RUB').value, null);
 });
-test('LP deposits and two live prices are insufficient to infer current reserves', () => {
-  assert.equal(protocolMarketValue(position({ position_type: 'liquidity_pool' }), prices, 'RUB').value, null);
+test('LP uses recorded quantities before the first composition update', () => {
+  const p = position({ position_type: 'liquidity_pool', metadata: { token1_crypto_asset_id: 2, token1_quantity: '20' } });
+  assert.equal(protocolMarketValue(p, prices, 'RUB').value, 21600);
+  assert.equal(protocolMarketValue({ ...p, metadata: { token1_crypto_asset_id: 2 } }, prices, 'RUB').value, null);
+});
+
+test('single-asset liquidity values the recorded asset without inventing a second leg', () => {
+  const p = position({ position_type: 'liquidity_pool', metadata: {} });
+  assert.equal(protocolMarketValue(p, prices, 'RUB').value, 20000);
 });
 test('zero collateral still retains and values an outstanding debt', () => {
   assert.equal(protocolMarketValue(position({ current_quantity: 0 }), prices, 'RUB').value, -800);
@@ -48,13 +55,13 @@ test('hide only empty positions, retaining dust, debt and unsettled funding', ()
   }
 });
 
-test('LP snapshot requires both current quotes and a composition dated today', () => {
+test('LP uses the latest recorded composition regardless of its date', () => {
   const metadata = { token1_crypto_asset_id: 2, lp_composition: { quantity0: '10', quantity1: '20', observed_at: new Date().toISOString().slice(0, 10) } };
   const p = position({ position_type: 'liquidity_pool', metadata });
   assert.equal(protocolMarketValue(p, prices, 'RUB').value, 3600);
   assert.equal(protocolMarketValue(p, new Map([[1, quote(1, 200)]]), 'RUB').value, null);
   metadata.lp_composition.observed_at = '2000-01-01';
-  assert.equal(protocolMarketValue(p, prices, 'RUB').value, null);
+  assert.equal(protocolMarketValue(p, prices, 'RUB').value, 3600);
 });
 
 test('wallet valuation distinguishes zero balance from unavailable market value', () => {

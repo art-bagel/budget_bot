@@ -6,7 +6,7 @@ export type ProtocolValuation = {
   quotes: CryptoLivePrice[];
 };
 
-/** Historical deposits are not a current snapshot of the LP's underlying reserves. */
+/** Value the quantities recorded by the user; composition updates are optional. */
 export function protocolMarketValue(
   position: CryptoProtocolPosition,
   prices: ReadonlyMap<number, CryptoLivePrice>,
@@ -24,9 +24,11 @@ export function protocolMarketValue(
   };
   if (position.position_type === 'liquidity_pool') {
     const snapshot = position.metadata.lp_composition as { quantity0?: string; quantity1?: string; observed_at?: string } | undefined;
-    if (!snapshot) return unavailable('Состав пула не обновлён');
-    if (snapshot.observed_at !== new Date().toISOString().slice(0, 10)) return unavailable('Обновите состав пула');
-    const quantities = [Number(snapshot.quantity0), Number(snapshot.quantity1)];
+    const quantities = [
+      Number(snapshot?.quantity0 ?? position.current_quantity ?? position.quantity),
+      Number(snapshot?.quantity1 ?? position.metadata.token1_quantity
+        ?? (position.metadata.token1_crypto_asset_id ? NaN : 0)),
+    ];
     if (quantities.some((q) => !Number.isFinite(q) || q < 0)) return unavailable('Состав пула не определён');
     const ids = [position.crypto_asset_id, Number(position.metadata.token1_crypto_asset_id)];
     let value = 0;
