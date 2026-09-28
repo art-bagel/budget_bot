@@ -1,10 +1,9 @@
--- Run on dev. All fixtures and changes are rolled back.
+-- Self-contained, so CI can run it on an empty schema. All fixtures and changes are rolled back.
 BEGIN;
 DO $$
-DECLARE uid bigint; aid bigint; result jsonb; blocked boolean;
+DECLARE uid bigint := 990000000501; aid bigint; result jsonb; blocked boolean;
 BEGIN
-    SELECT id INTO uid FROM budgeting.users ORDER BY id LIMIT 1;
-    ASSERT uid IS NOT NULL, 'A dev user is required';
+    PERFORM budgeting.put__register_user_context(uid, 'RUB', NULL, 'Account', 'Settings');
     INSERT INTO budgeting.bank_accounts(owner_type,owner_user_id,name,account_kind,investment_asset_type)
     VALUES ('user',uid,'archive-test-' || txid_current(),'investment','crypto') RETURNING id INTO aid;
     result := budgeting.set__crypto_account_settings(uid,aid,'Renamed-' || aid,'0x1234',true);
