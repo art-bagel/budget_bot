@@ -1,4 +1,4 @@
-import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
+import { cryptoAssetLabel, cryptoNetworkLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
 import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
@@ -9,7 +9,7 @@ import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
 import RefreshBar from '../components/RefreshBar';
-import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown } from 'lucide-react';
+import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown, Pencil, Check, ChevronRight, Plus, ArrowDownToLine, ArrowUpFromLine, HandCoins, Percent, Gift, RefreshCw, Link2, X, Zap } from 'lucide-react';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 import {
@@ -3140,11 +3140,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         ))}
       </div>
 
-      {activeAssetTypeCode === 'crypto' && accounts.some(a => a.account.investment_asset_type === 'crypto') && <>
-        <button type="button" className="btn btn--ghost" onClick={() => setCorrectionsOpen(true)}>Исправить прошлую операцию</button>
+      {activeAssetTypeCode === 'crypto' && accounts.some(a => a.account.investment_asset_type === 'crypto') && (
         <CryptoCorrectionSheet accounts={accounts.filter(a => a.account.investment_asset_type === 'crypto').map(a => ({id:a.account.id,name:a.account.name}))} open={correctionsOpen} anchorAccountId={accounts.find(a => a.account.investment_asset_type === 'crypto')!.account.id}
           onClose={() => setCorrectionsOpen(false)} onSuccess={() => void loadPortfolio()} />
-      </>}
+      )}
 
       {/* ══ Positions pane ══ */}
       {portfolioView === 'positions' && (
@@ -3337,10 +3336,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <div className="pf-grp__head">
                     <div>
                       <div className="pf-grp__title">{group.accountName}</div>
-                      {excludedAccountIds.has(group.accountId) && <div className="pf-grp__sub">Не входит в общую статистику</div>}
-                    <div className="pf-grp__meta">
-                        {group.ownerType === 'family' ? 'Семейный' : 'Личный'} · {group.positions.length} акт.
-                        {activeAssetTypeCode === 'crypto' ? ` · ${groupProtocolPositions.length} DeFi` : ''}
+                      <div className="pf-grp__meta">
+                        {group.ownerType === 'family' ? 'Семейный' : 'Личный'}
+                        {activeAssetTypeCode === 'crypto' ? (() => {
+                          const coins = group.positions.length - hiddenAssets.length;
+                          return ` · ${coins} ${pluralRu(coins, ['монета', 'монеты', 'монет'])}`;
+                        })() : ` · ${group.positions.length} акт.`}
+                        {groupProtocolPositions.length > 0 ? ` · ${groupProtocolPositions.length} DeFi` : ''}
+                        {excludedAccountIds.has(group.accountId) && <span className="pf-grp__flag">вне статистики</span>}
                       </div>
                     </div>
                     <div className="pf-grp__total">
@@ -3401,7 +3404,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                   {isCrypto ? (
                                     <>
                                       {formatNumericAmount(position.quantity ?? 0, 8)} {cryptoSymbol}
-                                      {cryptoNetwork ? ` · ${cryptoNetwork}` : ''}
+                                      {cryptoNetworkSuffix(cryptoNetwork, cryptoSymbol)}
                                     </>
                                   ) : isDeposit ? (
                                     <>
@@ -3429,11 +3432,17 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                               </div>
                             </div>
                             <div className="pf-pos__right">
-                              <div className="pf-pos__amount">
-                                {isCrypto && Number(position.quantity ?? 0) !== 0 && !getCryptoLivePrice(position) ? '—' : formatNumericAmount(displayValue)}
-                                <span className="pf-sym">{currencySymbol(displayCurrencyCode)}</span>
-                              </div>
-                              {isCrypto && Number(position.quantity ?? 0) !== 0 && !getCryptoLivePrice(position) && <div className="pf-pos__sub">Нет актуальной котировки</div>}
+                              {isCrypto && Number(position.quantity ?? 0) !== 0 && !getCryptoLivePrice(position) ? (
+                                <>
+                                  <div className="pf-pos__amount pf-pos__amount--none">—</div>
+                                  <div className="pf-pos__sub">нет курса</div>
+                                </>
+                              ) : (
+                                <div className="pf-pos__amount">
+                                  {formatNumericAmount(displayValue)}
+                                  <span className="pf-sym">{currencySymbol(displayCurrencyCode)}</span>
+                                </div>
+                              )}
                               {isDeposit && depositAccrued > 0 ? (
                                 <div className="pf-pos__pnl pf-pos__pnl--pos">
                                   +{formatAmount(depositAccrued, position.currency_code)}
@@ -3452,17 +3461,29 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   ))}
                   {hiddenAssets.length > 0 && (
                     <div>
-                      <button type="button" className="pf-closed__toggle" onClick={() => setShowHiddenWallets((previous) => {
+                      {showHidden && hiddenAssets.map((p) => {
+                        const symbol = getPositionMetadataText(p, 'asset_symbol') ?? p.title;
+                        const iconUrl = getCryptoIconUrl(symbol, p.metadata);
+                        return (
+                          <div className="pf-pos pf-pos--hidden" key={p.id}>
+                            <button type="button" className="pf-pos__identity" onClick={() => void handleOpenPositionDetails(p.id)}>
+                              {iconUrl ? <img className="pf-pos__logo" src={iconUrl} alt="" loading="lazy" /> : <div className="pf-pos__icon pf-pos__icon--crypto">{p.title.slice(0, 1).toUpperCase()}</div>}
+                              <div className="pf-pos__copy">
+                                <div className="pf-pos__title">{p.title}</div>
+                                <div className="pf-pos__sub">0 {symbol}{cryptoNetworkSuffix(getPositionMetadataText(p, 'network_code'), symbol)}</div>
+                              </div>
+                            </button>
+                            <button type="button" className="pf-pos__show" onClick={() => { const assetId = getCryptoAssetId(p); if (assetId !== null) void changeWalletAssetVisibility(group.accountId, assetId, false); }}>
+                              Показать
+                            </button>
+                          </div>
+                        );
+                      })}
+                      <button type="button" className="pf-grp__more" aria-expanded={showHidden} onClick={() => setShowHiddenWallets((previous) => {
                         const next = new Set(previous);
                         if (next.has(group.accountId)) next.delete(group.accountId); else next.add(group.accountId);
                         return next;
-                      })}>{showHidden ? 'Свернуть скрытые монеты' : `Скрытые монеты (${hiddenAssets.length})`}</button>
-                      {showHidden && hiddenAssets.map((p) => (
-                        <div className="pf-pos" key={p.id}>
-                          <button type="button" className="pf-closed__toggle" onClick={() => void handleOpenPositionDetails(p.id)}>{p.title} · 0</button>
-                          <button type="button" className="pf-closed__toggle" onClick={() => { const assetId = getCryptoAssetId(p); if (assetId !== null) void changeWalletAssetVisibility(group.accountId, assetId, false); }}>Показать</button>
-                        </div>
-                      ))}
+                      })}>{showHidden ? 'Свернуть скрытые' : `Скрытые монеты · ${hiddenAssets.length}`}</button>
                     </div>
                   )}
                   {activeAssetTypeCode === 'crypto' && groupProtocolPositions.length > 0 && (
@@ -3473,6 +3494,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           const members = visibleCryptoProtocolPositions.filter((item) => lendingGroupKey(item) === lendingGroupKey(position));
                           const protocolValue = sumProtocolValues(members.map(getProtocolValuation));
                           const typeLabel = PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type;
+                          const protocolIconUrl = getCryptoIconUrl(position.asset_symbol, null);
                           let extra = '';
                           if (position.position_type === 'liquidity_pool') {
                             const lp = getLiquidityPoolMetadata(position);
@@ -3497,22 +3519,32 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                               onClick={() => handleOpenProtocolDetails(position.id)}
                             >
                               <div className="pf-pos__identity">
-                                <div className="pf-pos__icon pf-pos__icon--crypto">
-                                  {position.asset_symbol.slice(0, 1).toUpperCase()}
-                                </div>
+                                {protocolIconUrl ? (
+                                  <img className="pf-pos__logo" src={protocolIconUrl} alt="" loading="lazy" />
+                                ) : (
+                                  <div className="pf-pos__icon pf-pos__icon--crypto">
+                                    {position.asset_symbol.slice(0, 1).toUpperCase()}
+                                  </div>
+                                )}
                                 <div className="pf-pos__copy">
                                   <div className="pf-pos__title">{protocolDisplayName(position)}</div>
                                   <div className="pf-pos__sub">
-                                    {position.asset_symbol} · {typeLabel.toLowerCase()}{extra}
+                                    {typeLabel}{extra || ` · ${position.asset_symbol}`}
                                   </div>
                                 </div>
                               </div>
                               <div className="pf-pos__right">
-                                <div className="pf-pos__amount">
-                                  {formatProtocolValue(protocolValue)}
-                                  <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
-                                </div>
-                                {protocolValue === null && <div className="pf-pos__sub">Нет оценки</div>}
+                                {protocolValue === null ? (
+                                  <>
+                                    <div className="pf-pos__amount pf-pos__amount--none">—</div>
+                                    <div className="pf-pos__sub">нет оценки</div>
+                                  </>
+                                ) : (
+                                  <div className="pf-pos__amount">
+                                    {formatProtocolValue(protocolValue)}
+                                    <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                                  </div>
+                                )}
                               </div>
                             </button>
                           );
@@ -3579,6 +3611,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       {/* ══ Operations pane ══ */}
       {portfolioView === 'ops' && (
         <div className="pf-view">
+          {activeAssetTypeCode === 'crypto' && accounts.some(a => a.account.investment_asset_type === 'crypto') && (
+            <div className="pf-ops-tools">
+              <button type="button" className="credits-textbtn" onClick={() => setCorrectionsOpen(true)}>
+                <Pencil strokeWidth={2} /> Исправить операцию
+              </button>
+            </div>
+          )}
           <Operations
             user={user}
             embedded
@@ -4920,8 +4959,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         >
           <div className="pf-detail-body">
             <div className="pf-detail-meta-row">
-              <span className="pf-detail-ticker">{selectedLendingGroup.length > 1 ? selectedLendingGroup.map((item) => item.asset_symbol).join(' + ') : selectedProtocolPosition.asset_symbol}</span>
-              {selectedProtocolPosition.network_code && <span className="pf-detail-pill">{selectedProtocolPosition.network_code}</span>}
+              <span className="pf-detail-ticker pf-detail-ticker--raw">{selectedLendingGroup.length > 1 ? selectedLendingGroup.map((item) => item.asset_symbol).join(' + ') : selectedProtocolPosition.asset_symbol}</span>
+              {selectedProtocolPosition.network_code && <span className="pf-detail-pill">{cryptoNetworkLabel(selectedProtocolPosition.network_code)}</span>}
               <span className="pf-detail-pill">{(PROTOCOL_TYPE_LABELS[selectedProtocolPosition.position_type] ?? selectedProtocolPosition.position_type).toLowerCase()}</span>
             </div>
 
@@ -4961,7 +5000,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <>
                   {selectedLendingGroup.map((item) => (
                     <div className="pf-dstats__cell" key={item.id}>
-                      <span className="pf-dstats__label">Залог {item.asset_symbol}</span>
+                      <span className="pf-dstats__label">Залог</span>
                       <span className="pf-dstats__value">{formatNumericAmount(item.current_quantity ?? item.quantity ?? 0, 8)}</span>
                       <span className="pf-dstats__sub">{item.asset_symbol}</span>
                     </div>
@@ -5048,20 +5087,27 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               )}
               {getProtocolValuation(selectedProtocolPosition).quotes.map((quote) => (
                 <div className="pf-dcond__row" key={quote.crypto_asset_id}>
-                  <span className="pf-dcond__row-label">Курс {quote.symbol} · {quote.source}</span>
-                  <span className="pf-dcond__row-value">{formatAmount(quote.price, user.base_currency_code)}<br />{new Date(quote.fetched_at).toLocaleString('ru-RU')}</span>
+                  <span className="pf-dcond__row-label">Курс {quote.symbol}</span>
+                  <span className="pf-dcond__row-value">
+                    {formatNumericAmount(quote.price, quote.price < 1 ? 6 : 2)} {currencySymbol(user.base_currency_code)}
+                    <span className="pf-dcond__row-note">{cryptoPriceSourceLabel(quote.source)}, {cryptoQuoteTime(quote.fetched_at)}</span>
+                  </span>
                 </div>
               ))}
             </div>
 
             {selectedLendingGroup.length > 1 && (
               <div className="pf-dcond">
-                <p>Залоги счёта</p>
+                <div className="pf-dcond__head"><span className="sec-tag">Залоги счёта</span></div>
                 {selectedLendingGroup.map((item) => (
-                  <button type="button" className="pf-dcond__row" key={item.id}
+                  <button type="button" className="pf-dcond__row pf-dcond__row--pick" key={item.id}
                     aria-pressed={item.id === selectedProtocolPosition.id}
                     onClick={() => handleOpenProtocolDetails(item.id)}>
-                    {item.asset_symbol}{item.id === selectedProtocolPosition.id ? ' · выбран' : ''}
+                    <span className="pf-dcond__row-label">{item.asset_symbol}</span>
+                    <span className="pf-dcond__row-value">
+                      {formatNumericAmount(item.current_quantity ?? item.quantity ?? 0, 8)}
+                      {item.id === selectedProtocolPosition.id ? <Check size={14} strokeWidth={2.4} aria-label="открыт" /> : <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -5146,39 +5192,31 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             </div>
 
             {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type === 'liquidity_pool' && (
-              <div className="pf-sheet-actions"><button type="button" className="btn btn--ghost" onClick={() => setLpSheet({ kind: 'snapshot', positionId: selectedProtocolPosition.id })}>Обновить состав пула</button></div>
-            )}
-            {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type === 'liquidity_pool' && (
-              <div className="pf-sheet-actions">
-                <button
-                  className="btn btn--primary"
-                  type="button"
-                  onClick={() => setLpSheet({ kind: 'add', positionId: selectedProtocolPosition.id })}
-                >
-                  Добавить ликвидность
-                </button>
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => setLpSheet({ kind: 'reward', positionId: selectedProtocolPosition.id })}
-                >
-                  Получить награду
-                </button>
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => setLpSheet({ kind: 'partial', positionId: selectedProtocolPosition.id })}
-                >
-                  Частично снять
-                </button>
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => setLpSheet({ kind: 'close', positionId: selectedProtocolPosition.id })}
-                >
-                  Закрыть позицию
-                </button>
-              </div>
+              <>
+                <div className="cat-actions cat-actions--crypto" role="group" aria-label="Действия с позицией">
+                  <button className="cat-act cat-act--primary" type="button" onClick={() => setLpSheet({ kind: 'add', positionId: selectedProtocolPosition.id })}>
+                    <span className="cat-act__ico"><Plus strokeWidth={2.2} /></span>
+                    <span className="cat-act__label">Добавить</span>
+                  </button>
+                  <button className="cat-act" type="button" onClick={() => setLpSheet({ kind: 'reward', positionId: selectedProtocolPosition.id })}>
+                    <span className="cat-act__ico"><Gift strokeWidth={2} /></span>
+                    <span className="cat-act__label">Награда</span>
+                  </button>
+                  <button className="cat-act" type="button" onClick={() => setLpSheet({ kind: 'partial', positionId: selectedProtocolPosition.id })}>
+                    <span className="cat-act__ico"><ArrowUpFromLine strokeWidth={2} /></span>
+                    <span className="cat-act__label">Снять часть</span>
+                  </button>
+                  <button className="cat-act" type="button" onClick={() => setLpSheet({ kind: 'snapshot', positionId: selectedProtocolPosition.id })}>
+                    <span className="cat-act__ico"><RefreshCw strokeWidth={2} /></span>
+                    <span className="cat-act__label">Состав</span>
+                  </button>
+                </div>
+                <div className="pf-sheet-actions">
+                  <button className="btn btn--ghost" type="button" onClick={() => setLpSheet({ kind: 'close', positionId: selectedProtocolPosition.id })}>
+                    Закрыть позицию
+                  </button>
+                </div>
+              </>
             )}
 
             {selectedProtocolPosition.status === 'open' && selectedProtocolPosition.position_type !== 'liquidity_pool' && (() => {
@@ -5191,91 +5229,77 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               };
               if (isLending) {
                 return (
-                  <div className="pf-sheet-actions">
-                    <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('group')}>
-                      Общий счёт протокола
-                    </button>
-                    {hasDebt && <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('interest')}>
-                      Начислить проценты по долгу
-                    </button>}
-                    {hasDebt &&
-                      <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('liquidate')}>
-                        Учесть ликвидацию
-                      </button>}
-                    <button
-                      className="btn btn--primary"
-                      type="button"
-                      onClick={() => openLendingSheet('yield')}
-                    >
-                      Начислить доход на залог
-                    </button>
-                    <button
-                      className="btn btn--ghost"
-                      type="button"
-                      onClick={() => openLendingSheet('top_up')}
-                    >
-                      Долить из актива
-                    </button>
-                    <button
-                      className="btn btn--ghost"
-                      type="button"
-                      onClick={() => openLendingSheet('take_debt')}
-                    >
-                      {hasDebt ? 'Взять ещё в долг' : 'Взять в долг'}
-                    </button>
-                    {hasDebt && (
-                      <button
-                        className="btn btn--ghost"
-                        type="button"
-                        onClick={() => openLendingSheet('repay_debt')}
-                      >
-                        Погасить долг
+                  <>
+                    <div className="pf-act-group">
+                      <span className="sec-tag">Залог</span>
+                      <div className="cat-actions pf-act-group__tiles" role="group" aria-label="Залог">
+                        <button className="cat-act cat-act--primary" type="button" onClick={() => openLendingSheet('yield')}>
+                          <span className="cat-act__ico"><Percent strokeWidth={2.2} /></span>
+                          <span className="cat-act__label">Доход</span>
+                        </button>
+                        <button className="cat-act" type="button" onClick={() => openLendingSheet('top_up')}>
+                          <span className="cat-act__ico"><Plus strokeWidth={2} /></span>
+                          <span className="cat-act__label">Добавить</span>
+                        </button>
+                        <button className="cat-act" type="button" onClick={() => openLendingSheet('partial')}>
+                          <span className="cat-act__ico"><ArrowUpFromLine strokeWidth={2} /></span>
+                          <span className="cat-act__label">Снять</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="pf-act-group">
+                      <span className="sec-tag">Долг</span>
+                      <div className="cat-actions pf-act-group__tiles" role="group" aria-label="Долг">
+                        <button className="cat-act" type="button" onClick={() => openLendingSheet('take_debt')}>
+                          <span className="cat-act__ico"><HandCoins strokeWidth={2} /></span>
+                          <span className="cat-act__label">{hasDebt ? 'Занять ещё' : 'Занять'}</span>
+                        </button>
+                        {hasDebt && (
+                          <button className="cat-act" type="button" onClick={() => openLendingSheet('repay_debt')}>
+                            <span className="cat-act__ico"><ArrowDownToLine strokeWidth={2} /></span>
+                            <span className="cat-act__label">Погасить</span>
+                          </button>
+                        )}
+                        {hasDebt && (
+                          <button className="cat-act" type="button" onClick={() => openLendingSheet('interest')}>
+                            <span className="cat-act__ico"><Percent strokeWidth={2} /></span>
+                            <span className="cat-act__label">Проценты</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="pf-sheet-actions">
+                      {hasDebt && (
+                        <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('liquidate')}>
+                          <Zap size={15} strokeWidth={2} /> Учесть ликвидацию
+                        </button>
+                      )}
+                      <button className="btn btn--ghost" type="button" onClick={() => openLendingSheet('group')}>
+                        <Link2 size={15} strokeWidth={2} /> Общий счёт протокола
                       </button>
-                    )}
-                    <button
-                      className="btn btn--ghost"
-                      type="button"
-                      onClick={() => openLendingSheet('partial')}
-                    >
-                      Снять из залога
-                    </button>
-                    <button
-                      className="btn btn--ghost"
-                      type="button"
-                      disabled={hasDebt}
-                      title={hasDebt ? 'Сначала погаси долг' : undefined}
-                      onClick={() => openLendingSheet('close')}
-                    >
-                      Закрыть лендинг
-                    </button>
-                  </div>
+                      <button className="btn btn--ghost" type="button" disabled={hasDebt} title={hasDebt ? 'Сначала погаси долг' : undefined} onClick={() => openLendingSheet('close')}>
+                        <X size={15} strokeWidth={2} /> Закрыть лендинг
+                      </button>
+                    </div>
+                  </>
                 );
               }
               return (
-                <div className="pf-sheet-actions">
-                  <button
-                    className="btn btn--primary"
-                    type="button"
-                    onClick={() => openLendingSheet('yield')}
-                  >
-                    Начислить монеты
+                <div className="cat-actions cat-actions--crypto" role="group" aria-label="Действия с позицией">
+                  <button className="cat-act cat-act--primary" type="button" onClick={() => openLendingSheet('yield')}>
+                    <span className="cat-act__ico"><Plus strokeWidth={2.2} /></span>
+                    <span className="cat-act__label">Начислить</span>
                   </button>
-                  <button
-                    className="btn btn--ghost"
-                    type="button"
-                    onClick={() => {
-                      setSelectedProtocolPositionId(null);
-                      setPartialCloseProtocolId(selectedProtocolPosition.id);
-                    }}
-                  >
-                    Частичный вывод
+                  <button className="cat-act" type="button" onClick={() => {
+                    setSelectedProtocolPositionId(null);
+                    setPartialCloseProtocolId(selectedProtocolPosition.id);
+                  }}>
+                    <span className="cat-act__ico"><ArrowUpFromLine strokeWidth={2} /></span>
+                    <span className="cat-act__label">Снять часть</span>
                   </button>
-                  <button
-                    className="btn btn--ghost"
-                    type="button"
-                    onClick={() => handleOpenStakingCloseForm(selectedProtocolPosition)}
-                  >
-                    Вывести обратно в актив
+                  <button className="cat-act" type="button" onClick={() => handleOpenStakingCloseForm(selectedProtocolPosition)}>
+                    <span className="cat-act__ico"><ArrowDownToLine strokeWidth={2} /></span>
+                    <span className="cat-act__label">Вывести всё</span>
                   </button>
                 </div>
               );

@@ -12365,6 +12365,7 @@ select.dlg-row__ghost option {
   margin-bottom: 0;
 }
 .sheet--gray .cat-act:not(.cat-act--primary) { background: var(--surface); box-shadow: var(--sh-1); }
+.sheet--gray .cat-act:not(.cat-act--primary) .cat-act__ico { background: var(--surface-inset); }
 .cat-act:disabled { opacity: .45; cursor: default; transform: none; }
 
 .ca-sheet__funding {
@@ -12391,3 +12392,74 @@ select.dlg-row__ghost option {
 }
 .ca-sheet__hide { align-self: center; font-size: 12.5px; margin: 0; }
 .ca-sheet__row-link { margin: -4px -8px -4px auto; padding: 4px 8px; font-size: 12px; }
+
+/* Crypto positions list */
+.pf-grp__flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-inset);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.pf-grp__more {
+  display: block;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  border-top: 1px solid var(--line, rgba(0,0,0,.06));
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+.pf-grp__more:active { background: var(--bg); }
+.pf-pos--hidden { cursor: default; }
+.pf-pos--hidden .pf-pos__identity {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  opacity: .6;
+}
+.pf-pos__show {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pf-pos__amount--none { color: var(--text-3); }
+.pf-ops-tools { display: flex; justify-content: flex-end; padding: 0 4px 6px; }
+
+/* DeFi sheet */
+.pf-detail-ticker--raw { text-transform: none; letter-spacing: 0; }
+.pf-dcond__row-value { overflow-wrap: anywhere; }
+.pf-dcond__row-note { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+.pf-dcond__row--pick {
+  width: 100%;
+  border-top: 0; border-left: 0; border-right: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  align-items: center;
+}
+.pf-dcond__row--pick .pf-dcond__row-value { display: inline-flex; align-items: center; gap: 6px; }
+.pf-dcond__row--pick svg { color: var(--text-3); flex-shrink: 0; }
+.pf-dcond__row--pick[aria-pressed='true'] .pf-dcond__row-label { color: var(--text); font-weight: 600; }
+.pf-dcond__row--pick[aria-pressed='true'] svg { color: var(--pos); }
+.pf-act-group { display: flex; flex-direction: column; gap: 8px; }
+.pf-act-group .sec-tag { padding-left: 2px; }
+.pf-act-group__tiles { margin-bottom: 0; }
