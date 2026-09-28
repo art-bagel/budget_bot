@@ -1105,7 +1105,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     const monthFormat: Intl.DateTimeFormatOptions['month'] = entries.length > 6 ? 'narrow' : 'short';
     return entries.map(([period, values]) => ({
       period,
-      label: new Date(period).toLocaleDateString('ru-RU', { month: monthFormat }),
+      label: new Date(period).toLocaleDateString('ru-RU', { month: monthFormat }).replace('.', ''),
       income: values.income,
       trades: values.trades,
       total: values.income + values.trades + values.adjustments,
