@@ -290,8 +290,8 @@ async def identities(db, mutations, server_graph):
             """insert into crypto_replay_identity(id,source_event_id,revision,command_index,table_name,row_key,after_row)
             values($1,$2,1,$3,$4,$5::jsonb,$6::jsonb)""",
             m["id"], m["source_event_id"], m["command_index"], m["table_name"], json.dumps({"id": row["id"]}), json.dumps(row))
-    # Advance sequences beyond reserved identities before any new inserts.
-    for table, ids in reserved.items():
+    # Advance sequences beyond reserved identities and seeded definitions before any new inserts.
+    for table, ids in {**reserved, "bank_accounts": set(), "crypto_assets": set()}.items():
         seq = await db.fetchval("select pg_get_serial_sequence($1,'id')", "budgeting." + table)
         if seq:
             highest = await db.fetchval(f"select coalesce(max(id),0) from budgeting.{table}")
@@ -423,7 +423,14 @@ async def verify(db, journal, snapshot, original, mapping, sources):
         join lateral (select count(*) n,sum(amount_remaining) q,sum(cost_base_remaining) c from budgeting.fx_lots f
         where f.bank_account_id=b.bank_account_id and f.currency_code=b.currency_code) l on l.n>0
         where b.currency_code<>'RUB' and (b.amount<>l.q or b.historical_cost_in_base<>l.c)""")
-    # 7. Repeat every request and the ordinary gift settlement: both read-only.
+    # 7. Every identity sequence is ahead of its table, so ordinary inserts work after the release.
+    for r in await db.fetch("""select c.relname t,pg_get_serial_sequence('budgeting.'||c.relname,'id') s from pg_class c
+        join pg_namespace n on n.oid=c.relnamespace join pg_attribute a on a.attrelid=c.oid and a.attname='id'
+        where n.nspname='budgeting' and c.relkind='r'"""):
+        if r["s"]:
+            assert await db.fetchval(f"select coalesce(max(id),0) from budgeting.{r['t']}") <= await db.fetchval(
+                f"select last_value from {r['s']}"), ("Sequence behind table", r["t"])
+    # 8. Repeat every request and the ordinary gift settlement: both read-only.
     before = await fingerprint(db)
     for s in await db.fetch("select * from budgeting.crypto_source_events order by occurred_at,order_in_timestamp"):
         result = await db.fetchval(
