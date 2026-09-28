@@ -12360,3 +12360,24 @@ select.dlg-row__ghost option {
 
 .auth__secondary:hover { color: var(--text-primary); }
 .auth__secondary:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Crypto summaries include financing components rather than brokerage-only metrics. */
+.pf-tsum__grid--crypto {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.pf-tsum__grid--crypto .pf-tsum__cell {
+  padding: 0;
+  gap: 6px;
+}
+.pf-tsum__grid--crypto .pf-tsum__cell-label {
+  white-space: normal;
+  overflow: visible;
+}
+.pf-tsum__funding {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}

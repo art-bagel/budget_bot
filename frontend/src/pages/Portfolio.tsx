@@ -3026,7 +3026,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <span className={`pf-hero__row-dot pf-hero__row-dot--${tab.code}`} />
             <span className="pf-hero__row-label">{tab.label}</span>
             <span className="pf-hero__row-value">
-              {tab.valuationIncomplete ? '≈ ' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
               <span className="pf-hero__row-sym">{currencySymbol(user.base_currency_code)}</span>
             </span>
             <span className="pf-hero__row-chev">›</span>
@@ -3166,7 +3166,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </div>
                 <div className="pf-tsum__now-period">{activeScopeMarketIncomplete ? 'Рыночная оценка неполная' : activeScopeDisplayMetrics.resultLabel}</div>
               </div>
-              <div className="pf-tsum__grid">
+              <div className={`pf-tsum__grid${activeScopeHasCrypto ? ' pf-tsum__grid--crypto' : ''}`}>
                 <div className="pf-tsum__cell">
                   <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
                   <div className="pf-tsum__cell-value">
@@ -3176,13 +3176,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </div>
                 {activeScopeDisplayMetrics.fundingParts.length > 0 && (
                   <div className="pf-tsum__cell">
-                    <div className="pf-tsum__cell-label">Непогашенные займы</div>
+                    <div className="pf-tsum__cell-label">Незакрытое финансирование</div>
                     {activeScopeDisplayMetrics.fundingParts.map((part) => (
-                      <div key={part.loan}>+ {formatNumericAmount(part.quantity, 12)} {part.symbol}</div>
+                      <div className="pf-tsum__funding" key={part.loan}>{formatNumericAmount(part.quantity, 8)} {part.symbol}</div>
                     ))}
                   </div>
                 )}
-                <div className="pf-tsum__cell pf-tsum__cell--mid">
+                {!activeScopeHasCrypto && <div className="pf-tsum__cell pf-tsum__cell--mid">
                   <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
                   <div className={`pf-tsum__cell-value${activeScopeResultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
                     {!activeScopeHasCrypto && (activeScopeResultValue >= 0 ? '+' : '')}
@@ -3200,14 +3200,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {activeScopeResultPct.toFixed(1)}%
                     </div>
                   )}
-                </div>
-                <div className="pf-tsum__cell">
+                </div>}
+                {(!activeScopeHasCrypto || activeScopeDisplayMetrics.cashValue !== 0) && <div className="pf-tsum__cell">
                   <div className="pf-tsum__cell-label">Свободно</div>
                   <div className="pf-tsum__cell-value">
                     {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.cashValue)}
                     <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                   </div>
-                </div>
+                </div>}
               </div>
             </div>
           )}
