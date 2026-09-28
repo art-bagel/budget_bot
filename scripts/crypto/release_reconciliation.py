@@ -4,6 +4,7 @@ Every budget difference is attributed to the operation that causes it; the
 columns must add up exactly. Writes private evidence to outputs/.
 """
 
+import argparse
 import asyncio
 import json
 from collections import defaultdict
@@ -13,7 +14,6 @@ import asyncpg
 import prepare_docker_history as prep
 import rehearse_release as release
 
-OUT = release.OUT.parent
 
 
 async def connect(name):
@@ -88,7 +88,7 @@ async def main():
             portfolio_candidate=[dict(x) for x in await cand.fetch(portfolio)],
             income_operations={n: await db.fetchval("select count(*) from budgeting.operations where type='income'") for n, db in (("production", prod), ("candidate", cand))},
         )
-        (OUT / "reconciliation.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        (release.OUT.parent / "reconciliation.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         print(json.dumps(report, ensure_ascii=False, indent=1, default=str))
     finally:
         for db in (prod, review, cand):
@@ -96,4 +96,10 @@ async def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--database", default=release.DB)
+    parser.add_argument("--snapshot", default=release.SNAPSHOT)
+    parser.add_argument("--out", default=str(release.OUT), help="Replay evidence directory; the report is written next to it")
+    args = parser.parse_args()
+    release.DB, release.SNAPSHOT, release.OUT = args.database, args.snapshot, type(release.ROOT)(args.out)
     asyncio.run(main())

@@ -22,8 +22,12 @@ ROOT = prep.ROOT
 DB = "crypto_release_20260929"
 # Untouched restore of the fresh production dump; compared, never modified.
 SNAPSHOT = "crypto_prod_20260928_211943"
-# The copy the owner reviewed and edited through the ordinary interface.
+# The copy the owner reviewed and edited through the ordinary interface, and
+# the production copy it was built on. Production rows absent from BASE are
+# production-only and must appear in the candidate exactly once.
 JOURNAL = "crypto_review_20260928"
+JOURNAL_DIGEST = "2841bf76b91b573e84abbc9731d9e2ac"  # frozen review journal, 2035 sources
+BASE = "crypto_prod_20260928_134135"
 OUT = ROOT / "outputs/crypto-release-2026-09-29/replay"
 SERVER = 21225
 # Review sources that must not reach production, decided by meaning.
@@ -39,9 +43,6 @@ EXCLUDED_NONJOURNAL = {1023400: "reversal of the trial operation 1023399 (source
 REPAIR_SOURCE = 2289
 PRE_REPAIR = "304bed1^"
 SETTLE = "infra/db/Scripts/budgeting/func/put__settle_crypto_fiat_sale.sql"
-# Production rows added after the review copy was taken. Their budget effect is
-# the only expected difference from review; 21274 replaces review source 2290.
-PRODUCTION_ONLY = {21273: {88: Decimal("716"), 105: Decimal("-716")}, 21274: {}}
 PRESERVED_EXCEPTIONS = ("current_bank_balances", "current_budget_balances", "current_crypto_balances",
                         "schema_migrations", "sessions")
 
@@ -73,10 +74,11 @@ async def main(verify_only=False):
     db = await asyncpg.connect(**{**cfg, "database": DB})
     journal = await asyncpg.connect(**{**cfg, "database": JOURNAL})
     snapshot = await asyncpg.connect(**{**cfg, "database": SNAPSHOT})
-    for ro in (journal, snapshot):
+    base = await asyncpg.connect(**{**cfg, "database": BASE})
+    for ro in (journal, snapshot, base):
         await ro.execute("set default_transaction_read_only=on")
     try:
-        assert cfg["host"] == "127.0.0.1" and DB.startswith("crypto_release_")
+        assert cfg["host"] == "127.0.0.1" and DB.startswith("crypto_release_") and SNAPSHOT.startswith("crypto_prod_")
         assert await db.fetchval("select current_database()") == DB
         assert await db.fetchval("select count(*) from budgeting.schema_migrations where filename='049_archive_import_accounts.sql'") == 1
         sources, excluded = await portable_sources(journal, snapshot)
@@ -86,7 +88,7 @@ async def main(verify_only=False):
             tx = db.transaction()
             await tx.start()
             try:
-                report = await verify(db, journal, snapshot, original, mapping, sources)
+                report = await verify(db, journal, snapshot, base, original, mapping, sources)
             finally:
                 await tx.rollback()
             (OUT / "result-verify-only.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str))
@@ -173,11 +175,11 @@ async def main(verify_only=False):
                 "select exists(select 1 from budgeting.portfolio_positions where metadata->>'crypto_asset_id'='2' and quantity<>0)")
             await db.execute(
                 "update budgeting.crypto_assets set metadata=metadata||jsonb_build_object('canonical_asset_id',15) where id=2")
-            report = await verify(db, journal, snapshot, original, mapping, sources)
+            report = await verify(db, journal, snapshot, base, original, mapping, sources)
             (OUT / "result.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         print("Full replay committed after verification", flush=True)
     finally:
-        for c in (db, journal, snapshot):
+        for c in (db, journal, snapshot, base):
             await c.close()
 
 
@@ -209,6 +211,8 @@ async def portable_sources(journal, snapshot):
             and r["comment"] != "Неучтённые расходы: остаток после восстановления криптопокупок (замена 19911)"] == list(EXCLUDED_NONJOURNAL)
     assert not await journal.fetchval(
         "select count(*) from budgeting.crypto_source_events where revision<>1 or id in (select source_event_id from budgeting.crypto_source_corrections)")
+    assert await journal.fetchval("""select md5(string_agg(id::text||':'||revision||':'||commands::text||':'||evidence::text,E'\n' order by id))
+        from budgeting.crypto_source_events""") == JOURNAL_DIGEST, "Review journal changed after the accepted rehearsal"
     sources = [dict(r) for r in await journal.fetch(
         "select * from budgeting.crypto_source_events where not (id=any($1::bigint[])) order by occurred_at,order_in_timestamp",
         list(EXCLUDED))]
@@ -300,7 +304,14 @@ async def identities(db, mutations, server_graph):
     return mapping
 
 
-async def verify(db, journal, snapshot, original, mapping, sources):
+async def effects(conn, ops):
+    """Net bank and budget postings of the given operations."""
+    return [{(r[0], r[1]): r[2] for r in await conn.fetch(
+        f"select {key},currency_code,sum(amount) from budgeting.{table} where operation_id=any($1::bigint[]) group by 1,2", ops)}
+        for table, key in (("bank_entries", "bank_account_id"), ("budget_entries", "category_id"))]
+
+
+async def verify(db, journal, snapshot, base, original, mapping, sources):
     def moved(table, ident):
         return mapping.get(table, {}).get(str(ident), ident)
 
@@ -344,11 +355,15 @@ async def verify(db, journal, snapshot, original, mapping, sources):
         (select jsonb_agg(jsonb_build_array(bank_account_id,currency_code,amount) order by bank_account_id,currency_code,amount) from budgeting.bank_entries where operation_id=o.id) bank,
         (select jsonb_agg(jsonb_build_array(category_id,amount) order by category_id,amount) from budgeting.budget_entries where operation_id=o.id) budget
         from budgeting.operations o"""
-    for op in PRODUCTION_ONLY:
+    base_ops = {r["id"] for r in await base.fetch("select id from budgeting.operations")}
+    assert base_ops <= production_ops, "Production lost operations after the review base"
+    production_only = sorted(production_ops - base_ops)
+    for op in production_only:
         same = await db.fetchval(f"select count(*) from ({signature}) a join ({signature} where o.id=$1) b on a.type=b.type and a.operated_on=b.operated_on and a.comment is not distinct from b.comment and a.bank is not distinct from b.bank and a.budget is not distinct from b.budget", op)
         assert same == 1, ("Production operation not exactly once", op, same)
     assert not await db.fetchval(
         "select count(*) from budgeting.operations o join budgeting.bank_entries b on b.operation_id=o.id where o.comment='Браслет для часов' and o.id<>21274")
+    assert 21274 in production_only
     income = [r["id"] for r in await db.fetch("select id from budgeting.operations where type='income' order by id")]
     assert income == sorted(r["id"] for r in original["operations"] if r["type"] == "income"), "New income"
     assert await db.fetchval("select sum(amount) from budgeting.bank_entries where operation_id=$1", SERVER) == Decimal("-2835")
@@ -399,18 +414,36 @@ async def verify(db, journal, snapshot, original, mapping, sources):
     review_costs = {moved("operations", r["op"]): (r["qty"], r["cost"]) for r in await journal.fetch(q)}
     review_costs.pop(1023399, None)
     assert review_costs == {r["op"]: (r["qty"], r["cost"]) for r in await db.fetch(q)}, "USD expense costs differ from review"
-    # 5. Bank and budget balances: review plus production-only rows, nothing else.
-    bank = "select bank_account_id,currency_code,amount,historical_cost_in_base from budgeting.current_bank_balances order by 1,2"
-    assert [tuple(r) for r in await db.fetch(bank)] == [tuple(r) for r in await journal.fetch(bank)], "Bank balances differ from review"
+    # 5. Bank and budget balances: review minus excluded review entries plus
+    # production-only operations, nothing else.
+    excluded_ops = [r[0] for r in await journal.fetch(
+        """select distinct (after_row->>'id')::bigint from budgeting.crypto_source_mutations
+        where table_name='operations' and before_row is null and source_event_id=any($1::bigint[])""", list(EXCLUDED))]
+    excluded_ops += list(EXCLUDED_NONJOURNAL)
+    added_bank, added_budget = await effects(snapshot, production_only)
+    removed_bank, removed_budget = await effects(journal, excluded_ops)
+
+    def expected(review, added, removed):
+        keys = set(review) | set(added) | set(removed)
+        return {k: review.get(k, 0) + added.get(k, 0) - removed.get(k, 0) for k in keys}
+
+    def same(expect, actual):
+        return [(k, expect.get(k), actual.get(k)) for k in set(expect) | set(actual) if expect.get(k, 0) != actual.get(k, 0)]
+
+    bank = "select bank_account_id,currency_code,amount,historical_cost_in_base from budgeting.current_bank_balances"
+    review_bank = {(r[0], r[1]): (r[2], r[3]) for r in await journal.fetch(bank)}
+    candidate_bank = {(r[0], r[1]): (r[2], r[3]) for r in await db.fetch(bank)}
+    delta = expected({}, added_bank, removed_bank)
+    assert not same(expected({k: v[0] for k, v in review_bank.items()}, added_bank, removed_bank),
+                    {k: v[0] for k, v in candidate_bank.items()}), "Bank balances differ from review"
+    for key, (_amount, cost) in candidate_bank.items():
+        change = delta.get(key, 0)
+        assert change == 0 or key[1] == "RUB", ("Production-only foreign currency posting needs a manual check", key)
+        assert cost == review_bank.get(key, (0, 0))[1] + round(change, 2), ("Bank cost differs from review", key)
     budget = "select category_id,currency_code,amount from budgeting.current_budget_balances"
     review_budget = {(r[0], r[1]): r[2] for r in await journal.fetch(budget)}
-    for effect in PRODUCTION_ONLY.values():
-        for category, delta in effect.items():
-            review_budget[(category, "RUB")] += delta
     candidate_budget = {(r[0], r[1]): r[2] for r in await db.fetch(budget)}
-    assert candidate_budget == review_budget, [
-        (k, review_budget.get(k), candidate_budget.get(k)) for k in set(review_budget) | set(candidate_budget)
-        if review_budget.get(k) != candidate_budget.get(k)]
+    assert not same(expected(review_budget, added_budget, removed_budget), candidate_budget), "Budget differs from review"
     # 6. Linked payments consume their own sale lot; FX lots equal balances.
     assert await db.fetchval("""select count(*) from budgeting.portfolio_events e where e.metadata->>'action'='fiat_sell'
         and e.metadata->>'target_bank_account_id'='73' and e.currency_code='USD' and e.metadata ? 'manual_expense_settlement'
@@ -443,7 +476,8 @@ async def verify(db, journal, snapshot, original, mapping, sources):
     assert before == await fingerprint(db), "Repeat changed accounting"
     free = await db.fetchval("select sum(amount) from budgeting.current_budget_balances where category_id in (88,89)")
     return dict(
-        database=DB, snapshot=SNAPSHOT, journal=JOURNAL, sources=len(sources), excluded=EXCLUDED,
+        database=DB, snapshot=SNAPSHOT, journal=JOURNAL, base=BASE, sources=len(sources), excluded=EXCLUDED,
+        production_only_operations=production_only,
         preserved_rows=preserved, remapped={t: len(v) for t, v in mapping.items()},
         crypto_state_equals_review=True, usd_expense_costs_equal_review=True, bank_balances_equal_review=True,
         budget_equals_review_plus_production_only=True, no_new_income=True,
@@ -462,4 +496,9 @@ async def verify(db, journal, snapshot, original, mapping, sources):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify-only", action="store_true", help="Verify the existing rehearsal in a rolled-back transaction")
-    asyncio.run(main(parser.parse_args().verify_only))
+    parser.add_argument("--database", default=DB, help="Local candidate database (crypto_release_*)")
+    parser.add_argument("--snapshot", default=SNAPSHOT, help="Untouched local restore of the production dump (crypto_prod_*)")
+    parser.add_argument("--out", default=str(OUT), help="Private evidence directory under outputs/")
+    args = parser.parse_args()
+    DB, SNAPSHOT, OUT = args.database, args.snapshot, type(ROOT)(args.out)
+    asyncio.run(main(args.verify_only))
