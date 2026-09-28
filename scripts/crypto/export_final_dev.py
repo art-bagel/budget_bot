@@ -118,7 +118,7 @@ async def run(database, history_cutoff, output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--database', choices=['budget_bot','crypto_merge_preview'], default='budget_bot')
+    parser.add_argument('--database', choices=['budget_bot','crypto_merge_preview','crypto_release_20260929'], default='budget_bot')
     parser.add_argument('--history-cutoff', required=True, help='Explicit ISO timestamp of the verified history boundary')
     parser.add_argument('--output', type=type(ROOT), default=ROOT / 'outputs/crypto-final')
     args = parser.parse_args()
