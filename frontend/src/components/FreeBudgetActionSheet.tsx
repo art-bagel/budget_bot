@@ -54,17 +54,7 @@ export default function FreeBudgetActionSheet({ personal, family, sources, baseC
 
   const selectedSource = visibleSources.find((s) => String(s.category_id) === sourceId) || null;
   const amountValue = parseFloat(amount);
-  const hasPositiveBalance = (selectedSource?.balance || 0) > 0;
-  const exceedsBalance = !!selectedSource && amountValue > selectedSource.balance;
-  const validationMsg = !selectedSource
-    ? null
-    : !hasPositiveBalance
-      ? 'В выбранной категории нет денег для перевода.'
-      : exceedsBalance
-        ? `Нельзя перевести больше: ${formatAmount(selectedSource.balance, selectedSource.currency_code)}.`
-        : null;
-
-  const canSubmit = !submitting && !!selectedSource && amountValue > 0 && !validationMsg;
+  const canSubmit = !submitting && !!selectedSource && amountValue > 0;
 
   const handleTargetSelect = (t: FreeBudgetTarget) => {
     setActiveTarget(t);
@@ -77,7 +67,7 @@ export default function FreeBudgetActionSheet({ personal, family, sources, baseC
   };
 
   const handleSubmit = async () => {
-    if (!selectedSource || amountValue <= 0 || validationMsg) return;
+    if (!selectedSource || amountValue <= 0) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -262,7 +252,6 @@ export default function FreeBudgetActionSheet({ personal, family, sources, baseC
           )}
         </div>
 
-        {validationMsg && <p className="dlg-error">{validationMsg}</p>}
 
         <div className="field">
           <span className="fl">Сумма</span>

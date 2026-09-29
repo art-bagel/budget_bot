@@ -114,7 +114,9 @@ BEGIN
     WHERE category_id IN (_from_category_id, _fx_category_id)
       AND currency_code = _base_currency_code;
 
-    IF _from_balance < round(_amount_in_base, 2) THEN
+    -- A regular category may go negative, as after an expense; the free
+    -- budget (Unallocated + FX Result) may not.
+    IF _from_kind = 'system' AND _from_balance < round(_amount_in_base, 2) THEN
         RAISE EXCEPTION 'Insufficient budget in category %', _from_category_id;
     END IF;
 

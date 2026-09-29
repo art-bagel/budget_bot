@@ -180,8 +180,10 @@ BEGIN
         FROM budget_entries
         WHERE operation_id = _operation_id
     LOOP
-        IF _budget_entry.amount > 0 THEN
-            -- Unallocated is spendable together with FX Result, as in allocations.
+        -- Regular categories may go negative, as in allocations; only the free
+        -- budget (Unallocated together with FX Result) must cover a reversal.
+        IF _budget_entry.amount > 0
+           AND EXISTS (SELECT 1 FROM categories WHERE id = _budget_entry.category_id AND kind = 'system') THEN
             SELECT COALESCE(sum(b.amount), 0)
             INTO _current_budget
             FROM current_budget_balances b
