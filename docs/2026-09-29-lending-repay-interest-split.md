@@ -1,6 +1,8 @@
 # Погашение долга: проценты подставляются автоматически
 
-29.09.2026, ветка `codex/crypto-accounting-recovery`.
+29.09.2026, ветка `codex/crypto-accounting-recovery`. Выкачено в production
+14:50 UTC (`3c94dbb`, run 36585361753): web отдаёт `index-BRO67gcy.js`, как dev,
+принятый владельцем; md5 `put__lending_repay_debt` совпадает с dev.
 
 ## Что было
 
