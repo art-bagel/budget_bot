@@ -5357,7 +5357,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         const TYPE_TILES = [
           { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
           { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
-          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
+          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, GRAM и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
           { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
         ];
         const resolvedTypeCode = addSheetTypeCode ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0];
@@ -5531,7 +5531,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <input
                         className="apf-input"
                         type="text"
-                        placeholder="Например: TON/USDT"
+                        placeholder="Например: GRAM/USDT"
                         value={stakingCreateDraft.poolName}
                         onChange={(event) => setStakingCreateDraft((prev) => ({ ...prev, poolName: event.target.value }))}
                         disabled={submittingStakingCreateAccountId !== null}
@@ -6104,7 +6104,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         const ACCOUNT_TYPE_TILES = [
           { code: 'security' as const, label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
           { code: 'deposit'  as const, label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
-          { code: 'crypto'   as const, label: 'Крипта',          sub: 'BTC, ETH, TON и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
+          { code: 'crypto'   as const, label: 'Крипта',          sub: 'BTC, ETH, GRAM и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
           { code: 'other'    as const, label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
         ];
         const selectedTile = ACCOUNT_TYPE_TILES.find((t) => t.code === newAccountAssetType);

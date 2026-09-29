@@ -6,7 +6,7 @@ const LOCAL_COIN_ICONS: Record<string, string> = {
   HGRAM: 'hgram.svg', HMSTR: 'hmstr.png', HPO: 'hpo.svg', HYDRA: 'hydra.png', JETTON: 'jetton.png',
   MAJOR: 'major.png', NOT: 'not.png', 'PT EUSDT': 'pt_eusdt.png', 'PT STGUSD': 'pt_stgusd.png',
   STGRAM: 'stgram.png', STGUSD: 'stgusd.svg', STON: 'ston.png', STXP: 'stxp.png', TGUSD: 'tgusd.svg',
-  'TON-SLP': 'ton-slp.png', TON: 'ton.png', TSTON: 'tston.svg', USDC: 'usdc.png', USDT: 'usdt.png',
+  'TON-SLP': 'ton-slp.png', GRAM: 'ton.png', TON: 'ton.png', TSTON: 'tston.svg', USDC: 'usdc.png', USDT: 'usdt.png',
   'YT STGUSD': 'yt_stgusd.png',
 };
 
