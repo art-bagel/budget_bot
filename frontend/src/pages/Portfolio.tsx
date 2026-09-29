@@ -4031,7 +4031,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {selectedPosition.asset_type_code === 'crypto' ? (
                         <>
                           <span className="pf-dstats__value">
-                            {detailCryptoLivePrice ? formatNumericAmount(detailCryptoLivePrice.price, 2) : '—'}
+                            {detailCryptoLivePrice ? formatNumericAmount(detailCryptoLivePrice.price, detailCryptoLivePrice.price < 1 ? 6 : 2) : '—'}
                           </span>
                           <span className="pf-dstats__sub">{detailCryptoLivePrice ? `${user.base_currency_code} · онлайн` : 'нет данных'}</span>
                         </>

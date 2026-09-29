@@ -18,9 +18,18 @@ logger = logging.getLogger(__name__)
 CACHE: dict[tuple[str, str], tuple[datetime, float]] = {}
 TTL = timedelta(minutes=2)
 MAX_AGE = timedelta(minutes=30)
+# Telegram Wallet holds these as TON jettons; masters are TonAPI-whitelisted.
+# Keyed by the exact service identity the import writes, not by ticker.
+TELEGRAM_WALLET_JETTONS = {
+    "service:telegram:DOGS": "0:afc49cb8786f21c87045b19ede78fc6b46c51048513f8e9a6d44060199c1bf0c",
+    "service:telegram:MAJOR": "0:ae3e6d351e576276e439e7168117fd64696fd6014cb90c77b2f2cbaacd4fcc00",
+    "service:telegram:HMSTR": "0:09f2e59dec406ab26a5259a45d7ff23ef11f3e5c7c21de0b0d2a1cbe52b76b3d",
+}
 
 
 def master_address(asset: dict) -> str | None:
+    if asset.get("network_code") == "telegram":
+        return TELEGRAM_WALLET_JETTONS.get(asset.get("contract_address"))
     if asset.get("network_code") != "ton":
         return None
     address = asset.get("contract_address")

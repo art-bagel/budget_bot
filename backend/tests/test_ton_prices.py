@@ -31,6 +31,11 @@ class TonPricesTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(master_address(dict(native, symbol="GRAM")), "GRAM")
         self.assertIsNone(master_address(dict(native, symbol="USDT")))
         self.assertIsNone(master_address(dict(native, network_code="manual")))
+        dogs = dict(id=26, symbol="DOGS", network_code="telegram",
+                    contract_address="service:telegram:DOGS")
+        self.assertTrue(master_address(dogs).startswith("0:afc49cb8"))
+        self.assertIsNone(master_address(dict(dogs, contract_address="service:telegram:X")))
+        self.assertIsNone(master_address(dict(dogs, network_code="manual")))
 
     async def test_native_ton_is_quoted(self):
         response = httpx.Response(
