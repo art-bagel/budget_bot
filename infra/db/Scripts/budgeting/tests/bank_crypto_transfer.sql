@@ -24,6 +24,8 @@ BEGIN
     PERFORM put__buy_crypto_asset(uid, personal, 'RUB', 10000, asset, 100);  -- 100 per unit
     PERFORM put__buy_crypto_asset(uid, personal, 'RUB', 5000, asset, 25);    -- 200 per unit
     SELECT id INTO lot_cheap FROM crypto_lots WHERE bank_account_id = personal ORDER BY created_at, id LIMIT 1;
+    -- Units already spent outside the bot, waiting for an expense category.
+    UPDATE crypto_lots SET metadata = metadata || '{"reserved_for_manual_expense": true}' WHERE id = lot_cheap;
 
     -- 1. Personal -> family: FIFO cost moves with the crypto into family free budget.
     op := put__transfer_bank_crypto(uid, personal, family, asset, 110, 'В семью');
@@ -33,6 +35,10 @@ BEGIN
     ASSERT (SELECT (amount, cost_base_remaining) = (110::numeric, 12000::numeric) FROM current_crypto_balances
             WHERE bank_account_id = family AND crypto_asset_id = asset), 'family holds 110 at 12000';
     ASSERT (SELECT amount_remaining FROM crypto_lots WHERE id = lot_cheap) = 0, 'oldest lot consumed first';
+    ASSERT (SELECT count(*) FROM crypto_lots WHERE bank_account_id = family AND amount_remaining = 100
+            AND (metadata->>'reserved_for_manual_expense')::boolean
+            AND created_at = (SELECT created_at FROM crypto_lots WHERE id = lot_cheap)) = 1,
+        'lots move with their cost, FIFO date and pending-expense mark';
     ASSERT (SELECT amount FROM current_budget_balances WHERE category_id = p_free AND currency_code = 'RUB') = 8000,
         'personal free: 20000 - 12000';
     ASSERT (SELECT amount FROM current_budget_balances WHERE category_id = f_free AND currency_code = 'RUB') = 12000,
@@ -40,9 +46,9 @@ BEGIN
     ASSERT (SELECT count(*) FROM operations WHERE type = 'income' AND owner_family_id = (fam->>'family_id')::bigint) = 0,
         'no income is created';
 
-    -- 2. Family -> personal, partial lot: proportional cost.
+    -- 2. Family -> personal, partial lot: FIFO of the original lots, not an average.
     back := put__transfer_bank_crypto(uid, family, personal, asset, 11);
-    ASSERT (back->>'cost_base')::numeric = 1200, format('12000 * 11/110 = 1200, got %s', back->>'cost_base');
+    ASSERT (back->>'cost_base')::numeric = 1100, format('11 * 100 = 1100, got %s', back->>'cost_base');
     ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id = personal AND crypto_asset_id = asset) = 26;
 
     -- 3. Reversal restores both sides, including budgets. Personal Unallocated

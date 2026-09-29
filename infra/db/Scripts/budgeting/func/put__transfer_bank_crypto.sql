@@ -1,6 +1,8 @@
 -- Move banking crypto between cash accounts, including personal <-> family.
--- FIFO lots keep their historical cost; like a currency transfer, that cost
--- moves between the owners' Unallocated. Not a sale, expense or income.
+-- Each consumed FIFO lot reappears on the target with its cost, FIFO date and
+-- metadata, including «spent, awaiting an expense category»: an expense moved
+-- to the family then consumes exactly those units. Like a currency transfer,
+-- the cost moves between the owners' Unallocated. Not a sale, expense or income.
 -- Ordinary operation outside the crypto journal, as account transfers are:
 -- the journal is per owner and this movement spans two owners.
 DROP FUNCTION IF EXISTS budgeting.put__transfer_bank_crypto;
@@ -78,13 +80,11 @@ BEGIN
 
     _need := _amount;
     FOR _lot IN
-        SELECT id, amount_remaining, cost_base_remaining
+        SELECT id, amount_remaining, cost_base_remaining, metadata, created_at
         FROM crypto_lots
         WHERE bank_account_id = _from_account_id
           AND crypto_asset_id = _crypto_asset_id
           AND amount_remaining > 0
-          -- Already spent externally, waiting for its expense category.
-          AND NOT COALESCE((metadata->>'reserved_for_manual_expense')::boolean, false)
         ORDER BY created_at, id
         FOR UPDATE
     LOOP
@@ -98,6 +98,10 @@ BEGIN
         WHERE id = _lot.id;
         INSERT INTO crypto_lot_consumptions (operation_id, lot_id, amount, cost_base)
         VALUES (_operation_id, _lot.id, _take, _take_cost);
+        INSERT INTO crypto_lots (bank_account_id, crypto_asset_id, amount_initial, amount_remaining,
+                                 cost_base_initial, cost_base_remaining, opened_by_operation_id, metadata, created_at)
+        VALUES (_to_account_id, _crypto_asset_id, _take, _take, _take_cost, _take_cost, _operation_id,
+                _lot.metadata, _lot.created_at);
         _cost := _cost + _take_cost;
         _need := _need - _take;
     END LOOP;
@@ -105,9 +109,6 @@ BEGIN
         RAISE EXCEPTION 'Сумма превышает остаток';
     END IF;
 
-    INSERT INTO crypto_lots (bank_account_id, crypto_asset_id, amount_initial, amount_remaining,
-                             cost_base_initial, cost_base_remaining, opened_by_operation_id)
-    VALUES (_to_account_id, _crypto_asset_id, _amount, _amount, _cost, _cost, _operation_id);
     INSERT INTO crypto_bank_entries (operation_id, bank_account_id, crypto_asset_id, amount)
     VALUES (_operation_id, _from_account_id, _crypto_asset_id, -_amount),
            (_operation_id, _to_account_id, _crypto_asset_id, _amount);
