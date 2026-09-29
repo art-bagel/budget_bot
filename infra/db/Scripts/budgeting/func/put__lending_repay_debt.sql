@@ -99,12 +99,13 @@ BEGIN
     IF _interest_qty IS NULL OR _interest_qty < 0 OR _interest_qty > _repay_qty
        OR _interest_qty > _interest_remaining
        OR _interest_qty::text IN ('NaN', 'Infinity', '-Infinity') THEN
-        RAISE EXCEPTION 'Invalid interest repayment quantity';
+        RAISE EXCEPTION 'Проценты: от 0 до начисленных % и не больше суммы погашения', trim_scale(_interest_remaining);
     END IF;
     _principal_qty := _repay_qty - _interest_qty;
     _principal_remaining := _current_borrowed - _interest_remaining;
     IF _principal_qty > _principal_remaining THEN
-        RAISE EXCEPTION 'Repayment exceeds principal; specify accrued interest separately';
+        RAISE EXCEPTION 'На основной долг остаётся %: остальное укажите как проценты (начислено %)',
+            trim_scale(_principal_remaining), trim_scale(_interest_remaining);
     END IF;
 
     IF _repay_qty > _current_borrowed THEN

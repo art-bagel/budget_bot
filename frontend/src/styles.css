@@ -7238,6 +7238,7 @@ select.dlg-row__ghost option {
   color: var(--text-2, #6B7380);
 }
 .tok-row__hint--muted { opacity: .7; }
+.tok-row__hint--warn { color: var(--neg); }
 
 .seg-row {
   display: flex;

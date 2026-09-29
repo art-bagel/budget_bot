@@ -323,6 +323,8 @@ export function LendingRepayDebtSheet({
   const lend = useMemo(() => getLendingMetadata(position), [position]);
   const symbol = lend.borrowed_asset_symbol ?? lend.borrowed_asset ?? '';
   const debtQty = lend.borrowed_quantity ?? 0;
+  const accruedInterest = lend.debt_interest_quantity ?? 0;
+  const principalQty = debtQty - accruedInterest;
   const sourcePosition = useMemo(
     () => findAccountPositionForAsset(accountPositions, lend.borrowed_crypto_asset_id),
     [accountPositions, lend.borrowed_crypto_asset_id],
@@ -351,12 +353,34 @@ export function LendingRepayDebtSheet({
     }
   }, [open]);
 
+  // Accrued interest is paid first; the owner may correct the split afterwards.
+  const changeQuantity = (value: string) => {
+    const next = sanitizeDecimalInput(value);
+    setQuantity(next);
+    const amount = Number(next);
+    const accrued = String(accruedInterest).includes('e')
+      ? accruedInterest.toFixed(18).replace(/\.?0+$/, '')
+      : String(accruedInterest);
+    setInterest(!(amount > 0) ? '' : amount <= accruedInterest ? next : accrued);
+  };
+
   const num = Number(quantity);
+  const interestNum = Number(interest || '0');
+  const eps = 1e-12;
+  const splitError = !(num > 0) ? null
+    : !(interestNum >= 0) || interestNum > accruedInterest + eps
+      ? `Проценты — не больше начисленных ${formatNumericAmount(accruedInterest, 8)} ${symbol}`
+      : interestNum > num + eps
+        ? 'Проценты не могут быть больше суммы погашения'
+        : num - interestNum > principalQty + eps
+          ? `На основной долг остаётся ${formatNumericAmount(principalQty, 8)} ${symbol} — остальное укажите как проценты`
+          : null;
   const valid = !!sourcePosition
     && Number.isFinite(num)
     && num > 0
     && num <= available
-    && num <= debtQty;
+    && num <= debtQty + eps
+    && !splitError;
   const canSubmit = !submitting && valid;
   const valueInBase = (valid && livePrice && livePrice > 0) ? livePrice * num : null;
 
@@ -411,11 +435,13 @@ export function LendingRepayDebtSheet({
           inputMode="decimal"
           placeholder="0"
           value={quantity}
-          onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))}
+          onChange={(e) => changeQuantity(e.target.value)}
           disabled={submitting || !sourcePosition}
         />
         <span className="tok-row__hint">
-          Долг: {formatNumericAmount(debtQty, 8)} {symbol} · На счёте: {formatNumericAmount(available, 8)} {symbol}
+          Долг: {formatNumericAmount(debtQty, 8)} {symbol}
+          {accruedInterest > 0 ? `, из них проценты ${formatNumericAmount(accruedInterest, 8)}` : ''}
+          {' · '}На счёте: {formatNumericAmount(available, 8)} {symbol}
           {valueInBase != null ? ` · ≈ ${formatNumericAmount(valueInBase, 2)} ${baseCurrencyCode}` : ''}
         </span>
         {!sourcePosition && (
@@ -426,6 +452,9 @@ export function LendingRepayDebtSheet({
         <label className="apf-label">Из этой суммы — проценты</label>
         <input className="apf-input" type="text" inputMode="decimal" placeholder="0"
           value={interest} onChange={(e) => setInterest(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
+        <span className={`tok-row__hint${splitError ? ' tok-row__hint--warn' : ''}`}>
+          {splitError ?? (num > 0 ? `На основной долг: ${formatNumericAmount(Math.max(num - interestNum, 0), 8)} ${symbol}` : 'Сначала гасятся начисленные проценты, остальное — основной долг')}
+        </span>
       </div>
       <div className="apf-field">
         <label className="apf-label">Дата</label>

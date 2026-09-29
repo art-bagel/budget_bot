@@ -426,6 +426,8 @@ export interface CryptoLendingMetadata {
   borrowed_asset_symbol?: string;
   borrowed_crypto_asset_id?: number;
   borrowed_quantity?: number;
+  /** Accrued interest already included in borrowed_quantity. */
+  debt_interest_quantity?: number;
   borrowed_position_id?: number;
   borrowed_value_in_base?: number;
   accrued_interest_in_base?: number;
@@ -453,6 +455,7 @@ export function getLendingMetadata(position: CryptoProtocolPosition): CryptoLend
     borrowed_asset_symbol: typeof m.borrowed_asset_symbol === 'string' ? m.borrowed_asset_symbol : undefined,
     borrowed_crypto_asset_id: typeof m.borrowed_crypto_asset_id === 'number' ? m.borrowed_crypto_asset_id : undefined,
     borrowed_quantity: typeof m.borrowed_quantity === 'number' ? m.borrowed_quantity : undefined,
+    debt_interest_quantity: typeof m.debt_interest_quantity === 'number' ? m.debt_interest_quantity : undefined,
     borrowed_position_id: typeof m.borrowed_position_id === 'number' ? m.borrowed_position_id : undefined,
     borrowed_value_in_base: typeof m.borrowed_value_in_base === 'number' ? m.borrowed_value_in_base : undefined,
     accrued_interest_in_base: typeof m.accrued_interest_in_base === 'number' ? m.accrued_interest_in_base : undefined,
