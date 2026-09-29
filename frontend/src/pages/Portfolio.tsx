@@ -92,7 +92,8 @@ import { calculateProjectedInterest } from '../utils/depositInterest';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
-import { getCryptoIconUrl } from '../utils/cryptoAssets';
+import { defiCoinSymbols, getCryptoIconUrl } from '../utils/cryptoAssets';
+import { CoinStack } from '../components/CoinStack';
 import { trimDecimal } from '../utils/portfolioPosition';
 import { fetchMoexPrices } from '../utils/moex';
 import type { MoexPrice } from '../utils/moex';
@@ -3062,11 +3063,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       <div>
         {open && closed.map((p) => {
           const lp = p.position_type === 'liquidity_pool' ? getLiquidityPoolMetadata(p) : null;
-          const iconUrl = getCryptoIconUrl(p.asset_symbol, null);
           return (
             <button type="button" className="pf-pos pf-pos--past" key={p.id} onClick={() => handleOpenProtocolDetails(p.id)}>
               <div className="pf-pos__identity">
-                {iconUrl ? <img className="pf-pos__logo" src={iconUrl} alt="" loading="lazy" /> : <div className="pf-pos__icon pf-pos__icon--crypto">{p.asset_symbol.slice(0, 1).toUpperCase()}</div>}
+                <CoinStack symbols={defiCoinSymbols([p])} />
                 <div className="pf-pos__copy">
                   <div className="pf-pos__title">{protocolDisplayName(p)}</div>
                   <div className="pf-pos__sub">
@@ -3618,7 +3618,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           const members = visibleCryptoProtocolPositions.filter((item) => lendingGroupKey(item) === lendingGroupKey(position));
                           const protocolValue = sumProtocolValues(members.map(getProtocolValuation));
                           const typeLabel = PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type;
-                          const protocolIconUrl = getCryptoIconUrl(position.asset_symbol, null);
                           let extra = '';
                           if (position.position_type === 'liquidity_pool') {
                             const lp = getLiquidityPoolMetadata(position);
@@ -3643,13 +3642,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                               onClick={() => handleOpenProtocolDetails(position.id)}
                             >
                               <div className="pf-pos__identity">
-                                {protocolIconUrl ? (
-                                  <img className="pf-pos__logo" src={protocolIconUrl} alt="" loading="lazy" />
-                                ) : (
-                                  <div className="pf-pos__icon pf-pos__icon--crypto">
-                                    {position.asset_symbol.slice(0, 1).toUpperCase()}
-                                  </div>
-                                )}
+                                <CoinStack symbols={defiCoinSymbols(members)} />
                                 <div className="pf-pos__copy">
                                   <div className="pf-pos__title">{protocolDisplayName(position)}</div>
                                   <div className="pf-pos__sub">
@@ -3909,7 +3902,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <div className="ana-cats">
                   {visibleCryptoProtocolPositions.map((position, index) => {
                     const protocolValue = getLendingNetValue(position);
-                    const iconUrl = getCryptoIconUrl(position.asset_symbol, null);
                     let detail = position.asset_symbol;
                     if (position.position_type === 'liquidity_pool') {
                       const lp = getLiquidityPoolMetadata(position);
@@ -3922,7 +3914,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     }
                     return (
                       <PaRow key={position.id} onClick={() => handleOpenProtocolDetails(position.id)}
-                        icon={iconUrl ? <img src={iconUrl} alt="" loading="lazy" /> : position.asset_symbol.slice(0, 1).toUpperCase()}
+                        icon={<CoinStack symbols={defiCoinSymbols([position])} />}
                         color={PA_COLORS[index % PA_COLORS.length]} title={protocolDisplayName(position)}
                         amount={protocolValue === null ? '—' : money(protocolValue)} amountTone={protocolValue === null ? 'mute' : undefined}
                         foot={`${PROTOCOL_TYPE_LABELS[position.position_type] ?? position.position_type} · ${detail}`} />
