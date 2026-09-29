@@ -188,6 +188,10 @@ COINGECKO_IDS_BY_SYMBOL = {
 SUPPORTED_PRICE_CURRENCIES = {'rub', 'usd', 'eur'}
 _PRICE_CACHE: dict[tuple[str, str], tuple[datetime, float]] = {}
 _PRICE_CACHE_TTL = timedelta(minutes=2)
+# After a refusal (429/403) CoinGecko is left alone for a while: retrying on
+# every page load keeps the public API's block from ever lifting.
+_COINGECKO_COOLDOWN = timedelta(minutes=10)
+_coingecko_paused_until = datetime.min.replace(tzinfo=timezone.utc)
 
 
 class CryptoAssetItem(BaseModel):
@@ -631,7 +635,8 @@ async def get_crypto_prices(
         or now - _PRICE_CACHE[(coingecko_id, normalized_vs)][0] > _PRICE_CACHE_TTL
     ]
 
-    if stale_ids:
+    global _coingecko_paused_until
+    if stale_ids and now >= _coingecko_paused_until:
         try:
             async with httpx.AsyncClient(timeout=8) as client:
                 response = await client.get(
@@ -648,6 +653,7 @@ async def get_crypto_prices(
                 if isinstance(raw_price, (int, float)) and raw_price > 0:
                     _PRICE_CACHE[(coingecko_id, normalized_vs)] = (now, float(raw_price))
         except httpx.HTTPError as exc:
+            _coingecko_paused_until = now + _COINGECKO_COOLDOWN
             # Цены не пропадают — ниже отдадим из кэша с пометкой stale. Но
             # молчать нельзя: публичный CoinGecko режет примерно на 5-15
             # запросов в минуту, и 429 выглядел бы как «цены просто старые»

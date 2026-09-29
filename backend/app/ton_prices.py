@@ -1,4 +1,9 @@
-"""Display-only TonAPI quotes keyed by mainnet master address, never by ticker."""
+"""Display-only TonAPI quotes keyed by mainnet master address, never by ticker.
+
+The native coin has no master; it is the asset (TON, ton, '') — (GRAM, ton, '')
+after the rebrand — which uq_crypto_assets_identity keeps unique. TonAPI quotes
+it under either name.
+"""
 
 import base64
 import binascii
@@ -21,6 +26,8 @@ def master_address(asset: dict) -> str | None:
     address = asset.get("contract_address")
     if not isinstance(address, str):
         return None
+    if address == "" and asset.get("symbol") in ("TON", "GRAM"):
+        return asset["symbol"]
     if re.fullmatch(r"(0|-1):[0-9a-fA-F]{64}", address):
         return address.lower()
     if not re.fullmatch(r"[A-Za-z0-9_+/\-]{48}", address):

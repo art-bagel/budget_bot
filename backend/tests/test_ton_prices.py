@@ -26,6 +26,26 @@ class TonPricesTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(
             master_address(dict(ASSET, contract_address=friendly[:-1] + "A"))
         )
+        native = dict(ASSET, symbol="TON", contract_address="")
+        self.assertEqual(master_address(native), "TON")
+        self.assertEqual(master_address(dict(native, symbol="GRAM")), "GRAM")
+        self.assertIsNone(master_address(dict(native, symbol="USDT")))
+        self.assertIsNone(master_address(dict(native, network_code="manual")))
+
+    async def test_native_ton_is_quoted(self):
+        response = httpx.Response(
+            200,
+            json={"rates": {"TON": {"prices": {"RUB": 133.8}}}},
+            request=httpx.Request("GET", "https://tonapi.io"),
+        )
+        with patch("backend.app.ton_prices.httpx.AsyncClient") as factory:
+            get = AsyncMock(return_value=response)
+            factory.return_value.__aenter__.return_value.get = get
+            rows = await token_prices(
+                [dict(ASSET, id=1, symbol="TON", contract_address="")], "rub"
+            )
+        self.assertEqual([(r["crypto_asset_id"], r["price"]) for r in rows], [(1, 133.8)])
+        self.assertEqual(get.await_args.kwargs["params"]["tokens"], "TON")
 
     async def test_quote_currency_cache_and_multiple_asset_ids(self):
         response = httpx.Response(
