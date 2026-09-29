@@ -45,7 +45,10 @@ BEGIN
     ASSERT (back->>'cost_base')::numeric = 1200, format('12000 * 11/110 = 1200, got %s', back->>'cost_base');
     ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id = personal AND crypto_asset_id = asset) = 26;
 
-    -- 3. Reversal restores both sides, including budgets.
+    -- 3. Reversal restores both sides, including budgets. Personal Unallocated
+    -- may be negative while Unallocated + FX Result stays positive.
+    PERFORM put__apply_current_budget_delta(p_free, 'RUB', -20000);
+    PERFORM put__apply_current_budget_delta((me->>'fx_result_category_id')::bigint, 'RUB', 20000);
     PERFORM put__reverse_operation(uid, (back->>'operation_id')::bigint, NULL);
     ASSERT (SELECT (amount, cost_base_remaining) = (110::numeric, 12000::numeric) FROM current_crypto_balances
             WHERE bank_account_id = family AND crypto_asset_id = asset), 'reversal restores family';
