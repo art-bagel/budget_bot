@@ -620,6 +620,25 @@ async def get_operations_analytics_details(
     return OperationAnalyticsDetailsResponse(**result)
 
 
+class BankCryptoTransferRequest(BaseModel):
+    from_account_id: int
+    to_account_id: int
+    crypto_asset_id: int
+    amount: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    comment: Optional[str] = None
+
+
+@router.post('/bank-crypto-transfer')
+async def transfer_bank_crypto(
+    body: BankCryptoTransferRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> Dict[str, Any]:
+    return await ledger.call_function(
+        'budgeting.put__transfer_bank_crypto', user.user_id, body.from_account_id,
+        body.to_account_id, body.crypto_asset_id, body.amount, body.comment,
+    )
+
+
 class MergeBankCryptoAssetRequest(BaseModel):
     bank_account_id: int
     from_crypto_asset_id: int
