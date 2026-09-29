@@ -31,7 +31,9 @@ export function cryptoNetworkLabel(code?: string | null): string | null {
 /** Network is noise when it only repeats the coin symbol (TON · TON). */
 export function cryptoNetworkSuffix(code: string | null | undefined, symbol: string | null | undefined): string {
   const label = cryptoNetworkLabel(code);
-  return label && label.toUpperCase() !== symbol?.trim().toUpperCase() ? ` · ${label}` : '';
+  const sym = symbol?.trim().toUpperCase();
+  const native = sym === 'GRAM' && label?.toUpperCase() === 'TON'; // native coin of the TON network
+  return label && label.toUpperCase() !== sym && !native ? ` · ${label}` : '';
 }
 
 const PRICE_SOURCE_LABELS: Record<string, string> = { coingecko: 'CoinGecko', tonapi: 'TonAPI' };

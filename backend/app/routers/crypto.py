@@ -176,6 +176,7 @@ COINGECKO_IDS_BY_SYMBOL = {
     'ETH': 'ethereum',
     'USDT': 'tether',
     'USDC': 'usd-coin',
+    'GRAM': 'the-open-network',  # TON coin renamed to GRAM; CoinGecko id is unchanged
     'TON': 'the-open-network',
     'BNB': 'binancecoin',
     'SOL': 'solana',
