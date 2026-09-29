@@ -7,6 +7,8 @@
 > [2026-09-29-crypto-release-candidate.md](2026-09-29-crypto-release-candidate.md).
 > Шаг 6 выполнен 29.09 —
 > [2026-09-29-crypto-production-release.md](2026-09-29-crypto-production-release.md).
+> Доработки после выпуска выкачены 29.09 02:57 UTC (`1d5ea0a`) —
+> [2026-09-29-release-transfers-hidden-coins-negative-categories.md](2026-09-29-release-transfers-hidden-coins-negative-categories.md).
 
 ## Цель и границы
 
