@@ -10,6 +10,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
+from backend.app.exchange_prices import bybit_prices
 from backend.app.ton_prices import token_prices
 
 
@@ -683,8 +684,10 @@ async def get_crypto_prices(
                 stale_age_seconds=int(age.total_seconds()) if is_stale else None,
             ))
     fresh_ids = {item.crypto_asset_id for item in result if not item.is_stale}
-    ton_quotes = await token_prices([asset for asset in assets if int(asset['id']) not in fresh_ids], normalized_vs)
-    replacements = {item['crypto_asset_id']: CryptoPriceItem(**item) for item in ton_quotes}
+    missing = [asset for asset in assets if int(asset['id']) not in fresh_ids]
+    # TonAPI prices TON-network coins, Bybit the rest: the sets do not overlap.
+    alternate = await token_prices(missing, normalized_vs) + await bybit_prices(missing, normalized_vs)
+    replacements = {item['crypto_asset_id']: CryptoPriceItem(**item) for item in alternate}
     # Prefer a fresh alternate quote; retain the newer timestamp if both are stale.
     combined = {item.crypto_asset_id: item for item in result}
     for asset_id, quote in replacements.items():
