@@ -129,7 +129,7 @@ BEGIN
         'investment_account_id', _position.investment_account_id,
         'investment_account_name', _account.name,
         'quantity', (_summary->>'quantity_now')::numeric,
-        'is_hidden', (_summary->>'quantity_now')::numeric=0 AND EXISTS (SELECT 1 FROM crypto_asset_visibility v WHERE v.user_id=_user_id AND v.investment_account_id=_investment_account_id AND v.crypto_asset_id=_crypto_asset_id),
+        'is_hidden', EXISTS (SELECT 1 FROM crypto_asset_visibility v WHERE v.user_id=_user_id AND v.investment_account_id=_investment_account_id AND v.crypto_asset_id=_crypto_asset_id),
         'opened_at', _position.opened_at,
         'total_entry_value_in_base', (_summary ->> 'total_entry_value_in_base')::numeric,
         'total_consumed_cost_basis', (_summary ->> 'total_consumed_cost_basis')::numeric,

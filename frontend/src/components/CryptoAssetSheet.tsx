@@ -306,7 +306,7 @@ export default function CryptoAssetSheet({
             </div>
           )}
 
-          {detail.quantity === 0 && onChangeHidden && (
+          {onChangeHidden && (
             <button type="button" className="credits-textbtn ca-sheet__hide" disabled={visibilitySaving}
               onClick={async () => {
                 setVisibilitySaving(true);

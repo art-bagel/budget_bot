@@ -2557,7 +2557,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     && (activeAccountTabKey === 'all' || `${p.owner_type}:${p.investment_account_id}` === activeAccountTabKey));
 
   const isHiddenWalletAsset = (p: PortfolioPosition) => p.asset_type_code === 'crypto'
-    && Number(p.quantity ?? 0) === 0
     && Boolean(cryptoAssetsByAccount.get(p.investment_account_id)?.find((a) => a.crypto_asset_id === getCryptoAssetId(p))?.is_hidden);
 
   const changeWalletAssetVisibility = async (accountId: number, assetId: number, hidden: boolean) => {
@@ -3594,7 +3593,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                               {iconUrl ? <img className="pf-pos__logo" src={iconUrl} alt="" loading="lazy" /> : <div className="pf-pos__icon pf-pos__icon--crypto">{p.title.slice(0, 1).toUpperCase()}</div>}
                               <div className="pf-pos__copy">
                                 <div className="pf-pos__title">{p.title}</div>
-                                <div className="pf-pos__sub">0 {symbol}{cryptoNetworkSuffix(getPositionMetadataText(p, 'network_code'), symbol)}</div>
+                                <div className="pf-pos__sub">{formatNumericAmount(Number(p.quantity ?? 0), 8)} {symbol}{cryptoNetworkSuffix(getPositionMetadataText(p, 'network_code'), symbol)}</div>
                               </div>
                             </button>
                             <button type="button" className="pf-pos__show" onClick={() => { const assetId = getCryptoAssetId(p); if (assetId !== null) void changeWalletAssetVisibility(group.accountId, assetId, false); }}>

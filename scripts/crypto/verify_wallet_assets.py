@@ -45,29 +45,15 @@ async def run(database, apply):
                 checked += 1
                 save = db.transaction()
                 await save.start()
-                if raw['qty'] == 0:
-                    await db.fetchval('select budgeting.set__crypto_asset_hidden($1,$2,$3,true)', UID, account['id'], aid)
-                    hidden = await db.fetchval('select budgeting.get__crypto_asset_detail($1,$2,$3)', UID, account['id'], aid)
-                    assert hidden['is_hidden']
-                    assert hidden['entries'] == detail['entries']
-                    await db.fetchval('select budgeting.set__crypto_asset_hidden($1,$2,$3,false)', UID, account['id'], aid)
-                    restored = await db.fetchval('select budgeting.get__crypto_asset_detail($1,$2,$3)', UID, account['id'], aid)
-                    assert not restored['is_hidden']
-                    zeros += 1
-                else:
-                    # Previously hidden coin must be visible after any positive inflow.
-                    await db.execute('insert into budgeting.crypto_asset_visibility values ($1,$2,$3) on conflict do nothing', UID, account['id'], aid)
-                    visible = await db.fetchval('select budgeting.get__crypto_asset_detail($1,$2,$3)', UID, account['id'], aid)
-                    assert not visible['is_hidden']
-                    rejected = db.transaction()
-                    await rejected.start()
-                    try:
-                        await db.fetchval('select budgeting.set__crypto_asset_hidden($1,$2,$3,true)', UID, account['id'], aid)
-                        raise AssertionError('Nonempty asset can be hidden')
-                    except asyncpg.RaiseError as error:
-                        assert 'Only an empty asset' in str(error)
-                    finally:
-                        await rejected.rollback()
+                # Any coin, empty or not, can be hidden; only the display flag changes.
+                await db.fetchval('select budgeting.set__crypto_asset_hidden($1,$2,$3,true)', UID, account['id'], aid)
+                hidden = await db.fetchval('select budgeting.get__crypto_asset_detail($1,$2,$3)', UID, account['id'], aid)
+                assert hidden['is_hidden']
+                assert {k: v for k, v in hidden.items() if k != 'is_hidden'} == {k: v for k, v in detail.items() if k != 'is_hidden'}
+                await db.fetchval('select budgeting.set__crypto_asset_hidden($1,$2,$3,false)', UID, account['id'], aid)
+                restored = await db.fetchval('select budgeting.get__crypto_asset_detail($1,$2,$3)', UID, account['id'], aid)
+                assert not restored['is_hidden']
+                zeros += raw['qty'] == 0
 
                 await save.rollback()
         # Authorization is enforced on both reads and visibility writes.

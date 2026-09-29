@@ -5,9 +5,8 @@ DECLARE _detail jsonb;
 BEGIN
     _detail := budgeting.get__crypto_asset_detail(_user_id, _account_id, _asset_id);
     IF _detail IS NULL THEN RAISE EXCEPTION 'Unknown wallet asset'; END IF;
-    IF _hidden AND (_detail->>'quantity')::numeric <> 0 THEN
-        RAISE EXCEPTION 'Only an empty asset can be hidden';
-    END IF;
+    -- Display preference only: any coin, including one with a balance, can be
+    -- hidden. Balances, costs and wallet totals are unaffected.
     IF _hidden THEN
         INSERT INTO budgeting.crypto_asset_visibility VALUES (_user_id, _account_id, _asset_id)
         ON CONFLICT DO NOTHING;
