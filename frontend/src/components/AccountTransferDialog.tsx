@@ -1,7 +1,7 @@
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 import BottomSheet from './BottomSheet';
-import { fetchBankAccountSnapshot, fetchBankAccounts, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
+import { fetchBankAccountSnapshot, fetchBankAccounts, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, DashboardBankBalance } from '../types';
 import { formatAmount, formatNumericAmount } from '../utils/format';
@@ -33,6 +33,8 @@ interface PickerItem {
   symbol?: string | null;
   networkCode?: string | null;
   balance: number;
+  /** Asset the account does not hold yet: offered only as a target. */
+  placeholder?: boolean;
 }
 
 const COMPAT: Record<AcctKind, Partial<Record<AcctKind, boolean>>> = {
@@ -207,6 +209,16 @@ export default function AccountTransferDialog({
         }
       }
     }
+    // Any cash account may receive a currency or crypto another cash account
+    // holds (personal ↔ family included), even if it has none yet.
+    const cashHeld = result.filter((item) => item.kind === 'cash' && (item.assetType === 'fiat' || item.balance > 0));
+    for (const { account, kind } of allAccounts) {
+      if (kind !== 'cash') continue;
+      for (const held of cashHeld) {
+        if (result.some((item) => item.account.id === account.id && item.assetKey === held.assetKey)) continue;
+        result.push({ ...held, account, balance: 0, placeholder: true });
+      }
+    }
     const heldCryptoByOwner = result.filter((item) => item.kind === 'cash' && item.assetType === 'crypto' && item.balance > 0);
     for (const { account, kind } of allAccounts) {
       if (kind !== 'investment' || account.investment_asset_type !== 'crypto') continue;
@@ -226,7 +238,9 @@ export default function AccountTransferDialog({
         });
       }
     }
-    return result;
+    // Keep each account's rows together; the list renders one header per account.
+    const order = new Map(allAccounts.map(({ account }, index) => [account.id, index]));
+    return result.sort((a, b) => (order.get(a.account.id) ?? 0) - (order.get(b.account.id) ?? 0));
   }, [allAccounts, balancesMap, baseCurrencyCode]);
 
   const isCompat = (role: 'from' | 'to', item: PickerItem): boolean => {
@@ -242,10 +256,10 @@ export default function AccountTransferDialog({
     const toAccount = role === 'from' ? otherItem.account : item.account;
     const assetType = role === 'from' ? item.assetType : otherItem.assetType;
     if (assetType === 'crypto') {
-      return fK === 'cash'
-        && tK === 'investment'
+      return fK === 'cash' && (tK === 'cash' || (
+        tK === 'investment'
         && toAccount.investment_asset_type === 'crypto'
-        && sameOwner(fromAccount, toAccount);
+        && sameOwner(fromAccount, toAccount)));
     }
     return !!COMPAT[fK]?.[tK];
   };
@@ -256,23 +270,21 @@ export default function AccountTransferDialog({
   const toItem = useMemo(() =>
     toSel ? allItems.find(pi => pi.account.id === toSel.accountId && pi.assetKey === toSel.assetKey) ?? null : null,
     [toSel, allItems]);
-  const fromBalance = useMemo(() =>
-    fromSel ? (balancesMap[fromSel.accountId] ?? []).find(b => assetKeyOfBalance(b) === fromSel.assetKey) ?? null : null,
-    [fromSel, balancesMap]);
 
   const canSwap = !!(
     fromItem
     && toItem
-    && fromItem.assetType === 'fiat'
-    && toItem.assetType === 'fiat'
-    && COMPAT[toItem.kind]?.[fromItem.kind]
+    && !toItem.placeholder
+    && (fromItem.assetType === 'fiat'
+      ? COMPAT[toItem.kind]?.[fromItem.kind]
+      : fromItem.kind === 'cash' && toItem.kind === 'cash')
   );
   const modeLabel = useMemo(() => {
     if (!fromItem || !toItem) return null;
     return MODE_LABEL[`${fromItem.kind}>${toItem.kind}`] ?? null;
   }, [fromItem, toItem]);
   const amountValue = parseFloat(amount) || 0;
-  const exceedsBalance = fromItem?.kind !== 'credit' && !!fromBalance && amountValue > fromBalance.amount;
+  const exceedsBalance = !!fromItem && fromItem.kind !== 'credit' && amountValue > fromItem.balance;
   const canSubmit = !submitting && !loading && !!fromSel && !!toSel && amountValue > 0 && !exceedsBalance;
 
   const handleSelect = (role: 'from' | 'to', item: PickerItem) => {
@@ -299,7 +311,15 @@ export default function AccountTransferDialog({
     if (!canSubmit || !fromSel || !toSel) return;
     setSubmitting(true); setError(null);
     try {
-      if (fromItem?.assetType === 'crypto' && toItem?.kind === 'investment' && fromItem.cryptoAssetId) {
+      if (fromItem?.assetType === 'crypto' && toItem?.kind === 'cash' && fromItem.cryptoAssetId) {
+        await transferBankCrypto({
+          from_account_id: fromSel.accountId,
+          to_account_id: toSel.accountId,
+          crypto_asset_id: fromItem.cryptoAssetId,
+          amount,
+          comment: comment.trim() || undefined,
+        });
+      } else if (fromItem?.assetType === 'crypto' && toItem?.kind === 'investment' && fromItem.cryptoAssetId) {
         const payload = {
           bank_account_id: fromSel.accountId,
           investment_account_id: toSel.accountId,
@@ -346,7 +366,7 @@ export default function AccountTransferDialog({
           <span className="atx__sel-name">
             {item.account.name}{isMulti && <span className="atx__sel-cur"> · {assetCode(item)}</span>}
           </span>
-          <span className="atx__sel-sub">{subLabel}: {bal ? formatAssetAmount(bal.amount, item) : item.assetType === 'crypto' ? assetName(item) : '—'}</span>
+          <span className="atx__sel-sub">{subLabel}: {formatAssetAmount(bal ? bal.amount : item.balance, item)}</span>
         </span>
       </span>
     );
@@ -354,7 +374,7 @@ export default function AccountTransferDialog({
 
   const renderList = (role: 'from' | 'to') =>
     KIND_ORDER.flatMap(kind => {
-      const items = allItems.filter(pi => pi.kind === kind && (role === 'to' || !(pi.kind === 'investment' && pi.assetType === 'crypto')));
+      const items = allItems.filter(pi => pi.kind === kind && (role === 'to' || !(pi.placeholder || (pi.kind === 'investment' && pi.assetType === 'crypto'))));
       if (!items.length) return [];
       const rows: React.ReactNode[] = [
         <li key={`grp-${kind}`} className="atx__group-label">{KIND_LABEL[kind]}</li>,
@@ -516,8 +536,8 @@ export default function AccountTransferDialog({
               />
               <span className="amt__cur">{fromItem ? assetCode(fromItem) : '₽'}</span>
             </div>
-            {exceedsBalance && fromBalance && (
-              <span className="atx__err">Недостаточно: {fromItem ? formatAssetAmount(fromBalance.amount, fromItem) : formatAmount(fromBalance.amount, baseCurrencyCode)}</span>
+            {exceedsBalance && fromItem && (
+              <span className="atx__err">Недостаточно: {formatAssetAmount(fromItem.balance, fromItem)}</span>
             )}
           </div>
 

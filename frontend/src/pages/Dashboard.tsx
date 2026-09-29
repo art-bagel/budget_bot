@@ -584,7 +584,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
             onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('portfolio'); }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate?.('portfolio'); }}
           >
-            <dt><span className="hero__mark hero__mark--mint" />&nbsp;{investmentValueIncomplete ? 'Инвестиции · известная часть' : 'Инвестиции'}</dt>
+            <dt><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</dt>
             <dd>
               <span className="hero__row-amount">
                 {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investmentBankTotal)}
