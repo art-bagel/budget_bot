@@ -1,12 +1,13 @@
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 import BottomSheet from './BottomSheet';
-import { fetchBankAccountSnapshot, fetchBankAccounts, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
+import { fetchBankAccountSnapshot, fetchBankAccounts, fetchPortfolioPositions, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, DashboardBankBalance } from '../types';
 import { formatAmount, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
+import { getCryptoAssetId } from '../utils/portfolioPosition';
 
 
 interface Props {
@@ -135,6 +136,8 @@ export default function AccountTransferDialog({
 
   const [allAccounts, setAllAccounts] = useState<AccountEntry[]>([]);
   const [balancesMap, setBalancesMap] = useState<Record<number, DashboardBankBalance[]>>({});
+  // Coins already held in each crypto wallet, keyed `${accountId}:${cryptoAssetId}`.
+  const [walletQuantities, setWalletQuantities] = useState<Map<string, number>>(new Map());
   const [fromSel, setFromSel] = useState<Selection | null>(null);
   const [toSel,   setToSel]   = useState<Selection | null>(null);
   const [openRole, setOpenRole] = useState<'from' | 'to' | null>(null);
@@ -153,12 +156,21 @@ export default function AccountTransferDialog({
     const load = async () => {
       setLoading(true);
       try {
-        const [cash, invest, credit] = await Promise.all([
+        const [cash, invest, credit, positions] = await Promise.all([
           fetchBankAccounts('cash'),
           fetchBankAccounts('investment'),
           fetchBankAccounts('credit'),
+          fetchPortfolioPositions('open'),
         ]);
         if (cancelled) return;
+        const quantities = new Map<string, number>();
+        for (const p of positions) {
+          const assetId = p.asset_type_code === 'crypto' ? getCryptoAssetId(p) : null;
+          if (assetId === null) continue;
+          const key = `${p.investment_account_id}:${assetId}`;
+          quantities.set(key, (quantities.get(key) ?? 0) + Number(p.quantity ?? 0));
+        }
+        setWalletQuantities(quantities);
         const entries: AccountEntry[] = [
           ...cash.map(a   => ({ account: a, kind: 'cash'       as AcctKind })),
           ...invest.map(a => ({ account: a, kind: 'investment' as AcctKind })),
@@ -190,7 +202,10 @@ export default function AccountTransferDialog({
       const bals = balancesMap[account.id];
       if (bals === undefined) continue;
       if (bals.length === 0) {
-        result.push({ account, kind, assetType: 'fiat', assetKey: `fiat:${baseCurrencyCode}`, currency: baseCurrencyCode, balance: 0 });
+        // A crypto wallet holds coins, not cash: no empty rouble row for it.
+        if (account.investment_asset_type !== 'crypto') {
+          result.push({ account, kind, assetType: 'fiat', assetKey: `fiat:${baseCurrencyCode}`, currency: baseCurrencyCode, balance: 0 });
+        }
       } else {
         for (const b of bals) {
           const isCrypto = b.asset_type === 'crypto' && !!b.crypto_asset_id;
@@ -234,14 +249,14 @@ export default function AccountTransferDialog({
           cryptoAssetId: crypto.cryptoAssetId,
           symbol: crypto.symbol,
           networkCode: crypto.networkCode,
-          balance: 0,
+          balance: walletQuantities.get(`${account.id}:${crypto.cryptoAssetId}`) ?? 0,
         });
       }
     }
     // Keep each account's rows together; the list renders one header per account.
     const order = new Map(allAccounts.map(({ account }, index) => [account.id, index]));
     return result.sort((a, b) => (order.get(a.account.id) ?? 0) - (order.get(b.account.id) ?? 0));
-  }, [allAccounts, balancesMap, baseCurrencyCode]);
+  }, [allAccounts, balancesMap, baseCurrencyCode, walletQuantities]);
 
   const isCompat = (role: 'from' | 'to', item: PickerItem): boolean => {
     const other = role === 'from' ? toSel : fromSel;
