@@ -1,6 +1,7 @@
 # Курс TON (GRAM), DOGS, MAJOR, HMSTR при блокировке CoinGecko
 
-29.09.2026, ветка `codex/crypto-accounting-recovery`.
+29.09.2026, ветка `codex/crypto-accounting-recovery`. Выкачено в production
+12:08 UTC (`150e31b`, GitHub Actions run 36565979632).
 
 ## Что было
 
@@ -42,6 +43,8 @@
 - Живой TonAPI с записью TON из production: TON 133,48 ₽, USDT 84,37 ₽,
   `source=tonapi`.
 - Живой TonAPI: DOGS 0,0041 ₽, HMSTR 0,0145 ₽, MAJOR 3,18 ₽.
+- После деплоя из контейнера API в production: TON 133,22 ₽, DOGS 0,0042 ₽,
+  HMSTR 0,0144 ₽, MAJOR 3,17 ₽, `source=tonapi`; `/health` 200.
 
 ## Откат
 
