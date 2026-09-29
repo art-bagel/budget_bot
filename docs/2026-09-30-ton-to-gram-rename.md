@@ -5,7 +5,7 @@
 (`network_code = 'ton'`) и провайдер счёта (`bank_accounts.provider_name = 'TON'`) остаются.
 
 ## Что сделано
-- Миграция `infra/db/Scripts/budgeting/migrations/050_rename_ton_coin_to_gram.sql`:
+- Миграция `infra/db/Scripts/budgeting/migrations/051_rename_ton_coin_to_gram.sql`:
   `crypto_assets.symbol`, `crypto_protocol_positions.asset_symbol` и metadata,
   `portfolio_positions.title` и metadata, `portfolio_events.metadata`.
   Проверена в транзакции с откатом, затем применена на dev через `run_migrations.sh`.
