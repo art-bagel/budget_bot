@@ -11,7 +11,7 @@ BEGIN
  IF a.id IS NULL OR NOT has__owner_access(_user_id,a.owner_type,a.owner_user_id,a.owner_family_id) THEN
   RAISE EXCEPTION 'Нет доступа к счёту';
  END IF;
- IF _request_id IS NULL OR _kind NOT IN ('bank_asset_merge','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate')
+ IF _request_id IS NULL OR _kind NOT IN ('bank_asset_merge','bank_swap','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate')
   OR _kind IS NULL OR jsonb_typeof(_payload) IS DISTINCT FROM 'object' THEN
   RAISE EXCEPTION 'Некорректная банковская операция';
  END IF;

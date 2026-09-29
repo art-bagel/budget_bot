@@ -42,7 +42,7 @@ BEGIN
     END IF;
     IF NOT ((_account.account_kind='investment' AND _account.investment_asset_type='crypto')
         OR (_account.account_kind='cash' AND jsonb_typeof(_commands)='array'
-        AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('bank_buy','bank_cash_sell','bank_asset_merge','bank_expense','bank_crypto_expense','bank_purchase','budget_allocate')))) THEN
+        AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('bank_buy','bank_cash_sell','bank_asset_merge','bank_swap','bank_expense','bank_crypto_expense','bank_purchase','budget_allocate')))) THEN
         RAISE EXCEPTION 'Source journal requires a crypto investment account';
     END IF;
     _owner_key := _account.owner_type || ':' || CASE WHEN _account.owner_type='user' THEN _account.owner_user_id ELSE _account.owner_family_id END;
@@ -188,7 +188,7 @@ BEGIN
         CASE _kind
         WHEN 'lp_snapshot','lp_withdraw','lp_reward' THEN
             _result:=budgeting.put__crypto_lp_action(_user_id,_kind,_payload,_accounting_date);
-        WHEN 'bank_asset_merge','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate' THEN
+        WHEN 'bank_asset_merge','bank_swap','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate' THEN
             _result:=budgeting.put__execute_bank_journal_command(_user_id,_anchor_account_id,_kind,_payload);
         WHEN 'group_lending' THEN
             IF EXISTS(SELECT 1 FROM jsonb_object_keys(_payload) k WHERE k NOT IN ('position_id','other_position_id'))

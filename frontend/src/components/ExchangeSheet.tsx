@@ -161,7 +161,6 @@ export default function ExchangeSheet({
     !!fromCode &&
     !!toCode &&
     fromCode !== toCode &&
-    !(fromAsset.type === 'crypto' && toAsset.type === 'crypto') &&
     fromVal > 0 &&
     toVal > 0 &&
     fromVal <= availableFromAmount + 1e-9;

@@ -453,9 +453,19 @@ async def exchange_currency(
     to_is_crypto = body.to_crypto_asset_id is not None
 
     if from_is_crypto and to_is_crypto:
-        raise HTTPException(status_code=422, detail='Crypto-to-crypto exchange is not supported in banking MVP')
-
-    if to_is_crypto:
+        payload = dict(
+            bank_account_id=body.bank_account_id,
+            from_crypto_asset_id=body.from_crypto_asset_id, from_quantity=str(body.from_amount),
+            to_crypto_asset_id=body.to_crypto_asset_id, to_quantity=str(body.to_amount),
+            operated_at=(body.operated_at or date.today()).isoformat(),
+        )
+        if body.comment:
+            payload['comment'] = body.comment
+        result = await ledger.call_function(
+            'budgeting.put__journal_bank_operation', user.user_id, body.bank_account_id,
+            'bank_swap', payload, body.request_id or uuid4(),
+        )
+    elif to_is_crypto:
         if body.from_currency_code is None:
             raise HTTPException(status_code=422, detail='from_currency_code is required when buying crypto')
         result = await ledger.put__manual_crypto_movement(

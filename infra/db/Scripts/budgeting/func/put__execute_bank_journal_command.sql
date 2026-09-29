@@ -12,6 +12,7 @@ BEGIN
  SELECT * INTO a FROM bank_accounts WHERE id=_anchor_account_id;
  CASE _kind
  WHEN 'bank_asset_merge' THEN required:=ARRAY['bank_account_id','from_crypto_asset_id','to_crypto_asset_id','operated_at'];
+ WHEN 'bank_swap' THEN required:=ARRAY['bank_account_id','from_crypto_asset_id','from_quantity','to_crypto_asset_id','to_quantity','operated_at'];
  WHEN 'bank_expense' THEN required:=ARRAY['bank_account_id','category_id','amount','currency_code','operated_at'];
  WHEN 'bank_crypto_expense' THEN required:=ARRAY['bank_account_id','category_id','amount','crypto_asset_id','operated_at'];
  WHEN 'bank_purchase' THEN required:=ARRAY['bank_account_id','fiat_currency_code','fiat_amount','crypto_asset_id','quantity','operated_at'];
@@ -44,11 +45,11 @@ BEGIN
    RAISE EXCEPTION 'Bank command resource is outside source journal owner scope';
   END IF;
  END LOOP;
- FOREACH k IN ARRAY ARRAY['amount','fiat_amount','quantity'] LOOP
+ FOREACH k IN ARRAY ARRAY['amount','fiat_amount','quantity','from_quantity','to_quantity'] LOOP
   IF NOT p ? k THEN CONTINUE; END IF;
   n:=(p->>k)::numeric;
   IF n IS NULL OR n<=0 OR n::text IN ('NaN','Infinity','-Infinity')
-   OR n<>round(n,CASE WHEN k='quantity' OR _kind='bank_crypto_expense' THEN 18
+   OR n<>round(n,CASE WHEN k IN ('quantity','from_quantity','to_quantity') OR _kind='bank_crypto_expense' THEN 18
     WHEN _kind='budget_allocate' THEN 2 ELSE 8 END) THEN
    RAISE EXCEPTION 'Bank amount must be positive, finite and exact';
   END IF;
@@ -56,6 +57,9 @@ BEGIN
  CASE _kind
  WHEN 'bank_asset_merge' THEN
   RETURN put__merge_bank_crypto_asset(_user_id,(p->>'bank_account_id')::bigint,(p->>'from_crypto_asset_id')::bigint,(p->>'to_crypto_asset_id')::bigint,day);
+ WHEN 'bank_swap' THEN
+  RETURN put__swap_bank_crypto_asset(_user_id,(p->>'bank_account_id')::bigint,(p->>'from_crypto_asset_id')::bigint,
+   (p->>'from_quantity')::numeric,(p->>'to_crypto_asset_id')::bigint,(p->>'to_quantity')::numeric,p->>'comment',day);
  WHEN 'bank_expense' THEN
   RETURN put__record_expense(_user_id,(p->>'bank_account_id')::bigint,(p->>'category_id')::bigint,
    (p->>'amount')::numeric,(p->>'currency_code')::char(3),p->>'comment',day);
