@@ -1,7 +1,11 @@
 # Обмен крипты в банке, курсы ETH/USDC, монеты Telegram Wallet в сети TON
 
 29.09.2026, ветка `codex/crypto-accounting-recovery`, коммиты `444211a`,
-`185fe84`, `ccffcce`.
+`185fe84`, `ccffcce`. Выкачено в production 14:00 UTC (`002d31c`, GitHub
+Actions run 36579079393): миграция 050 применена в 13:59:51 UTC после штатного
+дампа CI, DOGS/HMSTR/MAJOR в сети `ton`; из контейнера API — TON 130,81 ₽,
+DOGS 0,0041 ₽, ETH 229 949 ₽, USDC 84,31 ₽; `/health` 200, маршрут обмена
+отвечает 401 без авторизации.
 
 ## 1. Обмен USDT (TON) → USDC (Arbitrum) в банке
 
