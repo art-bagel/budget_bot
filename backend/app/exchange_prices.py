@@ -1,8 +1,8 @@
 """Display-only quotes for non-TON coins while CoinGecko refuses the server.
 
 Bybit spot gives the coin in USDT; TonAPI's rate of USDT (TON master) converts
-it to RUB/USD/EUR. TON-network and Telegram Wallet coins are priced by their
-jetton master in ton_prices, never here by ticker.
+it to RUB/USD/EUR. TON-network coins, Telegram Wallet ones included, are priced
+by their jetton master in ton_prices, never here by ticker.
 """
 
 import logging
@@ -30,7 +30,7 @@ async def bybit_prices(assets: list[dict], currency: str) -> list[dict]:
     wanted: dict[str, list[dict]] = {}
     for asset in assets:
         pair = BYBIT_PAIRS.get(str(asset.get("symbol")))
-        if pair and asset.get("network_code") not in ("ton", "telegram"):
+        if pair and asset.get("network_code") != "ton":
             wanted.setdefault(pair, []).append(asset)
     if not wanted:
         return []
