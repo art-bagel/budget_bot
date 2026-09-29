@@ -5,7 +5,8 @@
 
 > 29.09.2026: шаги 1–5 выполнены, кандидат и план переключения —
 > [2026-09-29-crypto-release-candidate.md](2026-09-29-crypto-release-candidate.md).
-> Шаг 6 ждёт разрешения.
+> Шаг 6 выполнен 29.09 —
+> [2026-09-29-crypto-production-release.md](2026-09-29-crypto-production-release.md).
 
 ## Цель и границы
 

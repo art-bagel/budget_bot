@@ -180,14 +180,19 @@ BEGIN
         FROM budget_entries
         WHERE operation_id = _operation_id
     LOOP
-        IF _budget_entry.amount > 0 THEN
-            SELECT COALESCE((
-                SELECT amount
-                FROM current_budget_balances
-                WHERE category_id = _budget_entry.category_id
-                  AND currency_code = _budget_entry.currency_code
-            ), 0)
-            INTO _current_budget;
+        -- Regular categories may go negative, as in allocations; only the free
+        -- budget (Unallocated together with FX Result) must cover a reversal.
+        IF _budget_entry.amount > 0
+           AND EXISTS (SELECT 1 FROM categories WHERE id = _budget_entry.category_id AND kind = 'system') THEN
+            SELECT COALESCE(sum(b.amount), 0)
+            INTO _current_budget
+            FROM current_budget_balances b
+            WHERE b.currency_code = _budget_entry.currency_code
+              AND b.category_id IN (
+                  _budget_entry.category_id,
+                  (SELECT budgeting.get__owner_system_category_id(c.owner_type, c.owner_user_id, c.owner_family_id, 'FX Result')
+                   FROM categories c
+                   WHERE c.id = _budget_entry.category_id AND c.kind = 'system' AND c.name = 'Unallocated'));
 
             IF _current_budget < _budget_entry.amount THEN
                 RAISE EXCEPTION 'Cannot reverse operation %, insufficient budget in category %',

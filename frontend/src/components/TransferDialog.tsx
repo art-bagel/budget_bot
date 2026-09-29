@@ -83,7 +83,8 @@ export default function TransferDialog({
   const amountValue = parseFloat(amount);
   const hasPositiveBalance = (selectedSource?.balance || 0) > 0;
   const exceedsSourceBalance = !!selectedSource && amountValue > selectedSource.balance;
-  const validationMessage = !selectedSource
+  // Regular categories may go negative; only the free budget must cover the amount.
+  const validationMessage = selectedSource?.kind !== 'free_budget'
     ? null
     : !hasPositiveBalance
       ? 'В выбранной категории нет денег для перевода.'

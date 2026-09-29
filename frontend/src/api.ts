@@ -837,6 +837,20 @@ export async function transferBetweenAccounts(data: AccountTransferRequest): Pro
   });
 }
 
+// Crypto held on a cash account, e.g. personal ↔ family. Amount stays a decimal string.
+export async function transferBankCrypto(data: {
+  from_account_id: number;
+  to_account_id: number;
+  crypto_asset_id: number;
+  amount: string;
+  comment?: string;
+}): Promise<{ operation_id: number; quantity: string; cost_base: number; base_currency_code: string }> {
+  return apiFetch('/operations/bank-crypto-transfer', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function fetchCategoryAccountCurrencies(categoryId: number): Promise<AccountCurrency[]> {
   return apiFetch<AccountCurrency[]>(`/scheduled-expenses/category/${categoryId}/currencies`);
 }

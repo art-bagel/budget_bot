@@ -88,6 +88,13 @@ BEGIN
         _from_owner_type, _from_owner_user_id, _from_owner_family_id
     );
 
+    -- Cost moves between owners' Unallocated in one base currency.
+    IF _base_currency_code IS DISTINCT FROM budgeting.get__owner_base_currency(
+        _to_owner_type, _to_owner_user_id, _to_owner_family_id
+    ) THEN
+        RAISE EXCEPTION 'У счетов разная базовая валюта';
+    END IF;
+
     IF _from_account_kind = 'cash' THEN
         _from_unallocated_id := budgeting.get__owner_system_category_id(
             _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'

@@ -149,7 +149,13 @@ BEGIN
     END LOOP;
 
     IF _remaining_to_consume > 0 THEN
-        RAISE EXCEPTION 'Сумма превышает остаток';
+        RAISE EXCEPTION 'Сумма превышает доступный остаток%', COALESCE((
+            SELECT format(': %s %s уже потрачены вне бота и ждут категории расхода',
+                          trim_scale(sum(amount_remaining)), _asset.symbol)
+            FROM crypto_lots
+            WHERE bank_account_id = _bank_account_id AND crypto_asset_id = _crypto_asset_id AND amount_remaining > 0
+              AND COALESCE((metadata->>'reserved_for_manual_expense')::boolean, false)
+            HAVING sum(amount_remaining) > 0), '');
     END IF;
 
     INSERT INTO operations (

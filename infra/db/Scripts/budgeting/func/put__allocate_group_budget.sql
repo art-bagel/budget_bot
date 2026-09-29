@@ -167,7 +167,8 @@ BEGIN
     WHERE category_id IN (_from_category_id, _fx_category_id)
       AND currency_code = _base_currency_code;
 
-    IF _from_balance < _source_debit THEN
+    -- A regular category may go negative; the free budget may not.
+    IF _source_kind = 'system' AND _from_balance < _source_debit THEN
         RAISE EXCEPTION 'Insufficient budget in category %', _from_category_id;
     END IF;
 
