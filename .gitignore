@@ -180,6 +180,8 @@ node_modules/
 
 # Personal data — never commit
 /local-data/
+# Also ignore the worktree symlink to shared personal materials.
+/local-data
 /skrin_shot/
 *.xlsx
 /infra/db/.env.prod
@@ -191,6 +193,8 @@ node_modules/
 # git clean. Каталоги перечислены поимённо, а не /crypto-task/ целиком,
 # чтобы в ветке crypto не скрывать новые файлы разбора.
 /crypto-task/local-data/
+# Also ignore the worktree symlink to shared personal materials.
+/local-data
 /crypto-task/archive/
 /crypto-task/results/
 /crypto-task/outputs/
