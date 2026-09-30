@@ -231,7 +231,7 @@ export default function CryptoAssetSheet({
             <div className="ca-sheet__stat">
               <span className="ca-sheet__stat-label">{basisOpen ? 'Учтённые затраты' : 'Себестоимость'}</span>
               <span className="ca-sheet__stat-val">
-                {basisUnknown ? '—' : `${basisEstimated ? '≈ ' : ''}${formatStatAmount(detail.remaining_cost_basis ?? 0)}\u00a0${baseSym}`}
+                {basisUnknown ? '—' : `${formatStatAmount(detail.remaining_cost_basis ?? 0)}\u00a0${baseSym}`}
               </span>
               <span className="ca-sheet__stat-sub">
                 {basisUnknown ? 'неизвестна' : basisOpen ? 'с займом' : `${formatNumericAmount(detail.avg_cost_per_unit ?? 0, (detail.avg_cost_per_unit ?? 0) < 1 ? 6 : 2)} ${baseSym} за 1 ${detail.symbol}`}

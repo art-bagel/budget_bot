@@ -117,7 +117,7 @@ export default function AccountDetailSheet({
           {formatNumericAmount(b.amount, b.asset_type === 'crypto' ? 8 : 2)} {b.asset_type === 'crypto' ? (b.symbol ?? b.currency_code) : currencySymbol(b.currency_code)}
           {!isBase && (
             <span className="comp__conv">
-              ≈ {formatBase(b.historical_cost_in_base)} {currencySymbol(baseCurrencyCode)}
+              {formatBase(b.historical_cost_in_base)} {currencySymbol(baseCurrencyCode)}
             </span>
           )}
         </span>

@@ -292,7 +292,7 @@ export function LendingTakeDebtSheet({
           {(lend.borrowed_quantity ?? 0) > 0
             ? `Сейчас в долге: ${formatNumericAmount(lend.borrowed_quantity ?? 0, 8)} ${symbol}`
             : 'Долга по этому лендингу пока нет'}
-          {valueInBase != null ? ` · ≈ ${formatNumericAmount(valueInBase, 2)} ${baseCurrencyCode}` : ''}
+          {valueInBase != null ? ` · ${formatNumericAmount(valueInBase, 2)} ${baseCurrencyCode}` : ''}
         </span>
       </div>
       <div className="apf-field">
@@ -442,7 +442,7 @@ export function LendingRepayDebtSheet({
           Долг: {formatNumericAmount(debtQty, 8)} {symbol}
           {accruedInterest > 0 ? `, из них проценты ${formatNumericAmount(accruedInterest, 8)}` : ''}
           {' · '}На счёте: {formatNumericAmount(available, 8)} {symbol}
-          {valueInBase != null ? ` · ≈ ${formatNumericAmount(valueInBase, 2)} ${baseCurrencyCode}` : ''}
+          {valueInBase != null ? ` · ${formatNumericAmount(valueInBase, 2)} ${baseCurrencyCode}` : ''}
         </span>
         {!sourcePosition && (
           <span className="tok-row__hint tok-row__hint--muted">На счёте нет заёмного актива — сначала пополни баланс.</span>

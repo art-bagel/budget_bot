@@ -2775,7 +2775,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     .some((position) => position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0))
     || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
-  const activeScopeBasisPrefix = activeScopeDisplayMetrics.basisEstimated ? '≈ ' : '';
   const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
     ? Landmark
     : activeAssetTypeCode === 'crypto'
@@ -3096,7 +3095,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
           <div className="pf-tsum__now-row">
             <div className="pf-tsum__now-value">
-              {activeScopeMarketIncomplete ? '≈ ' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
               <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
             </div>
             {!activeScopeHasCrypto && activeScopeBaseValue > 0 && (() => {
@@ -3118,7 +3117,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
             <div className="pf-tsum__cell-value">
-              {activeScopeDisplayMetrics.basisMissing ? '—' : activeScopeBasisPrefix + new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
+              {activeScopeDisplayMetrics.basisMissing ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
               <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
             </div>
           </div>
@@ -3200,7 +3199,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <div className="pf-alloc__totals">
             <div className="pf-alloc__t-cell">
               <span>{activeScopeBasisLabel}</span>
-              <strong>{activeScopeDisplayMetrics.basisMissing ? '—' : activeScopeBasisPrefix + fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+              <strong>{activeScopeDisplayMetrics.basisMissing ? '—' : fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
               <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
             </div>
             <span className="pf-alloc__t-sep" />
@@ -3456,7 +3455,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </div>
                     </div>
                     <div className="pf-grp__total">
-                      {groupMarketIncomplete ? '≈ ' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
+                      {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
                       <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </div>
                   </div>
@@ -3872,9 +3871,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   {portfolioAnalyticsAccounts.map((account, index) => (
                     <PaRow key={account.key} icon={account.accountName.slice(0, 1).toUpperCase()}
                       color={PA_COLORS[index % PA_COLORS.length]} title={account.accountName}
-                      amount={`${account.valuationIncomplete ? '≈ ' : ''}${money(account.estimatedValue)}`}
+                      amount={`${money(account.estimatedValue)}`}
                       share={accountsTotal > 0 ? Math.max(account.estimatedValue, 0) / accountsTotal : 0}
-                      foot={`${account.isCrypto ? 'затраты' : 'вложено'} ${account.basisIncomplete ? '≈ ' : ''}${money(account.investedPrincipal)}${!account.isCrypto || account.cashValue !== 0 ? ` · остаток ${money(account.cashValue)}` : ''}`}
+                      foot={`${account.isCrypto ? 'затраты' : 'вложено'} ${money(account.investedPrincipal)}${!account.isCrypto || account.cashValue !== 0 ? ` · остаток ${money(account.cashValue)}` : ''}`}
                       footRight={account.isCrypto ? undefined : <span className={`pa-foot--${tone(account.resultValue) ?? 'mute'}`}>{signed(account.resultValue)}</span>} />
                   ))}
                 </div>
@@ -5596,7 +5595,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       ? cryptoLivePrices.get(selectedBorrowAsset.id)?.price ?? null
                       : null;
                     const borrowValueHint = (selectedBorrowAsset && Number.isFinite(borrowQtyNum) && borrowQtyNum > 0 && livePrice && livePrice > 0)
-                      ? `≈ ${formatNumericAmount(livePrice * borrowQtyNum, 2)} ${currencySymbol(user.base_currency_code)}`
+                      ? `${formatNumericAmount(livePrice * borrowQtyNum, 2)} ${currencySymbol(user.base_currency_code)}`
                       : null;
                     return (
                       <>
@@ -5801,7 +5800,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       {heroTypeSheetCode === 'crypto' && (
                         <div className="pf-sheet-account__row">
                           <span>Рыночная оценка с DeFi</span>
-                          <strong>{accountIncomplete ? '≈ ' : ''}{formatAmount(currentAccountValue, user.base_currency_code)}</strong>
+                          <strong>{formatAmount(currentAccountValue, user.base_currency_code)}</strong>
                         </div>
                       )}
                       {heroTypeSheetCode !== 'crypto' && estimatedValue > 0 && (
