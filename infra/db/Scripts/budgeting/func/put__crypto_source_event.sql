@@ -392,7 +392,9 @@ BEGIN
                 IF _payload->>_key IS NULL THEN RAISE EXCEPTION 'Missing bank crypto argument %',_key; END IF;
             END LOOP;
             SELECT * INTO _resource FROM bank_accounts WHERE id=(_payload->>'bank_account_id')::bigint;
-            IF _resource.id IS NULL OR NOT _resource.is_active OR _resource.account_kind<>'cash'
+            -- A collection account holds coins like a bank and may send them to a crypto account.
+            IF _resource.id IS NULL OR NOT _resource.is_active
+                OR NOT (_resource.account_kind='cash' OR (_kind='bank_to_portfolio' AND _resource.investment_asset_type='collectible'))
                 OR _resource.owner_type IS DISTINCT FROM _account.owner_type
                 OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
                 OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id THEN

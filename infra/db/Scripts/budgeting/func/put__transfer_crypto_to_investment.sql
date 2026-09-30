@@ -18,6 +18,7 @@ DECLARE
     _bank_owner_user_id bigint;
     _bank_owner_family_id bigint;
     _bank_account_kind text;
+    _bank_asset_type text;
     _investment_owner_type text;
     _investment_owner_user_id bigint;
     _investment_owner_family_id bigint;
@@ -48,8 +49,8 @@ BEGIN
         RAISE EXCEPTION 'Crypto transfer amount must be positive';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind
-    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, investment_asset_type
+    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind, _bank_asset_type
     FROM bank_accounts
     WHERE id = _bank_account_id
       AND is_active;
@@ -64,8 +65,9 @@ BEGIN
         RAISE EXCEPTION 'Unknown active bank or investment account';
     END IF;
 
-    IF _bank_account_kind <> 'cash' THEN
-        RAISE EXCEPTION 'Source account must be a cash account';
+    -- Coins held on a collection account leave it without touching the budget.
+    IF NOT (_bank_account_kind = 'cash' OR _bank_asset_type = 'collectible') THEN
+        RAISE EXCEPTION 'Source account must be a cash or collection account';
     END IF;
 
     IF _investment_account_kind <> 'investment' OR _investment_asset_type <> 'crypto' THEN
@@ -181,8 +183,10 @@ BEGIN
     INSERT INTO crypto_bank_entries (operation_id, bank_account_id, crypto_asset_id, amount)
     VALUES (_operation_id, _bank_account_id, _crypto_asset_id, -_amount);
 
-    INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-    VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_consumed_cost_base);
+    IF _bank_account_kind = 'cash' THEN
+        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+        VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_consumed_cost_base);
+    END IF;
 
     FOR _lot_idx IN 1..array_length(_lot_ids, 1) LOOP
         UPDATE crypto_lots
@@ -264,7 +268,7 @@ BEGIN
             NULLIF(btrim(_comment), ''),
             _metadata || jsonb_build_object(
                 'entry_value_in_base', _consumed_cost_base,
-                'source_kind', 'bank',
+                'source_kind', CASE WHEN _bank_account_kind = 'cash' THEN 'bank' ELSE 'collection' END,
                 'source_bank_account_id', _bank_account_id
             ),
             _user_id
@@ -325,7 +329,7 @@ BEGIN
             NULLIF(btrim(_comment), ''),
             _metadata || jsonb_build_object(
                 'entry_value_in_base', _consumed_cost_base,
-                'source_kind', 'bank',
+                'source_kind', CASE WHEN _bank_account_kind = 'cash' THEN 'bank' ELSE 'collection' END,
                 'source_bank_account_id', _bank_account_id
             ),
             _user_id
@@ -339,11 +343,13 @@ BEGIN
         -_consumed_cost_base
     );
 
-    PERFORM budgeting.put__apply_current_budget_delta(
-        _from_unallocated_id,
-        _base_currency_code,
-        -_consumed_cost_base
-    );
+    IF _bank_account_kind = 'cash' THEN
+        PERFORM budgeting.put__apply_current_budget_delta(
+            _from_unallocated_id,
+            _base_currency_code,
+            -_consumed_cost_base
+        );
+    END IF;
 
     RETURN jsonb_build_object(
         'operation_id', _operation_id,

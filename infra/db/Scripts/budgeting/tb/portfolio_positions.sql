@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS budgeting.portfolio_positions (
         (owner_type = 'family' AND owner_user_id IS NULL AND owner_family_id IS NOT NULL)
     ),
     CONSTRAINT chk_portfolio_positions_amount CHECK (
-        (asset_type_code = 'crypto' AND amount_in_currency >= 0)
+        (asset_type_code IN ('crypto', 'collectible') AND amount_in_currency >= 0)
         OR
-        (asset_type_code <> 'crypto' AND amount_in_currency > 0)
+        (asset_type_code NOT IN ('crypto', 'collectible') AND amount_in_currency > 0)
     ),
     CONSTRAINT chk_portfolio_positions_close_fields CHECK (
         (status = 'open' AND closed_at IS NULL AND close_amount_in_currency IS NULL AND close_currency_code IS NULL)
