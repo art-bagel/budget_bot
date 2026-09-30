@@ -189,6 +189,12 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
       const id = pos.metadata?.crypto_asset_id;
       if (typeof id === 'number' && Number.isFinite(id)) assetIds.add(id);
     }
+    // Coins held on collection accounts, like bank coins.
+    for (const balances of Object.values(investmentBalancesByAccountId)) {
+      for (const balance of balances) {
+        if (balance.asset_type === 'crypto' && balance.crypto_asset_id) assetIds.add(balance.crypto_asset_id);
+      }
+    }
     for (const protocol of cryptoProtocolPositions) {
       if (typeof protocol.crypto_asset_id === 'number') assetIds.add(protocol.crypto_asset_id);
       for (const id of [protocol.metadata.borrowed_crypto_asset_id, protocol.metadata.token1_crypto_asset_id]) {
@@ -203,7 +209,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     void fetchCryptoLivePrices(Array.from(assetIds), user.base_currency_code)
       .then((items) => setCryptoLivePrices(new Map(items.map((item) => [item.crypto_asset_id, item]))))
       .catch(() => setCryptoLivePrices(new Map()));
-  }, [openPositions, cryptoProtocolPositions, user.base_currency_code]);
+  }, [openPositions, cryptoProtocolPositions, investmentBalancesByAccountId, user.base_currency_code]);
 
   useEffect(() => {
     const sharesTickers: string[] = [];
@@ -402,7 +408,12 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
       }
       marketValue += pos.amount_in_currency;
     }
-    return summary.cash_balance_in_base + marketValue + getCryptoProtocolsValue(accountId);
+    // Collection accounts also hold coins: at market when quoted, otherwise at cost.
+    const coinsValue = (investmentBalancesByAccountId[accountId] ?? [])
+      .filter((balance) => balance.asset_type === 'crypto')
+      .reduce((sum, balance) => sum + (walletMarketValue(balance.amount, balance.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code)
+        ?? balance.historical_cost_in_base), 0);
+    return summary.cash_balance_in_base + coinsValue + marketValue + getCryptoProtocolsValue(accountId);
   };
 
   const investmentBankTotal = investmentAccounts.filter((account) => account.include_in_statistics !== false).reduce(
