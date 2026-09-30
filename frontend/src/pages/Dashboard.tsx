@@ -388,7 +388,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     .reduce((sum, p) => sum + (protocolMarketValue(p, cryptoLivePrices, user.base_currency_code).value ?? 0), 0);
   const includedAccounts = new Set(investmentAccounts.filter((a) => a.include_in_statistics !== false).map((a) => a.id));
   const investmentValueIncomplete = openPositions.some((p) => includedAccounts.has(p.investment_account_id)
-    && p.asset_type_code === 'crypto' && getResolvedPositionValue(p) === null)
+    && (p.asset_type_code === 'collectible' || (p.asset_type_code === 'crypto' && getResolvedPositionValue(p) === null)))
     || openProtocols.some((p) => includedAccounts.has(p.investment_account_id)
       && protocolMarketValue(p, cryptoLivePrices, user.base_currency_code).value === null);
 
@@ -406,13 +406,13 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
         marketValue += resolvedValue;
         continue;
       }
-      marketValue += pos.amount_in_currency;
+      if (pos.asset_type_code !== 'collectible' && pos.asset_type_code !== 'crypto') marketValue += pos.amount_in_currency;
     }
     // Collection accounts also hold coins: at market when quoted, otherwise at cost.
     const coinsValue = (investmentBalancesByAccountId[accountId] ?? [])
       .filter((balance) => balance.asset_type === 'crypto')
       .reduce((sum, balance) => sum + (walletMarketValue(balance.amount, balance.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code)
-        ?? balance.historical_cost_in_base), 0);
+        ?? 0), 0);
     return summary.cash_balance_in_base + coinsValue + marketValue + getCryptoProtocolsValue(accountId);
   };
 

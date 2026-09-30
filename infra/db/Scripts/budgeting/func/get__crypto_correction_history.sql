@@ -25,7 +25,7 @@ BEGIN
      WHERE r.source_event_id=s.id),'[]'::jsonb) previous_versions
  FROM budgeting.crypto_source_events s WHERE s.owner_key=ownerkey
  -- Imported technical exchange detail stays out of the ordinary manual editor.
- AND (s.source_namespace='manual-portfolio-v1' OR (s.reversible AND EXISTS(
+ AND (s.source_namespace IN ('manual-portfolio-v1','manual-collection-v1') OR (s.reversible AND EXISTS(
    SELECT 1 FROM jsonb_array_elements(s.commands) c
    JOIN budgeting.bank_accounts visible ON visible.id=COALESCE(
       (c->'payload'->>'investment_account_id')::bigint,

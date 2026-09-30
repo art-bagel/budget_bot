@@ -6,8 +6,8 @@ BEGIN
  AND a.owner_user_id IS NOT DISTINCT FROM o.owner_user_id AND a.owner_family_id IS NOT DISTINCT FROM o.owner_family_id)
  SELECT jsonb_build_object(
  'positions',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',p.id,'name',p.title,'quantity',p.quantity::text,
- 'cost',budgeting.get__crypto_position_entry_summary(p.id)->'remaining_cost_basis','funding',p.metadata->'funding_units') ORDER BY p.id)
- FROM budgeting.portfolio_positions p WHERE p.investment_account_id IN (SELECT id FROM accounts) AND p.asset_type_code='crypto'),'[]'::jsonb),
+ 'cost',CASE WHEN p.asset_type_code='collectible' THEN p.metadata->'amount_in_base' ELSE budgeting.get__crypto_position_entry_summary(p.id)->'remaining_cost_basis' END,'funding',p.metadata->'funding_units') ORDER BY p.id)
+ FROM budgeting.portfolio_positions p WHERE p.investment_account_id IN (SELECT id FROM accounts) AND p.asset_type_code IN ('crypto','collectible')),'[]'::jsonb),
  'protocols',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',p.id,'name',p.protocol_name,'quantity',p.current_quantity::text,
  'cost',p.cost_basis_in_base::text,'metadata',p.metadata) ORDER BY p.id)
  FROM budgeting.crypto_protocol_positions p WHERE p.investment_account_id IN (SELECT id FROM accounts)),'[]'::jsonb),

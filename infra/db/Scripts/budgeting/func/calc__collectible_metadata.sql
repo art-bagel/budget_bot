@@ -8,7 +8,7 @@ IMMUTABLE
 AS $function$
 BEGIN
     _metadata := COALESCE(_metadata, '{}'::jsonb);
-    IF COALESCE(_metadata ->> 'item_kind', '') NOT IN ('telegram_gift', 'sticker', 'cs2_skin', 'physical', 'other') THEN
+    IF COALESCE(_metadata ->> 'item_kind', '') NOT IN ('telegram_gift', 'sticker', 'nft', 'cs2_skin', 'physical', 'other') THEN
         RAISE EXCEPTION 'Укажите вид предмета коллекции';
     END IF;
     IF (_metadata ->> 'item_link') !~ '^https://\S+$' OR length(_metadata ->> 'item_link') > 500 THEN

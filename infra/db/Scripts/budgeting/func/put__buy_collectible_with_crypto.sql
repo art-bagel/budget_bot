@@ -37,7 +37,7 @@ BEGIN
        OR _crypto_quantity <> round(_crypto_quantity, 18) THEN
         RAISE EXCEPTION 'Количество монет должно быть положительным, до 18 знаков';
     END IF;
-    IF _quantity IS NOT NULL AND _quantity <= 0 THEN
+    IF _quantity IS NOT NULL AND (_quantity <= 0 OR _quantity::text IN ('NaN','Infinity','-Infinity') OR _quantity<>round(_quantity,8)) THEN
         RAISE EXCEPTION 'Position quantity must be positive when provided';
     END IF;
     _metadata := calc__collectible_metadata(_metadata);

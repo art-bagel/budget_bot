@@ -22,6 +22,10 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
       { key: 'number', label: 'Номер' },
     ],
   },
+  { value: 'nft', label: 'Другое NFT', fields: [
+    { key: 'collection', label: 'Коллекция' }, { key: 'network', label: 'Сеть' },
+    { key: 'contract', label: 'Контракт' }, { key: 'token_id', label: 'Token ID' },
+  ] },
   {
     value: 'cs2_skin',
     label: 'Скин CS2',

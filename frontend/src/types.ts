@@ -830,6 +830,8 @@ export interface PortfolioEvent {
 }
 
 export interface CreatePortfolioPositionRequest {
+  received_free?: boolean;
+  request_id?: string;
   investment_account_id: number;
   asset_type_code: string;
   title: string;
@@ -842,6 +844,7 @@ export interface CreatePortfolioPositionRequest {
 }
 
 export interface TopUpPortfolioPositionRequest {
+  request_id?: string;
   amount_in_currency: number;
   currency_code: string;
   quantity?: number;
@@ -850,6 +853,7 @@ export interface TopUpPortfolioPositionRequest {
 }
 
 export interface ClosePortfolioPositionRequest {
+  request_id?: string;
   close_amount_in_currency: number;
   close_currency_code: string;
   close_amount_in_base?: number;
@@ -858,6 +862,7 @@ export interface ClosePortfolioPositionRequest {
 }
 
 export interface PartialClosePortfolioPositionRequest {
+  request_id?: string;
   return_amount_in_currency: number;
   return_currency_code: string;
   principal_reduction_in_currency: number;
@@ -886,6 +891,7 @@ export interface RecordPortfolioIncomeResponse {
 }
 
 export interface RecordPortfolioFeeRequest {
+  request_id?: string;
   amount: number;
   currency_code: string;
   charged_at?: string;

@@ -1,6 +1,15 @@
 CREATE OR REPLACE FUNCTION budgeting.get__crypto_correction_fields(_kind text)
 RETURNS text[] LANGUAGE sql IMMUTABLE AS $f$
  SELECT CASE _kind
+ WHEN 'collectible_coin_fee' THEN ARRAY['crypto_quantity']
+ WHEN 'collectible_coin_topup' THEN ARRAY['crypto_quantity']
+ WHEN 'collectible_transfer' THEN ARRAY['amount']
+ WHEN 'collectible_fiat_buy' THEN ARRAY['amount_in_currency','quantity']
+ WHEN 'collectible_fiat_close' THEN ARRAY['close_amount_in_currency']
+ WHEN 'collectible_fiat_topup' THEN ARRAY['amount_in_currency']
+ WHEN 'collectible_fiat_fee' THEN ARRAY['amount']
+ WHEN 'collectible_buy' THEN ARRAY['crypto_quantity','quantity']
+ WHEN 'collectible_sell' THEN ARRAY['crypto_quantity']
  WHEN 'lp_snapshot' THEN ARRAY['quantity','secondary_quantity']
  WHEN 'lp_withdraw' THEN ARRAY['quantity','secondary_quantity','share_percent']
  WHEN 'lp_reward' THEN ARRAY['quantity']

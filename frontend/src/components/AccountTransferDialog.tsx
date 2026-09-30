@@ -238,7 +238,7 @@ export default function AccountTransferDialog({
     const heldCryptoByOwner = result.filter((item) => (item.kind === 'cash' || item.account.investment_asset_type === 'collectible')
       && item.assetType === 'crypto' && item.balance > 0);
     for (const { account, kind } of allAccounts) {
-      if (kind !== 'investment' || account.investment_asset_type !== 'crypto') continue;
+      if (kind !== 'investment' || !['crypto', 'collectible'].includes(account.investment_asset_type ?? '')) continue;
       for (const crypto of heldCryptoByOwner) {
         if (!sameOwner(account, crypto.account)) continue;
         if (result.some((item) => item.account.id === account.id && item.assetKey === crypto.assetKey)) continue;
@@ -274,10 +274,10 @@ export default function AccountTransferDialog({
     const assetType = role === 'from' ? item.assetType : otherItem.assetType;
     if (assetType === 'crypto') {
       // A collection account sends coins only to a crypto account, like a bank does.
+      const fromCollection = fromAccount.investment_asset_type === 'collectible';
+      const toCollection = toAccount.investment_asset_type === 'collectible';
       return (fK === 'cash' && tK === 'cash') || (
-        (fK === 'cash' || fromAccount.investment_asset_type === 'collectible')
-        && tK === 'investment'
-        && toAccount.investment_asset_type === 'crypto'
+        (fK === 'cash' || fromCollection) && (toCollection || (tK === 'investment' && toAccount.investment_asset_type === 'crypto') || tK === 'cash')
         && sameOwner(fromAccount, toAccount));
     }
     return !!COMPAT[fK]?.[tK];
@@ -330,14 +330,18 @@ export default function AccountTransferDialog({
     if (!canSubmit || !fromSel || !toSel) return;
     setSubmitting(true); setError(null);
     try {
-      if (fromItem?.assetType === 'crypto' && toItem?.kind === 'cash' && fromItem.cryptoAssetId) {
-        await transferBankCrypto({
+      if (fromItem?.assetType === 'crypto' && (toItem?.kind === 'cash' || toItem?.account.investment_asset_type === 'collectible') && fromItem.cryptoAssetId) {
+        const payload = {
           from_account_id: fromSel.accountId,
           to_account_id: toSel.accountId,
           crypto_asset_id: fromItem.cryptoAssetId,
           amount,
           comment: comment.trim() || undefined,
-        });
+
+          collection_transfer: fromItem.account.investment_asset_type === 'collectible' || toItem?.account.investment_asset_type === 'collectible',
+        };
+        await transferBankCrypto({ ...payload, request_id: cryptoRequest.requestId(payload) });
+        cryptoRequest.completed();
       } else if (fromItem?.assetType === 'crypto' && toItem?.kind === 'investment' && fromItem.cryptoAssetId) {
         const payload = {
           bank_account_id: fromSel.accountId,

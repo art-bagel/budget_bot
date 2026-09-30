@@ -1043,7 +1043,7 @@ export default function Settings({
       )}
 
       {settingsAccount && (() => {
-        const isCrypto = settingsAccount.investment_asset_type === 'crypto';
+        const isCrypto = settingsAccount.investment_asset_type === 'crypto' || settingsAccount.investment_asset_type === 'collectible';
         const tone = settingsAccount.investment_asset_type ? ASSET_CHIP[settingsAccount.investment_asset_type] : null;
         const busy = deletingInvestmentAccountId !== null;
         const included = settingsAccount.include_in_statistics !== false;

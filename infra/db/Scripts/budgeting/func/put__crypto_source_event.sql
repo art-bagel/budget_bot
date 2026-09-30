@@ -40,7 +40,7 @@ BEGIN
     IF _account.id IS NULL OR NOT budgeting.has__owner_access(_user_id,_account.owner_type,_account.owner_user_id,_account.owner_family_id) THEN
         RAISE EXCEPTION 'Access denied to source journal account';
     END IF;
-    IF NOT ((_account.account_kind='investment' AND _account.investment_asset_type='crypto')
+    IF NOT ((_account.account_kind='investment' AND (_account.investment_asset_type='crypto' OR (_account.investment_asset_type='collectible' AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')))))
         OR (_account.account_kind='cash' AND jsonb_typeof(_commands)='array'
         AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('bank_buy','bank_cash_sell','bank_asset_merge','bank_swap','bank_expense','bank_crypto_expense','bank_purchase','budget_allocate')))) THEN
         RAISE EXCEPTION 'Source journal requires a crypto investment account';
@@ -120,7 +120,7 @@ BEGIN
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw','bank_to_portfolio','position_income')) THEN
+            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw','bank_to_portfolio','position_income','collectible_coin_fee','collectible_coin_topup','collectible_sell','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -129,7 +129,7 @@ BEGIN
             IF _resource.id IS NULL OR _resource.owner_type IS DISTINCT FROM _account.owner_type
                 OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
                 OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id
-                OR _resource.account_kind<>'investment' OR _resource.investment_asset_type<>'crypto' THEN
+                OR _resource.account_kind<>'investment' OR NOT (_resource.investment_asset_type='crypto' OR (_resource.investment_asset_type='collectible' AND _kind IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee'))) THEN
                 RAISE EXCEPTION 'Command resource is outside source journal owner scope';
             END IF;
         END LOOP;
@@ -186,6 +186,46 @@ BEGIN
             END IF;
         END IF;
         CASE _kind
+        WHEN 'collectible_fiat_buy' THEN
+            _result:=put__create_portfolio_position(_user_id,(_payload->>'investment_account_id')::bigint,
+                'collectible',_payload->>'title',(_payload->>'quantity')::numeric,
+                (_payload->>'amount_in_currency')::numeric,(_payload->>'currency_code')::char(3),
+                _accounting_date,_payload->>'comment',_payload->'metadata');
+        WHEN 'collectible_fiat_close' THEN
+            _result:=put__close_portfolio_position(_user_id,(_payload->>'position_id')::bigint,
+                (_payload->>'close_amount_in_currency')::numeric,(_payload->>'close_currency_code')::char(3),
+                (_payload->>'close_amount_in_base')::numeric,_accounting_date,_payload->>'comment');
+        WHEN 'collectible_fiat_partial' THEN
+            _result:=put__partial_close_portfolio_position(_user_id,(_payload->>'position_id')::bigint,
+                (_payload->>'return_amount_in_currency')::numeric,(_payload->>'return_currency_code')::char(3),
+                (_payload->>'principal_reduction_in_currency')::numeric,(_payload->>'return_amount_in_base')::numeric,
+                (_payload->>'closed_quantity')::numeric,_accounting_date,_payload->>'comment');
+        WHEN 'collectible_fiat_topup' THEN
+            _result:=put__top_up_portfolio_position(_user_id,(_payload->>'position_id')::bigint,
+                (_payload->>'amount_in_currency')::numeric,(_payload->>'currency_code')::char(3),
+                (_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment');
+        WHEN 'collectible_fiat_fee' THEN
+            _result:=put__record_portfolio_fee(_user_id,(_payload->>'position_id')::bigint,
+                (_payload->>'amount')::numeric,(_payload->>'currency_code')::char(3),_accounting_date,_payload->>'comment');
+        WHEN 'collectible_receive' THEN
+            _result:=put__receive_collectible(_user_id,(_payload->>'investment_account_id')::bigint,
+                _payload->>'title',(_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment',_payload->'metadata');
+        WHEN 'collectible_coin_fee', 'collectible_coin_topup' THEN
+            _result:=put__charge_collectible_coin(_user_id,(_payload->>'position_id')::bigint,
+                (_payload->>'crypto_asset_id')::bigint,(_payload->>'crypto_quantity')::numeric,
+                CASE WHEN _kind='collectible_coin_fee' THEN 'fee' ELSE 'topup' END,_accounting_date,_payload->>'comment');
+        WHEN 'collectible_transfer' THEN
+            _result:=put__transfer_bank_crypto(_user_id,(_payload->>'from_account_id')::bigint,
+                (_payload->>'to_account_id')::bigint,(_payload->>'crypto_asset_id')::bigint,
+                (_payload->>'amount')::numeric,_payload->>'comment',_accounting_date);
+        WHEN 'collectible_buy' THEN
+            _result:=put__buy_collectible_with_crypto(_user_id,(_payload->>'investment_account_id')::bigint,
+                (_payload->>'crypto_asset_id')::bigint,(_payload->>'crypto_quantity')::numeric,
+                _payload->>'title',(_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment',_payload->'metadata');
+        WHEN 'collectible_sell' THEN
+            _result:=put__sell_collectible_for_crypto(_user_id,(_payload->>'position_id')::bigint,
+                (_payload->>'crypto_asset_id')::bigint,(_payload->>'crypto_quantity')::numeric,
+                _accounting_date,_payload->>'comment',(_payload->>'item_quantity')::numeric);
         WHEN 'lp_snapshot','lp_withdraw','lp_reward' THEN
             _result:=budgeting.put__crypto_lp_action(_user_id,_kind,_payload,_accounting_date);
         WHEN 'bank_asset_merge','bank_swap','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate' THEN

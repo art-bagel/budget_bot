@@ -58,6 +58,8 @@ class PortfolioEventItem(BaseModel):
 
 
 class CreatePortfolioPositionRequest(BaseModel):
+    received_free: bool = False
+    request_id: UUID | None = None
     investment_account_id: int
     asset_type_code: str
     title: str
@@ -71,8 +73,8 @@ class CreatePortfolioPositionRequest(BaseModel):
     @field_validator('amount_in_currency')
     @classmethod
     def amount_must_be_positive(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError('Сумма должна быть положительной')
+        if v < 0:
+            raise ValueError('Сумма не может быть отрицательной')
         return v
 
     @field_validator('title', 'asset_type_code')
@@ -84,6 +86,7 @@ class CreatePortfolioPositionRequest(BaseModel):
 
 
 class TopUpPortfolioPositionRequest(BaseModel):
+    request_id: UUID | None = None
     amount_in_currency: float
     currency_code: str
     quantity: float | None = None
@@ -99,6 +102,7 @@ class TopUpPortfolioPositionRequest(BaseModel):
 
 
 class ClosePortfolioPositionRequest(BaseModel):
+    request_id: UUID | None = None
     close_amount_in_currency: float
     close_currency_code: str
     close_amount_in_base: float | None = None
@@ -114,6 +118,7 @@ class ClosePortfolioPositionRequest(BaseModel):
 
 
 class PartialClosePortfolioPositionRequest(BaseModel):
+    request_id: UUID | None = None
     return_amount_in_currency: float
     return_currency_code: str
     principal_reduction_in_currency: float
@@ -156,6 +161,7 @@ class RecordPortfolioIncomeResponse(BaseModel):
 
 
 class RecordPortfolioFeeRequest(BaseModel):
+    request_id: UUID | None = None
     amount: float
     currency_code: str
     charged_at: date | None = None
@@ -327,11 +333,27 @@ async def get_portfolio_positions(
     return _enrich_deposit_positions(positions)
 
 
+async def _post_collection(user_id: int, body: BaseModel, kind: str, day_field: str, position_id: int | None = None) -> PortfolioPositionItem:
+    request_id = getattr(body, 'request_id', None)
+    if request_id is None:
+        raise HTTPException(status_code=400, detail='Обновите форму: отсутствует идентификатор операции')
+    payload = body.model_dump(mode='json', exclude={'request_id', day_field, 'asset_type_code', 'received_free'}, exclude_none=True)
+    if position_id is not None:
+        payload['position_id'] = position_id
+    result = await ledger.call_function('budgeting.put__manual_collectible_movement', user_id,
+        request_id, kind, payload, getattr(body, day_field))
+    return PortfolioPositionItem(**result)
+
+
 @router.post('/positions', response_model=PortfolioPositionItem)
 async def create_portfolio_position(
     body: CreatePortfolioPositionRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
+    if body.asset_type_code == 'collectible':
+        if body.received_free and body.amount_in_currency != 0:
+            raise HTTPException(status_code=400, detail='Бесплатное получение не содержит оплаты')
+        return await _post_collection(user.user_id, body, 'collectible_receive' if body.received_free else 'collectible_fiat_buy', 'opened_at')
     result = await context.put__create_portfolio_position(
         user_id=user.user_id,
         investment_account_id=body.investment_account_id,
@@ -348,6 +370,7 @@ async def create_portfolio_position(
 
 
 class BuyCollectibleWithCryptoRequest(BaseModel):
+    request_id: UUID
     investment_account_id: int
     crypto_asset_id: int
     crypto_quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
@@ -359,6 +382,8 @@ class BuyCollectibleWithCryptoRequest(BaseModel):
 
 
 class SellCollectibleForCryptoRequest(BaseModel):
+    item_quantity: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=8, allow_inf_nan=False)
+    request_id: UUID
     crypto_asset_id: int
     crypto_quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
     closed_at: date | None = None
@@ -371,10 +396,27 @@ async def buy_collectible_with_crypto(
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     result = await ledger.call_function(
-        'budgeting.put__buy_collectible_with_crypto', user.user_id, body.investment_account_id,
-        body.crypto_asset_id, body.crypto_quantity, body.title, body.quantity, body.opened_at,
-        body.comment, body.metadata,
+        'budgeting.put__manual_collectible_movement', user.user_id, body.request_id, 'collectible_buy',
+        body.model_dump(mode='json', exclude={'request_id', 'opened_at'}, exclude_none=True), body.opened_at,
     )
+    return PortfolioPositionItem(**result)
+
+
+class ChargeCollectibleCoinRequest(BaseModel):
+    request_id: UUID
+    crypto_asset_id: int
+    crypto_quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    kind: Literal['fee', 'topup']
+    operated_at: date | None = None
+    comment: str | None = None
+
+
+@router.post('/positions/{position_id}/coin-charge', response_model=PortfolioPositionItem)
+async def charge_collectible_coin(position_id: int, body: ChargeCollectibleCoinRequest,
+    user: CurrentUser = Depends(get_current_user)) -> PortfolioPositionItem:
+    result = await ledger.call_function('budgeting.put__manual_collectible_movement', user.user_id, body.request_id,
+        'collectible_coin_' + body.kind,
+        {**body.model_dump(mode='json', exclude={'request_id', 'kind', 'operated_at'}, exclude_none=True), 'position_id': position_id}, body.operated_at)
     return PortfolioPositionItem(**result)
 
 
@@ -385,8 +427,8 @@ async def sell_collectible_for_crypto(
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     result = await ledger.call_function(
-        'budgeting.put__sell_collectible_for_crypto', user.user_id, position_id,
-        body.crypto_asset_id, body.crypto_quantity, body.closed_at, body.comment,
+        'budgeting.put__manual_collectible_movement', user.user_id, body.request_id, 'collectible_sell',
+        {**body.model_dump(mode='json', exclude={'request_id', 'closed_at'}, exclude_none=True), 'position_id': position_id}, body.closed_at,
     )
     return PortfolioPositionItem(**result)
 
@@ -399,6 +441,8 @@ async def close_portfolio_position(
 ) -> PortfolioPositionItem:
     # For deposits: accrue interest before closing
     position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and position['asset_type_code'] == 'collectible':
+        return await _post_collection(user.user_id, body, 'collectible_fiat_close', 'closed_at', position_id)
     if position and _is_deposit(position):
         await _accrue_deposit_interest(user.user_id, position, body.closed_at)
 
@@ -422,6 +466,8 @@ async def partial_close_portfolio_position(
 ) -> PortfolioPositionItem:
     # Term deposits cannot be partially closed
     position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and position['asset_type_code'] == 'collectible':
+        return await _post_collection(user.user_id, body, 'collectible_fiat_partial', 'closed_at', position_id)
     if position and _is_term_deposit(position):
         raise HTTPException(status_code=400, detail='Частичное снятие со вклада невозможно')
     # For savings accounts: accrue interest before partial close
@@ -450,6 +496,8 @@ async def top_up_portfolio_position(
 ) -> PortfolioPositionItem:
     # Term deposits cannot be topped up
     position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and position['asset_type_code'] == 'collectible':
+        return await _post_collection(user.user_id, body, 'collectible_fiat_topup', 'topped_up_at', position_id)
     if position and _is_term_deposit(position):
         raise HTTPException(status_code=400, detail='Пополнение вклада невозможно')
     # For savings accounts: accrue interest before top-up
@@ -503,6 +551,9 @@ async def record_portfolio_fee(
     body: RecordPortfolioFeeRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
+    position = await reports.get__portfolio_position(user.user_id, position_id)
+    if position and position['asset_type_code'] == 'collectible':
+        return await _post_collection(user.user_id, body, 'collectible_fiat_fee', 'charged_at', position_id)
     result = await context.put__record_portfolio_fee(
         user_id=user.user_id,
         position_id=position_id,

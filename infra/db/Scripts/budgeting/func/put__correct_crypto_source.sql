@@ -39,7 +39,7 @@ BEGIN
   IF idx IS NULL OR idx<0 OR idx>=jsonb_array_length(cmds) OR field IS NULL
    OR field NOT IN ('from_amount','to_amount','quantity','amount','debt_qty','interest_qty','collateral_qty',
     'collateral_fee_qty','principal_qty','secondary_principal_qty','rewards_qty','secondary_rewards_qty',
-    'return_quantity','secondary_return_quantity','secondary_quantity','fiat_amount','repay_qty')
+    'return_quantity','secondary_return_quantity','secondary_quantity','fiat_amount','repay_qty','crypto_quantity','amount_in_currency','close_amount_in_currency')
    OR jsonb_typeof(change->'value') IS DISTINCT FROM 'string' THEN
    RAISE EXCEPTION 'Можно исправлять только количества и сумму покупки, без изменения счетов и вида операции';
   END IF;

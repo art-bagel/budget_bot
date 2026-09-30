@@ -267,7 +267,7 @@ BEGIN
         IF _out<>'{}'::jsonb AND NOT COALESCE((_p->>'defer_manual_expense')::boolean,false) THEN
             RAISE EXCEPTION 'Funded fiat sale requires pending manual settlement tracking';
         END IF;
-    ELSIF _kind NOT IN ('bank_asset_merge','bank_swap','linked_fee_refund','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate','position_income','protocol_yield','fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_cash_sell','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account','group_lending','lp_snapshot','lp_withdraw','lp_reward') THEN
+    ELSIF _kind NOT IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee','bank_asset_merge','bank_swap','linked_fee_refund','bank_expense','bank_crypto_expense','bank_purchase','bank_settle_sale','budget_allocate','position_income','protocol_yield','fee','expense','bank_withdraw','bank_sell','accrue','accrue_interest','bank_cash_sell','bank_buy','bank_to_portfolio','reward','receive_unknown','quantity_correction','lp_custody','fee_refund','observation','tag_lending_account','group_lending','lp_snapshot','lp_withdraw','lp_reward') THEN
         RAISE EXCEPTION 'Command not supported by funding component accounting: %',_kind;
     END IF;
     -- Assert conservation after every command, not merely at the final snapshot.

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { buyCollectibleWithCrypto, createPortfolioPosition } from '../api';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { useMoexSearch } from '../hooks/useMoexSearch';
 import type { BankAccount, Currency, DashboardBankBalance, UserContext } from '../types';
@@ -149,7 +150,9 @@ export default function PortfolioPositionDialog({
   const isDeposit = defaultAssetTypeCode === 'deposit';
   const isSecurity = defaultAssetTypeCode === 'security';
   const isCrypto = defaultAssetTypeCode === 'crypto';
+  const collectibleRequest = useCryptoRequestKey('collectible-buy');
   const isCollectible = defaultAssetTypeCode === 'collectible';
+  const [receivedFree, setReceivedFree] = useState(false);
   const [itemKind, setItemKind] = useState('telegram_gift');
   const [itemAttributes, setItemAttributes] = useState<Record<string, string>>({});
   const [itemLink, setItemLink] = useState('');
@@ -220,7 +223,7 @@ export default function PortfolioPositionDialog({
     && !isCrypto
     && !!investmentAccountId
     && !!title.trim()
-    && parseFloat(amount) > 0
+    && ((isCollectible && receivedFree) || parseFloat(amount) > 0)
     && (!isDeposit || parseFloat(interestRate) >= 0)
     && itemLinkValid
     && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
@@ -273,8 +276,8 @@ export default function PortfolioPositionDialog({
         };
       }
 
-      if (payCoinId && metadata) {
-        await buyCollectibleWithCrypto({
+      if (payCoinId && metadata && !receivedFree) {
+        const purchase = {
           investment_account_id: Number(investmentAccountId),
           crypto_asset_id: payCoinId,
           crypto_quantity: amount,
@@ -283,21 +286,26 @@ export default function PortfolioPositionDialog({
           opened_at: openedAt || undefined,
           comment: comment.trim() || undefined,
           metadata,
-        });
+        };
+        await buyCollectibleWithCrypto({ ...purchase, request_id: collectibleRequest.requestId(purchase) });
+        collectibleRequest.completed();
         onSuccess();
         return;
       }
-      await createPortfolioPosition({
+      const purchase = {
         investment_account_id: Number(investmentAccountId),
         asset_type_code: defaultAssetTypeCode,
         title: title.trim(),
         quantity: (!isDeposit && quantity.trim()) ? Number(quantity) : undefined,
-        amount_in_currency: Number(amount),
+        amount_in_currency: isCollectible && receivedFree ? 0 : Number(amount),
+        received_free: isCollectible && receivedFree,
         currency_code: currencyCode,
         opened_at: openedAt || undefined,
         comment: comment.trim() || undefined,
         metadata,
-      });
+      };
+      await createPortfolioPosition({ ...purchase, request_id: collectibleRequest.requestId(purchase) });
+      collectibleRequest.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -444,8 +452,15 @@ export default function PortfolioPositionDialog({
         </div>
       )}
 
+      {isCollectible && (
+        <div className="apf-field">
+          <label className="apf-label">Получение</label>
+          <ApfSelect value={receivedFree ? 'free' : 'buy'} options={[{ value: 'buy', label: 'Покупка' }, { value: 'free', label: 'Получено бесплатно' }]}
+            onChange={(value) => { setReceivedFree(value === 'free'); setCurrencyCode(user.base_currency_code); }} disabled={submitting} />
+        </div>
+      )}
       {/* Amount + Currency */}
-      {!isCrypto && (
+      {!isCrypto && !receivedFree && (
         <div className="apf-row">
         <div className="apf-field" style={{ flex: 2 }}>
           <label className="apf-label">{isDeposit ? 'Сумма' : isCollectible ? 'Цена покупки' : 'Сумма входа'}</label>

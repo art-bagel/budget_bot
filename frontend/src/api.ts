@@ -839,6 +839,8 @@ export async function transferBetweenAccounts(data: AccountTransferRequest): Pro
 
 // Crypto held on a cash account, e.g. personal ↔ family. Amount stays a decimal string.
 export async function transferBankCrypto(data: {
+  request_id?: string;
+  collection_transfer?: boolean;
   from_account_id: number;
   to_account_id: number;
   crypto_asset_id: number;
@@ -972,6 +974,7 @@ export async function createPortfolioPosition(
 }
 
 export async function buyCollectibleWithCrypto(data: {
+  request_id: string;
   investment_account_id: number;
   crypto_asset_id: number;
   crypto_quantity: string;
@@ -988,6 +991,8 @@ export async function buyCollectibleWithCrypto(data: {
 }
 
 export async function sellCollectibleForCrypto(positionId: number, data: {
+  item_quantity?: string;
+  request_id: string;
   crypto_asset_id: number;
   crypto_quantity: string;
   closed_at?: string;
@@ -1298,4 +1303,11 @@ export async function mergeBankCryptoAsset(payload: {
   bank_account_id: number; from_crypto_asset_id: number; to_crypto_asset_id: number; request_id: string;
 }): Promise<unknown> {
   return apiFetch('/operations/merge-bank-crypto-asset', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function chargeCollectibleCoin(positionId: number, data: {
+  request_id: string; crypto_asset_id: number; crypto_quantity: string;
+  kind: 'fee' | 'topup'; operated_at?: string; comment?: string;
+}): Promise<PortfolioPosition> {
+  return apiFetch(`/portfolio/positions/${positionId}/coin-charge`, { method: 'POST', body: JSON.stringify(data) });
 }

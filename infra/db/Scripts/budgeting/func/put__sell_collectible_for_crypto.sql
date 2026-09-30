@@ -8,7 +8,8 @@ CREATE FUNCTION budgeting.put__sell_collectible_for_crypto(
     _crypto_asset_id bigint,
     _crypto_quantity numeric,
     _closed_at date,
-    _comment text
+    _comment text,
+    _item_quantity numeric DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -18,6 +19,8 @@ DECLARE
     _symbol text;
     _base char(3);
     _cost numeric(20, 2);
+    _sold_quantity numeric;
+    _fraction numeric;
     _operation_id bigint;
     _sold jsonb;
     _day date := COALESCE(_closed_at, current_date);
@@ -32,6 +35,7 @@ BEGIN
        OR NOT has__owner_access(_user_id, _position.owner_type, _position.owner_user_id, _position.owner_family_id) THEN
         RAISE EXCEPTION 'Нет доступа к предмету';
     END IF;
+    IF _day < _position.opened_at THEN RAISE EXCEPTION 'Дата продажи раньше получения предмета'; END IF;
     IF _position.status <> 'open' THEN
         RAISE EXCEPTION 'Предмет уже продан';
     END IF;
@@ -44,7 +48,13 @@ BEGIN
         RAISE EXCEPTION 'Неизвестная криптовалюта';
     END IF;
     _base := get__owner_base_currency(_position.owner_type, _position.owner_user_id, _position.owner_family_id);
-    _cost := COALESCE((_position.metadata->>'amount_in_base')::numeric, 0);
+    _sold_quantity := COALESCE(_item_quantity,_position.quantity);
+    IF _item_quantity IS NOT NULL AND (_item_quantity<=0 OR _item_quantity::text IN ('NaN','Infinity','-Infinity')
+       OR _position.quantity IS NULL OR _item_quantity>_position.quantity OR _item_quantity<>round(_item_quantity,8)) THEN
+        RAISE EXCEPTION 'Укажите количество продаваемых предметов в пределах остатка';
+    END IF;
+    _fraction := CASE WHEN _position.quantity IS NULL THEN 1 ELSE _sold_quantity/_position.quantity END;
+    _cost := round(COALESCE((_position.metadata->>'amount_in_base')::numeric, 0)*_fraction,2);
     _sold := jsonb_build_object('crypto_asset_id', _crypto_asset_id, 'symbol', _symbol,
                                 'quantity', trim_scale(_crypto_quantity));
 
@@ -61,15 +71,20 @@ BEGIN
     PERFORM put__apply_current_crypto_delta(_position.investment_account_id, _crypto_asset_id, _crypto_quantity, _cost);
 
     UPDATE portfolio_positions
-    SET status = 'closed', closed_at = _day, close_amount_in_currency = _cost, close_currency_code = _base,
+    SET status = CASE WHEN _fraction=1 THEN 'closed' ELSE 'open' END,
+        closed_at = CASE WHEN _fraction=1 THEN _day ELSE NULL END,
+        close_amount_in_currency = CASE WHEN _fraction=1 THEN _cost ELSE NULL END, close_currency_code = CASE WHEN _fraction=1 THEN _base ELSE NULL END,
+        quantity = CASE WHEN _fraction=1 THEN quantity ELSE quantity-_sold_quantity END,
+        amount_in_currency = CASE WHEN _fraction=1 THEN amount_in_currency ELSE amount_in_currency*(1-_fraction) END,
         metadata = metadata || jsonb_build_object(
             'realized_result_in_base', COALESCE((metadata->>'realized_result_in_base')::numeric, 0),
             'returned_amount_in_base', COALESCE((metadata->>'returned_amount_in_base')::numeric, 0) + _cost,
-            'sold_for_crypto', _sold)
+            'sold_for_crypto', _sold,
+            'amount_in_base', CASE WHEN _fraction=1 THEN (metadata->>'amount_in_base')::numeric ELSE (metadata->>'amount_in_base')::numeric-_cost END)
     WHERE id = _position_id;
     INSERT INTO portfolio_events (position_id, event_type, event_at, quantity, amount, currency_code,
                                   linked_operation_id, comment, metadata, created_by_user_id)
-    VALUES (_position_id, 'close', _day, _position.quantity, _cost, _base, _operation_id, NULLIF(btrim(_comment), ''),
+    VALUES (_position_id, CASE WHEN _fraction=1 THEN 'close' ELSE 'partial_close' END, _day, _sold_quantity, _cost, _base, _operation_id, NULLIF(btrim(_comment), ''),
             jsonb_build_object('amount_in_base', _cost, 'principal_amount_in_base', _cost,
                                'realized_result_in_base', 0, 'sold_for_crypto', _sold),
             _user_id);
