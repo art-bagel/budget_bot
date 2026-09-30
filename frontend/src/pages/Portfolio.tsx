@@ -694,37 +694,23 @@ function getPositionRealizedResult(position: PortfolioPosition): number {
 }
 
 function getEventLabel(item: PortfolioEvent): string {
-  if (item.event_type === 'transfer_in') return 'TRANSFER IN';
-  if (item.event_type === 'transfer_out') return 'TRANSFER OUT';
-  if (item.event_type === 'swap_in') return 'SWAP IN';
-  if (item.event_type === 'swap_out') return 'SWAP OUT';
-
-  if (item.event_type === 'income') {
-    const incomeKind = typeof item.metadata?.income_kind === 'string' ? item.metadata.income_kind : 'income';
-    if (incomeKind === 'dividend') return 'DIVIDEND';
-    if (incomeKind === 'interest') return 'INTEREST';
-    return 'INCOME';
+  switch (item.event_type) {
+    case 'transfer_in': return 'Перевод на позицию';
+    case 'transfer_out': return 'Перевод с позиции';
+    case 'swap_in': return 'Обмен: получено';
+    case 'swap_out': return 'Обмен: отдано';
+    case 'top_up': return 'Пополнение';
+    case 'partial_close': return 'Частичное закрытие';
+    case 'fee': return 'Комиссия';
+    case 'open': return 'Открытие позиции';
+    case 'close': return 'Закрытие позиции';
+    case 'income': {
+      const kind = item.metadata?.income_kind;
+      return kind === 'dividend' ? 'Дивиденды' : kind === 'interest' ? 'Проценты' : 'Доход';
+    }
+    case 'adjustment': return item.metadata?.action === 'cancel_income' ? 'Отмена дохода' : 'Корректировка';
+    default: return 'Операция';
   }
-
-  if (item.event_type === 'top_up') {
-    return 'TOP UP';
-  }
-
-  if (item.event_type === 'partial_close') {
-    return 'PARTIAL CLOSE';
-  }
-
-  if (item.event_type === 'fee') {
-    return 'FEE';
-  }
-
-  if (item.event_type === 'adjustment') {
-    const action = typeof item.metadata?.action === 'string' ? item.metadata.action : '';
-    if (action === 'cancel_income') return 'CANCEL';
-    return 'ADJUST';
-  }
-
-  return item.event_type.toUpperCase();
 }
 
 
@@ -4203,70 +4189,46 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 const isDepositPosition = selectedPosition.asset_type_code === 'deposit' && !!selectedPosition.metadata?.deposit_kind;
                 const isTermDeposit = selectedPosition.metadata?.deposit_kind === 'term_deposit';
                 const isCryptoPosition = selectedPosition.asset_type_code === 'crypto';
+                const tile = (label: string, Icon: LucideIcon, onClick: () => void, primary = false) => (
+                  <button key={label} className={`cat-act${primary ? ' cat-act--primary' : ''}`} type="button" onClick={onClick}>
+                    <span className="cat-act__ico"><Icon strokeWidth={primary ? 2.2 : 2} /></span>
+                    <span className="cat-act__label">{label}</span>
+                  </button>
+                );
+                const canAdjustPrincipal = !isCryptoPosition && !(isDepositPosition && isTermDeposit);
+                const tiles = [
+                  canAdjustPrincipal && { label: 'Пополнить', Icon: Plus, run: () => handleOpenTopUpForm(selectedPosition) },
+                  !isDepositPosition && canRecordPositionIncome(selectedPosition) && { label: 'Доход', Icon: HandCoins, run: () => handleOpenIncomeForm(selectedPosition) },
+                  canAdjustPrincipal && { label: 'Снять', Icon: ArrowUpFromLine, run: () => handleOpenPartialCloseForm(selectedPosition) },
+                  isDepositPosition && {
+                    label: 'Ставка',
+                    Icon: Percent,
+                    run: () => {
+                      clearPositionDrafts(selectedPosition.id);
+                      setRateChangeDrafts((prev) => ({
+                        ...prev,
+                        [selectedPosition.id]: {
+                          newRate: String(selectedPosition.metadata?.interest_rate ?? ''),
+                          effectiveDate: todayIso(),
+                        },
+                      }));
+                    },
+                  },
+                  !isCryptoPosition && !isDepositPosition && { label: 'Комиссия', Icon: Coins, run: () => handleOpenFeeForm(selectedPosition) },
+                ].filter((item) => item !== false);
                 return (
-                  <div className="pf-sheet-actions">
-                    <button
-                      className="btn btn--primary"
-                      type="button"
-                      onClick={() => handleOpenCloseForm(selectedPosition)}
-                    >
-                      Закрыть позицию
-                    </button>
-                    {!isDepositPosition && canRecordPositionIncome(selectedPosition) && (
-                      <button
-                        className="btn btn--ghost"
-                        type="button"
-                        onClick={() => handleOpenIncomeForm(selectedPosition)}
-                      >
-                        Начислить доход
-                      </button>
+                  <>
+                    {tiles.length > 0 && (
+                      <div className="cat-actions cat-actions--crypto" role="group" aria-label="Действия с позицией">
+                        {tiles.map((item, index) => tile(item.label, item.Icon, item.run, index === 0))}
+                      </div>
                     )}
-                    {!isCryptoPosition && !(isDepositPosition && isTermDeposit) && (
-                      <button
-                        className="btn btn--ghost"
-                        type="button"
-                        onClick={() => handleOpenPartialCloseForm(selectedPosition)}
-                      >
-                        Частично закрыть
+                    <div className="pf-sheet-actions">
+                      <button className="btn btn--ghost" type="button" onClick={() => handleOpenCloseForm(selectedPosition)}>
+                        Закрыть позицию
                       </button>
-                    )}
-                    {!isCryptoPosition && !(isDepositPosition && isTermDeposit) && (
-                      <button
-                        className="btn btn--ghost"
-                        type="button"
-                        onClick={() => handleOpenTopUpForm(selectedPosition)}
-                      >
-                        Пополнить
-                      </button>
-                    )}
-                    {isDepositPosition && (
-                      <button
-                        className="btn btn--ghost"
-                        type="button"
-                        onClick={() => {
-                          clearPositionDrafts(selectedPosition.id);
-                          setRateChangeDrafts((prev) => ({
-                            ...prev,
-                            [selectedPosition.id]: {
-                              newRate: String(selectedPosition.metadata?.interest_rate ?? ''),
-                              effectiveDate: todayIso(),
-                            },
-                          }));
-                        }}
-                      >
-                        Изменить ставку
-                      </button>
-                    )}
-                    {!isCryptoPosition && !isDepositPosition && (
-                      <button
-                        className="btn btn--ghost"
-                        type="button"
-                        onClick={() => handleOpenFeeForm(selectedPosition)}
-                      >
-                        Комиссия
-                      </button>
-                    )}
-                  </div>
+                    </div>
+                  </>
                 );
               })()}
 
@@ -4793,58 +4755,50 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               {deleteError && <p className="pf-detail-error">{deleteError}</p>}
               {cancelIncomeError && <p className="pf-detail-error">{cancelIncomeError}</p>}
 
-              <div className="pf-events">
-                <div className="pf-events__head">
-                  <span className="sec-tag">События</span>
+              <div className="ca-sheet__hist">
+                <div className="ca-sheet__hist-toggle">
+                  <h3 className="ca-sheet__hist-title">История · <span className="ca-sheet__hist-count">{selectedPositionEvents.length}</span></h3>
                 </div>
                 {eventsError && <p className="pf-detail-error">{eventsError}</p>}
                 {eventsLoadingId === selectedPosition.id ? (
-                  <p className="pf-events__empty">Загружаем события...</p>
+                  <p className="ca-sheet__hist-empty" role="status">Загружаем историю…</p>
                 ) : selectedPositionEvents.length === 0 ? (
-                  <p className="pf-events__empty">Событий пока нет</p>
+                  <p className="ca-sheet__hist-empty">Событий пока нет.</p>
                 ) : (
-                  <ul className="pf-events__list">
-                    {selectedPositionEvents.map((item) => (
-                      <li className="pf-events__item" key={item.id}>
-                        <div className="pf-events__row-main">
-                          <span className="pf-events__tag">{getEventLabel(item)}</span>
-                          {selectedPosition.asset_type_code !== 'crypto' && (
-                            <strong className="pf-events__amount">
-                              {item.amount !== null && item.amount !== undefined && item.currency_code
-                                ? formatAmount(item.amount, item.currency_code)
-                                : 'Без суммы'}
-                            </strong>
+                  selectedPositionEvents.map((item) => {
+                    const details = [
+                      typeof item.metadata?.destination === 'string' ? (item.metadata.destination === 'position' ? 'В актив' : 'На счёт') : null,
+                      item.quantity ? `Количество: ${item.quantity}` : null,
+                      item.event_type === 'swap_out' && typeof item.metadata?.to_asset_symbol === 'string' && item.metadata?.to_amount
+                        ? `Получено: ${item.metadata.to_amount} ${item.metadata.to_asset_symbol}` : null,
+                      item.event_type === 'swap_in' && typeof item.metadata?.from_asset_symbol === 'string' && item.metadata?.from_amount
+                        ? `Отдано: ${item.metadata.from_amount} ${item.metadata.from_asset_symbol}` : null,
+                      selectedPosition.asset_type_code !== 'crypto' && item.event_type === 'partial_close'
+                        && typeof item.metadata?.principal_amount_in_currency === 'number'
+                        ? `Вложено: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}` : null,
+                      selectedPosition.asset_type_code !== 'crypto' && (item.event_type === 'close' || item.event_type === 'partial_close')
+                        && typeof item.metadata?.realized_result_in_base === 'number'
+                        ? `Результат: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}` : null,
+                      item.comment && !item.comment_is_system ? item.comment : null,
+                    ].filter(Boolean);
+                    return (
+                      <div className="ca-sheet__row" key={item.id}>
+                        <div className="ca-sheet__row-date">{new Date(item.event_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
+                        <div className="ca-sheet__row-body">
+                          <div className="ca-sheet__row-line">
+                            <span className="ca-sheet__row-qty">{getEventLabel(item)}</span>
+                            {selectedPosition.asset_type_code !== 'crypto' && item.amount !== null && item.amount !== undefined && item.currency_code && (
+                              <span className="ca-sheet__row-val">{formatAmount(item.amount, item.currency_code)}</span>
+                            )}
+                          </div>
+                          {details.length > 0 && (
+                            <div className="ca-sheet__row-meta">
+                              {details.map((text) => <span className="ca-sheet__row-cp" key={String(text)}>{text}</span>)}
+                            </div>
                           )}
-                        </div>
-                        <div className="pf-events__sub">
-                          {formatDateLabel(item.event_at)}
-                          {typeof item.metadata?.destination === 'string'
-                            ? ` · ${item.metadata.destination === 'position' ? 'В актив' : 'На счёт'}`
-                            : ''}
-                          {item.quantity ? ` · Количество: ${item.quantity}` : ''}
-                          {item.event_type === 'swap_out' && typeof item.metadata?.to_asset_symbol === 'string' && item.metadata?.to_amount
-                            ? ` · Получено: ${item.metadata.to_amount} ${item.metadata.to_asset_symbol}`
-                            : ''}
-                          {item.event_type === 'swap_in' && typeof item.metadata?.from_asset_symbol === 'string' && item.metadata?.from_amount
-                            ? ` · Отдано: ${item.metadata.from_amount} ${item.metadata.from_asset_symbol}`
-                            : ''}
-                          {selectedPosition.asset_type_code !== 'crypto'
-                            && item.event_type === 'partial_close'
-                            && typeof item.metadata?.principal_amount_in_currency === 'number'
-                            ? ` · Principal: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}`
-                            : ''}
-                          {selectedPosition.asset_type_code !== 'crypto'
-                            && (item.event_type === 'close' || item.event_type === 'partial_close')
-                            && typeof item.metadata?.realized_result_in_base === 'number'
-                            ? ` · Результат: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}`
-                            : ''}
-                          {item.linked_operation_id ? ` · Операция #${item.linked_operation_id}` : ''}
-                          {item.comment && !item.comment_is_system ? ` · ${item.comment}` : ''}
-                        </div>
-                        {item.event_type === 'income' && (
-                          <div className="pf-events__actions">
-                            {selectedPositionCancelledIncomeIds.has(item.id) ? (
-                              <span className="tag tag--neutral">Уже отменён</span>
+                          {item.event_type === 'income' && (
+                            selectedPositionCancelledIncomeIds.has(item.id) ? (
+                              <span className="ca-sheet__row-legacy">Уже отменён</span>
                             ) : (
                               <button
                                 className="credits-textbtn credits-textbtn--danger"
@@ -4854,17 +4808,17 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                               >
                                 {cancellingIncomeEventId === item.id ? 'Отменяем...' : 'Отменить доход'}
                               </button>
-                            )}
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
 
               <button
-                className="pf-archive-btn"
+                className="credits-textbtn credits-textbtn--danger ca-sheet__hide"
                 type="button"
                 disabled={deletingPositionId === selectedPosition.id}
                 onClick={() => void handleDeletePosition(selectedPosition)}
