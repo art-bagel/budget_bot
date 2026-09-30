@@ -971,6 +971,34 @@ export async function createPortfolioPosition(
   });
 }
 
+export async function buyCollectibleWithCrypto(data: {
+  investment_account_id: number;
+  crypto_asset_id: number;
+  crypto_quantity: string;
+  title: string;
+  quantity?: number;
+  opened_at?: string;
+  comment?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>('/portfolio/positions/buy-with-crypto', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function sellCollectibleForCrypto(positionId: number, data: {
+  crypto_asset_id: number;
+  crypto_quantity: string;
+  closed_at?: string;
+  comment?: string;
+}): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/sell-for-crypto`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function topUpPortfolioPosition(
   positionId: number,
   data: TopUpPortfolioPositionRequest,

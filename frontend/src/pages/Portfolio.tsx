@@ -40,6 +40,7 @@ import {
   updateCryptoProtocolPosition,
   closeCryptoProtocolPosition,
   transferCryptoFromInvestment,
+  sellCollectibleForCrypto,
   transferCryptoBetweenInvestmentAccounts,
   swapCryptoInvestmentAsset,
 } from '../api';
@@ -953,6 +954,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         ...cryptoProtocolPositions
           .filter((position) => position.status === 'open')
           .map((position) => position.crypto_asset_id ?? null),
+        // Coins held on collection accounts, like bank coins.
+        ...accounts.flatMap(({ balances }) => balances
+          .filter((balance) => balance.asset_type === 'crypto')
+          .map((balance) => balance.crypto_asset_id ?? null)),
         ...cryptoProtocolPositions
           .filter((position) => position.status === 'open' && position.position_type === 'liquidity_pool')
           .map((position) => Number(position.metadata.token1_crypto_asset_id) || null),
@@ -984,7 +989,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       .catch(() => {
         // Keep previously loaded prices; they are better than nothing.
       });
-  }, [positions, cryptoProtocolPositions, user.base_currency_code]);
+  }, [positions, cryptoProtocolPositions, accounts, user.base_currency_code]);
 
   const excludedAccountIds = useMemo(() => new Set(accounts
     .filter(({ account }) => account.include_in_statistics === false)
@@ -1299,7 +1304,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     return quote.performanceCurrentValue - getPositionEntryAmount(position);
   };
 
-  const getAccountCashValue = (accountId: number): number => Number(summaryByAccountId[accountId]?.cash_balance_in_base ?? 0);
+  // Collection accounts also hold coins: at market when quoted, otherwise at cost.
+  const coinValueByAccountId = useMemo(() => new Map(accounts.map(({ account, balances }) => [account.id, balances
+    .filter((balance) => balance.asset_type === 'crypto')
+    .reduce((sum, balance) => sum + (walletMarketValue(balance.amount, balance.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code)
+      ?? balance.historical_cost_in_base), 0)])), [accounts, cryptoLivePrices, user.base_currency_code]);
+  const getAccountCashValue = (accountId: number): number => Number(summaryByAccountId[accountId]?.cash_balance_in_base ?? 0)
+    + (coinValueByAccountId.get(accountId) ?? 0);
 
   const getPositionScopedValue = (position: PortfolioPosition): number => {
     let value = getResolvedPositionEstimatedValue(position);
@@ -1346,8 +1357,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   );
 
   const totalInvestmentCashInBase = useMemo(
-    () => summaryItems.filter((item) => item.include_in_statistics !== false).reduce((sum, item) => sum + item.cash_balance_in_base, 0),
-    [summaryItems],
+    () => summaryItems.filter((item) => item.include_in_statistics !== false)
+      .reduce((sum, item) => sum + item.cash_balance_in_base + (coinValueByAccountId.get(item.investment_account_id) ?? 0), 0),
+    [summaryItems, coinValueByAccountId],
   );
 
   const includedCryptoProtocols = cryptoProtocolPositions.filter((p) =>
@@ -1380,7 +1392,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       );
       const cashBalanceInBase = accounts
         .filter(({ account }) => getInvestmentAccountAssetType(account) === code && account.include_in_statistics !== false)
-        .reduce((sum, { account }) => sum + (summaryByAccountId[account.id]?.cash_balance_in_base ?? 0), 0);
+        .reduce((sum, { account }) => sum + (summaryByAccountId[account.id]?.cash_balance_in_base ?? 0) + (coinValueByAccountId.get(account.id) ?? 0), 0);
 
       return {
         code,
@@ -1405,7 +1417,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       valuationIncomplete: typeTabs.some((t) => t.valuationIncomplete),
     };
     return [allTab, ...typeTabs];
-  }, [excludedAccountIds, accounts, closedPositions, openPositions, positions, summaryByAccountId, moexPrices, tinkoffLivePrices, cryptoLivePrices, user.base_currency_code, valueMode, knownProtocolValue, cryptoValuationIncomplete]);
+  }, [excludedAccountIds, accounts, closedPositions, openPositions, positions, summaryByAccountId, coinValueByAccountId, moexPrices, tinkoffLivePrices, cryptoLivePrices, user.base_currency_code, valueMode, knownProtocolValue, cryptoValuationIncomplete]);
 
   useEffect(() => {
     if (activeAssetTypeCode === 'all') return;
@@ -1543,7 +1555,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       estimatedValue,
       investedPrincipal,
       currentResult: accountCurrentResultById[accountId] ?? 0,
-      cashValue: summaryByAccountId[accountId]?.cash_balance_in_base ?? 0,
+      cashValue: getAccountCashValue(accountId),
     };
   };
 
@@ -1618,7 +1630,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     setCloseError(null);
 
     try {
-      await closePortfolioPosition(positionId, {
+      if (draft.currencyCode.startsWith('crypto:')) {
+        await sellCollectibleForCrypto(positionId, {
+          crypto_asset_id: Number(draft.currencyCode.slice(7)),
+          crypto_quantity: draft.amount.trim(),
+          closed_at: draft.closedAt || undefined,
+          comment: draft.comment.trim() || undefined,
+        });
+      } else await closePortfolioPosition(positionId, {
         close_amount_in_currency: Number(draft.amount),
         close_currency_code: draft.currencyCode,
         close_amount_in_base: draft.currencyCode === user.base_currency_code || !draft.baseAmount.trim()
@@ -2398,6 +2417,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     [selectedPositionEvents],
   );
 
+  const coinBalancesByAccountId = useMemo(() => new Map(accounts.map(({ account, balances }) => [
+    account.id, balances.filter((balance) => balance.asset_type === 'crypto' && balance.amount > 0),
+  ])), [accounts]);
+
   const filteredOpenPositionGroups = useMemo(() => {
     const grouped = new Map<string, PositionAccountGroup>();
 
@@ -2431,8 +2454,18 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         });
       });
 
+    // A collection account holding only coins is still listed with them.
+    if (activeAssetTypeCode === 'collectible') {
+      for (const { account } of accounts) {
+        const key = `${account.owner_type}:${account.id}`;
+        if (account.investment_asset_type === 'collectible' && !grouped.has(key) && coinBalancesByAccountId.get(account.id)?.length) {
+          grouped.set(key, { accountId: account.id, accountName: account.name, ownerType: account.owner_type, positions: [] });
+        }
+      }
+    }
+
     return Array.from(grouped.values());
-  }, [filteredOpenPositions]);
+  }, [filteredOpenPositions, activeAssetTypeCode, accounts, coinBalancesByAccountId]);
 
   const getProtocolValuation = useCallback((position: CryptoProtocolPosition) =>
     protocolMarketValue(position, cryptoLivePrices, user.base_currency_code), [cryptoLivePrices, user.base_currency_code]);
@@ -2843,12 +2876,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         estimatedValue: estimatedValue + protocolValues.value,
         investedPrincipal: isCrypto ? cryptoBasis : investedPrincipal,
         nkdValue,
-        cashValue: summaryByAccountId[group.accountId]?.cash_balance_in_base ?? 0,
+        cashValue: (summaryByAccountId[group.accountId]?.cash_balance_in_base ?? 0) + (coinValueByAccountId.get(group.accountId) ?? 0),
         resultValue,
         positionsCount: group.positions.length + protocols.length,
       };
     }).sort((left, right) => right.estimatedValue - left.estimatedValue),
-    [activeAccountTabKey, excludedAccountIds, activeAssetTypeCode, moexPrices, summaryByAccountId, tinkoffLivePrices, renderPositionGroups, accounts, cryptoAssetsByAccount, scopedCryptoProtocols, getProtocolValuation, cryptoLivePrices, user.base_currency_code],
+    [activeAccountTabKey, excludedAccountIds, activeAssetTypeCode, moexPrices, summaryByAccountId, coinValueByAccountId, tinkoffLivePrices, renderPositionGroups, accounts, cryptoAssetsByAccount, scopedCryptoProtocols, getProtocolValuation, cryptoLivePrices, user.base_currency_code],
   );
 
   const portfolioAnalyticsLeaders = useMemo<PortfolioAnalyticsLeader[]>(() => {
@@ -3426,7 +3459,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
           {accounts.length === 0 ? (
             <p className="pf-empty">Создай инвестиционный счёт в Настройках, затем добавь позиции.</p>
-          ) : visibleOpenPositions.length === 0 && !(activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0) ? (
+          ) : renderPositionGroups.length === 0 ? (
             <p className="pf-empty">Открытых позиций нет.</p>
           ) : (
             renderPositionGroups.map((group) => {
@@ -3452,7 +3485,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         {activeAssetTypeCode === 'crypto' ? (() => {
                           const coins = group.positions.length - hiddenAssets.length;
                           return ` · ${coins} ${pluralRu(coins, ['монета', 'монеты', 'монет'])}`;
-                        })() : ` · ${group.positions.length} акт.`}
+                        })() : activeAssetTypeCode === 'collectible'
+                          ? ` · ${group.positions.length} ${pluralRu(group.positions.length, ['предмет', 'предмета', 'предметов'])}`
+                          : ` · ${group.positions.length} акт.`}
                         {groupProtocolPositions.length > 0 ? ` · ${groupProtocolPositions.length} DeFi` : ''}
                         {excludedAccountIds.has(group.accountId) && <span className="pf-grp__flag">вне статистики</span>}
                       </div>
@@ -3602,6 +3637,39 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       })}>{showHidden ? 'Свернуть скрытые' : `Скрытые монеты · ${hiddenAssets.length}`}</button>
                     </div>
                   )}
+                  {(coinBalancesByAccountId.get(group.accountId) ?? []).map((coin) => {
+                    const symbol = coin.symbol ?? coin.currency_code;
+                    const value = walletMarketValue(coin.amount, coin.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code);
+                    const logoUrl = getCryptoIconUrl(symbol, { network_code: coin.network_code, contract_address: coin.contract_address });
+                    return (
+                      <div key={coin.crypto_asset_id} className="pf-pos">
+                        <div className="pf-pos__identity">
+                          {logoUrl
+                            ? <img className="pf-pos__logo" src={logoUrl} alt="" loading="lazy" />
+                            : <div className="pf-pos__icon pf-pos__icon--crypto">{symbol.slice(0, 1).toUpperCase()}</div>}
+                          <div className="pf-pos__copy">
+                            <div className="pf-pos__title">{symbol}</div>
+                            <div className="pf-pos__sub">
+                              {formatNumericAmount(coin.amount, 8)} {symbol}{cryptoNetworkSuffix(coin.network_code, symbol)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pf-pos__right">
+                          {value === null ? (
+                            <>
+                              <div className="pf-pos__amount pf-pos__amount--none">—</div>
+                              <div className="pf-pos__sub">нет курса</div>
+                            </>
+                          ) : (
+                            <div className="pf-pos__amount">
+                              {formatNumericAmount(value)}
+                              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                   {activeAssetTypeCode === 'crypto' && groupProtocolPositions.length > 0 && (
                     <div>
                       <div className="pf-grp__subhead">DeFi</div>
@@ -4133,6 +4201,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             <span className="pf-dcond__row-value">{row.value}</span>
                           </div>
                         ))}
+                        {(['paid_crypto', 'sold_for_crypto'] as const).map((key) => {
+                          const coins = selectedPosition.metadata?.[key] as { symbol?: string; quantity?: string } | undefined;
+                          return coins?.quantity ? (
+                            <div className="pf-dcond__row" key={key}>
+                              <span className="pf-dcond__row-label">{key === 'paid_crypto' ? 'Куплено за' : 'Продано за'}</span>
+                              <span className="pf-dcond__row-value">{coins.quantity} {coins.symbol}</span>
+                            </div>
+                          ) : null;
+                        })}
                         {itemLink && (
                           <div className="pf-dcond__row">
                             <span className="pf-dcond__row-label">Ссылка</span>
@@ -4290,6 +4367,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             {currency.code}
                           </option>
                         ))}
+                        {selectedPosition.asset_type_code === 'collectible' && cryptoAssets.map((asset) => (
+                          <option key={asset.id} value={`crypto:${asset.id}`}>
+                            {asset.symbol} · {asset.network_code}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="apf-field" style={{ flex: 1 }}>
@@ -4334,7 +4416,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </div>
                     );
                   })()}
-                  {closeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code && (
+                  {closeDrafts[selectedPosition.id].currencyCode !== user.base_currency_code
+                    && !closeDrafts[selectedPosition.id].currencyCode.startsWith('crypto:') && (
                     <div className="apf-field">
                       <label className="apf-label">Историческая стоимость в {user.base_currency_code}</label>
                       <input
@@ -5765,7 +5848,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   && (!heroTypeSheetCode || position.asset_type_code === heroTypeSheetCode)
                 ));
                 const isSecuritySheet = heroTypeSheetCode === 'security';
-                const cashValueInBase = Number(summary?.cash_balance_in_base ?? 0);
+                const cashValueInBase = getAccountCashValue(account.id);
                 const estimatedValue = accountOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0);
                 const investedPrincipal = accountOpenPositions.reduce((sum, position) => sum + (
                   isSecuritySheet ? getPositionVisibleInvestedPrincipal(position) : getPositionInvestedPrincipal(position)
@@ -5953,7 +6036,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         <CryptoWithdrawSheet
           open
           position={cryptoWithdrawSheetPosition}
-          cashAccounts={cashAccounts}
+          cashAccounts={[...cashAccounts, ...accounts.map(({ account }) => account).filter((account) => account.investment_asset_type === 'collectible')]}
           livePrice={cryptoLivePrices.get(getCryptoAssetId(cryptoWithdrawSheetPosition) ?? -1) ?? null}
           baseCurrencyCode={user.base_currency_code}
           defaultBankAccountId={user.bank_account_id}

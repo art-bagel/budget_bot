@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-import { createPortfolioPosition } from '../api';
+import { buyCollectibleWithCrypto, createPortfolioPosition } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { useMoexSearch } from '../hooks/useMoexSearch';
 import type { BankAccount, Currency, DashboardBankBalance, UserContext } from '../types';
@@ -196,7 +196,7 @@ export default function PortfolioPositionDialog({
       setCurrencyCode(user.base_currency_code);
       return;
     }
-    if (!currencies.some((currency) => currency.code === currencyCode)) {
+    if (!currencyCode.startsWith('crypto:') && !currencies.some((currency) => currency.code === currencyCode)) {
       setCurrencyCode(currencies[0]?.code ?? user.base_currency_code);
     }
   }, [currencies, currencyCode, user.base_currency_code, isCrypto]);
@@ -206,9 +206,14 @@ export default function PortfolioPositionDialog({
     [accounts, investmentAccountId],
   );
 
+  // A collection account also pays with the coins it holds: value `crypto:<asset id>`.
+  const payCoinId = currencyCode.startsWith('crypto:') ? Number(currencyCode.slice(7)) : null;
+  const heldCoins = isCollectible ? selectedAccountBalances.filter((b) => b.asset_type === 'crypto' && b.crypto_asset_id && b.amount > 0) : [];
   const selectedCurrencyBalance = useMemo(
-    () => selectedAccountBalances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0,
-    [selectedAccountBalances, currencyCode],
+    () => selectedAccountBalances.find((balance) => payCoinId
+      ? balance.crypto_asset_id === payCoinId
+      : balance.asset_type !== 'crypto' && balance.currency_code === currencyCode)?.amount ?? 0,
+    [selectedAccountBalances, currencyCode, payCoinId],
   );
 
   const canSubmit = !submitting
@@ -268,6 +273,20 @@ export default function PortfolioPositionDialog({
         };
       }
 
+      if (payCoinId && metadata) {
+        await buyCollectibleWithCrypto({
+          investment_account_id: Number(investmentAccountId),
+          crypto_asset_id: payCoinId,
+          crypto_quantity: amount,
+          title: title.trim(),
+          quantity: quantity.trim() ? Number(quantity) : undefined,
+          opened_at: openedAt || undefined,
+          comment: comment.trim() || undefined,
+          metadata,
+        });
+        onSuccess();
+        return;
+      }
       await createPortfolioPosition({
         investment_account_id: Number(investmentAccountId),
         asset_type_code: defaultAssetTypeCode,
@@ -438,7 +457,10 @@ export default function PortfolioPositionDialog({
           <label className="apf-label">Валюта</label>
           <ApfSelect
             value={currencyCode}
-            options={currencies.map((c) => ({ value: c.code, label: c.code }))}
+            options={[
+              ...currencies.map((c) => ({ value: c.code, label: c.code })),
+              ...heldCoins.map((b) => ({ value: `crypto:${b.crypto_asset_id}`, label: b.symbol ?? b.currency_code })),
+            ]}
             onChange={setCurrencyCode}
             disabled={submitting}
           />
@@ -522,7 +544,9 @@ export default function PortfolioPositionDialog({
       {/* Balance */}
       {!isCrypto && (
         <div className="apf-balance">
-        Доступно: {formatAmount(selectedCurrencyBalance, currencyCode)}
+        Доступно: {payCoinId
+          ? `${selectedCurrencyBalance} ${heldCoins.find((b) => b.crypto_asset_id === payCoinId)?.symbol ?? ''}`
+          : formatAmount(selectedCurrencyBalance, currencyCode)}
         </div>
       )}
 

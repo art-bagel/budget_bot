@@ -234,7 +234,9 @@ export default function AccountTransferDialog({
         result.push({ ...held, account, balance: 0, placeholder: true });
       }
     }
-    const heldCryptoByOwner = result.filter((item) => item.kind === 'cash' && item.assetType === 'crypto' && item.balance > 0);
+    // Coins held like bank coins: on cash accounts and on collection accounts.
+    const heldCryptoByOwner = result.filter((item) => (item.kind === 'cash' || item.account.investment_asset_type === 'collectible')
+      && item.assetType === 'crypto' && item.balance > 0);
     for (const { account, kind } of allAccounts) {
       if (kind !== 'investment' || account.investment_asset_type !== 'crypto') continue;
       for (const crypto of heldCryptoByOwner) {
@@ -271,10 +273,12 @@ export default function AccountTransferDialog({
     const toAccount = role === 'from' ? otherItem.account : item.account;
     const assetType = role === 'from' ? item.assetType : otherItem.assetType;
     if (assetType === 'crypto') {
-      return fK === 'cash' && (tK === 'cash' || (
-        tK === 'investment'
+      // A collection account sends coins only to a crypto account, like a bank does.
+      return (fK === 'cash' && tK === 'cash') || (
+        (fK === 'cash' || fromAccount.investment_asset_type === 'collectible')
+        && tK === 'investment'
         && toAccount.investment_asset_type === 'crypto'
-        && sameOwner(fromAccount, toAccount)));
+        && sameOwner(fromAccount, toAccount));
     }
     return !!COMPAT[fK]?.[tK];
   };
@@ -389,7 +393,8 @@ export default function AccountTransferDialog({
 
   const renderList = (role: 'from' | 'to') =>
     KIND_ORDER.flatMap(kind => {
-      const items = allItems.filter(pi => pi.kind === kind && (role === 'to' || !(pi.placeholder || (pi.kind === 'investment' && pi.assetType === 'crypto'))));
+      const items = allItems.filter(pi => pi.kind === kind && (role === 'to' || !(pi.placeholder
+        || (pi.kind === 'investment' && pi.assetType === 'crypto' && pi.account.investment_asset_type !== 'collectible'))));
       if (!items.length) return [];
       const rows: React.ReactNode[] = [
         <li key={`grp-${kind}`} className="atx__group-label">{KIND_LABEL[kind]}</li>,

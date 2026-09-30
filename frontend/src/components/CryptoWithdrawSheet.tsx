@@ -97,7 +97,7 @@ export default function CryptoWithdrawSheet({
     <BottomSheet
       open={open}
       tag={position.investment_account_name}
-      title={`В банк · ${symbol}`}
+      title={`Вывести · ${symbol}`}
       icon={iconUrl ? <img src={iconUrl} alt="" /> : undefined}
       iconColor={iconUrl ? undefined : 'o'}
       onClose={onClose}
@@ -133,7 +133,7 @@ export default function CryptoWithdrawSheet({
           onChange={(event) => setBankAccountId(event.target.value)}
           disabled={submitting}
         >
-          <option value="">Выберите банковский счёт</option>
+          <option value="">Выберите счёт</option>
           {targets.map((account) => (
             <option key={account.id} value={account.id}>{account.name}</option>
           ))}

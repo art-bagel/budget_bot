@@ -347,6 +347,50 @@ async def create_portfolio_position(
     return PortfolioPositionItem(**result)
 
 
+class BuyCollectibleWithCryptoRequest(BaseModel):
+    investment_account_id: int
+    crypto_asset_id: int
+    crypto_quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    title: str = Field(min_length=1, max_length=150)
+    quantity: float | None = Field(default=None, gt=0)
+    opened_at: date | None = None
+    comment: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SellCollectibleForCryptoRequest(BaseModel):
+    crypto_asset_id: int
+    crypto_quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    closed_at: date | None = None
+    comment: str | None = None
+
+
+@router.post('/positions/buy-with-crypto', response_model=PortfolioPositionItem)
+async def buy_collectible_with_crypto(
+    body: BuyCollectibleWithCryptoRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> PortfolioPositionItem:
+    result = await ledger.call_function(
+        'budgeting.put__buy_collectible_with_crypto', user.user_id, body.investment_account_id,
+        body.crypto_asset_id, body.crypto_quantity, body.title, body.quantity, body.opened_at,
+        body.comment, body.metadata,
+    )
+    return PortfolioPositionItem(**result)
+
+
+@router.post('/positions/{position_id}/sell-for-crypto', response_model=PortfolioPositionItem)
+async def sell_collectible_for_crypto(
+    position_id: int,
+    body: SellCollectibleForCryptoRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> PortfolioPositionItem:
+    result = await ledger.call_function(
+        'budgeting.put__sell_collectible_for_crypto', user.user_id, position_id,
+        body.crypto_asset_id, body.crypto_quantity, body.closed_at, body.comment,
+    )
+    return PortfolioPositionItem(**result)
+
+
 @router.post('/positions/{position_id}/close', response_model=PortfolioPositionItem)
 async def close_portfolio_position(
     position_id: int,
