@@ -98,6 +98,7 @@ Table bank_accounts {
   owner_family_id bigint [ref: > families.id]
   name varchar(100) [not null]
   account_kind varchar(20) [not null, default: 'cash', note: "cash | investment"]
+  investment_asset_type varchar(20) [note: "investment only: security | deposit | crypto | other | collectible (Коллекции)"]
   provider_name varchar(150)
   provider_account_ref varchar(150)
   include_in_statistics boolean [not null, default: true]
