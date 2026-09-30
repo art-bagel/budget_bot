@@ -2489,10 +2489,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       });
 
     // A collection account holding only coins is still listed with them.
-    if (activeAssetTypeCode === 'collectible') {
-      for (const { account } of accounts) {
+    if (activeAssetTypeCode === 'collectible' || activeAssetTypeCode === 'all') {
+      for (const { account, balances } of accounts) {
         const key = `${account.owner_type}:${account.id}`;
-        if (account.investment_asset_type === 'collectible' && !grouped.has(key) && coinBalancesByAccountId.get(account.id)?.length) {
+        if (account.investment_asset_type === 'collectible' && !grouped.has(key) && balances.some((balance) => balance.amount > 0)) {
           grouped.set(key, { accountId: account.id, accountName: account.name, ownerType: account.owner_type, positions: [] });
         }
       }
@@ -2850,7 +2850,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
     .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
-    .some((position) => position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0))
+    .some((position) => position.asset_type_code === 'collectible' || (position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0)))
     || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
   const ActiveAssetIcon = (PA_ASSET_TYPE_META[activeAssetTypeCode] ?? PA_ASSET_TYPE_META.security).Icon;
@@ -3145,7 +3145,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const scopeSummary = (
     <>
-    {activeAssetTypeCode !== 'all' && filteredOpenPositions.length > 0 && (
+    {activeAssetTypeCode !== 'all' && filteredOpenPositionGroups.length > 0 && (
       <div className="pf-tsum">
         <div className="pf-tsum__head">
           <div className={`pf-tsum__icon pf-tsum__icon--${activeAssetTypeCode}`} aria-hidden="true">
@@ -3170,7 +3170,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
               <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
             </div>
-            {!activeScopeHasCrypto && activeScopeBaseValue > 0 && (() => {
+            {!activeScopeHasCrypto && !activeScopeMarketIncomplete && activeScopeBaseValue > 0 && (() => {
               const rv = activeScopeResultValue;
               const pct = activeScopeResultPct;
               const isPos = rv >= 0;
@@ -3671,6 +3671,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       })}>{showHidden ? 'Свернуть скрытые' : `Скрытые монеты · ${hiddenAssets.length}`}</button>
                     </div>
                   )}
+                  {accounts.find(({ account }) => account.id === group.accountId && account.investment_asset_type === 'collectible')?.balances.filter((b) => b.asset_type !== 'crypto' && b.amount !== 0).map((balance) => (
+                    <div className="pf-pos" key={`cash:${balance.currency_code}`}>
+                      <div className="pf-pos__identity"><div className="pf-pos__copy">
+                        <div className="pf-pos__title">{balance.currency_code}</div>
+                        <div className="pf-pos__sub">Денежный остаток</div>
+                      </div></div>
+                      <div className="pf-pos__right"><div className="pf-pos__amount">{formatAmount(balance.amount, balance.currency_code)}</div></div>
+                    </div>
+                  ))}
                   {(coinBalancesByAccountId.get(group.accountId) ?? []).map((coin) => {
                     const symbol = coin.symbol ?? coin.currency_code;
                     const value = walletMarketValue(coin.amount, coin.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code);
@@ -4935,7 +4944,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <p className="ca-sheet__hist-empty">Событий пока нет.</p>
                 ) : (
                   selectedPositionEvents.map((item) => {
+                    const coinMovement = (item.metadata?.sold_for_crypto ?? item.metadata?.paid_crypto) as { quantity?: number | string; symbol?: string; crypto_asset_id?: number } | undefined;
+                    const coinSymbol = coinMovement?.symbol ?? cryptoAssets.find((asset) => asset.id === coinMovement?.crypto_asset_id)?.symbol;
+                    const coinLabel = coinMovement && coinSymbol ? `${formatNumericAmount(Number(coinMovement.quantity), 8)} ${coinSymbol}` : null;
                     const details = [
+                      coinLabel && item.amount != null && item.currency_code ? `Себестоимость: ${formatAmount(item.amount, item.currency_code)}` : null,
                       typeof item.metadata?.destination === 'string' ? (item.metadata.destination === 'position' ? 'В актив' : 'На счёт') : null,
                       item.quantity ? `Количество: ${item.quantity}` : null,
                       item.event_type === 'swap_out' && typeof item.metadata?.to_asset_symbol === 'string' && item.metadata?.to_amount
@@ -4945,7 +4958,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       selectedPosition.asset_type_code !== 'crypto' && item.event_type === 'partial_close'
                         && typeof item.metadata?.principal_amount_in_currency === 'number'
                         ? `Вложено: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}` : null,
-                      selectedPosition.asset_type_code !== 'crypto' && (item.event_type === 'close' || item.event_type === 'partial_close')
+                      selectedPosition.asset_type_code !== 'crypto' && !coinLabel && (item.event_type === 'close' || item.event_type === 'partial_close')
                         && typeof item.metadata?.realized_result_in_base === 'number'
                         ? `Результат: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}` : null,
                       item.comment && !item.comment_is_system ? item.comment : null,
@@ -4957,7 +4970,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           <div className="ca-sheet__row-line">
                             <span className="ca-sheet__row-qty">{getEventLabel(item)}</span>
                             {selectedPosition.asset_type_code !== 'crypto' && item.amount !== null && item.amount !== undefined && item.currency_code && (
-                              <span className="ca-sheet__row-val">{formatAmount(item.amount, item.currency_code)}</span>
+                              <span className="ca-sheet__row-val">{coinLabel ?? formatAmount(item.amount, item.currency_code)}</span>
                             )}
                           </div>
                           {details.length > 0 && (
@@ -6261,14 +6274,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <input
                     className="apf-input"
                     type="text"
-                    placeholder={newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : 'Например: ИИС Тинькофф'}
+                    placeholder={newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : newAccountAssetType === 'collectible' ? 'Например: Подарки и стикеры' : 'Например: ИИС Тинькофф'}
                     value={newAccountName}
                     onChange={(e) => setNewAccountName(e.target.value)}
                     autoFocus
                   />
                 </div>
                 <div className="apf-field">
-                  <label className="apf-label">Брокер / провайдер</label>
+                  <label className="apf-label">{newAccountAssetType === 'collectible' ? 'Площадка' : 'Брокер / провайдер'}</label>
                   <input
                     className="apf-input"
                     type="text"

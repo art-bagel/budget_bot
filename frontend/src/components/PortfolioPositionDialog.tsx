@@ -106,7 +106,7 @@ function ApfSelect<T extends string>({
               key={o.value}
               type="button"
               className={`apf-csel__item${o.value === value ? ' apf-csel__item--on' : ''}`}
-              onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); }}
+              onClick={() => { onChange(o.value); setOpen(false); }}
             >
               {o.label}
             </button>
