@@ -89,6 +89,7 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
+import { collectibleAttributeRows, getCollectibleKind, safeItemLink } from '../utils/collectibles';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -264,9 +265,10 @@ const ASSET_TYPE_OPTIONS = [
   { value: 'deposit', label: 'Депозит' },
   { value: 'crypto', label: 'Криптовалюта' },
   { value: 'other', label: 'Разное' },
+  { value: 'collectible', label: 'Коллекции' },
 ] as const;
 
-const DEFAULT_PORTFOLIO_ASSET_TYPE_CODES = ['security', 'deposit', 'crypto', 'other'] as const;
+const DEFAULT_PORTFOLIO_ASSET_TYPE_CODES = ['security', 'deposit', 'crypto', 'other', 'collectible'] as const;
 
 const SECURITY_KIND_OPTIONS = [
   { value: 'stock', label: 'Акции' },
@@ -281,6 +283,7 @@ const PA_ASSET_TYPE_META: Record<string, PaMeta> = {
   deposit: { Icon: Landmark, color: 'g' },
   crypto: { Icon: Coins, color: 'r' },
   other: { Icon: Package, color: 'p' },
+  collectible: { Icon: Gift, color: 'v' },
 };
 const PA_SECURITY_KIND_META: Record<string, PaMeta> = {
   stock: { Icon: TrendingUp, color: 'b' },
@@ -458,6 +461,7 @@ function assetTypeIconColor(code: string): { icon: string; color: string } {
   if (code === 'security') return { icon: 'chart', color: 'b' };
   if (code === 'deposit')  return { icon: 'landmark', color: 'g' };
   if (code === 'crypto')   return { icon: 'coins', color: 'o' };
+  if (code === 'collectible') return { icon: 'gift', color: 'v' };
   return { icon: 'package', color: 'p' };
 }
 
@@ -823,7 +827,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [newAccountStep, setNewAccountStep] = useState<'pick' | 'form'>('pick');
   const [newAccountName, setNewAccountName] = useState('');
   const [newAccountOwnerType, setNewAccountOwnerType] = useState<'user' | 'family'>('user');
-  const [newAccountAssetType, setNewAccountAssetType] = useState<'security' | 'deposit' | 'crypto' | 'other'>('security');
+  const [newAccountAssetType, setNewAccountAssetType] = useState<NonNullable<BankAccount['investment_asset_type']>>('security');
   const [newAccountProvider, setNewAccountProvider] = useState('');
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [createAccountError, setCreateAccountError] = useState<string | null>(null);
@@ -2781,7 +2785,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       ? Coins
       : activeAssetTypeCode === 'other'
         ? Package
-        : TrendingUp;
+        : activeAssetTypeCode === 'collectible'
+          ? Gift
+          : TrendingUp;
 
   const portfolioAnalyticsBuckets = useMemo<PortfolioAnalyticsBucket[]>(() => {
     if (activeAssetTypeCode !== 'security') {
@@ -3168,7 +3174,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       const incomePct = activeScopeResultPct;
       const fmt = (n: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
       const colorMap: Record<string, string> = {
-        security: '#0A0B0D', deposit: '#137534', crypto: '#9B1C1C', other: '#4B2D8F',
+        security: '#0A0B0D', deposit: '#137534', crypto: '#9B1C1C', other: '#4B2D8F', collectible: '#7A2E96',
       };
       return (
         <div
@@ -3518,6 +3524,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                       {position.metadata.deposit_kind === 'term_deposit' && position.metadata.end_date
                                         ? ` · до ${formatDateLabel(String(position.metadata.end_date))}`
                                         : ''}
+                                    </>
+                                  ) : position.asset_type_code === 'collectible' ? (
+                                    <>
+                                      {getCollectibleKind(position.metadata?.item_kind)?.label ?? 'Предмет'}
+                                      {Number(position.quantity) > 1 ? ` · ${position.quantity} шт.` : ''}
                                     </>
                                   ) : quote.currentPrice !== null && position.quantity ? (
                                     <>
@@ -4109,6 +4120,29 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </span>
                     </div>
                   ) : null}
+                  {selectedPosition.asset_type_code === 'collectible' ? (() => {
+                    const itemLink = safeItemLink(selectedPosition.metadata?.item_link);
+                    return (
+                      <>
+                        <div className="pf-dcond__row">
+                          <span className="pf-dcond__row-label">Вид</span>
+                          <span className="pf-dcond__row-value">{getCollectibleKind(selectedPosition.metadata?.item_kind)?.label ?? 'Предмет'}</span>
+                        </div>
+                        {collectibleAttributeRows(selectedPosition.metadata).map((row) => (
+                          <div className="pf-dcond__row" key={row.label}>
+                            <span className="pf-dcond__row-label">{row.label}</span>
+                            <span className="pf-dcond__row-value">{row.value}</span>
+                          </div>
+                        ))}
+                        {itemLink && (
+                          <div className="pf-dcond__row">
+                            <span className="pf-dcond__row-label">Ссылка</span>
+                            <a className="pf-dcond__row-value" href={itemLink.href} target="_blank" rel="noopener noreferrer">{itemLink.host}</a>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })() : null}
                   {selectedPosition.asset_type_code === 'crypto' && getPositionMetadataText(selectedPosition, 'network_code') ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">Сеть</span>
@@ -5309,6 +5343,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
           { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, GRAM и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
           { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
+          { code: 'collectible', label: 'Коллекции',   sub: 'Подарки, стикеры, скины, предметы', tint: 'v', icon: <Gift size={20} strokeWidth={2} /> },
         ];
         const resolvedTypeCode = addSheetTypeCode ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0];
         const resolvedTypeLabel = assetTypeLabel(resolvedTypeCode);
@@ -6055,6 +6090,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           { code: 'deposit'  as const, label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
           { code: 'crypto'   as const, label: 'Крипта',          sub: 'BTC, ETH, GRAM и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
           { code: 'other'    as const, label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
+          { code: 'collectible' as const, label: 'Коллекции', sub: 'Подарки, стикеры, скины, предметы', tint: 'v', icon: <Gift size={20} strokeWidth={2} /> },
         ];
         const selectedTile = ACCOUNT_TYPE_TILES.find((t) => t.code === newAccountAssetType);
         const resetAndClose = () => {

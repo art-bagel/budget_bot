@@ -6342,6 +6342,7 @@ select.dlg-row__ghost option {
 .pf-hero__row-dot--deposit  { background: #137534; }
 .pf-hero__row-dot--crypto   { background: #9B1C1C; }
 .pf-hero__row-dot--other    { background: #4B2D8F; }
+.pf-hero__row-dot--collectible { background: #7A2E96; }
 
 .pf-hero__row-label {
   flex: 1;
@@ -6784,6 +6785,7 @@ select.dlg-row__ghost option {
 .pf-pos__icon--deposit  { background: #137534; }
 .pf-pos__icon--crypto   { background: #9B1C1C; }
 .pf-pos__icon--other    { background: #4B2D8F; }
+.pf-pos__icon--collectible { background: #7A2E96; }
 
 [data-theme='dark'] .pf-pos__icon--security { background: var(--yellow); color: #0A0B0D; }
 

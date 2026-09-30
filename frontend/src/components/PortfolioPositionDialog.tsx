@@ -9,6 +9,7 @@ import { formatAmount } from '../utils/format';
 import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
+import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink, type CollectibleKind } from '../utils/collectibles';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -136,7 +137,7 @@ export default function PortfolioPositionDialog({
   const [moexMarket, setMoexMarket] = useState<MoexMarket>('shares');
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
   const tickerInputRef = useRef<HTMLInputElement>(null);
-  const [quantity, setQuantity] = useState('');
+  const [quantity, setQuantity] = useState(defaultAssetTypeCode === 'collectible' ? '1' : '');
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
   const [openedAt, setOpenedAt] = useState(todayIso());
@@ -148,6 +149,12 @@ export default function PortfolioPositionDialog({
   const isDeposit = defaultAssetTypeCode === 'deposit';
   const isSecurity = defaultAssetTypeCode === 'security';
   const isCrypto = defaultAssetTypeCode === 'crypto';
+  const isCollectible = defaultAssetTypeCode === 'collectible';
+  const [itemKind, setItemKind] = useState<CollectibleKind>('telegram_gift');
+  const [itemAttributes, setItemAttributes] = useState<Record<string, string>>({});
+  const [itemLink, setItemLink] = useState('');
+  const itemFields = getCollectibleKind(itemKind)?.fields ?? [];
+  const itemLinkValid = !itemLink.trim() || !!safeItemLink(itemLink.trim());
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
   const [endDate, setEndDate] = useState(todayIso());
@@ -210,6 +217,7 @@ export default function PortfolioPositionDialog({
     && !!title.trim()
     && parseFloat(amount) > 0
     && (!isDeposit || parseFloat(interestRate) >= 0)
+    && (!isCollectible || itemLinkValid)
     && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
 
   const handleSubmit = async () => {
@@ -249,6 +257,14 @@ export default function PortfolioPositionDialog({
             : {
                 capitalization_period: showCapPeriod ? capitalizationPeriod : 'daily',
               }),
+        };
+      } else if (isCollectible) {
+        metadata = {
+          item_kind: itemKind,
+          item_attributes: Object.fromEntries(itemFields
+            .map((field) => [field.key, itemAttributes[field.key]?.trim() ?? ''])
+            .filter(([, value]) => value)),
+          ...(itemLink.trim() ? { item_link: itemLink.trim() } : {}),
         };
       }
 
@@ -332,6 +348,13 @@ export default function PortfolioPositionDialog({
         </div>
       )}
 
+      {isCollectible && (
+        <div className="apf-field">
+          <label className="apf-label">Вид предмета</label>
+          <ApfSelect value={itemKind} options={COLLECTIBLE_KINDS} onChange={setItemKind} disabled={submitting} />
+        </div>
+      )}
+
       {isCrypto && (
         <div className="apf-balance">
           Новая crypto-позиция создается переводом уже купленной крипты с банковского счета на инвестиционный.
@@ -378,16 +401,35 @@ export default function PortfolioPositionDialog({
       <div className="apf-field">
         <label className="apf-label">Название</label>
         <input className="apf-input" type="text" autoFocus
-          placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Актив или направление' : 'Позиция'}
+          placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Актив или направление' : isCollectible ? 'Название предмета' : 'Позиция'}
           value={title} onChange={(e) => setTitle(e.target.value)} disabled={submitting} />
       </div>
+      )}
+
+      {isCollectible && itemFields.map((field) => (
+        <div className="apf-field" key={field.key}>
+          <label className="apf-label">{field.label}</label>
+          <input className="apf-input" type="text" maxLength={200} placeholder={field.placeholder ?? 'Необязательно'}
+            value={itemAttributes[field.key] ?? ''}
+            onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.value }))}
+            disabled={submitting} />
+        </div>
+      ))}
+
+      {isCollectible && (
+        <div className="apf-field">
+          <label className="apf-label">Ссылка</label>
+          <input className="apf-input" type="url" inputMode="url" maxLength={500} placeholder="https://t.me/nft/…"
+            value={itemLink} onChange={(e) => setItemLink(e.target.value)} disabled={submitting} />
+          {!itemLinkValid && <div className="apf-error">Ссылка должна начинаться с https://</div>}
+        </div>
       )}
 
       {/* Amount + Currency */}
       {!isCrypto && (
         <div className="apf-row">
         <div className="apf-field" style={{ flex: 2 }}>
-          <label className="apf-label">{isDeposit ? 'Сумма' : 'Сумма входа'}</label>
+          <label className="apf-label">{isDeposit ? 'Сумма' : isCollectible ? 'Цена покупки' : 'Сумма входа'}</label>
           <input className="apf-input" type="text" inputMode="decimal"
             placeholder="0" value={amount}
             onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
@@ -413,7 +455,7 @@ export default function PortfolioPositionDialog({
               value={quantity} onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
           </div>
           <div className="apf-field" style={{ flex: 1 }}>
-            <label className="apf-label">Дата входа</label>
+            <label className="apf-label">{isCollectible ? 'Дата покупки' : 'Дата входа'}</label>
             <input className="apf-input" type="date" value={openedAt}
               onChange={(e) => setOpenedAt(e.target.value)} disabled={submitting} />
           </div>
@@ -505,7 +547,7 @@ export default function PortfolioPositionDialog({
     <div className="apf-actions">
       <button className="apf-cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
       <button className="apf-submit" type="button" onClick={handleSubmit} disabled={!canSubmit}>
-        {submitting ? 'Сохраняем…' : isDeposit ? 'Открыть вклад' : 'Добавить позицию'}
+        {submitting ? 'Сохраняем…' : isDeposit ? 'Открыть вклад' : isCollectible ? 'Добавить предмет' : 'Добавить позицию'}
       </button>
     </div>
   );

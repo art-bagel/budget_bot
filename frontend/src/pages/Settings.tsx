@@ -79,6 +79,7 @@ const ASSET_CHIP: Record<NonNullable<BankAccount['investment_asset_type']>, { to
   deposit:  { tone: 'invest-tile__chip--g', label: 'Депозиты',      abbr: 'ДП' },
   crypto:   { tone: 'invest-tile__chip--p', label: 'Криптовалюта',  abbr: 'КР' },
   other:    { tone: 'invest-tile__chip--r', label: 'Разное',        abbr: '••' },
+  collectible: { tone: 'invest-tile__chip--p', label: 'Коллекции',  abbr: 'КЛ' },
 };
 
 function memberFullName(m: FamilyMember): string {
@@ -794,6 +795,7 @@ export default function Settings({
                       <option value="deposit">Депозиты</option>
                       <option value="crypto">Криптовалюта</option>
                       <option value="other">Разное</option>
+                      <option value="collectible">Коллекции</option>
                     </select>
                   </label>
                 </div>
