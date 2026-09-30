@@ -3433,8 +3433,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
               const protocolsForAccount = cryptoProtocolPositions.filter((item) => item.status === 'open' && !isEmptyProtocolPosition(item) && item.investment_account_id === group.accountId);
               const protocolMarketValue = knownProtocolValues(protocolsForAccount.map(getProtocolValuation));
-              const groupMarketIncomplete = group.positions.some((item) => item.asset_type_code === 'crypto' && Number(item.quantity ?? 0) !== 0 && !getCryptoLivePrice(item))
-                || protocolMarketValue.incomplete;
               const groupValue = positionsValue + getAccountCashValue(group.accountId) + protocolMarketValue.value;
               const groupProtocolPositions = activeAssetTypeCode === 'crypto'
                 ? (visibleCryptoProtocolPositionsByAccountId.get(group.accountId) ?? [])
@@ -5750,7 +5748,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 const displayIncome = accountOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0);
                 const accountProtocols = cryptoProtocolPositions.filter((p) => p.investment_account_id === account.id && p.status === 'open' && !isEmptyProtocolPosition(p));
                 const protocolValue = knownProtocolValues(accountProtocols.map(getProtocolValuation));
-                const accountIncomplete = protocolValue.incomplete || accountOpenPositions.some((p) => p.asset_type_code === 'crypto' && Number(p.quantity ?? 0) !== 0 && !getCryptoLivePrice(p));
                 const currentAccountValue = estimatedValue + cashValueInBase + protocolValue.value;
                 const realizedIncome = isSecuritySheet
                   ? currentAccountValue - netContributed - displayIncome
