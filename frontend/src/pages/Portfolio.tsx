@@ -285,6 +285,13 @@ const PA_ASSET_TYPE_META: Record<string, PaMeta> = {
   other: { Icon: Package, color: 'p' },
   collectible: { Icon: Gift, color: 'v' },
 };
+const TYPE_TILES = [
+  { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
+  { code: 'deposit', label: 'Депозит', sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark size={20} strokeWidth={2} /> },
+  { code: 'crypto', label: 'Крипта', sub: 'BTC, ETH, GRAM и другие', tint: 'o', icon: <Coins size={20} strokeWidth={2} /> },
+  { code: 'other', label: 'Другое', sub: 'Металлы, ЗПИФ и прочее', tint: 'p', icon: <Package size={20} strokeWidth={2} /> },
+  { code: 'collectible', label: 'Коллекции', sub: 'Подарки, стикеры, скины, предметы', tint: 'v', icon: <Gift size={20} strokeWidth={2} /> },
+] as const;
 const PA_SECURITY_KIND_META: Record<string, PaMeta> = {
   stock: { Icon: TrendingUp, color: 'b' },
   bond: { Icon: Ticket, color: 'o' },
@@ -2779,15 +2786,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     .some((position) => position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0))
     || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
   const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
-  const ActiveAssetIcon = activeAssetTypeCode === 'deposit'
-    ? Landmark
-    : activeAssetTypeCode === 'crypto'
-      ? Coins
-      : activeAssetTypeCode === 'other'
-        ? Package
-        : activeAssetTypeCode === 'collectible'
-          ? Gift
-          : TrendingUp;
+  const ActiveAssetIcon = (PA_ASSET_TYPE_META[activeAssetTypeCode] ?? PA_ASSET_TYPE_META.security).Icon;
 
   const portfolioAnalyticsBuckets = useMemo<PortfolioAnalyticsBucket[]>(() => {
     if (activeAssetTypeCode !== 'security') {
@@ -5338,13 +5337,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
       {/* ── Add position sheet ── */}
       {(() => {
-        const TYPE_TILES = [
-          { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
-          { code: 'deposit',  label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
-          { code: 'crypto',   label: 'Крипта',          sub: 'BTC, ETH, GRAM и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
-          { code: 'other',    label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
-          { code: 'collectible', label: 'Коллекции',   sub: 'Подарки, стикеры, скины, предметы', tint: 'v', icon: <Gift size={20} strokeWidth={2} /> },
-        ];
         const resolvedTypeCode = addSheetTypeCode ?? DEFAULT_PORTFOLIO_ASSET_TYPE_CODES[0];
         const resolvedTypeLabel = assetTypeLabel(resolvedTypeCode);
         const sheetTitle = addSheetTypeCode === 'crypto'
@@ -6085,14 +6077,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       })()}
 
       {showNewAccountModal && (() => {
-        const ACCOUNT_TYPE_TILES = [
-          { code: 'security' as const, label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
-          { code: 'deposit'  as const, label: 'Депозит',        sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark   size={20} strokeWidth={2} /> },
-          { code: 'crypto'   as const, label: 'Крипта',          sub: 'BTC, ETH, GRAM и другие',  tint: 'o', icon: <Coins      size={20} strokeWidth={2} /> },
-          { code: 'other'    as const, label: 'Другое',          sub: 'Металлы, ЗПИФ и прочее',  tint: 'p', icon: <Package    size={20} strokeWidth={2} /> },
-          { code: 'collectible' as const, label: 'Коллекции', sub: 'Подарки, стикеры, скины, предметы', tint: 'v', icon: <Gift size={20} strokeWidth={2} /> },
-        ];
-        const selectedTile = ACCOUNT_TYPE_TILES.find((t) => t.code === newAccountAssetType);
+        const selectedTile = TYPE_TILES.find((t) => t.code === newAccountAssetType);
         const resetAndClose = () => {
           setShowNewAccountModal(false);
           setNewAccountStep('pick');
@@ -6114,7 +6099,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           >
             {newAccountStep === 'pick' ? (
               <div className="add-pos-types">
-                {ACCOUNT_TYPE_TILES.map((t) => (
+                {TYPE_TILES.map((t) => (
                   <button
                     key={t.code}
                     type="button"

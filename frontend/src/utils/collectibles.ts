@@ -1,8 +1,8 @@
 // Item kinds of a collection account and the text fields each one records.
 // The database checks only the kind, an https link and short text values.
-export type CollectibleField = { key: string; label: string; placeholder?: string };
+type CollectibleKind = { value: string; label: string; fields: { key: string; label: string; placeholder?: string }[] };
 
-export const COLLECTIBLE_KINDS = [
+export const COLLECTIBLE_KINDS: CollectibleKind[] = [
   {
     value: 'telegram_gift',
     label: 'Подарок Telegram',
@@ -45,33 +45,25 @@ export const COLLECTIBLE_KINDS = [
     ],
   },
   { value: 'other', label: 'Другое', fields: [] },
-] as const satisfies readonly { value: string; label: string; fields: readonly CollectibleField[] }[];
+];
 
-export type CollectibleKind = (typeof COLLECTIBLE_KINDS)[number]['value'];
-
-type CollectibleKindInfo = { value: CollectibleKind; label: string; fields: readonly CollectibleField[] };
-
-export function getCollectibleKind(value: unknown): CollectibleKindInfo | null {
+export function getCollectibleKind(value: unknown): CollectibleKind | null {
   return COLLECTIBLE_KINDS.find((kind) => kind.value === value) ?? null;
 }
 
-// Known fields in form order, then any other stored keys; empty values are skipped.
+// Filled fields of the item's kind, in form order.
 export function collectibleAttributeRows(metadata: Record<string, unknown> | undefined): { label: string; value: string }[] {
-  const raw = metadata?.item_attributes;
-  const attributes = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
-  const fields = getCollectibleKind(metadata?.item_kind)?.fields ?? [];
-  const keys = [...fields.map((field) => field.key), ...Object.keys(attributes).filter((key) => !fields.some((field) => field.key === key))];
-  return keys
-    .filter((key) => typeof attributes[key] === 'string' && attributes[key])
-    .map((key) => ({ label: fields.find((field) => field.key === key)?.label ?? key, value: attributes[key] as string }));
+  const attributes = (metadata?.item_attributes ?? {}) as Record<string, unknown>;
+  return (getCollectibleKind(metadata?.item_kind)?.fields ?? [])
+    .filter((field) => typeof attributes[field.key] === 'string' && attributes[field.key])
+    .map((field) => ({ label: field.label, value: attributes[field.key] as string }));
 }
 
 // Only https links are rendered as links: anything else could run script in the WebApp.
-export function safeItemLink(value: unknown): { href: string; host: string } | null {
+export function safeItemLink(value: unknown): URL | null {
   if (typeof value !== 'string' || !/^https:\/\/\S+$/.test(value)) return null;
   try {
-    const url = new URL(value);
-    return { href: url.href, host: url.host };
+    return new URL(value);
   } catch {
     return null;
   }

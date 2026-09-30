@@ -9,7 +9,7 @@ import { formatAmount } from '../utils/format';
 import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink, type CollectibleKind } from '../utils/collectibles';
+import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink } from '../utils/collectibles';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -150,7 +150,7 @@ export default function PortfolioPositionDialog({
   const isSecurity = defaultAssetTypeCode === 'security';
   const isCrypto = defaultAssetTypeCode === 'crypto';
   const isCollectible = defaultAssetTypeCode === 'collectible';
-  const [itemKind, setItemKind] = useState<CollectibleKind>('telegram_gift');
+  const [itemKind, setItemKind] = useState('telegram_gift');
   const [itemAttributes, setItemAttributes] = useState<Record<string, string>>({});
   const [itemLink, setItemLink] = useState('');
   const itemFields = getCollectibleKind(itemKind)?.fields ?? [];
@@ -217,7 +217,7 @@ export default function PortfolioPositionDialog({
     && !!title.trim()
     && parseFloat(amount) > 0
     && (!isDeposit || parseFloat(interestRate) >= 0)
-    && (!isCollectible || itemLinkValid)
+    && itemLinkValid
     && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
 
   const handleSubmit = async () => {
@@ -419,7 +419,7 @@ export default function PortfolioPositionDialog({
       {isCollectible && (
         <div className="apf-field">
           <label className="apf-label">Ссылка</label>
-          <input className="apf-input" type="url" inputMode="url" maxLength={500} placeholder="https://t.me/nft/…"
+          <input className="apf-input" type="url" maxLength={500} placeholder="https://t.me/nft/…"
             value={itemLink} onChange={(e) => setItemLink(e.target.value)} disabled={submitting} />
           {!itemLinkValid && <div className="apf-error">Ссылка должна начинаться с https://</div>}
         </div>
