@@ -32,6 +32,10 @@ DECLARE
     _operation_comment text;
 BEGIN
     SET search_path TO budgeting;
+    IF EXISTS(SELECT 1 FROM portfolio_positions WHERE id=_position_id AND asset_type_code='collectible'
+        AND metadata->>'acquisition_kind'='unknown') THEN
+        RAISE EXCEPTION 'Сначала уточните цену покупки предмета';
+    END IF;
 
     IF _close_amount_in_currency IS NULL OR _close_amount_in_currency <= 0 THEN
         RAISE EXCEPTION 'Close amount must be positive';

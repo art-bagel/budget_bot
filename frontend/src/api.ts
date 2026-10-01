@@ -433,6 +433,12 @@ export async function fetchCryptoAssets(): Promise<CryptoAsset[]> {
   return apiFetch<CryptoAsset[]>('/crypto/assets');
 }
 
+export async function ensureCryptoAsset(payload: {
+  symbol: string; name: string; network_code: string; decimals: number;
+}): Promise<CryptoAsset> {
+  return apiFetch<CryptoAsset>('/crypto/assets', { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export async function fetchCryptoAccountAssets(
   investmentAccountId: number,
 ): Promise<CryptoAccountAssetSummary[]> {
@@ -1307,7 +1313,20 @@ export async function mergeBankCryptoAsset(payload: {
 
 export async function chargeCollectibleCoin(positionId: number, data: {
   request_id: string; crypto_asset_id: number; crypto_quantity: string;
-  kind: 'fee' | 'topup'; operated_at?: string; comment?: string;
+  resolve_purchase_price?: boolean; kind: 'fee' | 'topup'; operated_at?: string; comment?: string; allocation_position_ids?: number[];
 }): Promise<PortfolioPosition> {
   return apiFetch(`/portfolio/positions/${positionId}/coin-charge`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function setCollectibleAcquiredAt(positionId: number, data: {
+  request_id: string; acquired_at: string | null;
+}): Promise<PortfolioPosition> {
+  return apiFetch(`/portfolio/positions/${positionId}/acquired-at`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function editCollectibleDetails(positionId: number, data: {
+  request_id: string; title: string; comment: string | null; acquired_at: string | null;
+  item_kind: string; item_link: string | null; image_url: string | null; item_attributes: Record<string, string>;
+}): Promise<PortfolioPosition> {
+  return apiFetch(`/portfolio/positions/${positionId}/details`, { method: 'POST', body: JSON.stringify(data) });
 }

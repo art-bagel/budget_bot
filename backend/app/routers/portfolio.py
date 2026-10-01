@@ -59,6 +59,7 @@ class PortfolioEventItem(BaseModel):
 
 class CreatePortfolioPositionRequest(BaseModel):
     received_free: bool = False
+    cost_unknown: bool = False
     request_id: UUID | None = None
     investment_account_id: int
     asset_type_code: str
@@ -86,6 +87,7 @@ class CreatePortfolioPositionRequest(BaseModel):
 
 
 class TopUpPortfolioPositionRequest(BaseModel):
+    resolve_purchase_price: bool = False
     request_id: UUID | None = None
     amount_in_currency: float
     currency_code: str
@@ -351,9 +353,11 @@ async def create_portfolio_position(
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioPositionItem:
     if body.asset_type_code == 'collectible':
-        if body.received_free and body.amount_in_currency != 0:
+        if body.received_free and body.cost_unknown:
+            raise HTTPException(status_code=400, detail='Выберите один способ получения')
+        if (body.received_free or body.cost_unknown) and body.amount_in_currency != 0:
             raise HTTPException(status_code=400, detail='Бесплатное получение не содержит оплаты')
-        return await _post_collection(user.user_id, body, 'collectible_receive' if body.received_free else 'collectible_fiat_buy', 'opened_at')
+        return await _post_collection(user.user_id, body, 'collectible_receive' if (body.received_free or body.cost_unknown) else 'collectible_fiat_buy', 'opened_at')
     result = await context.put__create_portfolio_position(
         user_id=user.user_id,
         investment_account_id=body.investment_account_id,
@@ -403,9 +407,11 @@ async def buy_collectible_with_crypto(
 
 
 class ChargeCollectibleCoinRequest(BaseModel):
+    resolve_purchase_price: bool = False
     request_id: UUID
     crypto_asset_id: int
     crypto_quantity: Decimal = Field(gt=0, max_digits=50, decimal_places=18, allow_inf_nan=False)
+    allocation_position_ids: list[int] | None = Field(default=None, min_length=1, max_length=1000)
     kind: Literal['fee', 'topup']
     operated_at: date | None = None
     comment: str | None = None
@@ -630,3 +636,43 @@ async def change_deposit_rate(
     # Return updated position
     updated = await reports.get__portfolio_position(user.user_id, position_id)
     return PortfolioPositionItem(**updated)
+
+
+class CollectibleAcquiredAtRequest(BaseModel):
+    request_id: UUID
+    acquired_at: date | None = None
+
+
+@router.post('/positions/{position_id}/acquired-at', response_model=PortfolioPositionItem)
+async def set_collectible_acquired_at(
+    position_id: int,
+    body: CollectibleAcquiredAtRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> PortfolioPositionItem:
+    result = await ledger.call_function('budgeting.put__manual_collectible_movement', user.user_id,
+        body.request_id, 'collectible_details', {'position_id': position_id,
+        'acquired_at': body.acquired_at.isoformat() if body.acquired_at else None}, None)
+    return PortfolioPositionItem(**result)
+
+
+class CollectibleDetailsRequest(BaseModel):
+    request_id: UUID
+    title: str = Field(min_length=1, max_length=200)
+    comment: str | None = Field(default=None, max_length=2000)
+    acquired_at: date | None = None
+    item_kind: str
+    item_link: str | None = Field(default=None, max_length=500)
+    image_url: str | None = Field(default=None, max_length=1000)
+    item_attributes: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post('/positions/{position_id}/details', response_model=PortfolioPositionItem)
+async def edit_collectible_details(
+    position_id: int, body: CollectibleDetailsRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> PortfolioPositionItem:
+    payload = body.model_dump(mode='json', exclude={'request_id'})
+    payload['position_id'] = position_id
+    result = await ledger.call_function('budgeting.put__manual_collectible_movement', user.user_id,
+        body.request_id, 'collectible_details', payload, None)
+    return PortfolioPositionItem(**result)

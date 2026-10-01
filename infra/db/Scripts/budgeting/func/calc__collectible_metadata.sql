@@ -14,12 +14,20 @@ BEGIN
     IF (_metadata ->> 'item_link') !~ '^https://\S+$' OR length(_metadata ->> 'item_link') > 500 THEN
         RAISE EXCEPTION 'Ссылка на предмет должна начинаться с https://';
     END IF;
+    IF (_metadata->>'image_url') !~ '^https://\S+$' OR length(_metadata->>'image_url')>1000 THEN
+        RAISE EXCEPTION 'Ссылка на изображение должна начинаться с https://';
+    END IF;
     IF jsonb_typeof(COALESCE(_metadata -> 'item_attributes', '{}'::jsonb)) <> 'object'
        OR (SELECT count(*) > 20 OR bool_or(jsonb_typeof(value) <> 'string' OR length(key) > 40 OR length(value #>> '{}') > 200)
            FROM jsonb_each(COALESCE(_metadata -> 'item_attributes', '{}'::jsonb))) THEN
         RAISE EXCEPTION 'Параметры предмета: до 20 текстовых полей по 200 символов';
     END IF;
+    IF _metadata->>'acquired_at' IS NOT NULL AND NOT isfinite((_metadata->>'acquired_at')::date) THEN
+        RAISE EXCEPTION 'Некорректная дата приобретения';
+    END IF;
     RETURN jsonb_strip_nulls(jsonb_build_object(
+        'acquired_at', (_metadata->>'acquired_at')::date,
+        'image_url', _metadata->'image_url',
         'item_kind', _metadata -> 'item_kind',
         'item_link', _metadata -> 'item_link',
         'item_attributes', _metadata -> 'item_attributes'

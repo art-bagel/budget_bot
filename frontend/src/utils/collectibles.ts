@@ -72,3 +72,20 @@ export function safeItemLink(value: unknown): URL | null {
     return null;
   }
 }
+
+// Prefer a canonical item link to guessing names with punctuation or aliases.
+export function collectibleImageUrl(metadata: Record<string, unknown> | undefined): string | null {
+  const explicit = safeItemLink(metadata?.image_url);
+  if (explicit && !explicit.username && !explicit.password) return explicit.href;
+  const link = safeItemLink(metadata?.item_link);
+  if (link && ['t.me', 'telegram.me'].includes(link.hostname)) {
+    const match = link.pathname.match(/^\/nft\/([a-zA-Z0-9]+-\d+)\/?$/);
+    if (match) return `https://nft.fragment.com/gift/${match[1].toLowerCase()}.medium.jpg`;
+  }
+  const attrs = metadata?.item_attributes as Record<string, unknown> | undefined;
+  if (metadata?.item_kind === 'telegram_gift' && typeof attrs?.collection === 'string' && /^\d+$/.test(String(attrs.number ?? ''))) {
+    const slug = attrs.collection.replace(/[ -]/g, '').toLowerCase();
+    if (/^[a-z0-9]+$/.test(slug)) return `https://nft.fragment.com/gift/${slug}-${attrs.number}.medium.jpg`;
+  }
+  return null;
+}

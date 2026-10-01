@@ -153,6 +153,7 @@ export default function PortfolioPositionDialog({
   const collectibleRequest = useCryptoRequestKey('collectible-buy');
   const isCollectible = defaultAssetTypeCode === 'collectible';
   const [receivedFree, setReceivedFree] = useState(false);
+  const [costUnknown, setCostUnknown] = useState(false);
   const [itemKind, setItemKind] = useState('telegram_gift');
   const [itemAttributes, setItemAttributes] = useState<Record<string, string>>({});
   const [itemLink, setItemLink] = useState('');
@@ -223,7 +224,7 @@ export default function PortfolioPositionDialog({
     && !isCrypto
     && !!investmentAccountId
     && !!title.trim()
-    && ((isCollectible && receivedFree) || parseFloat(amount) > 0)
+    && ((isCollectible && (receivedFree || costUnknown)) || parseFloat(amount) > 0)
     && (!isDeposit || parseFloat(interestRate) >= 0)
     && itemLinkValid
     && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
@@ -238,7 +239,7 @@ export default function PortfolioPositionDialog({
       return;
     }
 
-    if (!isCrypto && parseFloat(amount) > selectedCurrencyBalance) {
+    if (!isCrypto && !(isCollectible && (receivedFree || costUnknown)) && parseFloat(amount) > selectedCurrencyBalance) {
       setError('Недостаточно денег на инвестиционном счете для открытия позиции.');
       return;
     }
@@ -276,7 +277,7 @@ export default function PortfolioPositionDialog({
         };
       }
 
-      if (payCoinId && metadata && !receivedFree) {
+      if (payCoinId && metadata && !(receivedFree || costUnknown)) {
         const purchase = {
           investment_account_id: Number(investmentAccountId),
           crypto_asset_id: payCoinId,
@@ -297,8 +298,9 @@ export default function PortfolioPositionDialog({
         asset_type_code: defaultAssetTypeCode,
         title: title.trim(),
         quantity: (!isDeposit && quantity.trim()) ? Number(quantity) : undefined,
-        amount_in_currency: isCollectible && receivedFree ? 0 : Number(amount),
+        amount_in_currency: isCollectible && (receivedFree || costUnknown) ? 0 : Number(amount),
         received_free: isCollectible && receivedFree,
+        cost_unknown: isCollectible && costUnknown,
         currency_code: currencyCode,
         opened_at: openedAt || undefined,
         comment: comment.trim() || undefined,
@@ -455,12 +457,12 @@ export default function PortfolioPositionDialog({
       {isCollectible && (
         <div className="apf-field">
           <label className="apf-label">Получение</label>
-          <ApfSelect value={receivedFree ? 'free' : 'buy'} options={[{ value: 'buy', label: 'Покупка' }, { value: 'free', label: 'Получено бесплатно' }]}
-            onChange={(value) => { setReceivedFree(value === 'free'); setCurrencyCode(user.base_currency_code); }} disabled={submitting} />
+          <ApfSelect value={costUnknown ? 'unknown' : receivedFree ? 'free' : 'buy'} options={[{ value: 'buy', label: 'Покупка' }, { value: 'free', label: 'Получено бесплатно' }, { value: 'unknown', label: 'Цена покупки неизвестна' }]}
+            onChange={(value) => { setReceivedFree(value === 'free'); setCostUnknown(value === 'unknown'); setCurrencyCode(user.base_currency_code); }} disabled={submitting} />
         </div>
       )}
       {/* Amount + Currency */}
-      {!isCrypto && !receivedFree && (
+      {!isCrypto && !(receivedFree || costUnknown) && (
         <div className="apf-row">
         <div className="apf-field" style={{ flex: 2 }}>
           <label className="apf-label">{isDeposit ? 'Сумма' : isCollectible ? 'Цена покупки' : 'Сумма входа'}</label>

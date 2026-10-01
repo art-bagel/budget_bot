@@ -26,6 +26,10 @@ DECLARE
     _day date := COALESCE(_closed_at, current_date);
 BEGIN
     SET search_path TO budgeting;
+    IF EXISTS(SELECT 1 FROM portfolio_positions WHERE id=_position_id AND asset_type_code='collectible'
+        AND metadata->>'acquisition_kind'='unknown') THEN
+        RAISE EXCEPTION 'Сначала уточните цену покупки предмета';
+    END IF;
     IF _crypto_quantity IS NULL OR _crypto_quantity <= 0 OR _crypto_quantity::text IN ('NaN', 'Infinity', '-Infinity')
        OR _crypto_quantity <> round(_crypto_quantity, 18) THEN
         RAISE EXCEPTION 'Количество монет должно быть положительным, до 18 знаков';

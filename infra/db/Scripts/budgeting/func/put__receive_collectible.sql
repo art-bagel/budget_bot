@@ -1,6 +1,7 @@
 -- Explicitly free receipt. Unknown acquisition cost is not a free receipt.
+DROP FUNCTION IF EXISTS budgeting.put__receive_collectible(bigint,bigint,text,numeric,date,text,jsonb);
 CREATE OR REPLACE FUNCTION budgeting.put__receive_collectible(
-    _uid bigint, _account bigint, _title text, _quantity numeric, _day date, _comment text, _metadata jsonb
+    _uid bigint, _account bigint, _title text, _quantity numeric, _day date, _comment text, _metadata jsonb, _cost_unknown boolean DEFAULT false
 ) RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE a record; pid bigint; op bigint; base char(3); m jsonb;
 BEGIN
@@ -15,9 +16,9 @@ BEGIN
         RAISE EXCEPTION 'Укажите название и положительное количество предметов';
     END IF;
     base:=get__owner_base_currency(a.owner_type,a.owner_user_id,a.owner_family_id);
-    m:=calc__collectible_metadata(_metadata)||jsonb_build_object('amount_in_base',0,'acquisition_kind','free');
+    m:=calc__collectible_metadata(_metadata)||jsonb_build_object('amount_in_base',0,'acquisition_kind',CASE WHEN _cost_unknown THEN 'unknown' ELSE 'free' END,'basis_quality',CASE WHEN _cost_unknown THEN 'unknown' ELSE 'confirmed_zero' END);
     INSERT INTO operations(actor_user_id,owner_type,owner_user_id,owner_family_id,type,comment,operated_on)
-    VALUES(_uid,a.owner_type,a.owner_user_id,a.owner_family_id,'investment_trade','Бесплатное получение · '||btrim(_title),_day) RETURNING id INTO op;
+    VALUES(_uid,a.owner_type,a.owner_user_id,a.owner_family_id,'investment_trade',CASE WHEN _cost_unknown THEN 'Получение с неизвестной ценой · ' ELSE 'Бесплатное получение · ' END||btrim(_title),_day) RETURNING id INTO op;
     INSERT INTO portfolio_positions(owner_type,owner_user_id,owner_family_id,investment_account_id,asset_type_code,
         title,quantity,amount_in_currency,currency_code,opened_at,comment,metadata,created_by_user_id)
     VALUES(a.owner_type,a.owner_user_id,a.owner_family_id,a.id,'collectible',btrim(_title),_quantity,0,base,_day,_comment,m,_uid)

@@ -8,7 +8,7 @@ DECLARE
     day date := COALESCE(_day,current_date); stamp timestamptz; ord bigint; result jsonb;
 BEGIN
     SET search_path TO budgeting;
-    IF _request_id IS NULL OR _kind IS NULL OR _kind NOT IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')
+    IF _request_id IS NULL OR _kind IS NULL OR _kind NOT IN ('collectible_details','collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')
        OR jsonb_typeof(_payload) IS DISTINCT FROM 'object' OR NOT isfinite(day) THEN
         RAISE EXCEPTION 'Некорректная операция коллекции';
     END IF;

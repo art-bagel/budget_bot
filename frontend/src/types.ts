@@ -831,6 +831,7 @@ export interface PortfolioEvent {
 
 export interface CreatePortfolioPositionRequest {
   received_free?: boolean;
+  cost_unknown?: boolean;
   request_id?: string;
   investment_account_id: number;
   asset_type_code: string;
@@ -844,6 +845,7 @@ export interface CreatePortfolioPositionRequest {
 }
 
 export interface TopUpPortfolioPositionRequest {
+  resolve_purchase_price?: boolean;
   request_id?: string;
   amount_in_currency: number;
   currency_code: string;

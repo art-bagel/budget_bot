@@ -40,7 +40,7 @@ BEGIN
     IF _account.id IS NULL OR NOT budgeting.has__owner_access(_user_id,_account.owner_type,_account.owner_user_id,_account.owner_family_id) THEN
         RAISE EXCEPTION 'Access denied to source journal account';
     END IF;
-    IF NOT ((_account.account_kind='investment' AND (_account.investment_asset_type='crypto' OR (_account.investment_asset_type='collectible' AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')))))
+    IF NOT ((_account.account_kind='investment' AND (_account.investment_asset_type='crypto' OR (_account.investment_asset_type='collectible' AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_details','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')))))
         OR (_account.account_kind='cash' AND jsonb_typeof(_commands)='array'
         AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(_commands) c WHERE c->>'kind' NOT IN ('bank_buy','bank_cash_sell','bank_asset_merge','bank_swap','bank_expense','bank_crypto_expense','bank_purchase','budget_allocate')))) THEN
         RAISE EXCEPTION 'Source journal requires a crypto investment account';
@@ -120,7 +120,7 @@ BEGIN
             IF _payload->>_key IS NULL THEN CONTINUE; END IF;
             IF _key IN ('investment_account_id','target_investment_account_id') THEN
                 _resource_account := (_payload->>_key)::bigint;
-            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('swap','transfer','staking_convert','bank_sell','bank_withdraw','bank_to_portfolio','position_income','collectible_coin_fee','collectible_coin_topup','collectible_sell','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')) THEN
+            ELSIF _key IN ('link_protocol_position_id','collateral_position_id','other_position_id') OR (_key='position_id' AND _kind NOT IN ('collectible_details','swap','transfer','staking_convert','bank_sell','bank_withdraw','bank_to_portfolio','position_income','collectible_coin_fee','collectible_coin_topup','collectible_sell','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee')) THEN
                 SELECT investment_account_id INTO _resource_account FROM crypto_protocol_positions WHERE id=(_payload->>_key)::bigint;
             ELSE
                 SELECT investment_account_id INTO _resource_account FROM portfolio_positions WHERE id=(_payload->>_key)::bigint;
@@ -129,7 +129,7 @@ BEGIN
             IF _resource.id IS NULL OR _resource.owner_type IS DISTINCT FROM _account.owner_type
                 OR _resource.owner_user_id IS DISTINCT FROM _account.owner_user_id
                 OR _resource.owner_family_id IS DISTINCT FROM _account.owner_family_id
-                OR _resource.account_kind<>'investment' OR NOT (_resource.investment_asset_type='crypto' OR (_resource.investment_asset_type='collectible' AND _kind IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee'))) THEN
+                OR _resource.account_kind<>'investment' OR NOT (_resource.investment_asset_type='crypto' OR (_resource.investment_asset_type='collectible' AND _kind IN ('collectible_transfer','collectible_coin_fee','collectible_coin_topup','collectible_details','collectible_receive','collectible_buy','collectible_sell','collectible_fiat_buy','collectible_fiat_close','collectible_fiat_partial','collectible_fiat_topup','collectible_fiat_fee'))) THEN
                 RAISE EXCEPTION 'Command resource is outside source journal owner scope';
             END IF;
         END LOOP;
@@ -185,6 +185,13 @@ BEGIN
                 RAISE EXCEPTION 'Funded history requires carry swaps';
             END IF;
         END IF;
+        IF COALESCE((_payload->>'resolve_purchase_price')::boolean,false) THEN
+            IF _kind NOT IN ('collectible_coin_topup','collectible_fiat_topup') OR _payload ? 'allocation_position_ids'
+               OR COALESCE((_payload->>'quantity')::numeric,0)<>0 THEN RAISE EXCEPTION 'Уточнение цены относится к одному предмету без изменения количества'; END IF;
+            PERFORM 1 FROM portfolio_positions WHERE id=(_payload->>'position_id')::bigint
+                AND asset_type_code='collectible' AND status='open' AND metadata->>'acquisition_kind'='unknown' FOR UPDATE;
+            IF NOT FOUND THEN RAISE EXCEPTION 'Цена покупки уже известна'; END IF;
+        END IF;
         CASE _kind
         WHEN 'collectible_fiat_buy' THEN
             _result:=put__create_portfolio_position(_user_id,(_payload->>'investment_account_id')::bigint,
@@ -207,13 +214,23 @@ BEGIN
         WHEN 'collectible_fiat_fee' THEN
             _result:=put__record_portfolio_fee(_user_id,(_payload->>'position_id')::bigint,
                 (_payload->>'amount')::numeric,(_payload->>'currency_code')::char(3),_accounting_date,_payload->>'comment');
+        WHEN 'collectible_details' THEN
+            _result:=put__edit_collectible_details(_user_id,(_payload->>'position_id')::bigint,_payload-'position_id');
         WHEN 'collectible_receive' THEN
             _result:=put__receive_collectible(_user_id,(_payload->>'investment_account_id')::bigint,
-                _payload->>'title',(_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment',_payload->'metadata');
+                _payload->>'title',(_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment',_payload->'metadata',COALESCE((_payload->>'cost_unknown')::boolean,false));
         WHEN 'collectible_coin_fee', 'collectible_coin_topup' THEN
+            IF _payload ? 'allocation_position_ids' THEN
+                IF _kind<>'collectible_coin_topup' THEN RAISE EXCEPTION 'Распределять можно только затраты в себестоимость'; END IF;
+                _result:=put__allocate_collectible_coin(_user_id,(_payload->>'position_id')::bigint,
+                    (_payload->>'crypto_asset_id')::bigint,(_payload->>'crypto_quantity')::numeric,
+                    ARRAY(SELECT value::bigint FROM jsonb_array_elements_text(_payload->'allocation_position_ids')),
+                    _accounting_date,_payload->>'comment');
+            ELSE
             _result:=put__charge_collectible_coin(_user_id,(_payload->>'position_id')::bigint,
                 (_payload->>'crypto_asset_id')::bigint,(_payload->>'crypto_quantity')::numeric,
                 CASE WHEN _kind='collectible_coin_fee' THEN 'fee' ELSE 'topup' END,_accounting_date,_payload->>'comment');
+            END IF;
         WHEN 'collectible_transfer' THEN
             _result:=put__transfer_bank_crypto(_user_id,(_payload->>'from_account_id')::bigint,
                 (_payload->>'to_account_id')::bigint,(_payload->>'crypto_asset_id')::bigint,
@@ -907,6 +924,12 @@ BEGIN
                 _collateral_position_id => (_payload->>'collateral_position_id')::bigint
             );        ELSE RAISE EXCEPTION 'Unsupported source command kind';
         END CASE;
+        IF COALESCE((_payload->>'resolve_purchase_price')::boolean,false) THEN
+            UPDATE portfolio_positions SET metadata=(metadata-'basis_quality')||jsonb_build_object(
+                'acquisition_kind','purchase','purchase_price_resolved_on',_accounting_date,
+                'purchase_price_source_event_id',_id) WHERE id=(_payload->>'position_id')::bigint;
+            _result:=get__portfolio_position(_user_id,(_payload->>'position_id')::bigint);
+        END IF;
         IF _kind IN ('borrow','accrue','repay') AND _payload->>'valuation_quality'='estimated' THEN
             UPDATE portfolio_events e SET metadata=e.metadata || jsonb_build_object(
                 'valuation_quality','estimated','valuation_source',_payload->>'valuation_source') ||

@@ -1,3 +1,4 @@
+import CollectibleImage from '../components/CollectibleImage';
 import { cryptoAssetLabel, cryptoNetworkLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
 import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
@@ -14,6 +15,7 @@ import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 import {
   cancelPortfolioIncome,
+  editCollectibleDetails,
   changeDepositRate,
   closePortfolioPosition,
   createBankAccount,
@@ -129,6 +131,8 @@ type IncomeDraft = {
 };
 
 type TopUpDraft = {
+  resolvePurchasePrice?: boolean;
+  allocationPositionIds?: number[];
   amount: string;
   quantity: string;
   currencyCode: string;
@@ -834,6 +838,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   // New investment account form
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
   const collectionActionRequest = useCryptoRequestKey('collectible-action');
+  const collectibleDateRequest = useCryptoRequestKey('collectible-date');
+  const [collectibleEditingId, setCollectibleEditingId] = useState<number | null>(null);
+  const [collectibleDateSaving, setCollectibleDateSaving] = useState(false);
+  const [collectibleDateError, setCollectibleDateError] = useState<string | null>(null);
   const [collectionSoldQuantity, setCollectionSoldQuantity] = useState('');
   const collectibleSaleRequest = useCryptoRequestKey('collectible-sell');
   const [newAccountStep, setNewAccountStep] = useState<'pick' | 'form'>('pick');
@@ -1887,6 +1895,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     try {
       if (position.asset_type_code === 'collectible' && draft.currencyCode.startsWith('crypto:')) {
         const payload = { crypto_asset_id: Number(draft.currencyCode.slice(7)), crypto_quantity: draft.amount,
+          resolve_purchase_price: draft.resolvePurchasePrice ?? false,
+          allocation_position_ids: draft.allocationPositionIds?.length ? [position.id, ...draft.allocationPositionIds] : undefined,
           kind: 'topup' as const, operated_at: draft.toppedUpAt || undefined, comment: draft.comment.trim() || undefined };
         await chargeCollectibleCoin(position.id, { ...payload, request_id: collectionActionRequest.requestId({ positionId: position.id, ...payload }) });
         collectionActionRequest.completed();
@@ -1895,6 +1905,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         amount_in_currency: Number(draft.amount),
         currency_code: draft.currencyCode,
         quantity: draft.quantity.trim() ? Number(draft.quantity) : undefined,
+        resolve_purchase_price: draft.resolvePurchasePrice ?? false,
         topped_up_at: draft.toppedUpAt || undefined,
         comment: draft.comment.trim() || undefined,
       };
@@ -2852,7 +2863,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'collectible' || (position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0)))
     || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
-  const activeScopeBasisLabel = activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
+  const activeScopeBasisLabel = visibleOpenPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).some((p) => p.metadata?.acquisition_kind === 'unknown') ? 'Известные затраты' : activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
   const ActiveAssetIcon = (PA_ASSET_TYPE_META[activeAssetTypeCode] ?? PA_ASSET_TYPE_META.security).Icon;
 
   const portfolioAnalyticsBuckets = useMemo<PortfolioAnalyticsBucket[]>(() => {
@@ -3571,7 +3582,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             onClick={() => void handleOpenPositionDetails(position.id)}
                           >
                             <div className="pf-pos__identity">
-                              {logoUrl ? (
+                              {position.asset_type_code === 'collectible' ? <CollectibleImage metadata={position.metadata} className="pf-pos__logo" /> : logoUrl ? (
                                 <img className="pf-pos__logo" src={logoUrl} alt="" loading="lazy" />
                               ) : (
                                 <div className={`pf-pos__icon pf-pos__icon--${position.asset_type_code}`}>
@@ -4063,7 +4074,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         gray
         tag={selectedPosition ? `${selectedPosition.investment_account_owner_type === 'family' ? 'Семейный' : 'Личный'} · ${selectedPosition.investment_account_name}` : ''}
         title={selectedPosition?.title ?? ''}
-        icon={selectedPosition ? (posLogoUrl ? <img src={posLogoUrl} alt="" /> : <CategorySvgIcon code={posIconColor.icon} />) : undefined}
+        icon={selectedPosition?.asset_type_code === 'collectible' ? <CollectibleImage key={selectedPosition.id} metadata={selectedPosition.metadata} /> : selectedPosition ? (posLogoUrl ? <img src={posLogoUrl} alt="" /> : <CategorySvgIcon code={posIconColor.icon} />) : undefined}
         iconColor={posLogoUrl ? undefined : posIconColor.color}
         onClose={() => {
           if (selectedPosition) clearPositionDrafts(selectedPosition.id);
@@ -4107,7 +4118,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   )}
                   <div className="pf-dstats">
                     <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">{selectedPosition.asset_type_code === 'crypto' ? 'Количество' : 'Вложено'}</span>
+                      <span className="pf-dstats__label">{selectedPosition.metadata?.acquisition_kind === 'unknown' ? 'Известные затраты' : selectedPosition.asset_type_code === 'crypto' ? 'Количество' : 'Вложено'}</span>
                       <span className="pf-dstats__value">
                         {selectedPosition.asset_type_code === 'crypto'
                           ? formatNumericAmount(selectedPosition.quantity ?? 0, 8)
@@ -4238,6 +4249,40 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           <span className="pf-dcond__row-label">Вид</span>
                           <span className="pf-dcond__row-value">{getCollectibleKind(selectedPosition.metadata?.item_kind)?.label ?? 'Предмет'}</span>
                         </div>
+                        {selectedPosition.metadata?.acquisition_kind === 'unknown' && (
+                          <div className="pf-dcond__row"><span className="pf-dcond__row-label">Цена покупки</span><span className="pf-dcond__row-value">Неизвестна</span></div>
+                        )}
+                        <div className="pf-dcond__row"><span className="pf-dcond__row-label">Дата приобретения</span><span className="pf-dcond__row-value">{typeof selectedPosition.metadata?.acquired_at === 'string' ? selectedPosition.metadata.acquired_at.split('-').reverse().join('.') : '—'}</span></div>
+                        <button className="sh-btn sh-btn--ghost" type="button" onClick={() => { setCollectibleEditingId(collectibleEditingId === selectedPosition.id ? null : selectedPosition.id); setCollectibleDateError(null); }}>Редактировать параметры</button>
+                        {collectibleEditingId === selectedPosition.id && <form key={`details-${selectedPosition.id}`} onSubmit={async (event) => {
+                          event.preventDefault();
+                          const form = new FormData(event.currentTarget);
+                          const text = (key: string) => String(form.get(key) ?? '').trim();
+                          const attributes = { ...(selectedPosition.metadata?.item_attributes as Record<string, string> ?? {}) };
+                          for (const field of getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []) {
+                            attributes[field.key] = text(`attribute-${field.key}`);
+                          }
+                          const details = { title: text('title'), comment: text('comment') || null,
+                            acquired_at: text('acquired_at') || null, item_kind: String(selectedPosition.metadata?.item_kind ?? 'other'),
+                            item_link: text('item_link') || null, image_url: text('image_url') || null, item_attributes: attributes };
+                          const positionId = selectedPosition.id;
+                          setCollectibleDateSaving(true); setCollectibleDateError(null);
+                          try {
+                            await editCollectibleDetails(positionId, { ...details, request_id: collectibleDateRequest.requestId({ positionId, ...details }) });
+                            collectibleDateRequest.completed(); setCollectibleEditingId(null);
+                            await loadPortfolio();
+                          } catch (reason: unknown) { setCollectibleDateError(reason instanceof Error ? reason.message : String(reason)); }
+                          finally { setCollectibleDateSaving(false); }
+                        }}>
+                          <label className="apf-label">Название<input className="apf-input" name="title" defaultValue={selectedPosition.title} required maxLength={200} /></label>
+                          <label className="apf-label">Дата приобретения<input className="apf-input" type="date" name="acquired_at" defaultValue={String(selectedPosition.metadata?.acquired_at ?? '')} /></label>
+                          {(getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []).map(field => <label className="apf-label" key={field.key}>{field.label}<input className="apf-input" name={`attribute-${field.key}`} maxLength={200} defaultValue={String((selectedPosition.metadata?.item_attributes as Record<string, unknown>)?.[field.key] ?? '')} /></label>)}
+                          <label className="apf-label">Ссылка на предмет<input className="apf-input" type="url" name="item_link" defaultValue={String(selectedPosition.metadata?.item_link ?? '')} /></label>
+                          <label className="apf-label">Ссылка на изображение<input className="apf-input" type="url" name="image_url" defaultValue={String(selectedPosition.metadata?.image_url ?? '')} /></label>
+                          <label className="apf-label">Комментарий<textarea className="apf-input" name="comment" maxLength={2000} defaultValue={selectedPosition.comment ?? ''} /></label>
+                          <div className="apf-row"><button type="submit" className="apf-submit" disabled={collectibleDateSaving}>Сохранить</button><button type="button" className="apf-submit" disabled={collectibleDateSaving} onClick={() => setCollectibleEditingId(null)}>Отмена</button></div>
+                          {collectibleDateError && <div className="apf-error">{collectibleDateError}</div>}
+                        </form>}
                         {collectibleAttributeRows(selectedPosition.metadata).map((row) => (
                           <div className="pf-dcond__row" key={row.label}>
                             <span className="pf-dcond__row-label">{row.label}</span>
@@ -4762,6 +4807,25 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </select>
                     </div>
                   )}
+                  {selectedPosition.metadata?.acquisition_kind === 'unknown' && <label className="apf-label"><input type="checkbox" checked={topUpDrafts[selectedPosition.id].resolvePurchasePrice ?? false} onChange={e => handleTopUpDraftChange(selectedPosition.id, { resolvePurchasePrice: e.target.checked, allocationPositionIds: [], quantity: '' })} /> Это найденная цена покупки</label>}
+                  {selectedPosition.asset_type_code === 'collectible' && !topUpDrafts[selectedPosition.id].resolvePurchasePrice && topUpDrafts[selectedPosition.id].currencyCode.startsWith('crypto:') && (
+                    <div className="apf-field">
+                      <label className="apf-label">Распределить затраты поровну на единицу</label>
+                      <button className="sh-btn sh-btn--ghost" type="button" disabled={submittingTopUpId === selectedPosition.id}
+                        onClick={() => handleTopUpDraftChange(selectedPosition.id, { allocationPositionIds: positions.filter((p) => p.asset_type_code === 'collectible' && p.status === 'open' && p.investment_account_id === selectedPosition.investment_account_id && p.id !== selectedPosition.id).map((p) => p.id) })}>Выбрать все</button>
+                      <span>{selectedPosition.title}</span>
+                      {positions.filter((p) => p.asset_type_code === 'collectible' && p.status === 'open' && p.investment_account_id === selectedPosition.investment_account_id && p.id !== selectedPosition.id).map((p) => (
+                        <label key={p.id}>
+                          <input type="checkbox" disabled={submittingTopUpId === selectedPosition.id}
+                            checked={topUpDrafts[selectedPosition.id].allocationPositionIds?.includes(p.id) ?? false}
+                            onChange={(event) => {
+                              const ids = topUpDrafts[selectedPosition.id].allocationPositionIds ?? [];
+                              handleTopUpDraftChange(selectedPosition.id, { allocationPositionIds: event.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id) });
+                            }} /> {p.title}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                   <div className="apf-field">
                     <label className="apf-label">Сумма пополнения</label>
                     <input
@@ -4775,7 +4839,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     />
                   </div>
                   <div className="apf-row apf-row--compact-labels">
-                    {!(selectedPosition.asset_type_code === 'collectible' && topUpDrafts[selectedPosition.id].currencyCode.startsWith('crypto:')) && <div className="apf-field" style={{ flex: 1 }}>
+                    {!topUpDrafts[selectedPosition.id].resolvePurchasePrice && !(selectedPosition.asset_type_code === 'collectible' && topUpDrafts[selectedPosition.id].currencyCode.startsWith('crypto:')) && <div className="apf-field" style={{ flex: 1 }}>
                       <label className="apf-label">Количество</label>
                       <input
                         className="apf-input"

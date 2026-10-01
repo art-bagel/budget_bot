@@ -219,11 +219,11 @@ class CryptoPriceItem(BaseModel):
 
 
 class EnsureCryptoAssetRequest(BaseModel):
-    symbol: str
-    name: Optional[str] = None
-    network_code: str = 'manual'
+    symbol: str = Field(min_length=1, max_length=30)
+    name: Optional[str] = Field(default=None, max_length=150)
+    network_code: str = Field(default='manual', min_length=1, max_length=50)
     contract_address: Optional[str] = None
-    decimals: int = 8
+    decimals: int = Field(default=8, ge=0, le=18)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator('symbol')
