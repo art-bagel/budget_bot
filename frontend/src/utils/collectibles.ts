@@ -1,11 +1,14 @@
 // Item kinds of a collection account and the text fields each one records.
 // The database checks only the kind, an https link and short text values.
-type CollectibleKind = { value: string; label: string; fields: { key: string; label: string; placeholder?: string }[] };
+// A `flag` field is a checkbox stored as 'yes' or omitted.
+type CollectibleField = { key: string; label: string; placeholder?: string; flag?: boolean };
+type CollectibleKind = { value: string; label: string; plural: string; fields: CollectibleField[] };
 
 export const COLLECTIBLE_KINDS: CollectibleKind[] = [
   {
     value: 'telegram_gift',
     label: 'Подарок Telegram',
+    plural: 'Подарки',
     fields: [
       { key: 'collection', label: 'Коллекция', placeholder: 'Plush Pepe' },
       { key: 'model', label: 'Модель' },
@@ -17,18 +20,22 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
   {
     value: 'sticker',
     label: 'Стикер',
+    plural: 'Стикеры',
     fields: [
-      { key: 'collection', label: 'Пак' },
+      { key: 'collection', label: 'Коллекция' },
       { key: 'number', label: 'Номер' },
+      // A bought pack whose sticker is not revealed yet.
+      { key: 'sealed', label: 'Пак ещё не открыт', flag: true },
     ],
   },
-  { value: 'nft', label: 'Другое NFT', fields: [
+  { value: 'nft', label: 'Другое NFT', plural: 'NFT', fields: [
     { key: 'collection', label: 'Коллекция' }, { key: 'network', label: 'Сеть' },
     { key: 'contract', label: 'Контракт' }, { key: 'token_id', label: 'Token ID' },
   ] },
   {
     value: 'cs2_skin',
     label: 'Скин CS2',
+    plural: 'Скины',
     fields: [
       { key: 'weapon', label: 'Оружие', placeholder: 'AK-47' },
       { key: 'skin', label: 'Скин', placeholder: 'Redline' },
@@ -41,6 +48,7 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
   {
     value: 'physical',
     label: 'Физический предмет',
+    plural: 'Предметы',
     fields: [
       { key: 'category', label: 'Категория', placeholder: 'Монеты, карточки, часы' },
       { key: 'year', label: 'Год' },
@@ -48,7 +56,7 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
       { key: 'storage', label: 'Где хранится' },
     ],
   },
-  { value: 'other', label: 'Другое', fields: [] },
+  { value: 'other', label: 'Другое', plural: 'Другое', fields: [] },
 ];
 
 export function getCollectibleKind(value: unknown): CollectibleKind | null {
@@ -59,7 +67,7 @@ export function getCollectibleKind(value: unknown): CollectibleKind | null {
 export function collectibleAttributeRows(metadata: Record<string, unknown> | undefined): { label: string; value: string }[] {
   const attributes = (metadata?.item_attributes ?? {}) as Record<string, unknown>;
   return (getCollectibleKind(metadata?.item_kind)?.fields ?? [])
-    .filter((field) => typeof attributes[field.key] === 'string' && attributes[field.key])
+    .filter((field) => !field.flag && typeof attributes[field.key] === 'string' && attributes[field.key])
     .map((field) => ({ label: field.label, value: attributes[field.key] as string }));
 }
 
@@ -88,4 +96,30 @@ export function collectibleImageUrl(metadata: Record<string, unknown> | undefine
     if (/^[a-z0-9]+$/.test(slug)) return `https://nft.fragment.com/gift/${slug}-${attrs.number}.medium.jpg`;
   }
   return null;
+}
+
+function attributes(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  return (metadata?.item_attributes ?? {}) as Record<string, unknown>;
+}
+
+export function isSealedPack(metadata: Record<string, unknown> | undefined): boolean {
+  return metadata?.item_kind === 'sticker' && attributes(metadata).sealed === 'yes';
+}
+
+// The shelf an item sits on: its collection, or the closest thing its kind records.
+export function collectibleShelf(metadata: Record<string, unknown> | undefined, title: string): string {
+  const attrs = attributes(metadata);
+  const name = [attrs.collection, attrs.category, attrs.weapon].find((value) => typeof value === 'string' && value.trim());
+  return typeof name === 'string' ? name.trim() : title;
+}
+
+export function collectibleNumber(metadata: Record<string, unknown> | undefined): string | null {
+  const number = attributes(metadata).number;
+  return typeof number === 'string' && number.trim() ? number.trim() : null;
+}
+
+// Telegram writes trait rarity into the value: "Bronze (3%)".
+export function splitRarity(value: string): { name: string; rarity: string | null } {
+  const match = value.match(/^(.*\S)\s*\((\d+(?:[.,]\d+)?\s*%)\)$/);
+  return match ? { name: match[1], rarity: match[2].replace(/\s/g, '') } : { name: value, rarity: null };
 }

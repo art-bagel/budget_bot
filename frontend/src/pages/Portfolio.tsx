@@ -1,4 +1,5 @@
 import CollectibleImage from '../components/CollectibleImage';
+import CollectionShelf, { CollectibleHero } from '../components/CollectionShelf';
 import { cryptoAssetLabel, cryptoNetworkLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
 import FeeRefundSheet from '../components/FeeRefundSheet';
 import LiquidityActionSheet from '../components/LiquidityActionSheet';
@@ -93,7 +94,7 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { collectibleAttributeRows, getCollectibleKind, safeItemLink } from '../utils/collectibles';
+import { getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -710,7 +711,14 @@ function getPositionRealizedResult(position: PortfolioPosition): number {
   return Number(position.metadata?.income_in_base ?? 0) + Number(position.metadata?.realized_result_in_base ?? 0);
 }
 
-function getEventLabel(item: PortfolioEvent): string {
+// Collection items are acquired, invested in and sold rather than opened and topped up.
+const COLLECTIBLE_EVENT_LABELS: Partial<Record<PortfolioEvent['event_type'], string>> = {
+  open: 'Приобретение', top_up: 'Вложение', partial_close: 'Частичная продажа', close: 'Продажа',
+};
+
+function getEventLabel(item: PortfolioEvent, assetTypeCode?: string): string {
+  const collectible = assetTypeCode === 'collectible' ? COLLECTIBLE_EVENT_LABELS[item.event_type] : undefined;
+  if (collectible) return collectible;
   switch (item.event_type) {
     case 'transfer_in': return 'Перевод на позицию';
     case 'transfer_out': return 'Перевод с позиции';
@@ -840,6 +848,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const collectionActionRequest = useCryptoRequestKey('collectible-action');
   const collectibleDateRequest = useCryptoRequestKey('collectible-date');
   const [collectibleEditingId, setCollectibleEditingId] = useState<number | null>(null);
+  const [collectibleOpeningPack, setCollectibleOpeningPack] = useState(false);
   const [collectibleDateSaving, setCollectibleDateSaving] = useState(false);
   const [collectibleDateError, setCollectibleDateError] = useState<string | null>(null);
   const [collectionSoldQuantity, setCollectionSoldQuantity] = useState('');
@@ -3511,6 +3520,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const hiddenAssets = group.positions.filter(isHiddenWalletAsset);
               const showHidden = showHiddenWallets.has(group.accountId);
               const sections = getOpenPositionSections(group.positions.filter((p) => !isHiddenWalletAsset(p)));
+              const groupAccount = accounts.find(({ account }) => account.id === group.accountId);
+              const isCollectionAccount = groupAccount?.account.investment_asset_type === 'collectible';
+              const money = isCollectionAccount ? groupAccount.balances.filter((b) => b.amount !== 0) : [];
               const positionsValue = activeAssetTypeCode === 'security'
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
                 : group.positions.reduce((s, p) => s + getPositionScopedValue(p), 0);
@@ -3542,7 +3554,52 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
                     </div>
                   </div>
-                  {sections.map((section) => (
+                  {isCollectionAccount && money.length > 0 && <div className="pf-grp__subhead">Деньги на счёте</div>}
+                  {accounts.find(({ account }) => account.id === group.accountId && account.investment_asset_type === 'collectible')?.balances.filter((b) => b.asset_type !== 'crypto' && b.amount !== 0).map((balance) => (
+                    <div className="pf-pos" key={`cash:${balance.currency_code}`}>
+                      <div className="pf-pos__identity"><div className="pf-pos__copy">
+                        <div className="pf-pos__title">{balance.currency_code}</div>
+                        <div className="pf-pos__sub">Денежный остаток</div>
+                      </div></div>
+                      <div className="pf-pos__right"><div className="pf-pos__amount">{formatAmount(balance.amount, balance.currency_code)}</div></div>
+                    </div>
+                  ))}
+                  {(coinBalancesByAccountId.get(group.accountId) ?? []).map((coin) => {
+                    const symbol = coin.symbol ?? coin.currency_code;
+                    const value = walletMarketValue(coin.amount, coin.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code);
+                    const logoUrl = getCryptoIconUrl(symbol, { network_code: coin.network_code, contract_address: coin.contract_address });
+                    return (
+                      <div key={coin.crypto_asset_id} className="pf-pos">
+                        <div className="pf-pos__identity">
+                          {logoUrl
+                            ? <img className="pf-pos__logo" src={logoUrl} alt="" loading="lazy" />
+                            : <div className="pf-pos__icon pf-pos__icon--crypto">{symbol.slice(0, 1).toUpperCase()}</div>}
+                          <div className="pf-pos__copy">
+                            <div className="pf-pos__title">{symbol}</div>
+                            <div className="pf-pos__sub">
+                              {formatNumericAmount(coin.amount, 8)} {symbol}{cryptoNetworkSuffix(coin.network_code, symbol)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="pf-pos__right">
+                          {value === null ? (
+                            <>
+                              <div className="pf-pos__amount pf-pos__amount--none">—</div>
+                              <div className="pf-pos__sub">нет курса</div>
+                            </>
+                          ) : (
+                            <div className="pf-pos__amount">
+                              {formatNumericAmount(value)}
+                              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {isCollectionAccount && group.positions.length > 0 ? (
+                    <CollectionShelf positions={group.positions} onOpen={(id) => void handleOpenPositionDetails(id)} />
+                  ) : sections.map((section) => (
                     <div key={section.code}>
                       {section.positions.length > 0 && (sections.length > 1
                         || (activeAssetTypeCode === 'crypto' && groupProtocolPositions.length > 0)
@@ -3682,48 +3739,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       })}>{showHidden ? 'Свернуть скрытые' : `Скрытые монеты · ${hiddenAssets.length}`}</button>
                     </div>
                   )}
-                  {accounts.find(({ account }) => account.id === group.accountId && account.investment_asset_type === 'collectible')?.balances.filter((b) => b.asset_type !== 'crypto' && b.amount !== 0).map((balance) => (
-                    <div className="pf-pos" key={`cash:${balance.currency_code}`}>
-                      <div className="pf-pos__identity"><div className="pf-pos__copy">
-                        <div className="pf-pos__title">{balance.currency_code}</div>
-                        <div className="pf-pos__sub">Денежный остаток</div>
-                      </div></div>
-                      <div className="pf-pos__right"><div className="pf-pos__amount">{formatAmount(balance.amount, balance.currency_code)}</div></div>
-                    </div>
-                  ))}
-                  {(coinBalancesByAccountId.get(group.accountId) ?? []).map((coin) => {
-                    const symbol = coin.symbol ?? coin.currency_code;
-                    const value = walletMarketValue(coin.amount, coin.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code);
-                    const logoUrl = getCryptoIconUrl(symbol, { network_code: coin.network_code, contract_address: coin.contract_address });
-                    return (
-                      <div key={coin.crypto_asset_id} className="pf-pos">
-                        <div className="pf-pos__identity">
-                          {logoUrl
-                            ? <img className="pf-pos__logo" src={logoUrl} alt="" loading="lazy" />
-                            : <div className="pf-pos__icon pf-pos__icon--crypto">{symbol.slice(0, 1).toUpperCase()}</div>}
-                          <div className="pf-pos__copy">
-                            <div className="pf-pos__title">{symbol}</div>
-                            <div className="pf-pos__sub">
-                              {formatNumericAmount(coin.amount, 8)} {symbol}{cryptoNetworkSuffix(coin.network_code, symbol)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="pf-pos__right">
-                          {value === null ? (
-                            <>
-                              <div className="pf-pos__amount pf-pos__amount--none">—</div>
-                              <div className="pf-pos__sub">нет курса</div>
-                            </>
-                          ) : (
-                            <div className="pf-pos__amount">
-                              {formatNumericAmount(value)}
-                              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
                   {activeAssetTypeCode === 'crypto' && groupProtocolPositions.length > 0 && (
                     <div>
                       <div className="pf-grp__subhead">DeFi</div>
@@ -4074,7 +4089,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         gray
         tag={selectedPosition ? `${selectedPosition.investment_account_owner_type === 'family' ? 'Семейный' : 'Личный'} · ${selectedPosition.investment_account_name}` : ''}
         title={selectedPosition?.title ?? ''}
-        icon={selectedPosition?.asset_type_code === 'collectible' ? <CollectibleImage key={selectedPosition.id} metadata={selectedPosition.metadata} /> : selectedPosition ? (posLogoUrl ? <img src={posLogoUrl} alt="" /> : <CategorySvgIcon code={posIconColor.icon} />) : undefined}
+        icon={selectedPosition?.asset_type_code === 'collectible' ? undefined : selectedPosition ? (posLogoUrl ? <img src={posLogoUrl} alt="" /> : <CategorySvgIcon code={posIconColor.icon} />) : undefined}
         iconColor={posLogoUrl ? undefined : posIconColor.color}
         onClose={() => {
           if (selectedPosition) clearPositionDrafts(selectedPosition.id);
@@ -4083,6 +4098,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       >
         {selectedPosition && (
           <div className="pf-detail-body">
+            {selectedPosition.asset_type_code === 'collectible' && <CollectibleHero key={selectedPosition.id} position={selectedPosition} />}
             {(() => {
               const detailTicker = typeof selectedPosition.metadata?.ticker === 'string' ? selectedPosition.metadata.ticker : null;
               const detailMoexPrice = detailTicker ? moexPrices.get(detailTicker) : null;
@@ -4118,7 +4134,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   )}
                   <div className="pf-dstats">
                     <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">{selectedPosition.metadata?.acquisition_kind === 'unknown' ? 'Известные затраты' : selectedPosition.asset_type_code === 'crypto' ? 'Количество' : 'Вложено'}</span>
+                      <span className="pf-dstats__label">{selectedPosition.metadata?.acquisition_kind === 'unknown' ? 'Известные затраты' : selectedPosition.asset_type_code === 'crypto' ? 'Количество' : selectedPosition.asset_type_code === 'collectible' ? 'Затраты' : 'Вложено'}</span>
                       <span className="pf-dstats__value">
                         {selectedPosition.asset_type_code === 'crypto'
                           ? formatNumericAmount(selectedPosition.quantity ?? 0, 8)
@@ -4131,9 +4147,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-dstats__value">
                         {detailCurrentTotal !== null ? formatNumericAmount(detailCurrentTotal, 0) : '—'}
                       </span>
-                      <span className="pf-dstats__sub">{detailCurrentTotal !== null ? 'текущая' : 'нет данных'}</span>
+                      <span className="pf-dstats__sub">{detailCurrentTotal !== null ? 'текущая' : selectedPosition.asset_type_code === 'collectible' ? 'рыночной цены нет' : 'нет данных'}</span>
                     </div>
-                    <div className="pf-dstats__cell">
+                    {selectedPosition.asset_type_code !== 'collectible' && <div className="pf-dstats__cell">
                       <span className="pf-dstats__label">{selectedPosition.asset_type_code === 'crypto' ? 'Курс' : 'P&L'}</span>
                       {selectedPosition.asset_type_code === 'crypto' ? (
                         <>
@@ -4152,7 +4168,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           </span>
                         </>
                       )}
-                    </div>
+                    </div>}
                   </div>
                 </>
               );
@@ -4233,7 +4249,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 </>
               ) : (
                 <>
-                  {selectedPosition.quantity ? (
+                  {selectedPosition.quantity && !(selectedPosition.asset_type_code === 'collectible' && Number(selectedPosition.quantity) === 1) ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">Количество</span>
                       <span className="pf-dcond__row-value">
@@ -4245,22 +4261,41 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     const itemLink = safeItemLink(selectedPosition.metadata?.item_link);
                     return (
                       <>
-                        <div className="pf-dcond__row">
-                          <span className="pf-dcond__row-label">Вид</span>
-                          <span className="pf-dcond__row-value">{getCollectibleKind(selectedPosition.metadata?.item_kind)?.label ?? 'Предмет'}</span>
-                        </div>
-                        {selectedPosition.metadata?.acquisition_kind === 'unknown' && (
-                          <div className="pf-dcond__row"><span className="pf-dcond__row-label">Цена покупки</span><span className="pf-dcond__row-value">Неизвестна</span></div>
+                        {['unknown', 'free'].includes(String(selectedPosition.metadata?.acquisition_kind)) && (
+                          <div className="pf-dcond__row"><span className="pf-dcond__row-label">Цена покупки</span><span className="pf-dcond__row-value">{selectedPosition.metadata?.acquisition_kind === 'free' ? 'Получен бесплатно' : 'Неизвестна'}</span></div>
                         )}
                         <div className="pf-dcond__row"><span className="pf-dcond__row-label">Дата приобретения</span><span className="pf-dcond__row-value">{typeof selectedPosition.metadata?.acquired_at === 'string' ? selectedPosition.metadata.acquired_at.split('-').reverse().join('.') : '—'}</span></div>
-                        <button className="sh-btn sh-btn--ghost" type="button" onClick={() => { setCollectibleEditingId(collectibleEditingId === selectedPosition.id ? null : selectedPosition.id); setCollectibleDateError(null); }}>Редактировать параметры</button>
-                        {collectibleEditingId === selectedPosition.id && <form key={`details-${selectedPosition.id}`} onSubmit={async (event) => {
+                        {(['paid_crypto', 'sold_for_crypto'] as const).map((key) => {
+                          const coins = selectedPosition.metadata?.[key] as { symbol?: string; quantity?: string } | undefined;
+                          return coins?.quantity ? (
+                            <div className="pf-dcond__row" key={key}>
+                              <span className="pf-dcond__row-label">{key === 'paid_crypto' ? 'Куплено за' : 'Продано за'}</span>
+                              <span className="pf-dcond__row-value">{formatNumericAmount(Number(coins.quantity), 4)} {coins.symbol}</span>
+                            </div>
+                          ) : null;
+                        })}
+                        {itemLink && (
+                          <div className="pf-dcond__row">
+                            <span className="pf-dcond__row-label">Ссылка</span>
+                            <a className="pf-dcond__row-value" href={itemLink.href} target="_blank" rel="noopener noreferrer">{itemLink.host}</a>
+                          </div>
+                        )}
+                        {collectibleEditingId !== selectedPosition.id && (
+                          <div className="clx-edit-actions">
+                            {isSealedPack(selectedPosition.metadata) && (
+                              <button className="sh-btn clx-open-btn" type="button" onClick={() => { setCollectibleOpeningPack(true); setCollectibleEditingId(selectedPosition.id); setCollectibleDateError(null); }}>Пак открыт</button>
+                            )}
+                            <button className="sh-btn sh-btn--ghost" type="button" onClick={() => { setCollectibleOpeningPack(false); setCollectibleEditingId(selectedPosition.id); setCollectibleDateError(null); }}>Изменить</button>
+                          </div>
+                        )}
+                        {collectibleEditingId === selectedPosition.id && <form className="clx-editor" key={`details-${selectedPosition.id}-${collectibleOpeningPack}`} onSubmit={async (event) => {
                           event.preventDefault();
                           const form = new FormData(event.currentTarget);
                           const text = (key: string) => String(form.get(key) ?? '').trim();
                           const attributes = { ...(selectedPosition.metadata?.item_attributes as Record<string, string> ?? {}) };
                           for (const field of getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []) {
-                            attributes[field.key] = text(`attribute-${field.key}`);
+                            const value = text(`attribute-${field.key}`);
+                            if (value) attributes[field.key] = value; else delete attributes[field.key];
                           }
                           const details = { title: text('title'), comment: text('comment') || null,
                             acquired_at: text('acquired_at') || null, item_kind: String(selectedPosition.metadata?.item_kind ?? 'other'),
@@ -4276,34 +4311,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         }}>
                           <label className="apf-label">Название<input className="apf-input" name="title" defaultValue={selectedPosition.title} required maxLength={200} /></label>
                           <label className="apf-label">Дата приобретения<input className="apf-input" type="date" name="acquired_at" defaultValue={String(selectedPosition.metadata?.acquired_at ?? '')} /></label>
-                          {(getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []).map(field => <label className="apf-label" key={field.key}>{field.label}<input className="apf-input" name={`attribute-${field.key}`} maxLength={200} defaultValue={String((selectedPosition.metadata?.item_attributes as Record<string, unknown>)?.[field.key] ?? '')} /></label>)}
+                          {(getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []).map(field => field.flag
+                            ? <label className="apf-check" key={field.key}><input type="checkbox" name={`attribute-${field.key}`} value="yes" defaultChecked={(selectedPosition.metadata?.item_attributes as Record<string, unknown>)?.[field.key] === 'yes' && !(field.key === 'sealed' && collectibleOpeningPack)} />{field.label}</label>
+                            : <label className="apf-label" key={field.key}>{field.label}<input className="apf-input" name={`attribute-${field.key}`} maxLength={200} autoFocus={field.key === 'number' && collectibleOpeningPack} defaultValue={String((selectedPosition.metadata?.item_attributes as Record<string, unknown>)?.[field.key] ?? '')} /></label>)}
                           <label className="apf-label">Ссылка на предмет<input className="apf-input" type="url" name="item_link" defaultValue={String(selectedPosition.metadata?.item_link ?? '')} /></label>
                           <label className="apf-label">Ссылка на изображение<input className="apf-input" type="url" name="image_url" defaultValue={String(selectedPosition.metadata?.image_url ?? '')} /></label>
                           <label className="apf-label">Комментарий<textarea className="apf-input" name="comment" maxLength={2000} defaultValue={selectedPosition.comment ?? ''} /></label>
-                          <div className="apf-row"><button type="submit" className="apf-submit" disabled={collectibleDateSaving}>Сохранить</button><button type="button" className="apf-submit" disabled={collectibleDateSaving} onClick={() => setCollectibleEditingId(null)}>Отмена</button></div>
+                          <div className="clx-edit-actions"><button type="button" className="sh-btn sh-btn--ghost" disabled={collectibleDateSaving} onClick={() => setCollectibleEditingId(null)}>Отмена</button><button type="submit" className="sh-btn sh-btn--primary" disabled={collectibleDateSaving}>Сохранить</button></div>
                           {collectibleDateError && <div className="apf-error">{collectibleDateError}</div>}
                         </form>}
-                        {collectibleAttributeRows(selectedPosition.metadata).map((row) => (
-                          <div className="pf-dcond__row" key={row.label}>
-                            <span className="pf-dcond__row-label">{row.label}</span>
-                            <span className="pf-dcond__row-value">{row.value}</span>
-                          </div>
-                        ))}
-                        {(['paid_crypto', 'sold_for_crypto'] as const).map((key) => {
-                          const coins = selectedPosition.metadata?.[key] as { symbol?: string; quantity?: string } | undefined;
-                          return coins?.quantity ? (
-                            <div className="pf-dcond__row" key={key}>
-                              <span className="pf-dcond__row-label">{key === 'paid_crypto' ? 'Куплено за' : 'Продано за'}</span>
-                              <span className="pf-dcond__row-value">{coins.quantity} {coins.symbol}</span>
-                            </div>
-                          ) : null;
-                        })}
-                        {itemLink && (
-                          <div className="pf-dcond__row">
-                            <span className="pf-dcond__row-label">Ссылка</span>
-                            <a className="pf-dcond__row-value" href={itemLink.href} target="_blank" rel="noopener noreferrer">{itemLink.host}</a>
-                          </div>
-                        )}
                       </>
                     );
                   })() : null}
@@ -4392,9 +4408,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 );
                 const canAdjustPrincipal = !isCryptoPosition && !(isDepositPosition && isTermDeposit);
                 const tiles = [
-                  canAdjustPrincipal && { label: selectedPosition.asset_type_code === 'collectible' ? 'Доплата' : 'Пополнить', Icon: Plus, run: () => handleOpenTopUpForm(selectedPosition) },
+                  canAdjustPrincipal && { label: selectedPosition.asset_type_code === 'collectible' ? 'Вложить' : 'Пополнить', Icon: Plus, run: () => handleOpenTopUpForm(selectedPosition) },
                   !isDepositPosition && canRecordPositionIncome(selectedPosition) && { label: 'Доход', Icon: HandCoins, run: () => handleOpenIncomeForm(selectedPosition) },
-                  canAdjustPrincipal && { label: 'Снять', Icon: ArrowUpFromLine, run: () => handleOpenPartialCloseForm(selectedPosition) },
+                  canAdjustPrincipal && { label: selectedPosition.asset_type_code !== 'collectible' ? 'Снять' : Number(selectedPosition.quantity) > 1 ? 'Продать часть' : 'Вернуть часть', Icon: ArrowUpFromLine, run: () => handleOpenPartialCloseForm(selectedPosition) },
                   isDepositPosition && {
                     label: 'Ставка',
                     Icon: Percent,
@@ -4420,7 +4436,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     )}
                     <div className="pf-sheet-actions">
                       <button className="btn btn--ghost" type="button" onClick={() => handleOpenCloseForm(selectedPosition)}>
-                        Закрыть позицию
+                        {selectedPosition.asset_type_code === 'collectible' ? 'Продать' : 'Закрыть позицию'}
                       </button>
                     </div>
                   </>
@@ -4431,7 +4447,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <form className="pf-pos-form" onSubmit={(event) => void handleClosePosition(selectedPosition.id, event)}>
                   <div className="apf-row">
                     <div className="apf-field" style={{ flex: 2 }}>
-                      <label className="apf-label">Сумма выхода</label>
+                      <label className="apf-label">{selectedPosition.asset_type_code === 'collectible' ? 'Сумма продажи' : 'Сумма выхода'}</label>
                       <input
                         className="apf-input"
                         type="text"
@@ -4827,7 +4843,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     </div>
                   )}
                   <div className="apf-field">
-                    <label className="apf-label">Сумма пополнения</label>
+                    <label className="apf-label">{selectedPosition.asset_type_code === 'collectible' ? 'Сумма в стоимость предмета' : 'Сумма пополнения'}</label>
                     <input
                       className="apf-input"
                       type="text"
@@ -5032,7 +5048,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         <div className="ca-sheet__row-date">{new Date(item.event_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
                         <div className="ca-sheet__row-body">
                           <div className="ca-sheet__row-line">
-                            <span className="ca-sheet__row-qty">{getEventLabel(item)}</span>
+                            <span className="ca-sheet__row-qty">{getEventLabel(item, selectedPosition?.asset_type_code)}</span>
                             {selectedPosition.asset_type_code !== 'crypto' && item.amount !== null && item.amount !== undefined && item.currency_code && (
                               <span className="ca-sheet__row-val">{coinLabel ?? formatAmount(item.amount, item.currency_code)}</span>
                             )}

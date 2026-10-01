@@ -435,7 +435,13 @@ export default function PortfolioPositionDialog({
       </div>
       )}
 
-      {isCollectible && itemFields.map((field) => (
+      {isCollectible && itemFields.map((field) => field.flag ? (
+        <label className="apf-check" key={field.key}>
+          <input type="checkbox" checked={itemAttributes[field.key] === 'yes'} disabled={submitting}
+            onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.checked ? 'yes' : '' }))} />
+          {field.label}
+        </label>
+      ) : (
         <div className="apf-field" key={field.key}>
           <label className="apf-label">{field.label}</label>
           <input className="apf-input" type="text" maxLength={200} placeholder={field.placeholder ?? 'Необязательно'}
