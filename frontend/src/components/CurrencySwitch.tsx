@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchCryptoAssets, fetchCryptoLivePrices } from '../api';
 import { currencySymbol, formatNumericAmount } from '../utils/format';
 
@@ -26,12 +26,37 @@ export type DollarDisplay = {
   show: (dollars: boolean) => Promise<void>;
 };
 
+// The viewer's last choice; storage may be unavailable, so it is only a convenience.
+const STORAGE_KEY = 'portfolio.displayCurrency';
+function rememberDollars(dollars: boolean) {
+  try { localStorage.setItem(STORAGE_KEY, dollars ? 'USD' : 'base'); } catch { /* not remembered */ }
+}
+function rememberedDollars(): boolean {
+  try { return localStorage.getItem(STORAGE_KEY) === 'USD'; } catch { return false; }
+}
+
 // Amounts in the base currency, optionally shown in dollars at today's rate.
 export function useDollarDisplay(baseCurrencyCode: string): DollarDisplay {
   const [rate, setRate] = useState<number | null>(null);
   const [inDollars, setInDollars] = useState(false);
   const [state, setState] = useState<DollarDisplay['state']>('idle');
   const active = inDollars && rate !== null;
+  const show = async (dollars: boolean) => {
+    rememberDollars(dollars);
+    if (!dollars || rate !== null) { setInDollars(dollars); return; }
+    setState('loading');
+    try {
+      setRate(await fetchDollarRate(baseCurrencyCode));
+      setInDollars(true);
+      setState('idle');
+    } catch {
+      setState('failed');
+    }
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restore the remembered choice once per base currency.
+  useEffect(() => {
+    if (baseCurrencyCode !== 'USD' && rememberedDollars()) void show(true);
+  }, [baseCurrencyCode]);
   return {
     baseCurrencyCode,
     inDollars: active,
@@ -39,17 +64,7 @@ export function useDollarDisplay(baseCurrencyCode: string): DollarDisplay {
     state,
     convert: (value) => (active ? value / (rate as number) : value),
     symbol: active ? '$' : currencySymbol(baseCurrencyCode),
-    show: async (dollars) => {
-      if (!dollars || rate !== null) { setInDollars(dollars); return; }
-      setState('loading');
-      try {
-        setRate(await fetchDollarRate(baseCurrencyCode));
-        setInDollars(true);
-        setState('idle');
-      } catch {
-        setState('failed');
-      }
-    },
+    show,
   };
 }
 
