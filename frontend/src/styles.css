@@ -12268,3 +12268,9 @@ svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; 
 .ica-legend b { grid-column: 2; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
 .ica-legend__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .ica-split:last-child { border-bottom: none; padding-bottom: 2px; }
+.ica-cur { display: flex; padding: 2px; border-radius: 999px; background: var(--surface-inset); }
+.ica-cur__btn { min-width: 32px; padding: 4px 10px; border: none; border-radius: 999px; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-2); cursor: pointer; }
+.ica-cur__btn--on { background: var(--surface); color: var(--text); box-shadow: var(--sh-1); }
+.ica-cur__btn:disabled { opacity: .5; cursor: progress; }
+.ica-cur__btn:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.ica-total__rate { margin-top: 2px; font-size: 12px; color: var(--text-2); }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowUpFromLine, Receipt, Shuffle, Wallet } from 'lucide-react';
-import { fetchInvestmentCostAnalytics, type InvestmentCostAnalyticsData } from '../api';
+import { fetchCryptoAssets, fetchCryptoLivePrices, fetchInvestmentCostAnalytics, type InvestmentCostAnalyticsData } from '../api';
 import { currencySymbol, formatNumericAmount } from '../utils/format';
 import { cryptoNetworkSuffix } from '../utils/cryptoAssetLabel';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
@@ -12,10 +12,37 @@ const COLLAPSED_COINS = 8;
 
 const quantityText = (value: number) => formatNumericAmount(value, value >= 100 ? 2 : value >= 1 ? 4 : 6);
 
+// There is no fiat rate source: CoinGecko quotes every coin in both currencies through
+// the same fiat rate, so any coin's price ratio is today's base-per-dollar rate.
+async function fetchDollarRate(baseCurrencyCode: string): Promise<number> {
+  const assets = await fetchCryptoAssets();
+  const ids = [...assets].sort((a, b) => Number(b.symbol === 'USDT') - Number(a.symbol === 'USDT')).slice(0, 20).map((asset) => asset.id);
+  const [base, usd] = await Promise.all([fetchCryptoLivePrices(ids, baseCurrencyCode.toLowerCase()), fetchCryptoLivePrices(ids, 'usd')]);
+  for (const quote of base) {
+    const dollar = usd.find((item) => item.crypto_asset_id === quote.crypto_asset_id);
+    if (dollar && dollar.price > 0 && quote.price > 0 && !quote.is_stale && !dollar.is_stale) return quote.price / dollar.price;
+  }
+  throw new Error('Курс доллара сейчас недоступен');
+}
+
 export default function InvestmentCostAnalytics({ assetType, accountId, baseCurrencyCode }: Props) {
   const [data, setData] = useState<InvestmentCostAnalyticsData | null>(null);
   const [error, setError] = useState('');
   const [allCoins, setAllCoins] = useState(false);
+  const [dollarRate, setDollarRate] = useState<number | null>(null);
+  const [inDollars, setInDollars] = useState(false);
+  const [rateState, setRateState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const showDollars = async (on: boolean) => {
+    if (!on || dollarRate !== null) { setInDollars(on); return; }
+    setRateState('loading');
+    try {
+      setDollarRate(await fetchDollarRate(baseCurrencyCode));
+      setInDollars(true);
+      setRateState('idle');
+    } catch {
+      setRateState('failed');
+    }
+  };
   useEffect(() => {
     let active = true;
     setData(null);
@@ -25,8 +52,10 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : 'Не удалось загрузить аналитику'); });
     return () => { active = false; };
   }, [assetType, accountId]);
-  const sym = currencySymbol(baseCurrencyCode);
-  const money = (value: number) => `${formatNumericAmount(value, 0)} ${sym}`;
+  const usd = inDollars && dollarRate !== null;
+  const sym = usd ? '$' : currencySymbol(baseCurrencyCode);
+  const convert = (value: number) => (usd ? value / (dollarRate as number) : value);
+  const money = (value: number) => `${formatNumericAmount(convert(value), 0)} ${sym}`;
   const signed = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${money(Math.abs(value))}`;
   if (error) return <section className="pa-card"><div className="tk-error" role="alert">{error}</div></section>;
   if (!data) return <section className="pa-card"><p className="ca-sheet__hist-empty" role="status">Загружаем аналитику…</p></section>;
@@ -61,10 +90,25 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
 
   return <>
     <section className="pa-card">
-      <div className="pa-card__head"><h3 className="pa-card__title">Вложения за всё время</h3></div>
+      <div className="pa-card__head">
+        <h3 className="pa-card__title">Вложения за всё время</h3>
+        {baseCurrencyCode !== 'USD' && (
+          <div className="ica-cur" role="group" aria-label="Валюта сумм">
+            {[false, true].map((dollars) => (
+              <button key={String(dollars)} type="button" aria-pressed={inDollars === dollars}
+                className={`ica-cur__btn${inDollars === dollars ? ' ica-cur__btn--on' : ''}`}
+                disabled={rateState === 'loading'} onClick={() => void showDollars(dollars)}>
+                {dollars ? '$' : currencySymbol(baseCurrencyCode)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="ica-total">
         <span className="ica-total__label">Внесено</span>
         <span className="ica-total__value">{money(data.invested)}</span>
+        {usd && <span className="ica-total__rate">По текущему курсу CoinGecko: 1 $ = {formatNumericAmount(dollarRate as number, 2)} {currencySymbol(baseCurrencyCode)}</span>}
+        {rateState === 'failed' && <span className="ica-total__rate" role="alert">Курс доллара сейчас недоступен, суммы в рублях</span>}
       </div>
       {segments.length > 1 && (
         <>
@@ -125,7 +169,7 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
                 title={`${coin.symbol}${cryptoNetworkSuffix(coin.network, coin.symbol)}`}
                 amount={money(coin.cost)} share={costedTotal > 0 ? coin.cost / costedTotal : 0}
                 foot={notes}
-                footRight={coin.unit_cost === null ? undefined : `${formatNumericAmount(coin.unit_cost, coin.unit_cost >= 1 ? 2 : 6)} ${sym} за 1`} />
+                footRight={coin.unit_cost === null ? undefined : `${formatNumericAmount(convert(coin.unit_cost), convert(coin.unit_cost) >= 1 ? 2 : 6)} ${sym} за 1`} />
             );
           })}
           {free.length > 0 && (allCoins || costed.length <= COLLAPSED_COINS) && (
