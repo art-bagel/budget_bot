@@ -87,7 +87,7 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
           <>
             <PaRow icon={<Receipt strokeWidth={2} />} color="r" title="Расходы" amount={money(spent)}
               footRight={pct(spent)} />
-            {split([['Комиссии, кроме возвращённых', data.fees], ['Проценты и ликвидации', data.interest], ['Прочие расходы', data.expenses]])}
+            {split([['Комиссии минус возвраты', data.fees], ['Проценты и ликвидации', data.interest], ['Прочие расходы', data.expenses]])}
           </>
         )}
         {Math.abs(data.other) >= 0.5 && (
