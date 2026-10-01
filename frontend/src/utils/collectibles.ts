@@ -133,8 +133,22 @@ export function collectibleNumber(metadata: Record<string, unknown> | undefined)
   return typeof number === 'string' && number.trim() ? number.trim() : null;
 }
 
-// Telegram writes trait rarity into the value: "Bronze (3%)".
-export function splitRarity(value: string): { name: string; rarity: string | null } {
-  const match = value.match(/^(.*\S)\s*\((\d+(?:[.,]\d+)?\s*%)\)$/);
-  return match ? { name: match[1], rarity: match[2].replace(/\s/g, '') } : { name: value, rarity: null };
+// Telegram writes trait rarity into the value: "Bronze (3%)", or typed by hand as "Bronze 3%".
+export function splitRarity(value: string): { name: string; percent: number | null } {
+  const match = value.match(/^(.*\S)\s+\(?(\d+(?:[.,]\d+)?)\s*%\)?$/);
+  const percent = match ? Number(match[2].replace(',', '.')) : Number.NaN;
+  return match && percent > 0 && percent <= 100 ? { name: match[1], percent } : { name: value, percent: null };
+}
+
+// "1 из 500" reads better than 0.2%; large counts are compacted: "1 из 1,7 млн".
+export function oneIn(percent: number): string {
+  const count = 100 / percent;
+  return `1 из ${new Intl.NumberFormat('ru-RU', count < 1000
+    ? { maximumFractionDigits: 0 }
+    : { notation: 'compact', maximumFractionDigits: 1 }).format(count)}`;
+}
+
+// Colour tier of a rarity: only a visual cue, the "1 из N" text carries the value.
+export function rarityTier(percent: number): 'common' | 'rare' | 'epic' | 'legendary' {
+  return percent <= 0.1 ? 'legendary' : percent <= 0.5 ? 'epic' : percent <= 2 ? 'rare' : 'common';
 }
