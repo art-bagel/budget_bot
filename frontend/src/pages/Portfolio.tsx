@@ -1,4 +1,5 @@
 import InvestmentCostAnalytics from '../components/InvestmentCostAnalytics';
+import PaRow, { PA_COLORS } from '../components/PaRow';
 import CollectibleImage from '../components/CollectibleImage';
 import CollectionShelf, { CollectibleHero } from '../components/CollectionShelf';
 import { cryptoAssetLabel, cryptoNetworkLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
@@ -9,7 +10,7 @@ import { setCryptoAssetHidden } from '../api';
 import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, knownProtocolValues, walletMarketValue } from '../utils/cryptoProtocolValuation';
 import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
 import RefreshBar from '../components/RefreshBar';
 import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown, Pencil, Check, ChevronRight, Plus, ArrowDownToLine, ArrowUpFromLine, HandCoins, Percent, Gift, RefreshCw, Link2, X, Zap, Ticket, PieChart, Droplets, type LucideIcon } from 'lucide-react';
@@ -243,6 +244,7 @@ type PortfolioAnalyticsBucket = {
 
 type PortfolioAnalyticsAccountItem = {
   isCrypto: boolean;
+  isCollection: boolean;
   valuationIncomplete: boolean;
   basisIncomplete: boolean;
   key: string;
@@ -284,7 +286,6 @@ const SECURITY_KIND_OPTIONS = [
   { value: 'fund', label: 'Фонды' },
 ] as const;
 
-const PA_COLORS = ['g', 'o', 'b', 'p', 'r', 'v'] as const;
 type PaMeta = { Icon: LucideIcon; color: (typeof PA_COLORS)[number] };
 const PA_ASSET_TYPE_META: Record<string, PaMeta> = {
   security: { Icon: TrendingUp, color: 'b' },
@@ -315,45 +316,6 @@ const PA_INCOME_KIND_META: Record<string, PaMeta> = {
   liquidity: { Icon: Droplets, color: 'b' },
   other: { Icon: Package, color: 'v' },
 };
-
-/** Analytics list row in the dashboard analytics style: icon, name, amount, share bar, foot line. */
-function PaRow({ icon, color, title, amount, amountTone, share, foot, footRight, onClick }: {
-  icon: ReactNode;
-  color: string;
-  title: string;
-  amount: ReactNode;
-  amountTone?: 'pos' | 'neg' | 'mute';
-  share?: number;
-  foot?: ReactNode;
-  footRight?: ReactNode;
-  onClick?: () => void;
-}) {
-  const body = (
-    <>
-      <div className={`ana-cat__ico ana-cat__ico--${color}`}>{icon}</div>
-      <div className="ana-cat__body">
-        <div className="ana-cat__top">
-          <span className="ana-cat__name">{title}</span>
-          <span className={`ana-cat__amt${amountTone ? ` pa-amt--${amountTone}` : ''}`}>{amount}</span>
-        </div>
-        {share !== undefined && (
-          <div className="ana-cat__bar-wrap">
-            <div className={`ana-cat__fill ana-cat__fill--${color}`} style={{ width: `${Math.max(share * 100, share > 0 ? 2 : 0)}%` }} />
-          </div>
-        )}
-        {(foot || footRight) && (
-          <div className="ana-cat__foot">
-            <span className="pa-row__foot">{foot}</span>
-            {footRight && <span className="pa-row__foot-r">{footRight}</span>}
-          </div>
-        )}
-      </div>
-    </>
-  );
-  return onClick
-    ? <button type="button" className="ana-cat pa-row" onClick={onClick}>{body}</button>
-    : <div className="ana-cat pa-row">{body}</div>;
-}
 
 const INCOME_KIND_LABELS: Record<string, string> = {
   dividend: 'Дивиденды',
@@ -2906,6 +2868,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const portfolioAnalyticsAccounts = useMemo<PortfolioAnalyticsAccountItem[]>(
     () => renderPositionGroups.filter((g) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId)).map((group) => {
       const isCrypto = accounts.some(({ account }) => account.id === group.accountId && account.investment_asset_type === 'crypto');
+      const isCollection = accounts.some(({ account }) => account.id === group.accountId && account.investment_asset_type === 'collectible');
       const walletAssets = cryptoAssetsByAccount.get(group.accountId) ?? [];
       const protocols = scopedCryptoProtocols.filter((p) => p.investment_account_id === group.accountId);
       const protocolValues = knownProtocolValues(protocols.map(getProtocolValuation));
@@ -2924,7 +2887,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         ? group.positions.reduce((sum, position) => sum + (getResolvedPositionCurrentResult(position) ?? 0), 0)
         : group.positions.reduce((sum, position) => sum + getPositionRealizedResult(position), 0);
       return {
-        isCrypto, valuationIncomplete, basisIncomplete,
+        isCrypto, isCollection, valuationIncomplete, basisIncomplete,
         key: `${group.ownerType}:${group.accountId}`,
         accountName: group.accountName,
         ownerLabel: group.ownerType === 'family' ? 'Семейный счет' : 'Личный счет',
@@ -3206,7 +3169,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           </div>
           <div className="pf-tsum__now-period">{activeScopeMarketIncomplete ? 'Рыночная оценка неполная' : activeScopeDisplayMetrics.resultLabel}</div>
         </div>
-        <div className={`pf-tsum__grid${activeScopeHasCrypto ? ' pf-tsum__grid--crypto' : ''}`}>
+        {/* Coins and collection items have no running result: their cells drop it. */}
+        <div className={`pf-tsum__grid${activeScopeHasCrypto || activeAssetTypeCode === 'collectible' ? ' pf-tsum__grid--crypto' : ''}`}>
           <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
             <div className="pf-tsum__cell-value">
@@ -3222,7 +3186,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               ))}
             </div>
           )}
-          {!activeScopeHasCrypto && <div className="pf-tsum__cell pf-tsum__cell--mid">
+          {!activeScopeHasCrypto && activeAssetTypeCode !== 'collectible' && <div className="pf-tsum__cell pf-tsum__cell--mid">
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
             <div className={`pf-tsum__cell-value${activeScopeResultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
               {!activeScopeHasCrypto && (activeScopeResultValue >= 0 ? '+' : '')}
@@ -3907,7 +3871,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 baseCurrencyCode={user.base_currency_code} />
             )}
 
-            {activeAssetTypeCode !== 'crypto' && (
+            {activeAssetTypeCode !== 'crypto' && activeAssetTypeCode !== 'collectible' && (
               <section className="pa-card">
                 <div className="pa-card__head"><h3 className="pa-card__title">Доход за период</h3></div>
                 <div className="ana-scope">
@@ -4033,7 +3997,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               <section className="pa-card">
                 <div className="pa-card__head"><h3 className="pa-card__title">Счета</h3></div>
                 <div className="ana-cats">
-                  {portfolioAnalyticsAccounts.map((account, index) => (
+                  {portfolioAnalyticsAccounts.map((account, index) => account.isCollection ? (
+                    // Items have no market price yet: show what is known instead of a zero value and result.
+                    <PaRow key={account.key} icon={account.accountName.slice(0, 1).toUpperCase()}
+                      color={PA_COLORS[index % PA_COLORS.length]} title={account.accountName}
+                      amount="—" amountTone="mute"
+                      foot={`себестоимость ${money(account.investedPrincipal)}${account.cashValue !== 0 ? ` · деньги ${money(account.cashValue)}` : ''}`} />
+                  ) : (
                     <PaRow key={account.key} icon={account.accountName.slice(0, 1).toUpperCase()}
                       color={PA_COLORS[index % PA_COLORS.length]} title={account.accountName}
                       amount={`${money(account.estimatedValue)}`}
