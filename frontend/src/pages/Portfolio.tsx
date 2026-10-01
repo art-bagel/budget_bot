@@ -1,4 +1,5 @@
 import InvestmentCostAnalytics from '../components/InvestmentCostAnalytics';
+import CurrencySwitch, { CurrencyNote, useDollarDisplay } from '../components/CurrencySwitch';
 import PaRow, { PA_COLORS } from '../components/PaRow';
 import CollectibleImage from '../components/CollectibleImage';
 import CollectionShelf, { CollectibleHero } from '../components/CollectionShelf';
@@ -812,6 +813,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const collectibleDateRequest = useCryptoRequestKey('collectible-date');
   const [collectibleEditingId, setCollectibleEditingId] = useState<number | null>(null);
   const [collectibleOpeningPack, setCollectibleOpeningPack] = useState(false);
+  // Base-currency amounts on this page can be shown in dollars at today's rate.
+  const display = useDollarDisplay(user.base_currency_code);
   const [collectibleDateSaving, setCollectibleDateSaving] = useState(false);
   const [collectibleDateError, setCollectibleDateError] = useState<string | null>(null);
   const [collectionSoldQuantity, setCollectionSoldQuantity] = useState('');
@@ -3146,13 +3149,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               {visibleOpenPositionGroups.length} {pluralRu(visibleOpenPositionGroups.length, ['счёт', 'счёта', 'счетов'])}
             </div>
           </div>
+          <CurrencySwitch display={display} />
         </div>
         <div className="pf-tsum__now">
             <div className="pf-tsum__now-label">{valueMode === 'now' ? 'Сейчас' : 'С доходом'}</div>
           <div className="pf-tsum__now-row">
             <div className="pf-tsum__now-value">
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeCurrentValue)}
-              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeScopeCurrentValue))}
+              <span className="pf-sym">{display.symbol}</span>
             </div>
             {!activeScopeHasCrypto && !activeScopeMarketIncomplete && activeScopeBaseValue > 0 && (() => {
               const rv = activeScopeResultValue;
@@ -3160,7 +3164,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const isPos = rv >= 0;
               return (
                 <span className={`pf-tsum__delta${isPos ? ' pf-tsum__delta--pos' : ' pf-tsum__delta--neg'}`}>
-                  {isPos ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(rv)}{currencySymbol(user.base_currency_code)}
+                  {isPos ? '+' : ''}{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(rv))}{display.symbol}
                   <span className="pf-tsum__delta-sep">·</span>
                   {isPos ? '+' : ''}{pct.toFixed(1)}%
                 </span>
@@ -3168,14 +3172,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             })()}
           </div>
           <div className="pf-tsum__now-period">{activeScopeMarketIncomplete ? 'Рыночная оценка неполная' : activeScopeDisplayMetrics.resultLabel}</div>
+          <CurrencyNote display={display} />
         </div>
         {/* Coins and collection items have no running result: their cells drop it. */}
         <div className={`pf-tsum__grid${activeScopeHasCrypto || activeAssetTypeCode === 'collectible' ? ' pf-tsum__grid--crypto' : ''}`}>
           <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
             <div className="pf-tsum__cell-value">
-              {activeScopeDisplayMetrics.basisMissing ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeBaseValue)}
-              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+              {activeScopeDisplayMetrics.basisMissing ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeScopeBaseValue))}
+              <span className="pf-sym">{display.symbol}</span>
             </div>
           </div>
           {activeScopeDisplayMetrics.fundingParts.length > 0 && (
@@ -3190,13 +3195,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.resultLabel}</div>
             <div className={`pf-tsum__cell-value${activeScopeResultValue >= 0 ? ' pf-tsum__cell-value--pos' : ' pf-tsum__cell-value--neg'}`}>
               {!activeScopeHasCrypto && (activeScopeResultValue >= 0 ? '+' : '')}
-              {activeScopeHasCrypto ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeResultValue)}
-              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+              {activeScopeHasCrypto ? '—' : new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeScopeResultValue))}
+              <span className="pf-sym">{display.symbol}</span>
             </div>
             {activeAssetTypeCode === 'security' && activeScopeNkdValue > 0 ? (
               <div className="pf-tsum__cell-note">
-                НКД +{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeNkdValue)}
-                <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                НКД +{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeScopeNkdValue))}
+                <span className="pf-sym">{display.symbol}</span>
               </div>
             ) : !activeScopeHasCrypto && activeScopeBaseValue > 0 && (
               <div className="pf-tsum__cell-note">
@@ -3208,8 +3213,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           {(!activeScopeHasCrypto || activeScopeDisplayMetrics.cashValue !== 0) && <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">Свободно</div>
             <div className="pf-tsum__cell-value">
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(activeScopeDisplayMetrics.cashValue)}
-              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeScopeDisplayMetrics.cashValue))}
+              <span className="pf-sym">{display.symbol}</span>
             </div>
           </div>}
         </div>
@@ -3223,7 +3228,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       const income = activeScopeResultValue;
       const incomeIsPos = income >= 0;
       const incomePct = activeScopeResultPct;
-      const fmt = (n: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
+      const fmt = (n: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(n));
       const colorMap: Record<string, string> = {
         security: '#0A0B0D', deposit: '#137534', crypto: '#9B1C1C', other: '#4B2D8F', collectible: '#7A2E96',
       };
@@ -3234,7 +3239,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <div className="pf-alloc__head">
             <span className="pf-alloc__tag">{cryptoValuationIncomplete ? 'Оценённые активы' : 'Распределение'}</span>
             <span className="pf-alloc__meta">{typeTabs.length} {typeTabs.length === 1 ? 'тип' : typeTabs.length < 5 ? 'типа' : 'типов'}</span>
+            <CurrencySwitch display={display} />
           </div>
+          <CurrencyNote display={display} />
           <div className="pf-alloc__bar" role="img" aria-label="Распределение по типам активов">
             {typeTabs.map((t) => (
               <span
@@ -3256,7 +3263,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <div className="pf-alloc__totals">
             <div className="pf-alloc__t-cell">
               <span>{activeScopeBasisLabel}</span>
-              <strong>{activeScopeDisplayMetrics.basisMissing ? '—' : fmt(basisValue)}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span></strong>
+              <strong>{activeScopeDisplayMetrics.basisMissing ? '—' : fmt(basisValue)}<span className="pf-sym">{display.symbol}</span></strong>
               <em className="pf-alloc__t-placeholder" aria-hidden="true">&nbsp;</em>
             </div>
             <span className="pf-alloc__t-sep" />
@@ -3270,7 +3277,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               ) : (
                 <>
                   <strong className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
-                    {`${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                    {`${incomeIsPos ? '+' : ''}${fmt(income)}`}<span className="pf-sym">{display.symbol}</span>
                   </strong>
                   <em className={incomeIsPos ? 'pf-alloc__t-pos' : 'pf-alloc__t-neg'}>
                     {`${incomeIsPos ? '+' : ''}${incomePct.toFixed(1)}%`}
@@ -3313,10 +3320,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         <div className="pf-hero__amount">
           <strong className="pf-hero__value">
             {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(
-              heroDisplayedPortfolioValue,
+              display.convert(heroDisplayedPortfolioValue),
             )}
           </strong>
-          <span className="pf-hero__sym">{currencySymbol(user.base_currency_code)}</span>
+          <span className="pf-hero__sym">{display.symbol}</span>
         </div>
 
 
@@ -3327,8 +3334,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             </span>
             <span>
               {heroPnlValue >= 0 ? '+' : '−'}
-              {formatNumericAmount(Math.abs(heroPnlValue), 0)}
-              <span className="pf-hero__pnl-sym">{currencySymbol(user.base_currency_code)}</span>
+              {formatNumericAmount(Math.abs(display.convert(heroPnlValue)), 0)}
+              <span className="pf-hero__pnl-sym">{display.symbol}</span>
             </span>
             <span className="pf-hero__pnl-sep">·</span>
             <span>
@@ -3349,8 +3356,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             <span className={`pf-hero__row-dot pf-hero__row-dot--${tab.code}`} />
             <span className="pf-hero__row-label">{tab.label}</span>
             <span className="pf-hero__row-value">
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(tab.totalInBase)}
-              <span className="pf-hero__row-sym">{currencySymbol(user.base_currency_code)}</span>
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(tab.totalInBase))}
+              <span className="pf-hero__row-sym">{display.symbol}</span>
             </span>
             <span className="pf-hero__row-chev">›</span>
           </button>
@@ -3516,8 +3523,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </div>
                     </div>
                     <div className="pf-grp__total">
-                      {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(groupValue)}
-                      <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                      {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(groupValue))}
+                      <span className="pf-sym">{display.symbol}</span>
                     </div>
                   </div>
                   {isCollectionAccount && money.length > 0 && <div className="pf-grp__subhead">Деньги на счёте</div>}
@@ -3555,8 +3562,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             </>
                           ) : (
                             <div className="pf-pos__amount">
-                              {formatNumericAmount(value)}
-                              <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                              {formatNumericAmount(display.convert(value))}
+                              <span className="pf-sym">{display.symbol}</span>
                             </div>
                           )}
                         </div>
@@ -3658,8 +3665,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                 </>
                               ) : (
                                 <div className="pf-pos__amount">
-                                  {formatNumericAmount(displayValue)}
-                                  <span className="pf-sym">{currencySymbol(displayCurrencyCode)}</span>
+                                  {formatNumericAmount(displayCurrencyCode === user.base_currency_code ? display.convert(displayValue) : displayValue)}
+                                  <span className="pf-sym">{displayCurrencyCode === user.base_currency_code ? display.symbol : currencySymbol(displayCurrencyCode)}</span>
                                 </div>
                               )}
                               {isDeposit && depositAccrued > 0 ? (
@@ -3668,7 +3675,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                 </div>
                               ) : unrealizedPnl !== null && pnlPercent !== null ? (
                                 <div className={`pf-pos__pnl${unrealizedPnl >= 0 ? ' pf-pos__pnl--pos' : ' pf-pos__pnl--neg'}`}>
-                                  {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(0)} {currencySymbol(user.base_currency_code)}
+                                  {unrealizedPnl >= 0 ? '+' : ''}{display.convert(unrealizedPnl).toFixed(0)} {display.symbol}
                                   {' '}({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
                                 </div>
                               ) : null}
@@ -3753,8 +3760,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                                   </>
                                 ) : (
                                   <div className="pf-pos__amount">
-                                    {formatProtocolValue(protocolValue)}
-                                    <span className="pf-sym">{currencySymbol(user.base_currency_code)}</span>
+                                    {formatProtocolValue(display.convert(protocolValue))}
+                                    <span className="pf-sym">{display.symbol}</span>
                                   </div>
                                 )}
                               </div>
@@ -3855,9 +3862,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
       {/* ══ Analytics pane ══ */}
       {portfolioView === 'analytics' && (() => {
-        const sym = currencySymbol(user.base_currency_code);
-        const money = (value: number) => `${formatNumericAmount(value, 0)} ${sym}`;
-        const signed = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatNumericAmount(Math.abs(value), 0)} ${sym}`;
+        const sym = display.symbol;
+        const money = (value: number) => `${formatNumericAmount(display.convert(value), 0)} ${sym}`;
+        const signed = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatNumericAmount(Math.abs(display.convert(value)), 0)} ${sym}`;
         const tone = (value: number) => (value > 0 ? 'pos' : value < 0 ? 'neg' : undefined);
         const accountsTotal = portfolioAnalyticsAccounts.reduce((sum, account) => sum + Math.max(account.estimatedValue, 0), 0);
         const periodTotal = analyticsTotalIncome + analyticsTotalTrades;
@@ -3868,7 +3875,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             {(activeAssetTypeCode === 'crypto' || activeAssetTypeCode === 'collectible') && (
               <InvestmentCostAnalytics assetType={activeAssetTypeCode}
                 accountId={activeAccountTabKey === 'all' ? undefined : Number(activeAccountTabKey.split(':')[1])}
-                baseCurrencyCode={user.base_currency_code} />
+                display={display} />
             )}
 
             {activeAssetTypeCode !== 'crypto' && activeAssetTypeCode !== 'collectible' && (

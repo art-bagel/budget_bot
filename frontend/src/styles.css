@@ -12274,3 +12274,9 @@ svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; 
 .ica-cur__btn:disabled { opacity: .5; cursor: progress; }
 .ica-cur__btn:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 .ica-total__rate { margin-top: 2px; font-size: 12px; color: var(--text-2); }
+.pf-tsum__head .ica-cur { margin-left: auto; align-self: flex-start; flex-shrink: 0; }
+.pf-alloc__head .ica-cur { margin-left: 10px; flex-shrink: 0; }
+.pf-tsum__now .ica-total__rate,
+.pf-alloc > .ica-total__rate { display: block; margin: 4px 0 0; }
+.pf-alloc__head:has(.ica-cur) { justify-content: flex-start; }
+.pf-alloc__head:has(.ica-cur) .pf-alloc__meta { margin-left: auto; }
