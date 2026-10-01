@@ -37,26 +37,33 @@ function rememberedDollars(): boolean {
 
 // Amounts in the base currency, optionally shown in dollars at today's rate.
 export function useDollarDisplay(baseCurrencyCode: string): DollarDisplay {
-  const [rate, setRate] = useState<number | null>(null);
-  const [inDollars, setInDollars] = useState(false);
-  const [state, setState] = useState<DollarDisplay['state']>('idle');
-  const active = inDollars && rate !== null;
+  const [quote, setQuote] = useState<{ base: string; rate: number } | null>(null);
+  const [inDollars, setInDollars] = useState(rememberedDollars);
+  const [failedBase, setFailedBase] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  // A quote from the previous base currency must never convert the new amounts.
+  const rate = quote?.base === baseCurrencyCode ? quote.rate : null;
+  const needsRate = inDollars && baseCurrencyCode !== 'USD';
+  const active = needsRate && rate !== null;
+  const state: DollarDisplay['state'] = !needsRate || rate !== null ? 'idle'
+    : failedBase === baseCurrencyCode ? 'failed' : 'loading';
+  useEffect(() => {
+    if (!needsRate || rate !== null) return;
+    let cancelled = false;
+    setFailedBase(null);
+    fetchDollarRate(baseCurrencyCode).then(value => {
+      if (!cancelled) setQuote({ base: baseCurrencyCode, rate: value });
+    }).catch(() => {
+      if (!cancelled) setFailedBase(baseCurrencyCode);
+    });
+    return () => { cancelled = true; };
+  }, [baseCurrencyCode, needsRate, rate, retry]);
   const show = async (dollars: boolean) => {
     rememberDollars(dollars);
-    if (!dollars || rate !== null) { setInDollars(dollars); return; }
-    setState('loading');
-    try {
-      setRate(await fetchDollarRate(baseCurrencyCode));
-      setInDollars(true);
-      setState('idle');
-    } catch {
-      setState('failed');
-    }
+    setInDollars(dollars);
+    setFailedBase(null);
+    if (dollars) setRetry(value => value + 1);
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: restore the remembered choice once per base currency.
-  useEffect(() => {
-    if (baseCurrencyCode !== 'USD' && rememberedDollars()) void show(true);
-  }, [baseCurrencyCode]);
   return {
     baseCurrencyCode,
     inDollars: active,

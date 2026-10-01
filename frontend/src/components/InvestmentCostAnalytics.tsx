@@ -52,10 +52,12 @@ export default function InvestmentCostAnalytics({ assetType, accountId, display 
     { key: 'out', label: 'Выведено', value: data.withdrawn, color: 'b' },
     { key: 'spent', label: 'Расходы', value: spent, color: 'r' },
     { key: 'other', label: 'Прочее', value: data.other, color: 'p' },
-  ].filter((segment) => segment.value > 0.5);
+  ];
+  const canShowShares = data.invested > 0 && segments.every(segment => segment.value >= 0);
+  const visibleSegments = segments.filter(segment => segment.value > 0.5);
 
   const coins = [...data.coins].sort((a, b) => b.cost - a.cost);
-  const costed = coins.filter((coin) => coin.cost > 0 || coin.incomplete);
+  const costed = coins.filter((coin) => coin.cost > 0 || coin.incomplete || coin.funded);
   const free = coins.filter((coin) => !costed.includes(coin));
   const costedTotal = costed.reduce((sum, coin) => sum + coin.cost, 0);
   const shownCoins = allCoins ? costed : costed.slice(0, COLLAPSED_COINS);
@@ -67,16 +69,16 @@ export default function InvestmentCostAnalytics({ assetType, accountId, display 
         <span className="ica-total__label">Внесено</span>
         <span className="ica-total__value">{money(data.invested)}</span>
       </div>
-      {segments.length > 1 && (
+      {canShowShares && visibleSegments.length > 1 && (
         <>
           <div className="ica-bar" aria-hidden="true">
-            {segments.map((segment) => (
+            {visibleSegments.map((segment) => (
               <span key={segment.key} className={`ana-cat__fill--${segment.color}`} style={{ flexGrow: segment.value }} />
             ))}
           </div>
           {/* Shares of the invested total, keyed to the bar colours. */}
           <ul className="ica-legend">
-            {segments.map((segment) => (
+            {visibleSegments.map((segment) => (
               <li key={segment.key}>
                 <span className={`ica-legend__dot ana-cat__fill--${segment.color}`} aria-hidden="true" />
                 {segment.label}<b>{pct(segment.value)}</b>
@@ -95,7 +97,7 @@ export default function InvestmentCostAnalytics({ assetType, accountId, display 
             {assetType === 'crypto' && split([['В банк', data.bank_out], ['В коллекции', data.collection_out]])}
           </>
         )}
-        {spent >= 0.5 && (
+        {(Math.abs(data.fees) >= 0.5 || Math.abs(data.interest) >= 0.5 || Math.abs(data.expenses) >= 0.5) && (
           <>
             <PaRow icon={<Receipt strokeWidth={2} />} color="r" title="Расходы" amount={money(spent)} />
             {split([['Комиссии минус возвраты', data.fees], ['Проценты и ликвидации', data.interest], ['Прочие расходы', data.expenses]])}
