@@ -12171,18 +12171,12 @@ svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; 
 .clx-trait__label { font-size: 11.5px; color: var(--text-2); }
 .clx-trait__value { font-size: 13.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .clx-trait__rarity {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  align-self: flex-start;
   margin-top: 6px;
-  font-size: 11.5px;
-  color: var(--rar-f, var(--text-2));
-}
-.clx-trait__rarity b {
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--rar-b, var(--surface-inset));
+  color: var(--rar-f, var(--text-2));
   font-size: 11px;
   font-weight: 700;
 }
@@ -12194,19 +12188,6 @@ svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; 
 [data-theme='dark'] .clx-trait--legendary { --rar-b: rgba(255, 221, 45, .16); --rar-f: var(--yellow); }
 .clx-trait[class*='clx-trait--'] { box-shadow: var(--sh-1), inset 0 -3px 0 var(--rar-b); }
 
-.clx-combo {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: var(--rar-b);
-  color: var(--rar-f);
-}
-.clx-combo__label { font-size: 13px; font-weight: 500; }
-.clx-combo__value { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
 
 .pf-dstats:has(> :nth-child(2):last-child) { grid-template-columns: 1fr 1fr; }
 

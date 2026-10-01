@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import CollectibleImage from './CollectibleImage';
 import type { PortfolioPosition } from '../types';
-import { COLLECTIBLE_KINDS, collectibleAttributeRows, collectibleFlag, collectibleNumber, collectibleShelf, getCollectibleKind, isPlainGift, isSealedPack, oneIn, rarityTier, splitRarity } from '../utils/collectibles';
+import { COLLECTIBLE_KINDS, collectibleAttributeRows, collectibleFlag, collectibleNumber, collectibleShelf, getCollectibleKind, isPlainGift, isSealedPack, rarityTier, splitRarity } from '../utils/collectibles';
 import { currencySymbol, formatNumericAmount, pluralRu } from '../utils/format';
 
 const COLLAPSED_TILES = 6;
@@ -205,28 +205,15 @@ export function CollectibleHero({ position }: { position: PortfolioPosition }) {
       {sealed && <p className="clx-hero__note">Какой стикер внутри, станет известно после открытия.</p>}
       {traits.length > 0 && (() => {
         const parsed = traits.map((row) => ({ ...row, ...splitRarity(row.value) }));
-        const rarities = parsed.map((row) => row.percent).filter((percent): percent is number => percent !== null);
-        // Telegram draws each trait independently, so the combination's chance is their product.
-        const combined = rarities.length > 1 ? rarities.reduce((product, percent) => product * percent / 100, 100) : null;
         return (
           <div className="clx-traits">
             {parsed.map((row) => (
               <div className={`clx-trait${row.percent !== null ? ` clx-trait--${rarityTier(row.percent)}` : ''}`} key={row.label}>
                 <span className="clx-trait__label">{row.label}</span>
                 <span className="clx-trait__value">{row.name}</span>
-                {row.percent !== null && (
-                  <span className="clx-trait__rarity">
-                    <b>{formatNumericAmount(row.percent, 2)}%</b>{oneIn(row.percent)}
-                  </span>
-                )}
+                {row.percent !== null && <span className="clx-trait__rarity">{formatNumericAmount(row.percent, 2)}%</span>}
               </div>
             ))}
-            {combined !== null && (
-              <div className={`clx-combo clx-trait--${rarityTier(combined)}`}>
-                <span className="clx-combo__label">Такое сочетание</span>
-                <span className="clx-combo__value">{oneIn(combined)}</span>
-              </div>
-            )}
           </div>
         );
       })()}
