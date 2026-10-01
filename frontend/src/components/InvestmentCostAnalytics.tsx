@@ -86,11 +86,11 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
       )}
       <div className="ana-cats">
         <PaRow icon={<Wallet strokeWidth={2} />} color="g" title="Сейчас в активах" amount={money(data.cost)}
-          foot={data.incomplete ? 'по известной себестоимости' : 'по себестоимости'} />
+          foot={data.incomplete ? 'часть затрат неизвестна' : undefined} />
         {data.withdrawn >= 0.5 && (
           <>
             <PaRow icon={<ArrowUpFromLine strokeWidth={2} />} color="b" title="Выведено" amount={money(data.withdrawn)}
-              foot="по себестоимости" />
+            />
             {assetType === 'crypto' && split([['В банк', data.bank_out], ['В коллекции', data.collection_out]])}
           </>
         )}
