@@ -1,3 +1,4 @@
+import InvestmentCostAnalytics from '../components/InvestmentCostAnalytics';
 import CollectibleImage from '../components/CollectibleImage';
 import CollectionShelf, { CollectibleHero } from '../components/CollectionShelf';
 import { cryptoAssetLabel, cryptoNetworkLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
@@ -2781,9 +2782,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const activeScopeDisplayMetrics = useMemo(() => {
     const scopedOpenPositions = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
-      .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id));
+      .filter((p) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id));
     const scopedGroups = (activeAssetTypeCode === 'all' ? filteredOpenPositionGroups : visibleOpenPositionGroups)
-      .filter((g) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId));
+      .filter((g) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId));
     const nkdValue = scopedOpenPositions.reduce((sum, position) => sum + getPositionNkdValue(position), 0);
     const valuedAssets = new Set<string>();
     let cryptoBasis = 0;
@@ -2865,14 +2866,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const activeScopeResultPct = activeScopeBaseValue > 0 ? (activeScopeResultValue / activeScopeBaseValue) * 100 : 0;
   const activeScopeNkdValue = activeScopeDisplayMetrics.nkdValue;
   const activeScopeHasCrypto = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
-    .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
+    .filter((p) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'crypto')
     || (activeAssetTypeCode === 'crypto' && visibleCryptoProtocolPositions.length > 0);
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
-    .filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
+    .filter((p) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'collectible' || (position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0)))
     || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
-  const activeScopeBasisLabel = visibleOpenPositions.filter((p) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id)).some((p) => p.metadata?.acquisition_kind === 'unknown') ? 'Известные затраты' : activeScopeHasCrypto ? 'Себестоимость активов' : 'Вложено';
+  const activeScopeBasisLabel = ['crypto', 'collectible'].includes(activeAssetTypeCode) || activeScopeHasCrypto ? 'Себестоимость' : 'Вложено';
   const ActiveAssetIcon = (PA_ASSET_TYPE_META[activeAssetTypeCode] ?? PA_ASSET_TYPE_META.security).Icon;
 
   const portfolioAnalyticsBuckets = useMemo<PortfolioAnalyticsBucket[]>(() => {
@@ -2903,7 +2904,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   }, [activeAccountTabKey, excludedAccountIds, activeAssetTypeCode, moexPrices, tinkoffLivePrices, visibleOpenPositions]);
 
   const portfolioAnalyticsAccounts = useMemo<PortfolioAnalyticsAccountItem[]>(
-    () => renderPositionGroups.filter((g) => activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId)).map((group) => {
+    () => renderPositionGroups.filter((g) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(g.accountId)).map((group) => {
       const isCrypto = accounts.some(({ account }) => account.id === group.accountId && account.investment_asset_type === 'crypto');
       const walletAssets = cryptoAssetsByAccount.get(group.accountId) ?? [];
       const protocols = scopedCryptoProtocols.filter((p) => p.investment_account_id === group.accountId);
@@ -3479,7 +3480,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       </div>
 
       {['crypto','collectible'].includes(activeAssetTypeCode) && accounts.some(a => a.account.investment_asset_type === activeAssetTypeCode) && (
-        <CryptoCorrectionSheet accounts={accounts.filter(a => ['crypto','collectible'].includes(a.account.investment_asset_type ?? '')).map(a => ({id:a.account.id,name:a.account.name}))} open={correctionsOpen} anchorAccountId={accounts.find(a => a.account.investment_asset_type === activeAssetTypeCode)!.account.id}
+        <CryptoCorrectionSheet accounts={accounts.filter(a => a.account.investment_asset_type === activeAssetTypeCode).map(a => ({id:a.account.id,name:a.account.name}))} open={correctionsOpen} anchorAccountId={(accounts.find(a => a.account.investment_asset_type === activeAssetTypeCode && a.account.owner_type + ':' + a.account.id === activeAccountTabKey) ?? accounts.find(a => a.account.investment_asset_type === activeAssetTypeCode))!.account.id}
+          assetType={activeAssetTypeCode === 'collectible' ? 'collectible' : 'crypto'}
           baseCurrencyCode={user.base_currency_code}
           onClose={() => setCorrectionsOpen(false)} onSuccess={() => void loadPortfolio()} />
       )}
@@ -3899,6 +3901,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         return (
           <div className="pf-view pa-view">
             {scopeSummary}
+            {(activeAssetTypeCode === 'crypto' || activeAssetTypeCode === 'collectible') && (
+              <InvestmentCostAnalytics assetType={activeAssetTypeCode}
+                accountId={activeAccountTabKey === 'all' ? undefined : Number(activeAccountTabKey.split(':')[1])}
+                baseCurrencyCode={user.base_currency_code} />
+            )}
 
             {activeAssetTypeCode !== 'crypto' && (
               <section className="pa-card">
@@ -4147,7 +4154,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   )}
                   <div className="pf-dstats">
                     <div className="pf-dstats__cell">
-                      <span className="pf-dstats__label">{selectedPosition.metadata?.acquisition_kind === 'unknown' ? 'Известные затраты' : selectedPosition.asset_type_code === 'crypto' ? 'Количество' : selectedPosition.asset_type_code === 'collectible' ? 'Затраты' : 'Вложено'}</span>
+                      <span className="pf-dstats__label">{selectedPosition.asset_type_code === 'crypto' ? 'Количество' : selectedPosition.asset_type_code === 'collectible' ? 'Себестоимость' : 'Вложено'}</span>
                       <span className="pf-dstats__value">
                         {selectedPosition.asset_type_code === 'crypto'
                           ? formatNumericAmount(selectedPosition.quantity ?? 0, 8)

@@ -1330,3 +1330,16 @@ export async function editCollectibleDetails(positionId: number, data: {
 }): Promise<PortfolioPosition> {
   return apiFetch(`/portfolio/positions/${positionId}/details`, { method: 'POST', body: JSON.stringify(data) });
 }
+
+
+export type InvestmentCostAnalyticsData = {
+  invested: number; withdrawn: number; bank_out: number; collection_out: number; cost: number; fees: number; interest: number;
+  expenses: number; other: number; incomplete: boolean;
+  coins: { asset_id: number; symbol: string; network: string; quantity: number; cost: number;
+    unit_cost: number | null; incomplete: boolean; funded: boolean; defi_quantity: number }[];
+};
+export function fetchInvestmentCostAnalytics(assetType: 'crypto' | 'collectible', accountId?: number): Promise<InvestmentCostAnalyticsData> {
+  const query = new URLSearchParams({ asset_type: assetType });
+  if (accountId !== undefined) query.set('account_id', String(accountId));
+  return apiFetch<InvestmentCostAnalyticsData>(`/portfolio/cost-analytics?${query}`);
+}

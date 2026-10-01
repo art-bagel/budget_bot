@@ -437,6 +437,9 @@ class Reports(DataBase):
             item['metadata'] = self._normalize_metadata(item.get('metadata'))
         return result
 
+    async def get__investment_cost_analytics(self, user_id: int, asset_type: str, account_id: Optional[int] = None) -> dict:
+        return await self.call_function(self._fn('get__investment_cost_analytics'), user_id, asset_type, account_id) or {}
+
     async def get__portfolio_analytics(
         self,
         user_id: int,

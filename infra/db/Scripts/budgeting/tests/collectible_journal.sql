@@ -90,4 +90,30 @@ BEGIN
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',jsonb_build_object('position_id',item->'id','close_amount_in_currency',50,'close_currency_code','USD','close_amount_in_base',5000),current_date);
  ASSERT (SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='USD')=109,'USD sale balance';
 END $$;
+DO $$
+DECLARE uid bigint:=990000000906; me jsonb; bank bigint; coll bigint; other_coll bigint;
+ item jsonb; history jsonb; sid bigint;
+BEGIN
+ me:=put__register_user_context(uid,'RUB',NULL,'History','Filter');
+ bank:=(me->>'bank_account_id')::bigint;
+ coll:=(put__create_bank_account(uid,'First collection','user','investment','collectible')->>'id')::bigint;
+ other_coll:=(put__create_bank_account(uid,'Second collection','user','investment','collectible')->>'id')::bigint;
+ PERFORM put__record_income(uid,bank,10000,'RUB');
+ PERFORM put__transfer_between_accounts(uid,bank,coll,'RUB',5000);
+ item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_buy',
+   jsonb_build_object('investment_account_id',coll,'title','History item','quantity',1,
+     'amount_in_currency',1000,'currency_code','RUB','metadata','{"item_kind":"physical"}'::jsonb),current_date);
+ sid:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
+ -- More than a page of descriptive events must not hide the purchase.
+ FOR i IN 1..35 LOOP
+   PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_receive',
+     jsonb_build_object('investment_account_id',coll,'title','Free item','quantity',1,
+       'metadata','{"item_kind":"physical"}'::jsonb),current_date);
+ END LOOP;
+ history:=get__crypto_correction_history(uid,coll);
+ ASSERT jsonb_array_length(history)=1,'only editable events before pagination';
+ ASSERT (history->0->>'id')::bigint=sid,'purchase still on first page';
+ ASSERT history->0->>'context'='History item','collection item title available';
+ ASSERT get__crypto_correction_history(uid,other_coll)='[]'::jsonb,'selected collection isolated';
+END $$;
 ROLLBACK;

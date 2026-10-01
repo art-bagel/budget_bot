@@ -321,6 +321,15 @@ async def get_portfolio_analytics(
     return await reports.get__portfolio_analytics(user.user_id, date_from, date_to)
 
 
+@router.get('/cost-analytics')
+async def get_investment_cost_analytics(
+    asset_type: Literal['crypto', 'collectible'],
+    account_id: Optional[int] = Query(None),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    return await reports.get__investment_cost_analytics(user.user_id, asset_type, account_id)
+
+
 @router.get('/positions', response_model=List[PortfolioPositionItem])
 async def get_portfolio_positions(
     status: Optional[Literal['open', 'closed']] = Query(None),
