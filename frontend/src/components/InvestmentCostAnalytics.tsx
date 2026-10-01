@@ -47,10 +47,10 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
     ) : null;
   };
   const segments = [
-    { key: 'held', value: data.cost, color: 'g' },
-    { key: 'out', value: data.withdrawn, color: 'b' },
-    { key: 'spent', value: spent, color: 'r' },
-    { key: 'other', value: data.other, color: 'p' },
+    { key: 'held', label: 'В активах', value: data.cost, color: 'g' },
+    { key: 'out', label: 'Выведено', value: data.withdrawn, color: 'b' },
+    { key: 'spent', label: 'Расходы', value: spent, color: 'r' },
+    { key: 'other', label: 'Прочее', value: data.other, color: 'p' },
   ].filter((segment) => segment.value > 0.5);
 
   const coins = [...data.coins].sort((a, b) => b.cost - a.cost);
@@ -67,26 +67,36 @@ export default function InvestmentCostAnalytics({ assetType, accountId, baseCurr
         <span className="ica-total__value">{money(data.invested)}</span>
       </div>
       {segments.length > 1 && (
-        <div className="ica-bar" aria-hidden="true">
-          {segments.map((segment) => (
-            <span key={segment.key} className={`ana-cat__fill--${segment.color}`} style={{ flexGrow: segment.value }} />
-          ))}
-        </div>
+        <>
+          <div className="ica-bar" aria-hidden="true">
+            {segments.map((segment) => (
+              <span key={segment.key} className={`ana-cat__fill--${segment.color}`} style={{ flexGrow: segment.value }} />
+            ))}
+          </div>
+          {/* Shares of the invested total, keyed to the bar colours. */}
+          <ul className="ica-legend">
+            {segments.map((segment) => (
+              <li key={segment.key}>
+                <span className={`ica-legend__dot ana-cat__fill--${segment.color}`} aria-hidden="true" />
+                {segment.label}<b>{pct(segment.value)}</b>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       <div className="ana-cats">
         <PaRow icon={<Wallet strokeWidth={2} />} color="g" title="Сейчас в активах" amount={money(data.cost)}
-          foot={data.incomplete ? 'по известной себестоимости' : 'по себестоимости'} footRight={pct(data.cost)} />
+          foot={data.incomplete ? 'по известной себестоимости' : 'по себестоимости'} />
         {data.withdrawn >= 0.5 && (
           <>
             <PaRow icon={<ArrowUpFromLine strokeWidth={2} />} color="b" title="Выведено" amount={money(data.withdrawn)}
-              foot="по себестоимости" footRight={pct(data.withdrawn)} />
+              foot="по себестоимости" />
             {assetType === 'crypto' && split([['В банк', data.bank_out], ['В коллекции', data.collection_out]])}
           </>
         )}
         {spent >= 0.5 && (
           <>
-            <PaRow icon={<Receipt strokeWidth={2} />} color="r" title="Расходы" amount={money(spent)}
-              footRight={pct(spent)} />
+            <PaRow icon={<Receipt strokeWidth={2} />} color="r" title="Расходы" amount={money(spent)} />
             {split([['Комиссии минус возвраты', data.fees], ['Проценты и ликвидации', data.interest], ['Прочие расходы', data.expenses]])}
           </>
         )}
