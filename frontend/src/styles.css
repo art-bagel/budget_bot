@@ -12280,3 +12280,5 @@ svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; 
 .pf-alloc > .ica-total__rate { display: block; margin: 4px 0 0; }
 .pf-alloc__head:has(.ica-cur) { justify-content: flex-start; }
 .pf-alloc__head:has(.ica-cur) .pf-alloc__meta { margin-left: auto; }
+.pf-tsum__grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pf-tsum__grid--two .pf-tsum__cell + .pf-tsum__cell { border-left: 1px solid var(--line, rgba(0,0,0,.08)); }

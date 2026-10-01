@@ -3174,8 +3174,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <div className="pf-tsum__now-period">{activeScopeMarketIncomplete ? 'Рыночная оценка неполная' : activeScopeDisplayMetrics.resultLabel}</div>
           <CurrencyNote display={display} />
         </div>
-        {/* Coins and collection items have no running result: their cells drop it. */}
-        <div className={`pf-tsum__grid${activeScopeHasCrypto || activeAssetTypeCode === 'collectible' ? ' pf-tsum__grid--crypto' : ''}`}>
+        {/* Coins and collection items have no running result: their summaries drop that cell. */}
+        <div className={`pf-tsum__grid${activeScopeHasCrypto ? ' pf-tsum__grid--crypto' : activeAssetTypeCode === 'collectible' ? ' pf-tsum__grid--two' : ''}`}>
           <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
             <div className="pf-tsum__cell-value">
