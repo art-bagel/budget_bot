@@ -1,6 +1,6 @@
 // Item kinds of a collection account and the text fields each one records.
 // The database checks only the kind, an https link and short text values.
-// A `flag` field is a checkbox stored as 'yes' or omitted.
+// A `flag` field is a checkbox stored as 'yes' or 'no'; see collectibleFlag for a missing value.
 type CollectibleField = { key: string; label: string; placeholder?: string; flag?: boolean };
 type CollectibleKind = { value: string; label: string; plural: string; fields: CollectibleField[] };
 
@@ -15,6 +15,8 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
       { key: 'backdrop', label: 'Фон' },
       { key: 'symbol', label: 'Узор' },
       { key: 'number', label: 'Номер', placeholder: '1234' },
+      { key: 'upgraded', label: 'Улучшенный', flag: true },
+      { key: 'nft', label: 'Выпущен как NFT', flag: true },
     ],
   },
   {
@@ -26,6 +28,7 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
       { key: 'number', label: 'Номер' },
       // A bought pack whose sticker is not revealed yet.
       { key: 'sealed', label: 'Пак ещё не открыт', flag: true },
+      { key: 'nft', label: 'Выпущен как NFT', flag: true },
     ],
   },
   { value: 'nft', label: 'Другое NFT', plural: 'NFT', fields: [
@@ -102,8 +105,20 @@ function attributes(metadata: Record<string, unknown> | undefined): Record<strin
   return (metadata?.item_attributes ?? {}) as Record<string, unknown>;
 }
 
+// A gift recorded before the `upgraded` flag existed counts as upgraded when it has a number:
+// only upgraded gifts were imported with one.
+export function collectibleFlag(metadata: Record<string, unknown> | undefined, key: string): boolean {
+  const value = attributes(metadata)[key];
+  if (key === 'upgraded' && value === undefined) return metadata?.item_kind === 'telegram_gift' && collectibleNumber(metadata) !== null;
+  return value === 'yes';
+}
+
 export function isSealedPack(metadata: Record<string, unknown> | undefined): boolean {
-  return metadata?.item_kind === 'sticker' && attributes(metadata).sealed === 'yes';
+  return metadata?.item_kind === 'sticker' && collectibleFlag(metadata, 'sealed');
+}
+
+export function isPlainGift(metadata: Record<string, unknown> | undefined): boolean {
+  return metadata?.item_kind === 'telegram_gift' && !collectibleFlag(metadata, 'upgraded');
 }
 
 // The shelf an item sits on: its collection, or the closest thing its kind records.

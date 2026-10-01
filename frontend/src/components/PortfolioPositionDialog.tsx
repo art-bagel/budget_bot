@@ -271,7 +271,7 @@ export default function PortfolioPositionDialog({
         metadata = {
           item_kind: itemKind,
           item_attributes: Object.fromEntries(itemFields
-            .map((field) => [field.key, itemAttributes[field.key]?.trim() ?? ''])
+            .map((field) => [field.key, field.flag ? (itemAttributes[field.key] === 'yes' ? 'yes' : 'no') : itemAttributes[field.key]?.trim() ?? ''])
             .filter(([, value]) => value)),
           ...(itemLink.trim() ? { item_link: itemLink.trim() } : {}),
         };

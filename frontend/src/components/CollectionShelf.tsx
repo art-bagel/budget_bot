@@ -1,10 +1,24 @@
 import { useMemo, useState } from 'react';
 import CollectibleImage from './CollectibleImage';
 import type { PortfolioPosition } from '../types';
-import { COLLECTIBLE_KINDS, collectibleAttributeRows, collectibleNumber, collectibleShelf, getCollectibleKind, isSealedPack, splitRarity } from '../utils/collectibles';
+import { COLLECTIBLE_KINDS, collectibleAttributeRows, collectibleFlag, collectibleNumber, collectibleShelf, getCollectibleKind, isPlainGift, isSealedPack, splitRarity } from '../utils/collectibles';
 import { currencySymbol, formatNumericAmount, pluralRu } from '../utils/format';
 
 const COLLAPSED_TILES = 6;
+
+function groupByShelf(items: PortfolioPosition[]): { name: string; items: PortfolioPosition[] }[] {
+  const byShelf = new Map<string, PortfolioPosition[]>();
+  for (const item of items) {
+    const name = collectibleShelf(item.metadata, item.title);
+    byShelf.set(name, [...(byShelf.get(name) ?? []), item]);
+  }
+  return [...byShelf].map(([name, list]) => ({ name, items: list.sort((a, b) => b.amount_in_currency - a.amount_in_currency) }))
+    .sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name, 'ru'));
+}
+
+export function NftMark({ metadata }: { metadata?: Record<string, unknown> }) {
+  return collectibleFlag(metadata, 'nft') ? <span className="clx-nft">NFT</span> : null;
+}
 
 function costLabel(position: PortfolioPosition): string {
   if (position.metadata?.acquisition_kind === 'unknown') return 'цена неизвестна';
@@ -21,27 +35,28 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const kind = kinds.find((k) => k.value === kindValue) ?? kinds[0];
 
-  const { packs, shelves } = useMemo(() => {
+  const { packs, shelves, stacks } = useMemo(() => {
     const items = kind?.items ?? [];
-    const byShelf = new Map<string, PortfolioPosition[]>();
-    for (const item of items) {
-      if (isSealedPack(item.metadata)) continue;
-      const name = collectibleShelf(item.metadata, item.title);
-      byShelf.set(name, [...(byShelf.get(name) ?? []), item]);
-    }
-    const shelves = [...byShelf].filter(([, list]) => list.length > 1).map(([name, list]) => ({
-      name,
-      items: list.sort((a, b) => b.amount_in_currency - a.amount_in_currency),
-      mixed: false,
-    })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name, 'ru'));
+    const groups = groupByShelf(items.filter((item) => !isSealedPack(item.metadata) && !isPlainGift(item.metadata)));
+    const shelves = groups.filter((group) => group.items.length > 1).map((group) => ({ ...group, mixed: false }));
     // One-item collections share a shelf instead of taking a row each.
-    const singles = [...byShelf].filter(([, list]) => list.length === 1)
-      .sort(([a], [b]) => a.localeCompare(b, 'ru')).map(([, list]) => list[0]);
+    const singles = groups.filter((group) => group.items.length === 1)
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((group) => group.items[0]);
     if (singles.length > 0) {
       shelves.push({ name: shelves.length > 0 ? 'Другие коллекции' : 'Коллекции', items: singles, mixed: true });
     }
-    return { packs: items.filter((item) => isSealedPack(item.metadata)), shelves };
+    return {
+      packs: items.filter((item) => isSealedPack(item.metadata)),
+      shelves,
+      // Plain gifts of one kind are interchangeable, so they stack.
+      stacks: groupByShelf(items.filter((item) => isPlainGift(item.metadata))),
+    };
   }, [kind]);
+  const toggle = (key: string) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
 
   if (!kind) return null;
 
@@ -55,6 +70,7 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
         aria-label={`${item.title}, ${costLabel(item)}`}>
         <span className="clx-tile__art">
           <CollectibleImage metadata={item.metadata} className="clx-tile__img" />
+          <NftMark metadata={item.metadata} />
           {quantity > 1 && <span className="clx-tile__qty">×{formatNumericAmount(quantity, 0)}</span>}
         </span>
         {caption && <span className="clx-tile__cap">{caption}</span>}
@@ -107,18 +123,14 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
               <span className="clx-shelf__name">{shelf.name}</span>
               <span className="clx-shelf__count">{shelf.items.length}</span>
               {expanded.has(shelf.name) && (
-                <button type="button" className="clx-shelf__toggle" onClick={() => setExpanded((prev) => {
-                  const next = new Set(prev);
-                  next.delete(shelf.name);
-                  return next;
-                })}>Свернуть</button>
+                <button type="button" className="clx-shelf__toggle" onClick={() => toggle(shelf.name)}>Свернуть</button>
               )}
             </div>
             <div className="clx-grid">
               {visible.map((item) => tile(item, shelf.mixed ? null : shelf.name))}
               {!open && (
                 <button type="button" className="clx-tile clx-tile--more"
-                  onClick={() => setExpanded((prev) => new Set(prev).add(shelf.name))}
+                  onClick={() => toggle(shelf.name)}
                   aria-label={`Показать все ${shelf.items.length} ${pluralRu(shelf.items.length, ['предмет', 'предмета', 'предметов'])}`}>
                   <span className="clx-tile__art clx-tile__art--more">+{shelf.items.length - visible.length}</span>
                   <span className="clx-tile__cap">Показать все</span>
@@ -128,6 +140,42 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
           </section>
         );
       })}
+
+      {stacks.length > 0 && (
+        <section className="clx-shelf clx-shelf--plain">
+          <div className="clx-shelf__head">
+            <span className="clx-shelf__name">Неулучшенные</span>
+            <span className="clx-shelf__count">{stacks.reduce((sum, stack) => sum + stack.items.length, 0)}</span>
+          </div>
+          <div className="clx-grid">
+            {stacks.flatMap((stack) => {
+              const key = `stack:${stack.name}`;
+              if (stack.items.length === 1) return [tile(stack.items[0], null)];
+              if (expanded.has(key)) {
+                return [...stack.items.map((item) => tile(item, null)),
+                  <button key={key} type="button" className="clx-tile clx-tile--more" onClick={() => toggle(key)}>
+                    <span className="clx-tile__art clx-tile__art--more">−</span>
+                    <span className="clx-tile__cap">Свернуть</span>
+                  </button>];
+              }
+              const known = stack.items.filter((item) => item.metadata?.acquisition_kind !== 'unknown');
+              return [
+                <button key={key} type="button" className="clx-tile clx-tile--stack" onClick={() => toggle(key)}
+                  aria-label={`${stack.name}: ${stack.items.length} шт., показать все`}>
+                  <span className="clx-tile__art">
+                    <CollectibleImage metadata={stack.items[0].metadata} className="clx-tile__img" />
+                    <span className="clx-tile__qty">×{stack.items.length}</span>
+                  </span>
+                  <span className="clx-tile__cap">{stack.name}</span>
+                  <span className="clx-tile__sub">
+                    {known.length > 0 ? `${formatNumericAmount(known.reduce((sum, item) => sum + item.amount_in_currency, 0), 0)} ${currencySymbol(known[0].currency_code)}` : 'цена неизвестна'}
+                  </span>
+                </button>,
+              ];
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -145,11 +193,14 @@ export function CollectibleHero({ position }: { position: PortfolioPosition }) {
     <div className="clx-hero">
       <div className={`clx-hero__art${sealed ? ' clx-hero__art--pack' : ''}`}>
         <CollectibleImage metadata={position.metadata} packName={shelf} className="clx-hero__img" />
+        <NftMark metadata={position.metadata} />
       </div>
       <div className="clx-hero__tags">
         <span className="clx-hero__tag">{kindLabel}</span>
         {shelf !== position.title && <span className="clx-hero__tag">{shelf}</span>}
         {number && !position.title.includes(`#${number}`) && <span className="clx-hero__tag">#{number}</span>}
+        {isPlainGift(position.metadata) && <span className="clx-hero__tag">Неулучшенный</span>}
+        {position.status === 'closed' && <span className="clx-hero__tag clx-hero__tag--sold">Продан</span>}
       </div>
       {sealed && <p className="clx-hero__note">Какой стикер внутри, станет известно после открытия.</p>}
       {traits.length > 0 && (
