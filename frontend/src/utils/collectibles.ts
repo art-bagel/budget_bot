@@ -1,3 +1,6 @@
+import type { PortfolioPosition } from '../types';
+import { currencySymbol, formatNumericAmount } from './format';
+
 // Item kinds of a collection account and the text fields each one records.
 // The database checks only the kind, an https link and short text values.
 // A `flag` field is a checkbox stored as 'yes' or 'no'; see collectibleFlag for a missing value.
@@ -143,4 +146,32 @@ export function splitRarity(value: string): { name: string; percent: number | nu
 // Colour tier of a rarity: only a visual cue next to the percent.
 export function rarityTier(percent: number): 'common' | 'rare' | 'epic' | 'legendary' {
   return percent <= 0.1 ? 'legendary' : percent <= 0.5 ? 'epic' : percent <= 2 ? 'rare' : 'common';
+}
+
+// Keep payment proceeds separate from the historical cost carried into received coins.
+export function collectibleSaleLabel(position: PortfolioPosition): string {
+  const coins = position.metadata?.sold_for_crypto as { quantity?: string; symbol?: string } | undefined;
+  if (coins?.quantity && coins.symbol) return `${formatNumericAmount(Number(coins.quantity), 8)} ${coins.symbol}`;
+  return position.close_amount_in_currency != null && position.close_currency_code
+    ? `${formatNumericAmount(position.close_amount_in_currency)} ${currencySymbol(position.close_currency_code)}` : '—';
+}
+
+export function collectibleUnits(items: PortfolioPosition[]): number {
+  return items.reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
+}
+
+// Different currencies are shown separately; unknown purchases retain their known costs.
+export function collectibleCostsLabel(items: PortfolioPosition[]): string {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    totals.set(item.currency_code, (totals.get(item.currency_code) ?? 0) + Number(item.amount_in_currency));
+  }
+  const unknown = items.some(item => item.metadata?.acquisition_kind === 'unknown');
+  const free = items.every(item => item.metadata?.acquisition_kind === 'free');
+  const hasCosts = [...totals.values()].some(amount => amount !== 0);
+  const amounts = [...totals].filter(([, amount]) => amount !== 0)
+    .map(([currency, amount]) => `${formatNumericAmount(amount)} ${currencySymbol(currency)}`).join(' + ');
+  if (unknown) return hasCosts ? `известно ${amounts} · цена неизвестна` : 'цена неизвестна';
+  if (free) return hasCosts ? `бесплатно · затраты ${amounts}` : 'бесплатно';
+  return amounts || `0 ${currencySymbol(items[0]?.currency_code ?? '')}`;
 }

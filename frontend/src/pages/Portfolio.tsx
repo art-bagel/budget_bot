@@ -94,7 +94,7 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -3843,9 +3843,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           </div>
                         </div>
                       </div>
-                      {position.close_amount_in_currency && position.close_currency_code ? (
-                        <div className="pf-pos__right"><div className="pf-pos__amount">{formatAmount(position.close_amount_in_currency, position.close_currency_code)}</div></div>
-                      ) : null}
+                      <div className="pf-pos__right"><div className="pf-pos__amount">{collectibleSaleLabel(position)}</div></div>
                     </button>
                   ) : (
                     <div key={position.id} className="pf-pos pf-pos--closed">
@@ -4160,8 +4158,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     {selectedPosition.asset_type_code === 'collectible' && selectedPosition.status === 'closed' ? (
                       <div className="pf-dstats__cell">
                         <span className="pf-dstats__label">Продан за</span>
-                        <span className="pf-dstats__value">{selectedPosition.close_amount_in_currency != null ? formatNumericAmount(selectedPosition.close_amount_in_currency, 0) : '—'}</span>
-                        <span className="pf-dstats__sub">{selectedPosition.close_currency_code ?? ''}</span>
+                        <span className="pf-dstats__value">{collectibleSaleLabel(selectedPosition)}</span>
                       </div>
                     ) : (
                     <div className="pf-dstats__cell">

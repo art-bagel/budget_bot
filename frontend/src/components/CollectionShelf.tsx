@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import CollectibleImage from './CollectibleImage';
 import type { PortfolioPosition } from '../types';
-import { COLLECTIBLE_KINDS, collectibleAttributeRows, collectibleFlag, collectibleNumber, collectibleShelf, getCollectibleKind, isPlainGift, isSealedPack, rarityTier, splitRarity } from '../utils/collectibles';
-import { currencySymbol, formatNumericAmount, pluralRu } from '../utils/format';
+import { COLLECTIBLE_KINDS, collectibleCostsLabel, collectibleUnits, collectibleAttributeRows, collectibleFlag, collectibleNumber, collectibleShelf, getCollectibleKind, isPlainGift, isSealedPack, rarityTier, splitRarity } from '../utils/collectibles';
+import { formatNumericAmount, pluralRu } from '../utils/format';
 
 const COLLAPSED_TILES = 6;
 
@@ -18,12 +18,6 @@ function groupByShelf(items: PortfolioPosition[]): { name: string; items: Portfo
 
 export function NftMark({ metadata }: { metadata?: Record<string, unknown> }) {
   return collectibleFlag(metadata, 'nft') ? <span className="clx-nft">NFT</span> : null;
-}
-
-function costLabel(position: PortfolioPosition): string {
-  if (position.metadata?.acquisition_kind === 'unknown') return 'цена неизвестна';
-  if (position.metadata?.acquisition_kind === 'free') return 'бесплатно';
-  return `${formatNumericAmount(position.amount_in_currency, 0)} ${currencySymbol(position.currency_code)}`;
 }
 
 // Items of one collection account as a showcase: kinds as tabs, sealed packs first, then a shelf per collection.
@@ -67,14 +61,14 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
     const quantity = Number(item.quantity ?? 1);
     return (
       <button key={item.id} type="button" className="clx-tile" onClick={() => onOpen(item.id)}
-        aria-label={`${item.title}, ${costLabel(item)}`}>
+        aria-label={`${item.title}, ${collectibleCostsLabel([item])}`}>
         <span className="clx-tile__art">
           <CollectibleImage metadata={item.metadata} className="clx-tile__img" />
           <NftMark metadata={item.metadata} />
           {quantity > 1 && <span className="clx-tile__qty">×{formatNumericAmount(quantity, 0)}</span>}
         </span>
         {caption && <span className="clx-tile__cap">{caption}</span>}
-        <span className={`clx-tile__sub${item.metadata?.acquisition_kind === 'unknown' ? ' clx-tile__sub--unknown' : ''}`}>{costLabel(item)}</span>
+        <span className={`clx-tile__sub${item.metadata?.acquisition_kind === 'unknown' ? ' clx-tile__sub--unknown' : ''}`}>{collectibleCostsLabel([item])}</span>
       </button>
     );
   };
@@ -87,7 +81,7 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
             <button key={k.value} type="button" role="tab" aria-selected={k === kind}
               className={`op-filter__chip${k === kind ? ' op-filter__chip--active' : ''}`}
               onClick={() => setKindValue(k.value)}>
-              {k.plural}<span className="clx-kinds__count">{k.items.length}</span>
+              {k.plural}<span className="clx-kinds__count">{collectibleUnits(k.items)}</span>
             </button>
           ))}
         </div>
@@ -97,16 +91,16 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
         <section className="clx-shelf">
           <div className="clx-shelf__head">
             <span className="clx-shelf__name">Неоткрытые паки</span>
-            <span className="clx-shelf__count">{packs.length}</span>
+            <span className="clx-shelf__count">{collectibleUnits(packs)}</span>
           </div>
           <div className="clx-packs">
             {packs.map((pack) => {
               const name = collectibleShelf(pack.metadata, pack.title);
               return (
                 <button key={pack.id} type="button" className="clx-packtile" onClick={() => onOpen(pack.id)}
-                  aria-label={`Неоткрытый пак ${name}, ${costLabel(pack)}`}>
+                  aria-label={`Неоткрытый пак ${name}, ${collectibleCostsLabel([pack])}`}>
                   <CollectibleImage metadata={pack.metadata} packName={name} className="clx-packtile__art" />
-                  <span className="clx-tile__sub">{costLabel(pack)}</span>
+                  <span className="clx-tile__sub">{collectibleCostsLabel([pack])}</span>
                 </button>
               );
             })}
@@ -121,7 +115,7 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
           <section className="clx-shelf" key={shelf.name}>
             <div className="clx-shelf__head">
               <span className="clx-shelf__name">{shelf.name}</span>
-              <span className="clx-shelf__count">{shelf.items.length}</span>
+              <span className="clx-shelf__count">{collectibleUnits(shelf.items)}</span>
               {expanded.has(shelf.name) && (
                 <button type="button" className="clx-shelf__toggle" onClick={() => toggle(shelf.name)}>Свернуть</button>
               )}
@@ -145,7 +139,7 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
         <section className="clx-shelf clx-shelf--plain">
           <div className="clx-shelf__head">
             <span className="clx-shelf__name">Неулучшенные</span>
-            <span className="clx-shelf__count">{stacks.reduce((sum, stack) => sum + stack.items.length, 0)}</span>
+            <span className="clx-shelf__count">{stacks.reduce((sum, stack) => sum + collectibleUnits(stack.items), 0)}</span>
           </div>
           <div className="clx-grid">
             {stacks.flatMap((stack) => {
@@ -158,17 +152,17 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
                     <span className="clx-tile__cap">Свернуть</span>
                   </button>];
               }
-              const known = stack.items.filter((item) => item.metadata?.acquisition_kind !== 'unknown');
+              const units = collectibleUnits(stack.items);
               return [
                 <button key={key} type="button" className="clx-tile clx-tile--stack" onClick={() => toggle(key)}
-                  aria-label={`${stack.name}: ${stack.items.length} шт., показать все`}>
+                  aria-label={`${stack.name}: ${units} шт., показать все`}>
                   <span className="clx-tile__art">
                     <CollectibleImage metadata={stack.items[0].metadata} className="clx-tile__img" />
-                    <span className="clx-tile__qty">×{stack.items.length}</span>
+                    <span className="clx-tile__qty">×{units}</span>
                   </span>
                   <span className="clx-tile__cap">{stack.name}</span>
                   <span className="clx-tile__sub">
-                    {known.length > 0 ? `${formatNumericAmount(known.reduce((sum, item) => sum + item.amount_in_currency, 0), 0)} ${currencySymbol(known[0].currency_code)}` : 'цена неизвестна'}
+                    {collectibleCostsLabel(stack.items)}
                   </span>
                 </button>,
               ];
