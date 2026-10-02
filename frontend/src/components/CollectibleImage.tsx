@@ -18,6 +18,10 @@ export default function CollectibleImage({ metadata, className, packName }: {
       </span>
     );
   }
+  if (url && failed !== url && /\.(mp4|webm)$/i.test(url.split(/[?#]/)[0])) {
+    return <video key={url} className={className} src={url} autoPlay loop muted playsInline
+      preload="metadata" aria-hidden="true" onError={() => setFailed(url)} />;
+  }
   return url && failed !== url
     ? <img className={className} src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(url)} />
     : <Gift className={className} aria-hidden="true" />;

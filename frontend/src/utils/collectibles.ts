@@ -1,5 +1,10 @@
 import type { PortfolioPosition } from '../types';
+import giftOriginals from '../data/telegramGiftOriginals.json';
 import { currencySymbol, formatNumericAmount } from './format';
+
+const normalizedGiftName = (name: string) => name.toLowerCase().replace(/[\s’'_-]/g, '');
+const giftOriginalIds = new Map(giftOriginals.flatMap((gift) =>
+  [gift.id, gift.name, ...gift.aliases].filter(Boolean).map((name) => [normalizedGiftName(name), gift.id] as const)));
 
 // Item kinds of a collection account and the text fields each one records.
 // The database checks only the kind, an https link and short text values.
@@ -97,6 +102,10 @@ export function collectibleImageUrl(metadata: Record<string, unknown> | undefine
     if (match) return `https://nft.fragment.com/gift/${match[1].toLowerCase()}.medium.jpg`;
   }
   const attrs = metadata?.item_attributes as Record<string, unknown> | undefined;
+  if (isPlainGift(metadata) && typeof attrs?.collection === 'string') {
+    const id = giftOriginalIds.get(normalizedGiftName(attrs.collection));
+    return id ? `/gifts/originals/${id}.webp` : null;
+  }
   if (metadata?.item_kind === 'telegram_gift' && typeof attrs?.collection === 'string' && /^\d+$/.test(String(attrs.number ?? ''))) {
     const slug = attrs.collection.replace(/[ -]/g, '').toLowerCase();
     if (/^[a-z0-9]+$/.test(slug)) return `https://nft.fragment.com/gift/${slug}-${attrs.number}.medium.jpg`;

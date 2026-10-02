@@ -1042,6 +1042,10 @@ export default function Settings({
         </div>
       )}
 
+      <p className="st-card-sec__hint">
+        Изображения оригинальных подарков — <a href="https://t.me/GiftChanges" target="_blank" rel="noopener noreferrer">GiftChanges</a>
+      </p>
+
       {settingsAccount && (() => {
         const isCrypto = settingsAccount.investment_asset_type === 'crypto' || settingsAccount.investment_asset_type === 'collectible';
         const tone = settingsAccount.investment_asset_type ? ASSET_CHIP[settingsAccount.investment_asset_type] : null;
