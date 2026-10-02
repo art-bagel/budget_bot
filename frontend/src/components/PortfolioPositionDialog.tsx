@@ -270,6 +270,7 @@ export default function PortfolioPositionDialog({
       } else if (isCollectible) {
         metadata = {
           item_kind: itemKind,
+          ...(openedAt ? { acquired_at: openedAt } : {}),
           item_attributes: Object.fromEntries(itemFields
             .map((field) => [field.key, field.flag ? (itemAttributes[field.key] === 'yes' ? 'yes' : 'no') : itemAttributes[field.key]?.trim() ?? ''])
             .filter(([, value]) => value)),
@@ -284,7 +285,7 @@ export default function PortfolioPositionDialog({
           crypto_quantity: amount,
           title: title.trim(),
           quantity: quantity.trim() ? Number(quantity) : undefined,
-          opened_at: openedAt || undefined,
+          opened_at: undefined,
           comment: comment.trim() || undefined,
           metadata,
         };
@@ -302,7 +303,7 @@ export default function PortfolioPositionDialog({
         received_free: isCollectible && receivedFree,
         cost_unknown: isCollectible && costUnknown,
         currency_code: currencyCode,
-        opened_at: openedAt || undefined,
+        opened_at: isCollectible ? undefined : openedAt || undefined,
         comment: comment.trim() || undefined,
         metadata,
       };
@@ -500,7 +501,7 @@ export default function PortfolioPositionDialog({
               value={quantity} onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
           </div>
           <div className="apf-field" style={{ flex: 1 }}>
-            <label className="apf-label">{isCollectible ? 'Дата покупки' : 'Дата входа'}</label>
+            <label className="apf-label">{isCollectible ? 'Дата приобретения' : 'Дата входа'}</label>
             <input className="apf-input" type="date" value={openedAt}
               onChange={(e) => setOpenedAt(e.target.value)} disabled={submitting} />
           </div>
