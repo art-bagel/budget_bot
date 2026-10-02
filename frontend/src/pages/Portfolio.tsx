@@ -2792,6 +2792,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     return {
       estimatedValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionScopedValue(position), 0)
         + scopedCryptoProtocols.reduce((sum, p) => sum + (getLendingNetValue(p) ?? 0), 0),
+      walletValue: scopedOpenPositions.filter((position) => position.asset_type_code === 'crypto')
+        .reduce((sum, position) => sum + getPositionScopedValue(position), 0),
       investedPrincipal,
       basisMissing,
       basisEstimated,
@@ -3175,7 +3177,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           <CurrencyNote display={display} />
         </div>
         {/* Coins and collection items have no running result: their summaries drop that cell. */}
-        <div className={`pf-tsum__grid${activeScopeHasCrypto ? ' pf-tsum__grid--crypto' : activeAssetTypeCode === 'collectible' ? ' pf-tsum__grid--two' : ''}`}>
+        <div className={`pf-tsum__grid${activeScopeHasCrypto && activeScopeDisplayMetrics.fundingParts.length > 0 ? ' pf-tsum__grid--crypto' : ['crypto', 'collectible'].includes(activeAssetTypeCode) ? ' pf-tsum__grid--two' : ''}`}>
           <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">{activeScopeDisplayMetrics.fundingParts.length ? 'Учтённые затраты' : activeScopeBasisLabel}</div>
             <div className="pf-tsum__cell-value">
@@ -3210,10 +3212,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               </div>
             )}
           </div>}
-          {(!activeScopeHasCrypto || activeScopeDisplayMetrics.cashValue !== 0) && <div className="pf-tsum__cell">
+          {(activeAssetTypeCode === 'crypto' || !activeScopeHasCrypto || activeScopeDisplayMetrics.cashValue !== 0) && <div className="pf-tsum__cell">
             <div className="pf-tsum__cell-label">Свободно</div>
             <div className="pf-tsum__cell-value">
-              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeScopeDisplayMetrics.cashValue))}
+              {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(display.convert(activeAssetTypeCode === 'crypto' ? activeScopeDisplayMetrics.walletValue : activeScopeDisplayMetrics.cashValue))}
               <span className="pf-sym">{display.symbol}</span>
             </div>
           </div>}
