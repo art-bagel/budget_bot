@@ -4,7 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import BottomSheet from './BottomSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
-import { transferCryptoBetweenInvestmentAccounts } from '../api';
+import { transferCryptoBetweenInvestmentAccounts, transferCryptoFromInvestment } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
@@ -47,7 +47,7 @@ export default function CryptoTransferSheet({
     () => accounts
       .map(({ account }) => account)
       .filter((account) => account.account_kind === 'investment'
-        && account.investment_asset_type === 'crypto'
+        && ['crypto', 'collectible'].includes(account.investment_asset_type ?? '')
         && isSameAccountOwner(account, position)
         && account.id !== position.investment_account_id),
     [accounts, position],
@@ -67,6 +67,7 @@ export default function CryptoTransferSheet({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const toCollection = targets.find(a => String(a.id) === targetInvestmentAccountId)?.investment_asset_type === 'collectible';
   const amountNum = Number(amount);
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(amountNum) && amountNum > sourceQuantity;
   const canSubmit = !submitting
@@ -89,7 +90,15 @@ export default function CryptoTransferSheet({
         fee: feeAmount && Number(feeAmount) > 0
           ? { source_position_id: position.id, quantity: feeAmount } : undefined,
       };
-      await transferCryptoBetweenInvestmentAccounts({ ...payload, request_id: request.requestId(payload) });
+      if (toCollection) {
+        const withdrawal = {
+          position_id: position.id, bank_account_id: Number(targetInvestmentAccountId),
+          amount, comment: comment.trim() || undefined, operated_at: operatedAt || undefined,
+        };
+        await transferCryptoFromInvestment({ ...withdrawal, request_id: request.requestId(withdrawal) });
+      } else {
+        await transferCryptoBetweenInvestmentAccounts({ ...payload, request_id: request.requestId(payload) });
+      }
       request.completed();
       onSuccess();
     } catch (reason: unknown) {
@@ -135,7 +144,7 @@ export default function CryptoTransferSheet({
     >
       {targets.length === 0 ? (
         <div className="cs-sheet__hint">
-          <span>Нет других криптосчетов с тем же владельцем для перевода.</span>
+          <span>Нет других криптосчетов или счетов коллекций с тем же владельцем.</span>
         </div>
       ) : (
         <>
@@ -147,7 +156,7 @@ export default function CryptoTransferSheet({
               onChange={(event) => setTargetInvestmentAccountId(event.target.value)}
               disabled={submitting}
             >
-              <option value="">Выберите криптосчёт</option>
+              <option value="">Выберите счёт</option>
               {targets.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
@@ -192,12 +201,12 @@ export default function CryptoTransferSheet({
           )}
 
 
-          <div className="field">
+          {!toCollection && <div className="field">
             <span className="fl">Комиссия в {symbol} (если есть)</span>
             <input className="picker-v2" inputMode="decimal" value={feeAmount}
               onChange={(event) => setFeeAmount(sanitizeDecimalInput(event.target.value))}
               disabled={submitting} placeholder="0" />
-              </div>
+              </div>}
 
           <div className="field">
             <span className="fl">Комментарий</span>

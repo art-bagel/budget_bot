@@ -1,13 +1,13 @@
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 import BottomSheet from './BottomSheet';
-import { fetchBankAccountSnapshot, fetchBankAccounts, fetchPortfolioPositions, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
+import { fetchBankAccountSnapshot, fetchBankAccounts, fetchPortfolioPositions, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment, transferCryptoFromInvestment, transferCryptoBetweenInvestmentAccounts, repayCreditAccount } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
-import type { BankAccount, DashboardBankBalance } from '../types';
+import type { BankAccount, DashboardBankBalance, PortfolioPosition } from '../types';
 import { formatAmount, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
-import { getCryptoAssetId } from '../utils/portfolioPosition';
+import { getCryptoAssetId, getPositionMetadataText } from '../utils/portfolioPosition';
 
 
 interface Props {
@@ -36,12 +36,13 @@ interface PickerItem {
   balance: number;
   /** Asset the account does not hold yet: offered only as a target. */
   placeholder?: boolean;
+  positionId?: number;
 }
 
 const COMPAT: Record<AcctKind, Partial<Record<AcctKind, boolean>>> = {
-  cash:       { cash: true, investment: true },
-  investment: { cash: true },
-  credit:     { cash: true },
+  cash:       { cash: true, investment: true, credit: true },
+  investment: { cash: true, investment: true, credit: true },
+  credit:     { cash: true, investment: true },
 };
 const KIND_ORDER: AcctKind[] = ['cash', 'investment', 'credit'];
 const KIND_LABEL: Record<AcctKind, string> = {
@@ -51,7 +52,11 @@ const MODE_LABEL: Partial<Record<string, string>> = {
   'cash>cash':       'Перевод между счетами',
   'cash>investment': 'Пополнение инвестиций',
   'investment>cash': 'Вывод из инвестиций',
-  'credit>cash':     'Погашение долга',
+  'credit>cash': 'Перевод с кредитного счёта',
+  'credit>investment': 'Перевод с кредитного счёта',
+  'cash>credit': 'Погашение долга',
+  'investment>credit': 'Погашение долга',
+  'investment>investment': 'Перевод между инвестиционными счетами',
 };
 const CUR_SYM: Record<string, string>  = { RUB: '₽', USD: '$', EUR: '€' };
 const CUR_NAME: Record<string, string> = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' };
@@ -136,13 +141,14 @@ export default function AccountTransferDialog({
 
   const [allAccounts, setAllAccounts] = useState<AccountEntry[]>([]);
   const [balancesMap, setBalancesMap] = useState<Record<number, DashboardBankBalance[]>>({});
-  // Coins already held in each crypto wallet, keyed `${accountId}:${cryptoAssetId}`.
-  const [walletQuantities, setWalletQuantities] = useState<Map<string, number>>(new Map());
+  // Portfolio coins are loaded separately from free fiat / collection balances.
+  const [walletPositions, setWalletPositions] = useState<PortfolioPosition[]>([]);
   const [fromSel, setFromSel] = useState<Selection | null>(null);
   const [toSel,   setToSel]   = useState<Selection | null>(null);
   const [openRole, setOpenRole] = useState<'from' | 'to' | null>(null);
   const [amount,   setAmount]  = useState('');
   const [comment,  setComment] = useState('');
+  const [paymentKind, setPaymentKind] = useState<'scheduled' | 'early'>('scheduled');
   const [loading,    setLoading]    = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,14 +169,7 @@ export default function AccountTransferDialog({
           fetchPortfolioPositions('open'),
         ]);
         if (cancelled) return;
-        const quantities = new Map<string, number>();
-        for (const p of positions) {
-          const assetId = p.asset_type_code === 'crypto' ? getCryptoAssetId(p) : null;
-          if (assetId === null) continue;
-          const key = `${p.investment_account_id}:${assetId}`;
-          quantities.set(key, (quantities.get(key) ?? 0) + Number(p.quantity ?? 0));
-        }
-        setWalletQuantities(quantities);
+        setWalletPositions(positions.filter(p => p.asset_type_code === 'crypto'));
         const entries: AccountEntry[] = [
           ...cash.map(a   => ({ account: a, kind: 'cash'       as AcctKind })),
           ...invest.map(a => ({ account: a, kind: 'investment' as AcctKind })),
@@ -224,64 +223,58 @@ export default function AccountTransferDialog({
         }
       }
     }
-    // Any cash account may receive a currency or crypto another cash account
-    // holds (personal ↔ family included), even if it has none yet.
-    const cashHeld = result.filter((item) => item.kind === 'cash' && (item.assetType === 'fiat' || item.balance > 0));
-    for (const { account, kind } of allAccounts) {
-      if (kind !== 'cash') continue;
-      for (const held of cashHeld) {
-        if (result.some((item) => item.account.id === account.id && item.assetKey === held.assetKey)) continue;
-        result.push({ ...held, account, balance: 0, placeholder: true });
-      }
+    // Wallet coins are positions, not bank balances.
+    for (const position of walletPositions) {
+      const cryptoAssetId = getCryptoAssetId(position);
+      const entry = allAccounts.find(({ account }) => account.id === position.investment_account_id
+        && account.investment_asset_type === 'crypto');
+      if (!entry || cryptoAssetId === null || Number(position.quantity ?? 0) <= 0) continue;
+      result.push({
+        ...entry, assetType: 'crypto', assetKey: `crypto:${cryptoAssetId}`, cryptoAssetId,
+        currency: getPositionMetadataText(position, 'asset_symbol') ?? position.title,
+        symbol: getPositionMetadataText(position, 'asset_symbol') ?? position.title,
+        networkCode: getPositionMetadataText(position, 'network_code'),
+        balance: Number(position.quantity ?? 0), positionId: position.id,
+      });
     }
-    // Coins held like bank coins: on cash accounts and on collection accounts.
-    const heldCryptoByOwner = result.filter((item) => (item.kind === 'cash' || item.account.investment_asset_type === 'collectible')
-      && item.assetType === 'crypto' && item.balance > 0);
+    const heldItems = [...result];
     for (const { account, kind } of allAccounts) {
-      if (kind !== 'investment' || !['crypto', 'collectible'].includes(account.investment_asset_type ?? '')) continue;
-      for (const crypto of heldCryptoByOwner) {
-        if (!sameOwner(account, crypto.account)) continue;
-        if (result.some((item) => item.account.id === account.id && item.assetKey === crypto.assetKey)) continue;
-        result.push({
-          account,
-          kind,
-          assetType: 'crypto',
-          assetKey: crypto.assetKey,
-          currency: crypto.currency,
-          cryptoAssetId: crypto.cryptoAssetId,
-          symbol: crypto.symbol,
-          networkCode: crypto.networkCode,
-          balance: walletQuantities.get(`${account.id}:${crypto.cryptoAssetId}`) ?? 0,
-        });
+      if (kind === 'credit') continue;
+      for (const held of heldItems) {
+        if (held.assetType === 'crypto') {
+          if (kind === 'investment' && !['crypto', 'collectible'].includes(account.investment_asset_type ?? '')) continue;
+          if (!(kind === 'cash' && held.kind === 'cash') && !sameOwner(account, held.account)) continue;
+        } else if (kind === 'investment' && account.investment_asset_type === 'crypto') continue;
+        if (result.some(item => item.account.id === account.id && item.assetKey === held.assetKey)) continue;
+        result.push({ ...held, account, kind, balance: 0, positionId: undefined, placeholder: true });
       }
     }
     // Keep each account's rows together; the list renders one header per account.
     const order = new Map(allAccounts.map(({ account }, index) => [account.id, index]));
     return result.sort((a, b) => (order.get(a.account.id) ?? 0) - (order.get(b.account.id) ?? 0));
-  }, [allAccounts, balancesMap, baseCurrencyCode, walletQuantities]);
+  }, [allAccounts, balancesMap, baseCurrencyCode, walletPositions]);
 
-  const isCompat = (role: 'from' | 'to', item: PickerItem): boolean => {
-    const other = role === 'from' ? toSel : fromSel;
-    if (!other) return true;
-    if (other.accountId === item.account.id && other.assetKey === item.assetKey) return false;
-    if (other.assetKey !== item.assetKey) return false;
-    const otherItem = allItems.find(pi => pi.account.id === other.accountId && pi.assetKey === other.assetKey);
-    if (!otherItem) return false;
-    const fK = role === 'from' ? item.kind : otherItem.kind;
-    const tK = role === 'from' ? otherItem.kind : item.kind;
-    const fromAccount = role === 'from' ? item.account : otherItem.account;
-    const toAccount = role === 'from' ? otherItem.account : item.account;
-    const assetType = role === 'from' ? item.assetType : otherItem.assetType;
-    if (assetType === 'crypto') {
-      // A collection account sends coins only to a crypto account, like a bank does.
-      const fromCollection = fromAccount.investment_asset_type === 'collectible';
-      const toCollection = toAccount.investment_asset_type === 'collectible';
-      return (fK === 'cash' && tK === 'cash') || (
-        (fK === 'cash' || fromCollection) && (toCollection || (tK === 'investment' && toAccount.investment_asset_type === 'crypto') || tK === 'cash')
-        && sameOwner(fromAccount, toAccount));
+  const compatiblePair = (from: PickerItem, to: PickerItem): boolean => {
+    if (from.account.id === to.account.id || from.assetKey !== to.assetKey) return false;
+    if (from.assetType === 'crypto') {
+      const acceptsCoins = (item: PickerItem) => item.kind === 'cash'
+        || (item.kind === 'investment' && ['crypto', 'collectible'].includes(item.account.investment_asset_type ?? ''));
+      return acceptsCoins(from) && acceptsCoins(to)
+        && ((from.kind === 'cash' && to.kind === 'cash') || sameOwner(from.account, to.account));
     }
-    return !!COMPAT[fK]?.[tK];
+    if (from.kind === 'credit' && (from.account.credit_kind !== 'credit_card' || from.currency !== baseCurrencyCode)) return false;
+    if (to.account.investment_asset_type === 'crypto') return false;
+    return !!COMPAT[from.kind]?.[to.kind]
+      && (from.kind === 'cash' || to.kind === 'cash' || sameOwner(from.account, to.account));
   };
+  const isCompat = (role: 'from' | 'to', item: PickerItem): boolean => {
+    const selection = role === 'from' ? toSel : fromSel;
+    if (!selection) return true;
+    const other = allItems.find(pi => pi.account.id === selection.accountId && pi.assetKey === selection.assetKey);
+    return !!other && (role === 'from' ? compatiblePair(item, other) : compatiblePair(other, item));
+  };
+  const available = (item: PickerItem) => item.kind === 'credit'
+    ? Math.max(0, (item.account.credit_limit ?? 0) + item.balance) : item.balance;
 
   const fromItem = useMemo(() =>
     fromSel ? allItems.find(pi => pi.account.id === fromSel.accountId && pi.assetKey === fromSel.assetKey) ?? null : null,
@@ -290,30 +283,26 @@ export default function AccountTransferDialog({
     toSel ? allItems.find(pi => pi.account.id === toSel.accountId && pi.assetKey === toSel.assetKey) ?? null : null,
     [toSel, allItems]);
 
-  const canSwap = !!(
-    fromItem
-    && toItem
-    && !toItem.placeholder
-    && (fromItem.assetType === 'fiat'
-      ? COMPAT[toItem.kind]?.[fromItem.kind]
-      : fromItem.kind === 'cash' && toItem.kind === 'cash')
-  );
+  const canSwap = !!(fromItem && toItem && !toItem.placeholder && available(toItem) > 0
+    && compatiblePair(toItem, fromItem));
+  const isLoanRepayment = toItem?.kind === 'credit' && toItem.account.credit_kind !== 'credit_card';
   const modeLabel = useMemo(() => {
     if (!fromItem || !toItem) return null;
     return MODE_LABEL[`${fromItem.kind}>${toItem.kind}`] ?? null;
   }, [fromItem, toItem]);
   const amountValue = parseFloat(amount) || 0;
-  const exceedsBalance = !!fromItem && fromItem.kind !== 'credit' && amountValue > fromItem.balance;
-  const canSubmit = !submitting && !loading && !!fromSel && !!toSel && amountValue > 0 && !exceedsBalance;
+  const exceedsBalance = !!fromItem && amountValue > available(fromItem);
+  const canSubmit = !submitting && !loading && !!fromSel && !!toSel && Number.isFinite(amountValue) && amountValue > 0 && !exceedsBalance
+    && !!fromItem && !!toItem && compatiblePair(fromItem, toItem);
 
   const handleSelect = (role: 'from' | 'to', item: PickerItem) => {
     const sel: Selection = { accountId: item.account.id, assetKey: item.assetKey };
     if (role === 'from') {
       setFromSel(sel);
-      if (toSel && toSel.assetKey !== item.assetKey) setToSel(null);
+      if (toItem && !compatiblePair(item, toItem)) setToSel(null);
     } else {
       setToSel(sel);
-      if (fromSel && fromSel.assetKey !== item.assetKey) setFromSel(null);
+      if (fromItem && !compatiblePair(fromItem, item)) setFromSel(null);
     }
     setOpenRole(null);
     setAmount('');
@@ -330,7 +319,22 @@ export default function AccountTransferDialog({
     if (!canSubmit || !fromSel || !toSel) return;
     setSubmitting(true); setError(null);
     try {
-      if (fromItem?.assetType === 'crypto' && (toItem?.kind === 'cash' || toItem?.account.investment_asset_type === 'collectible') && fromItem.cryptoAssetId) {
+      if (fromItem?.positionId && toItem) {
+        const common = { position_id: fromItem.positionId, amount, comment: comment.trim() || undefined };
+        if (toItem.account.investment_asset_type === 'crypto') {
+          const payload = { ...common, target_investment_account_id: toSel.accountId };
+          await transferCryptoBetweenInvestmentAccounts({ ...payload, request_id: cryptoRequest.requestId(payload) });
+        } else {
+          const payload = { ...common, bank_account_id: toSel.accountId };
+          await transferCryptoFromInvestment({ ...payload, request_id: cryptoRequest.requestId(payload) });
+        }
+        cryptoRequest.completed();
+      } else if (isLoanRepayment && fromItem) {
+        await repayCreditAccount(toSel.accountId, {
+          from_account_id: fromSel.accountId, currency_code: fromItem.currency,
+          amount: amountValue, payment_kind: paymentKind, comment: comment.trim() || undefined,
+        });
+      } else if (fromItem?.assetType === 'crypto' && (toItem?.kind === 'cash' || toItem?.account.investment_asset_type === 'collectible') && fromItem.cryptoAssetId) {
         const payload = {
           from_account_id: fromSel.accountId,
           to_account_id: toSel.accountId,
@@ -378,7 +382,7 @@ export default function AccountTransferDialog({
     }
     const siblings = allItems.filter(pi => pi.account.id === item.account.id);
     const isMulti  = siblings.length > 1;
-    const subLabel = item.kind === 'credit' ? 'Задолженность' : (role === 'from' ? 'Доступно' : 'Остаток');
+    const subLabel = item.kind === 'credit' && role === 'to' ? 'Задолженность' : (role === 'from' ? 'Доступно' : 'Остаток');
     const bal      = (balancesMap[sel.accountId] ?? []).find(b => assetKeyOfBalance(b) === sel.assetKey);
     return (
       <span className="atx__sel">
@@ -389,7 +393,7 @@ export default function AccountTransferDialog({
           <span className="atx__sel-name">
             {item.account.name}{isMulti && <span className="atx__sel-cur"> · {assetCode(item)}</span>}
           </span>
-          <span className="atx__sel-sub">{subLabel}: {formatAssetAmount(bal ? bal.amount : item.balance, item)}</span>
+          <span className="atx__sel-sub">{subLabel}: {formatAssetAmount(role === 'from' ? available(item) : (bal ? bal.amount : item.balance), item)}</span>
         </span>
       </span>
     );
@@ -397,8 +401,9 @@ export default function AccountTransferDialog({
 
   const renderList = (role: 'from' | 'to') =>
     KIND_ORDER.flatMap(kind => {
-      const items = allItems.filter(pi => pi.kind === kind && (role === 'to' || !(pi.placeholder
-        || (pi.kind === 'investment' && pi.assetType === 'crypto' && pi.account.investment_asset_type !== 'collectible'))));
+      const other = role === 'from' ? toSel : fromSel;
+      const items = allItems.filter(pi => pi.kind === kind && (!other || pi.assetKey === other.assetKey) && (role === 'to' || (!pi.placeholder
+        && (pi.kind !== 'credit' || (pi.account.credit_kind === 'credit_card' && pi.currency === baseCurrencyCode)))));
       if (!items.length) return [];
       const rows: React.ReactNode[] = [
         <li key={`grp-${kind}`} className="atx__group-label">{KIND_LABEL[kind]}</li>,
@@ -411,7 +416,7 @@ export default function AccountTransferDialog({
           : toSel?.accountId   === item.account.id && toSel?.assetKey   === item.assetKey;
         const siblings = items.filter(pi => pi.account.id === item.account.id);
         const isMulti  = siblings.length > 1;
-        const subLabel = item.kind === 'credit' ? 'Задолженность' : 'Остаток';
+        const subLabel = item.kind === 'credit' ? (role === 'to' ? 'Задолженность' : 'Доступно') : 'Остаток';
         const icoClass = acctIcoClass(item.account, item.kind);
         const key      = `${item.account.id}-${item.assetKey}`;
 
@@ -439,7 +444,7 @@ export default function AccountTransferDialog({
                 <AssetMark item={item} />
                 <span className="atx__item-text">
                   <span className="atx__item-name">{assetName(item)}</span>
-                  <span className="atx__item-sub">{subLabel}: {formatAssetAmount(item.balance, item)}</span>
+                  <span className="atx__item-sub">{subLabel}: {formatAssetAmount(role === 'from' ? available(item) : item.balance, item)}</span>
                 </span>
                 <span className="atx__item-badge">{!compat ? 'нельзя' : selected ? 'выбран' : ''}</span>
               </button>
@@ -458,7 +463,7 @@ export default function AccountTransferDialog({
                 <span className={`sheet-ico sheet-ico--sm ${icoClass}`}><AcctIcon kind={item.kind} /></span>
                 <span className="atx__item-text">
                   <span className="atx__item-name">{item.account.name}</span>
-                  <span className="atx__item-sub">{subLabel}: {formatAssetAmount(item.balance, item)}</span>
+                  <span className="atx__item-sub">{subLabel}: {formatAssetAmount(role === 'from' ? available(item) : item.balance, item)}</span>
                 </span>
                 <span className="atx__item-badge">
                   {!compat ? 'нельзя' : selected ? 'выбран' : assetCode(item)}
@@ -561,9 +566,20 @@ export default function AccountTransferDialog({
               <span className="amt__cur">{fromItem ? assetCode(fromItem) : '₽'}</span>
             </div>
             {exceedsBalance && fromItem && (
-              <span className="atx__err">Недостаточно: {formatAssetAmount(fromItem.balance, fromItem)}</span>
+              <span className="atx__err">Недостаточно: {formatAssetAmount(available(fromItem), fromItem)}</span>
             )}
           </div>
+
+          {isLoanRepayment && (
+            <div className="field">
+              <span className="fl">Платёж по кредиту</span>
+              <select className="picker-v2" value={paymentKind}
+                onChange={e => setPaymentKind(e.target.value as 'scheduled' | 'early')} disabled={submitting}>
+                <option value="scheduled">Плановый</option>
+                <option value="early">Досрочный</option>
+              </select>
+            </div>
+          )}
 
           {/* Comment */}
           <div className="field">

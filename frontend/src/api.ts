@@ -120,8 +120,8 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Расходы можно записывать только с кредитных карт';
   }
 
-  if (text.includes('Credit repayment is supported only from cash accounts')) {
-    return 'Погашение кредита пока можно делать только с обычного счёта';
+  if (text.includes('Credit repayment requires a cash or investment account')) {
+    return 'Выберите обычный или инвестиционный счёт для погашения';
   }
 
   if (text.includes('Use a regular account transfer to repay credit cards')) {

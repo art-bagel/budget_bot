@@ -92,8 +92,8 @@ BEGIN
         RAISE EXCEPTION 'Access denied to source bank account %', _from_account_id;
     END IF;
 
-    IF _from_account_kind <> 'cash' THEN
-        RAISE EXCEPTION 'Credit repayment is supported only from cash accounts';
+    IF _from_account_kind NOT IN ('cash', 'investment') THEN
+        RAISE EXCEPTION 'Credit repayment requires a cash or investment account';
     END IF;
 
     SELECT
@@ -145,11 +145,21 @@ BEGIN
         _from_owner_type, _from_owner_user_id, _from_owner_family_id
     );
 
-    _source_unallocated_id := budgeting.get__owner_system_category_id(
-        _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
-    );
-    IF _source_unallocated_id IS NULL THEN
-        RAISE EXCEPTION 'Unallocated category missing for source account %', _from_account_id;
+    IF _from_account_kind = 'investment' AND (
+        _from_owner_type IS DISTINCT FROM _credit_owner_type
+        OR _from_owner_user_id IS DISTINCT FROM _credit_owner_user_id
+        OR _from_owner_family_id IS DISTINCT FROM _credit_owner_family_id
+    ) THEN
+        RAISE EXCEPTION 'Investment and credit accounts must have the same owner';
+    END IF;
+
+    IF _from_account_kind = 'cash' THEN
+        _source_unallocated_id := budgeting.get__owner_system_category_id(
+            _from_owner_type, _from_owner_user_id, _from_owner_family_id, 'Unallocated'
+        );
+        IF _source_unallocated_id IS NULL THEN
+            RAISE EXCEPTION 'Unallocated category missing for source account %', _from_account_id;
+        END IF;
     END IF;
 
     PERFORM 1
@@ -371,8 +381,10 @@ BEGIN
         VALUES (_operation_id, _credit_account_id, _currency_code, _principal_paid);
     END IF;
 
-    INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-    VALUES (_operation_id, _source_unallocated_id, _base_currency_code, -_cost_base);
+    IF _from_account_kind = 'cash' THEN
+        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+        VALUES (_operation_id, _source_unallocated_id, _base_currency_code, -_cost_base);
+    END IF;
 
     PERFORM budgeting.put__apply_current_bank_delta(
         _from_account_id,
@@ -390,11 +402,11 @@ BEGIN
         );
     END IF;
 
-    PERFORM budgeting.put__apply_current_budget_delta(
-        _source_unallocated_id,
-        _base_currency_code,
-        -_cost_base
-    );
+    IF _from_account_kind = 'cash' THEN
+        PERFORM budgeting.put__apply_current_budget_delta(
+            _source_unallocated_id, _base_currency_code, -_cost_base
+        );
+    END IF;
 
     IF _currency_code <> _base_currency_code THEN
         IF array_length(_lot_ids, 1) IS NOT NULL THEN
