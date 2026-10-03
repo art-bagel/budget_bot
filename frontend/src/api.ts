@@ -121,8 +121,8 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
     return 'Расходы можно записывать только с кредитных карт';
   }
 
-  if (text.includes('Credit repayment is supported only from cash accounts')) {
-    return 'Погашение кредита пока можно делать только с обычного счёта';
+  if (text.includes('Credit repayment requires a cash or investment account')) {
+    return 'Выберите обычный или инвестиционный счёт для погашения';
   }
 
   if (text.includes('Use a regular account transfer to repay credit cards')) {
@@ -436,6 +436,12 @@ export async function fetchCurrencyRates(): Promise<FxRates> {
 
 export async function fetchCryptoAssets(): Promise<CryptoAsset[]> {
   return apiFetch<CryptoAsset[]>('/crypto/assets');
+}
+
+export async function ensureCryptoAsset(payload: {
+  symbol: string; name: string; network_code: string; decimals: number;
+}): Promise<CryptoAsset> {
+  return apiFetch<CryptoAsset>('/crypto/assets', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function fetchCryptoAccountAssets(
@@ -844,6 +850,8 @@ export async function transferBetweenAccounts(data: AccountTransferRequest): Pro
 
 // Crypto held on a cash account, e.g. personal ↔ family. Amount stays a decimal string.
 export async function transferBankCrypto(data: {
+  request_id?: string;
+  collection_transfer?: boolean;
   from_account_id: number;
   to_account_id: number;
   crypto_asset_id: number;
@@ -971,6 +979,37 @@ export async function createPortfolioPosition(
   data: CreatePortfolioPositionRequest,
 ): Promise<PortfolioPosition> {
   return apiFetch<PortfolioPosition>('/portfolio/positions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function buyCollectibleWithCrypto(data: {
+  request_id: string;
+  investment_account_id: number;
+  crypto_asset_id: number;
+  crypto_quantity: string;
+  title: string;
+  quantity?: number;
+  opened_at?: string;
+  comment?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>('/portfolio/positions/buy-with-crypto', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function sellCollectibleForCrypto(positionId: number, data: {
+  item_quantity?: string;
+  request_id: string;
+  crypto_asset_id: number;
+  crypto_quantity: string;
+  closed_at?: string;
+  comment?: string;
+}): Promise<PortfolioPosition> {
+  return apiFetch<PortfolioPosition>(`/portfolio/positions/${positionId}/sell-for-crypto`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -1275,4 +1314,37 @@ export async function mergeBankCryptoAsset(payload: {
   bank_account_id: number; from_crypto_asset_id: number; to_crypto_asset_id: number; request_id: string;
 }): Promise<unknown> {
   return apiFetch('/operations/merge-bank-crypto-asset', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function chargeCollectibleCoin(positionId: number, data: {
+  request_id: string; crypto_asset_id: number; crypto_quantity: string;
+  resolve_purchase_price?: boolean; kind: 'fee' | 'topup'; operated_at?: string; comment?: string; allocation_position_ids?: number[];
+}): Promise<PortfolioPosition> {
+  return apiFetch(`/portfolio/positions/${positionId}/coin-charge`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function setCollectibleAcquiredAt(positionId: number, data: {
+  request_id: string; acquired_at: string | null;
+}): Promise<PortfolioPosition> {
+  return apiFetch(`/portfolio/positions/${positionId}/acquired-at`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function editCollectibleDetails(positionId: number, data: {
+  request_id: string; title: string; comment: string | null; acquired_at: string | null;
+  item_kind: string; item_link: string | null; image_url: string | null; item_attributes: Record<string, string>;
+}): Promise<PortfolioPosition> {
+  return apiFetch(`/portfolio/positions/${positionId}/details`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+
+export type InvestmentCostAnalyticsData = {
+  invested: number; withdrawn: number; bank_out: number; collection_out: number; cost: number; fees: number; interest: number;
+  expenses: number; other: number; incomplete: boolean;
+  coins: { asset_id: number; symbol: string; network: string; quantity: number; cost: number;
+    unit_cost: number | null; incomplete: boolean; funded: boolean; defi_quantity: number }[];
+};
+export function fetchInvestmentCostAnalytics(assetType: 'crypto' | 'collectible', accountId?: number): Promise<InvestmentCostAnalyticsData> {
+  const query = new URLSearchParams({ asset_type: assetType });
+  if (accountId !== undefined) query.set('account_id', String(accountId));
+  return apiFetch<InvestmentCostAnalyticsData>(`/portfolio/cost-analytics?${query}`);
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-import { createPortfolioPosition } from '../api';
+import { buyCollectibleWithCrypto, createPortfolioPosition } from '../api';
+import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { useMoexSearch } from '../hooks/useMoexSearch';
 import type { BankAccount, Currency, DashboardBankBalance, UserContext } from '../types';
@@ -9,6 +10,7 @@ import { formatAmount } from '../utils/format';
 import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
+import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink } from '../utils/collectibles';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -104,7 +106,7 @@ function ApfSelect<T extends string>({
               key={o.value}
               type="button"
               className={`apf-csel__item${o.value === value ? ' apf-csel__item--on' : ''}`}
-              onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); }}
+              onClick={() => { onChange(o.value); setOpen(false); }}
             >
               {o.label}
             </button>
@@ -136,7 +138,7 @@ export default function PortfolioPositionDialog({
   const [moexMarket, setMoexMarket] = useState<MoexMarket>('shares');
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
   const tickerInputRef = useRef<HTMLInputElement>(null);
-  const [quantity, setQuantity] = useState('');
+  const [quantity, setQuantity] = useState(defaultAssetTypeCode === 'collectible' ? '1' : '');
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
   const [openedAt, setOpenedAt] = useState(todayIso());
@@ -148,6 +150,15 @@ export default function PortfolioPositionDialog({
   const isDeposit = defaultAssetTypeCode === 'deposit';
   const isSecurity = defaultAssetTypeCode === 'security';
   const isCrypto = defaultAssetTypeCode === 'crypto';
+  const collectibleRequest = useCryptoRequestKey('collectible-buy');
+  const isCollectible = defaultAssetTypeCode === 'collectible';
+  const [receivedFree, setReceivedFree] = useState(false);
+  const [costUnknown, setCostUnknown] = useState(false);
+  const [itemKind, setItemKind] = useState('telegram_gift');
+  const [itemAttributes, setItemAttributes] = useState<Record<string, string>>({});
+  const [itemLink, setItemLink] = useState('');
+  const itemFields = getCollectibleKind(itemKind)?.fields ?? [];
+  const itemLinkValid = !itemLink.trim() || !!safeItemLink(itemLink.trim());
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
   const [endDate, setEndDate] = useState(todayIso());
@@ -189,7 +200,7 @@ export default function PortfolioPositionDialog({
       setCurrencyCode(user.base_currency_code);
       return;
     }
-    if (!currencies.some((currency) => currency.code === currencyCode)) {
+    if (!currencyCode.startsWith('crypto:') && !currencies.some((currency) => currency.code === currencyCode)) {
       setCurrencyCode(currencies[0]?.code ?? user.base_currency_code);
     }
   }, [currencies, currencyCode, user.base_currency_code, isCrypto]);
@@ -199,17 +210,23 @@ export default function PortfolioPositionDialog({
     [accounts, investmentAccountId],
   );
 
+  // A collection account also pays with the coins it holds: value `crypto:<asset id>`.
+  const payCoinId = currencyCode.startsWith('crypto:') ? Number(currencyCode.slice(7)) : null;
+  const heldCoins = isCollectible ? selectedAccountBalances.filter((b) => b.asset_type === 'crypto' && b.crypto_asset_id && b.amount > 0) : [];
   const selectedCurrencyBalance = useMemo(
-    () => selectedAccountBalances.find((balance) => balance.currency_code === currencyCode)?.amount ?? 0,
-    [selectedAccountBalances, currencyCode],
+    () => selectedAccountBalances.find((balance) => payCoinId
+      ? balance.crypto_asset_id === payCoinId
+      : balance.asset_type !== 'crypto' && balance.currency_code === currencyCode)?.amount ?? 0,
+    [selectedAccountBalances, currencyCode, payCoinId],
   );
 
   const canSubmit = !submitting
     && !isCrypto
     && !!investmentAccountId
     && !!title.trim()
-    && parseFloat(amount) > 0
+    && ((isCollectible && (receivedFree || costUnknown)) || parseFloat(amount) > 0)
     && (!isDeposit || parseFloat(interestRate) >= 0)
+    && itemLinkValid
     && (!(isDeposit && depositKind === 'term_deposit') || !!endDate);
 
   const handleSubmit = async () => {
@@ -222,7 +239,7 @@ export default function PortfolioPositionDialog({
       return;
     }
 
-    if (!isCrypto && parseFloat(amount) > selectedCurrencyBalance) {
+    if (!isCrypto && !(isCollectible && (receivedFree || costUnknown)) && parseFloat(amount) > selectedCurrencyBalance) {
       setError('Недостаточно денег на инвестиционном счете для открытия позиции.');
       return;
     }
@@ -250,19 +267,48 @@ export default function PortfolioPositionDialog({
                 capitalization_period: showCapPeriod ? capitalizationPeriod : 'daily',
               }),
         };
+      } else if (isCollectible) {
+        metadata = {
+          item_kind: itemKind,
+          ...(openedAt ? { acquired_at: openedAt } : {}),
+          item_attributes: Object.fromEntries(itemFields
+            .map((field) => [field.key, field.flag ? (itemAttributes[field.key] === 'yes' ? 'yes' : 'no') : itemAttributes[field.key]?.trim() ?? ''])
+            .filter(([, value]) => value)),
+          ...(itemLink.trim() ? { item_link: itemLink.trim() } : {}),
+        };
       }
 
-      await createPortfolioPosition({
+      if (payCoinId && metadata && !(receivedFree || costUnknown)) {
+        const purchase = {
+          investment_account_id: Number(investmentAccountId),
+          crypto_asset_id: payCoinId,
+          crypto_quantity: amount,
+          title: title.trim(),
+          quantity: quantity.trim() ? Number(quantity) : undefined,
+          opened_at: undefined,
+          comment: comment.trim() || undefined,
+          metadata,
+        };
+        await buyCollectibleWithCrypto({ ...purchase, request_id: collectibleRequest.requestId(purchase) });
+        collectibleRequest.completed();
+        onSuccess();
+        return;
+      }
+      const purchase = {
         investment_account_id: Number(investmentAccountId),
         asset_type_code: defaultAssetTypeCode,
         title: title.trim(),
         quantity: (!isDeposit && quantity.trim()) ? Number(quantity) : undefined,
-        amount_in_currency: Number(amount),
+        amount_in_currency: isCollectible && (receivedFree || costUnknown) ? 0 : Number(amount),
+        received_free: isCollectible && receivedFree,
+        cost_unknown: isCollectible && costUnknown,
         currency_code: currencyCode,
-        opened_at: openedAt || undefined,
+        opened_at: isCollectible ? undefined : openedAt || undefined,
         comment: comment.trim() || undefined,
         metadata,
-      });
+      };
+      await createPortfolioPosition({ ...purchase, request_id: collectibleRequest.requestId(purchase) });
+      collectibleRequest.completed();
       onSuccess();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -332,6 +378,13 @@ export default function PortfolioPositionDialog({
         </div>
       )}
 
+      {isCollectible && (
+        <div className="apf-field">
+          <label className="apf-label">Вид предмета</label>
+          <ApfSelect value={itemKind} options={COLLECTIBLE_KINDS} onChange={setItemKind} disabled={submitting} />
+        </div>
+      )}
+
       {isCrypto && (
         <div className="apf-balance">
           Новая crypto-позиция создается переводом уже купленной крипты с банковского счета на инвестиционный.
@@ -378,16 +431,48 @@ export default function PortfolioPositionDialog({
       <div className="apf-field">
         <label className="apf-label">Название</label>
         <input className="apf-input" type="text" autoFocus
-          placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Актив или направление' : 'Позиция'}
+          placeholder={isDeposit ? 'Название вклада' : defaultAssetTypeCode === 'other' ? 'Актив или направление' : isCollectible ? 'Название предмета' : 'Позиция'}
           value={title} onChange={(e) => setTitle(e.target.value)} disabled={submitting} />
       </div>
       )}
 
+      {isCollectible && itemFields.map((field) => field.flag ? (
+        <label className="apf-check" key={field.key}>
+          <input type="checkbox" checked={itemAttributes[field.key] === 'yes'} disabled={submitting}
+            onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.checked ? 'yes' : '' }))} />
+          {field.label}
+        </label>
+      ) : (
+        <div className="apf-field" key={field.key}>
+          <label className="apf-label">{field.label}</label>
+          <input className="apf-input" type="text" maxLength={200} placeholder={field.placeholder ?? 'Необязательно'}
+            value={itemAttributes[field.key] ?? ''}
+            onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.value }))}
+            disabled={submitting} />
+        </div>
+      ))}
+
+      {isCollectible && (
+        <div className="apf-field">
+          <label className="apf-label">Ссылка</label>
+          <input className="apf-input" type="url" maxLength={500} placeholder="https://t.me/nft/…"
+            value={itemLink} onChange={(e) => setItemLink(e.target.value)} disabled={submitting} />
+          {!itemLinkValid && <div className="apf-error">Ссылка должна начинаться с https://</div>}
+        </div>
+      )}
+
+      {isCollectible && (
+        <div className="apf-field">
+          <label className="apf-label">Получение</label>
+          <ApfSelect value={costUnknown ? 'unknown' : receivedFree ? 'free' : 'buy'} options={[{ value: 'buy', label: 'Покупка' }, { value: 'free', label: 'Получено бесплатно' }, { value: 'unknown', label: 'Цена покупки неизвестна' }]}
+            onChange={(value) => { setReceivedFree(value === 'free'); setCostUnknown(value === 'unknown'); setCurrencyCode(user.base_currency_code); }} disabled={submitting} />
+        </div>
+      )}
       {/* Amount + Currency */}
-      {!isCrypto && (
+      {!isCrypto && !(receivedFree || costUnknown) && (
         <div className="apf-row">
         <div className="apf-field" style={{ flex: 2 }}>
-          <label className="apf-label">{isDeposit ? 'Сумма' : 'Сумма входа'}</label>
+          <label className="apf-label">{isDeposit ? 'Сумма' : isCollectible ? 'Цена покупки' : 'Сумма входа'}</label>
           <input className="apf-input" type="text" inputMode="decimal"
             placeholder="0" value={amount}
             onChange={(e) => setAmount(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
@@ -396,7 +481,10 @@ export default function PortfolioPositionDialog({
           <label className="apf-label">Валюта</label>
           <ApfSelect
             value={currencyCode}
-            options={currencies.map((c) => ({ value: c.code, label: c.code }))}
+            options={[
+              ...currencies.map((c) => ({ value: c.code, label: c.code })),
+              ...heldCoins.map((b) => ({ value: `crypto:${b.crypto_asset_id}`, label: b.symbol ?? b.currency_code })),
+            ]}
             onChange={setCurrencyCode}
             disabled={submitting}
           />
@@ -413,7 +501,7 @@ export default function PortfolioPositionDialog({
               value={quantity} onChange={(e) => setQuantity(sanitizeDecimalInput(e.target.value))} disabled={submitting} />
           </div>
           <div className="apf-field" style={{ flex: 1 }}>
-            <label className="apf-label">Дата входа</label>
+            <label className="apf-label">{isCollectible ? 'Дата приобретения' : 'Дата входа'}</label>
             <input className="apf-input" type="date" value={openedAt}
               onChange={(e) => setOpenedAt(e.target.value)} disabled={submitting} />
           </div>
@@ -480,7 +568,9 @@ export default function PortfolioPositionDialog({
       {/* Balance */}
       {!isCrypto && (
         <div className="apf-balance">
-        Доступно: {formatAmount(selectedCurrencyBalance, currencyCode)}
+        Доступно: {payCoinId
+          ? `${selectedCurrencyBalance} ${heldCoins.find((b) => b.crypto_asset_id === payCoinId)?.symbol ?? ''}`
+          : formatAmount(selectedCurrencyBalance, currencyCode)}
         </div>
       )}
 
@@ -505,7 +595,7 @@ export default function PortfolioPositionDialog({
     <div className="apf-actions">
       <button className="apf-cancel" type="button" onClick={onClose} disabled={submitting}>Отмена</button>
       <button className="apf-submit" type="button" onClick={handleSubmit} disabled={!canSubmit}>
-        {submitting ? 'Сохраняем…' : isDeposit ? 'Открыть вклад' : 'Добавить позицию'}
+        {submitting ? 'Сохраняем…' : isDeposit ? 'Открыть вклад' : isCollectible ? 'Добавить предмет' : 'Добавить позицию'}
       </button>
     </div>
   );

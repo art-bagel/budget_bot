@@ -631,6 +631,8 @@ async def get_operations_analytics_details(
 
 
 class BankCryptoTransferRequest(BaseModel):
+    request_id: UUID | None = None
+    collection_transfer: bool = False
     from_account_id: int
     to_account_id: int
     crypto_asset_id: int
@@ -643,6 +645,12 @@ async def transfer_bank_crypto(
     body: BankCryptoTransferRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> Dict[str, Any]:
+    if body.collection_transfer:
+        if body.request_id is None:
+            raise HTTPException(status_code=400, detail='Обновите форму перевода')
+        return await ledger.call_function('budgeting.put__manual_collectible_movement', user.user_id,
+            body.request_id, 'collectible_transfer',
+            body.model_dump(mode='json', exclude={'request_id', 'collection_transfer'}, exclude_none=True), None)
     return await ledger.call_function(
         'budgeting.put__transfer_bank_crypto', user.user_id, body.from_account_id,
         body.to_account_id, body.crypto_asset_id, body.amount, body.comment,

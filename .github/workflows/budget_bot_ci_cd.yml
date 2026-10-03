@@ -80,8 +80,8 @@ jobs:
       - name: Lint backend
         run: ruff check backend storage
 
-      - name: Test fiat exchange rates
-        run: python -m unittest backend.tests.test_fx_rates
+      - name: Test fiat rates and account response compatibility
+        run: python -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response
 
       - name: Validate backend modules
         run: |

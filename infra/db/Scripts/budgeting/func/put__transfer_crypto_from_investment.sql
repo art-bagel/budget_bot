@@ -17,6 +17,7 @@ DECLARE
     _bank_owner_user_id bigint;
     _bank_owner_family_id bigint;
     _bank_account_kind text;
+    _bank_asset_type text;
     _base_currency_code char(3);
     _to_unallocated_id bigint;
     _crypto_asset_id bigint;
@@ -56,8 +57,8 @@ BEGIN
         RAISE EXCEPTION 'Access denied to portfolio position %', _position_id;
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind
-    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, investment_asset_type
+    INTO _bank_owner_type, _bank_owner_user_id, _bank_owner_family_id, _bank_account_kind, _bank_asset_type
     FROM bank_accounts
     WHERE id = _bank_account_id
       AND is_active;
@@ -66,8 +67,10 @@ BEGIN
         RAISE EXCEPTION 'Unknown active bank account %', _bank_account_id;
     END IF;
 
-    IF _bank_account_kind <> 'cash' THEN
-        RAISE EXCEPTION 'Target account must be a cash account';
+    -- A collection account keeps coins like a bank, but it is an investment
+    -- account: the move stays outside the budget.
+    IF NOT (_bank_account_kind = 'cash' OR _bank_asset_type = 'collectible') THEN
+        RAISE EXCEPTION 'Target account must be a cash or collection account';
     END IF;
 
     IF _bank_owner_type <> _position.owner_type
@@ -137,8 +140,10 @@ BEGIN
     INSERT INTO crypto_bank_entries (operation_id, bank_account_id, crypto_asset_id, amount)
     VALUES (_operation_id, _bank_account_id, _crypto_asset_id, _amount);
 
-    INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-    VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _consumed_cost_basis);
+    IF _bank_account_kind = 'cash' THEN
+        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
+        VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _consumed_cost_basis);
+    END IF;
 
     INSERT INTO crypto_lots (
         bank_account_id,
@@ -194,7 +199,7 @@ BEGIN
             'observed_value_in_base', _value_in_base,
             'crypto_asset_id', _crypto_asset_id,
             'action', 'transfer_to_banking',
-            'target_kind', 'bank',
+            'target_kind', CASE WHEN _bank_account_kind = 'cash' THEN 'bank' ELSE 'collection' END,
             'target_bank_account_id', _bank_account_id
         ),
         _user_id
@@ -228,11 +233,13 @@ BEGIN
         _consumed_cost_basis
     );
 
-    PERFORM budgeting.put__apply_current_budget_delta(
-        _to_unallocated_id,
-        _base_currency_code,
-        _consumed_cost_basis
-    );
+    IF _bank_account_kind = 'cash' THEN
+        PERFORM budgeting.put__apply_current_budget_delta(
+            _to_unallocated_id,
+            _base_currency_code,
+            _consumed_cost_basis
+        );
+    END IF;
 
     RETURN jsonb_build_object(
         'operation_id', _operation_id,

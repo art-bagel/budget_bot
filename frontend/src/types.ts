@@ -673,7 +673,7 @@ export interface BankAccount {
   owner_family_id?: number | null;
   owner_name: string;
   account_kind: 'cash' | 'investment' | 'credit';
-  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | null;
+  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | 'collectible' | null;
   credit_kind?: 'loan' | 'credit_card' | 'mortgage' | null;
   interest_rate?: number | null;
   payment_day?: number | null;
@@ -693,7 +693,7 @@ export interface CreateBankAccountRequest {
   name: string;
   owner_type?: 'user' | 'family';
   account_kind?: 'cash' | 'investment';
-  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other';
+  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | 'collectible';
   provider_name?: string;
   provider_account_ref?: string;
 }
@@ -837,6 +837,9 @@ export interface PortfolioEvent {
 }
 
 export interface CreatePortfolioPositionRequest {
+  received_free?: boolean;
+  cost_unknown?: boolean;
+  request_id?: string;
   investment_account_id: number;
   asset_type_code: string;
   title: string;
@@ -849,6 +852,8 @@ export interface CreatePortfolioPositionRequest {
 }
 
 export interface TopUpPortfolioPositionRequest {
+  resolve_purchase_price?: boolean;
+  request_id?: string;
   amount_in_currency: number;
   currency_code: string;
   quantity?: number;
@@ -857,6 +862,7 @@ export interface TopUpPortfolioPositionRequest {
 }
 
 export interface ClosePortfolioPositionRequest {
+  request_id?: string;
   close_amount_in_currency: number;
   close_currency_code: string;
   close_amount_in_base?: number;
@@ -865,6 +871,7 @@ export interface ClosePortfolioPositionRequest {
 }
 
 export interface PartialClosePortfolioPositionRequest {
+  request_id?: string;
   return_amount_in_currency: number;
   return_currency_code: string;
   principal_reduction_in_currency: number;
@@ -893,6 +900,7 @@ export interface RecordPortfolioIncomeResponse {
 }
 
 export interface RecordPortfolioFeeRequest {
+  request_id?: string;
   amount: number;
   currency_code: string;
   charged_at?: string;

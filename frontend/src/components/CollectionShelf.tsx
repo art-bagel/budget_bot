@@ -1,0 +1,216 @@
+import { useMemo, useState } from 'react';
+import CollectibleImage from './CollectibleImage';
+import type { PortfolioPosition } from '../types';
+import { COLLECTIBLE_KINDS, collectibleCostsLabel, collectibleUnits, collectibleAttributeRows, collectibleFlag, collectibleNumber, collectibleShelf, getCollectibleKind, isPlainGift, isSealedPack, rarityTier, splitRarity } from '../utils/collectibles';
+import { formatNumericAmount, pluralRu } from '../utils/format';
+
+const COLLAPSED_TILES = 6;
+
+function groupByShelf(items: PortfolioPosition[]): { name: string; items: PortfolioPosition[] }[] {
+  const byShelf = new Map<string, PortfolioPosition[]>();
+  for (const item of items) {
+    const name = collectibleShelf(item.metadata, item.title);
+    byShelf.set(name, [...(byShelf.get(name) ?? []), item]);
+  }
+  return [...byShelf].map(([name, list]) => ({ name, items: list.sort((a, b) => b.amount_in_currency - a.amount_in_currency) }))
+    .sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name, 'ru'));
+}
+
+export function NftMark({ metadata }: { metadata?: Record<string, unknown> }) {
+  return collectibleFlag(metadata, 'nft') ? <span className="clx-nft">NFT</span> : null;
+}
+
+// Items of one collection account as a showcase: kinds as tabs, sealed packs first, then a shelf per collection.
+export default function CollectionShelf({ positions, onOpen }: { positions: PortfolioPosition[]; onOpen: (id: number) => void }) {
+  const kinds = useMemo(() => COLLECTIBLE_KINDS
+    .map((kind) => ({ ...kind, items: positions.filter((p) => (p.metadata?.item_kind ?? 'other') === kind.value) }))
+    .filter((kind) => kind.items.length > 0), [positions]);
+  const [kindValue, setKindValue] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const kind = kinds.find((k) => k.value === kindValue) ?? kinds[0];
+
+  const { packs, shelves, stacks } = useMemo(() => {
+    const items = kind?.items ?? [];
+    const groups = groupByShelf(items.filter((item) => !isSealedPack(item.metadata) && !isPlainGift(item.metadata)));
+    const shelves = groups.filter((group) => group.items.length > 1).map((group) => ({ ...group, mixed: false }));
+    // One-item collections share a shelf instead of taking a row each.
+    const singles = groups.filter((group) => group.items.length === 1)
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((group) => group.items[0]);
+    if (singles.length > 0) {
+      shelves.push({ name: shelves.length > 0 ? 'Другие коллекции' : 'Коллекции', items: singles, mixed: true });
+    }
+    return {
+      packs: items.filter((item) => isSealedPack(item.metadata)),
+      shelves,
+      // Plain gifts of one kind are interchangeable, so they stack.
+      stacks: groupByShelf(items.filter((item) => isPlainGift(item.metadata))),
+    };
+  }, [kind]);
+  const toggle = (key: string) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  if (!kind) return null;
+
+  const tile = (item: PortfolioPosition, shelfName: string | null) => {
+    const number = collectibleNumber(item.metadata);
+    const caption = shelfName === null ? collectibleShelf(item.metadata, item.title)
+      : number ? `#${number}` : item.title !== shelfName ? item.title : null;
+    const quantity = Number(item.quantity ?? 1);
+    return (
+      <button key={item.id} type="button" className="clx-tile" onClick={() => onOpen(item.id)}
+        aria-label={`${item.title}, ${collectibleCostsLabel([item])}`}>
+        <span className="clx-tile__art">
+          <CollectibleImage metadata={item.metadata} className="clx-tile__img" />
+          <NftMark metadata={item.metadata} />
+          {quantity > 1 && <span className="clx-tile__qty">×{formatNumericAmount(quantity, 0)}</span>}
+        </span>
+        {caption && <span className="clx-tile__cap">{caption}</span>}
+        <span className={`clx-tile__sub${item.metadata?.acquisition_kind === 'unknown' ? ' clx-tile__sub--unknown' : ''}`}>{collectibleCostsLabel([item])}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="clx">
+      {kinds.length > 1 && (
+        <div className="clx-kinds" role="tablist" aria-label="Вид предметов">
+          {kinds.map((k) => (
+            <button key={k.value} type="button" role="tab" aria-selected={k === kind}
+              className={`op-filter__chip${k === kind ? ' op-filter__chip--active' : ''}`}
+              onClick={() => setKindValue(k.value)}>
+              {k.plural}<span className="clx-kinds__count">{collectibleUnits(k.items)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {packs.length > 0 && (
+        <section className="clx-shelf">
+          <div className="clx-shelf__head">
+            <span className="clx-shelf__name">Неоткрытые паки</span>
+            <span className="clx-shelf__count">{collectibleUnits(packs)}</span>
+          </div>
+          <div className="clx-packs">
+            {packs.map((pack) => {
+              const name = collectibleShelf(pack.metadata, pack.title);
+              return (
+                <button key={pack.id} type="button" className="clx-packtile" onClick={() => onOpen(pack.id)}
+                  aria-label={`Неоткрытый пак ${name}, ${collectibleCostsLabel([pack])}`}>
+                  <CollectibleImage metadata={pack.metadata} packName={name} className="clx-packtile__art" />
+                  <span className="clx-tile__sub">{collectibleCostsLabel([pack])}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {shelves.map((shelf) => {
+        const open = expanded.has(shelf.name) || shelf.items.length <= COLLAPSED_TILES;
+        const visible = open ? shelf.items : shelf.items.slice(0, COLLAPSED_TILES - 1);
+        return (
+          <section className="clx-shelf" key={shelf.name}>
+            <div className="clx-shelf__head">
+              <span className="clx-shelf__name">{shelf.name}</span>
+              <span className="clx-shelf__count">{collectibleUnits(shelf.items)}</span>
+              {expanded.has(shelf.name) && (
+                <button type="button" className="clx-shelf__toggle" onClick={() => toggle(shelf.name)}>Свернуть</button>
+              )}
+            </div>
+            <div className="clx-grid">
+              {visible.map((item) => tile(item, shelf.mixed ? null : shelf.name))}
+              {!open && (
+                <button type="button" className="clx-tile clx-tile--more"
+                  onClick={() => toggle(shelf.name)}
+                  aria-label={`Показать все ${shelf.items.length} ${pluralRu(shelf.items.length, ['предмет', 'предмета', 'предметов'])}`}>
+                  <span className="clx-tile__art clx-tile__art--more">+{shelf.items.length - visible.length}</span>
+                  <span className="clx-tile__cap">Показать все</span>
+                </button>
+              )}
+            </div>
+          </section>
+        );
+      })}
+
+      {stacks.length > 0 && (
+        <section className="clx-shelf clx-shelf--plain">
+          <div className="clx-shelf__head">
+            <span className="clx-shelf__name">Неулучшенные</span>
+            <span className="clx-shelf__count">{stacks.reduce((sum, stack) => sum + collectibleUnits(stack.items), 0)}</span>
+          </div>
+          <div className="clx-grid">
+            {stacks.flatMap((stack) => {
+              const key = `stack:${stack.name}`;
+              if (stack.items.length === 1) return [tile(stack.items[0], null)];
+              if (expanded.has(key)) {
+                return [...stack.items.map((item) => tile(item, null)),
+                  <button key={key} type="button" className="clx-tile clx-tile--more" onClick={() => toggle(key)}>
+                    <span className="clx-tile__art clx-tile__art--more">−</span>
+                    <span className="clx-tile__cap">Свернуть</span>
+                  </button>];
+              }
+              const units = collectibleUnits(stack.items);
+              return [
+                <button key={key} type="button" className="clx-tile clx-tile--stack" onClick={() => toggle(key)}
+                  aria-label={`${stack.name}: ${units} шт., показать все`}>
+                  <span className="clx-tile__art">
+                    <CollectibleImage metadata={stack.items[0].metadata} className="clx-tile__img" />
+                    <span className="clx-tile__qty">×{units}</span>
+                  </span>
+                  <span className="clx-tile__cap">{stack.name}</span>
+                  <span className="clx-tile__sub">
+                    {collectibleCostsLabel(stack.items)}
+                  </span>
+                </button>,
+              ];
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+const HERO_SKIP = new Set(['Коллекция', 'Номер']);
+
+// Top of an item card: the picture at full width, its collection and number, then traits.
+export function CollectibleHero({ position }: { position: PortfolioPosition }) {
+  const sealed = isSealedPack(position.metadata);
+  const shelf = collectibleShelf(position.metadata, position.title);
+  const number = collectibleNumber(position.metadata);
+  const kindLabel = sealed ? 'Неоткрытый пак' : getCollectibleKind(position.metadata?.item_kind)?.label ?? 'Предмет';
+  const traits = collectibleAttributeRows(position.metadata).filter((row) => !HERO_SKIP.has(row.label));
+  return (
+    <div className="clx-hero">
+      <div className={`clx-hero__art${sealed ? ' clx-hero__art--pack' : ''}`}>
+        <CollectibleImage metadata={position.metadata} packName={shelf} className="clx-hero__img" />
+        <NftMark metadata={position.metadata} />
+      </div>
+      <div className="clx-hero__tags">
+        <span className="clx-hero__tag">{kindLabel}</span>
+        {shelf !== position.title && <span className="clx-hero__tag">{shelf}</span>}
+        {number && !position.title.includes(`#${number}`) && <span className="clx-hero__tag">#{number}</span>}
+        {isPlainGift(position.metadata) && <span className="clx-hero__tag">Неулучшенный</span>}
+        {position.status === 'closed' && <span className="clx-hero__tag clx-hero__tag--sold">Продан</span>}
+      </div>
+      {sealed && <p className="clx-hero__note">Какой стикер внутри, станет известно после открытия.</p>}
+      {traits.length > 0 && (() => {
+        const parsed = traits.map((row) => ({ ...row, ...splitRarity(row.value) }));
+        return (
+          <div className="clx-traits">
+            {parsed.map((row) => (
+              <div className={`clx-trait${row.percent !== null ? ` clx-trait--${rarityTier(row.percent)}` : ''}`} key={row.label}>
+                <span className="clx-trait__label">{row.label}</span>
+                <span className="clx-trait__value">{row.name}</span>
+                {row.percent !== null && <span className="clx-trait__rarity">{formatNumericAmount(row.percent, 2)}%</span>}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}

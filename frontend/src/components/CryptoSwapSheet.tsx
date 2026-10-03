@@ -5,7 +5,7 @@ import { AlertCircle, ArrowDown } from 'lucide-react';
 import BottomSheet from './BottomSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
-import { swapCryptoInvestmentAsset } from '../api';
+import { ensureCryptoAsset, swapCryptoInvestmentAsset } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { formatNumericAmount } from '../utils/format';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
@@ -51,10 +51,18 @@ export default function CryptoSwapSheet({
   const sourceAssetId = getCryptoAssetId(position);
   const sourceSymbol = getPositionMetadataText(position, 'asset_symbol') ?? position.title;
   const sourceQuantity = position.quantity ?? 0;
+  const [createdAssets, setCreatedAssets] = useState<CryptoAsset[]>([]);
+  const allAssets = useMemo(() => [...cryptoAssets, ...createdAssets.filter(
+    asset => !cryptoAssets.some(existing => existing.id === asset.id),
+  )], [cryptoAssets, createdAssets]);
+  const [newSymbol, setNewSymbol] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newNetwork, setNewNetwork] = useState('manual');
+  const [newDecimals, setNewDecimals] = useState('0');
 
   const targetAssetCandidates = useMemo(
-    () => cryptoAssets.filter((asset) => asset.id !== sourceAssetId),
-    [cryptoAssets, sourceAssetId],
+    () => allAssets.filter((asset) => asset.id !== sourceAssetId),
+    [allAssets, sourceAssetId],
   );
 
   const targetAccounts: BankAccount[] = useMemo(
@@ -88,7 +96,7 @@ export default function CryptoSwapSheet({
 
   const fromNum = Number(fromAmount);
   const toNum = Number(toAmount);
-  const toAsset = cryptoAssets.find((a) => String(a.id) === toCryptoAssetId);
+  const toAsset = allAssets.find((a) => String(a.id) === toCryptoAssetId);
 
   const exceedsBalance = sourceQuantity > 0 && Number.isFinite(fromNum) && fromNum > sourceQuantity;
 
@@ -96,9 +104,22 @@ export default function CryptoSwapSheet({
     && !exceedsBalance
     && Number.isFinite(fromNum) && fromNum > 0
     && Number.isFinite(toNum) && toNum > 0
-    && !!toCryptoAssetId
+    && !!toAsset
     && !!targetInvestmentAccountId
     && Number(toCryptoAssetId) !== sourceAssetId;
+
+  const createAsset = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const asset = await ensureCryptoAsset({ symbol: newSymbol.trim(), name: newName.trim(),
+        network_code: newNetwork.trim(), decimals: Number(newDecimals) });
+      setCreatedAssets(previous => [...previous.filter(a => a.id !== asset.id), asset]);
+      setToCryptoAssetId(asset.id === sourceAssetId ? '' : String(asset.id));
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setSubmitting(false); }
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -207,16 +228,25 @@ export default function CryptoSwapSheet({
           className="picker-v2"
           value={toCryptoAssetId}
           onChange={(event) => setToCryptoAssetId(event.target.value)}
-          disabled={submitting || targetAssetCandidates.length === 0}
+          disabled={submitting}
         >
           <option value="">Выберите монету</option>
           {targetAssetCandidates.map((asset) => (
             <option key={asset.id} value={asset.id}>
-              {cryptoAssetLabel(asset, cryptoAssets)}
+              {cryptoAssetLabel(asset, allAssets)}
             </option>
           ))}
+          <option value="new">Добавить актив…</option>
         </select>
       </div>
+
+      {toCryptoAssetId === 'new' && <>
+        <div className="field"><span className="fl">Обозначение</span><input className="inp-v2" value={newSymbol} maxLength={30} onChange={e => setNewSymbol(e.target.value)} disabled={submitting} /></div>
+        <div className="field"><span className="fl">Название</span><input className="inp-v2" value={newName} maxLength={150} onChange={e => setNewName(e.target.value)} disabled={submitting} /></div>
+        <div className="field"><span className="fl">Сеть или сервис</span><input className="inp-v2" value={newNetwork} maxLength={50} onChange={e => setNewNetwork(e.target.value)} disabled={submitting} /></div>
+        <div className="field"><span className="fl">Знаков после запятой</span><input className="inp-v2" type="number" min={0} max={18} step={1} value={newDecimals} onChange={e => setNewDecimals(e.target.value)} disabled={submitting} /></div>
+        <button className="sh-btn sh-btn--ghost" type="button" onClick={createAsset} disabled={submitting || !newSymbol.trim() || !newName.trim() || !newNetwork.trim() || !/^\d+$/.test(newDecimals) || Number(newDecimals) > 18}>Добавить актив</button>
+      </>}
 
       {targetAccounts.length > 1 && (
         <div className="field">

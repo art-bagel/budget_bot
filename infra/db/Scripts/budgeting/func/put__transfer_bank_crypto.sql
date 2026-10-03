@@ -44,14 +44,23 @@ BEGIN
     PERFORM 1 FROM bank_accounts WHERE id IN (_from_account_id, _to_account_id) ORDER BY id FOR UPDATE;
     SELECT * INTO _from FROM bank_accounts WHERE id = _from_account_id AND is_active;
     SELECT * INTO _to FROM bank_accounts WHERE id = _to_account_id AND is_active;
-    IF _from.id IS NULL OR _to.id IS NULL OR _from.account_kind <> 'cash' OR _to.account_kind <> 'cash' THEN
-        RAISE EXCEPTION 'Криптовалюту можно перевести только между активными банковскими счетами';
+    IF _from.id IS NULL OR _to.id IS NULL OR NOT (_from.account_kind='cash' OR _from.investment_asset_type='collectible') OR NOT (_to.account_kind='cash' OR _to.investment_asset_type='collectible') THEN
+        RAISE EXCEPTION 'Выберите активные банковские счета или счета коллекций';
     END IF;
     IF NOT has__owner_access(_user_id, _from.owner_type, _from.owner_user_id, _from.owner_family_id)
        OR NOT has__owner_access(_user_id, _to.owner_type, _to.owner_user_id, _to.owner_family_id) THEN
         RAISE EXCEPTION 'Нет доступа к счёту';
     END IF;
 
+    IF (_from.investment_asset_type='collectible' OR _to.investment_asset_type='collectible') AND
+        (_from.owner_type IS DISTINCT FROM _to.owner_type OR _from.owner_user_id IS DISTINCT FROM _to.owner_user_id
+         OR _from.owner_family_id IS DISTINCT FROM _to.owner_family_id) THEN
+        RAISE EXCEPTION 'Перевод в коллекции допускается только между счетами одного владельца';
+    END IF;
+    IF (_from.investment_asset_type='collectible' OR _to.investment_asset_type='collectible')
+       AND NULLIF(current_setting('budgeting.crypto_source_event_id',true),'') IS NULL THEN
+        RAISE EXCEPTION 'Перевод коллекций требует журнал операции';
+    END IF;
     _base := get__owner_base_currency(_from.owner_type, _from.owner_user_id, _from.owner_family_id);
     IF _base IS DISTINCT FROM get__owner_base_currency(_to.owner_type, _to.owner_user_id, _to.owner_family_id) THEN
         RAISE EXCEPTION 'У счетов разная базовая валюта';
@@ -85,6 +94,7 @@ BEGIN
         WHERE bank_account_id = _from_account_id
           AND crypto_asset_id = _crypto_asset_id
           AND amount_remaining > 0
+          AND (_to.investment_asset_type IS DISTINCT FROM 'collectible' OR NOT COALESCE((metadata->>'reserved_for_manual_expense')::boolean,false))
         ORDER BY created_at, id
         FOR UPDATE
     LOOP
@@ -115,13 +125,17 @@ BEGIN
     PERFORM put__apply_current_crypto_delta(_from_account_id, _crypto_asset_id, -_amount, -_cost);
     PERFORM put__apply_current_crypto_delta(_to_account_id, _crypto_asset_id, _amount, _cost);
 
-    -- The value follows the crypto into the other owner's free budget.
-    IF _from_unallocated <> _to_unallocated AND _cost > 0 THEN
-        INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-        VALUES (_operation_id, _from_unallocated, _base, -_cost),
-               (_operation_id, _to_unallocated, _base, _cost);
-        PERFORM put__apply_current_budget_delta(_from_unallocated, _base, -_cost);
-        PERFORM put__apply_current_budget_delta(_to_unallocated, _base, _cost);
+    -- Cash/collection boundary changes the budget once; internal investment
+    -- moves do not. Preserve the existing cross-owner cash transfer behavior.
+    IF _cost>0 AND (_from_unallocated<>_to_unallocated OR _from.account_kind<>_to.account_kind) THEN
+        IF _from.account_kind='cash' THEN
+            INSERT INTO budget_entries(operation_id,category_id,currency_code,amount) VALUES(_operation_id,_from_unallocated,_base,-_cost);
+            PERFORM put__apply_current_budget_delta(_from_unallocated,_base,-_cost);
+        END IF;
+        IF _to.account_kind='cash' THEN
+            INSERT INTO budget_entries(operation_id,category_id,currency_code,amount) VALUES(_operation_id,_to_unallocated,_base,_cost);
+            PERFORM put__apply_current_budget_delta(_to_unallocated,_base,_cost);
+        END IF;
     END IF;
 
     RETURN jsonb_build_object('operation_id', _operation_id, 'quantity', _amount::text,

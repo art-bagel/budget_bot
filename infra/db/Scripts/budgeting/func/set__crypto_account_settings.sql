@@ -7,8 +7,8 @@ BEGIN
     IF NOT FOUND OR NOT budgeting.has__owner_access(_user_id,a.owner_type,a.owner_user_id,a.owner_family_id) THEN
         RAISE EXCEPTION 'Счёт недоступен';
     END IF;
-    IF a.account_kind <> 'investment' OR a.investment_asset_type IS DISTINCT FROM 'crypto' THEN
-        RAISE EXCEPTION 'Настройка доступна для криптовалютных счетов';
+    IF a.account_kind <> 'investment' OR a.investment_asset_type NOT IN ('crypto','collectible') THEN
+        RAISE EXCEPTION 'Настройка доступна для криптовалютных счетов и коллекций';
     END IF;
     IF nullif(trim(_name),'') IS NULL OR length(trim(_name)) > 100 THEN
         RAISE EXCEPTION 'Название должно содержать от 1 до 100 символов';

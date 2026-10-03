@@ -5278,6 +5278,7 @@ select.dlg-row__ghost option {
   color: var(--bg);
 }
 .op-filter__chip--all { font-weight: 700; }
+[data-theme='dark'] .op-filter__chip--active { background: var(--text); color: var(--bg); }
 
 .op-dot {
   width: 8px;
@@ -6342,6 +6343,7 @@ select.dlg-row__ghost option {
 .pf-hero__row-dot--deposit  { background: #137534; }
 .pf-hero__row-dot--crypto   { background: #9B1C1C; }
 .pf-hero__row-dot--other    { background: #4B2D8F; }
+.pf-hero__row-dot--collectible { background: #7A2E96; }
 
 .pf-hero__row-label {
   flex: 1;
@@ -6784,6 +6786,7 @@ select.dlg-row__ghost option {
 .pf-pos__icon--deposit  { background: #137534; }
 .pf-pos__icon--crypto   { background: #9B1C1C; }
 .pf-pos__icon--other    { background: #4B2D8F; }
+.pf-pos__icon--collectible { background: #7A2E96; }
 
 [data-theme='dark'] .pf-pos__icon--security { background: var(--yellow); color: #0A0B0D; }
 
@@ -11937,3 +11940,345 @@ button.pa-row:active { opacity: .7; }
 .pa-row .ana-cat__ico:has(img) { background: transparent; }
 .pa-row .ana-cat__ico img { border-radius: 50%; }
 [data-theme='dark'] .pf-tsum__icon { background: var(--surface-inset); color: var(--text); }
+
+/* ── Collections showcase ─────────────────────────────
+   Items of a collection account are pictures first: a grid of tiles per
+   collection instead of money rows. A sealed pack is the one loud element —
+   a foil pack with a heat-sealed edge and a question mark for its unknown
+   sticker. */
+.clx { padding-bottom: 14px; }
+
+.clx-kinds {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 12px 16px 2px;
+}
+.clx-kinds::-webkit-scrollbar { display: none; }
+.clx-kinds__count { margin-left: 6px; font-weight: 500; opacity: .6; }
+
+.clx-shelf { padding: 16px 16px 0; }
+.clx-shelf__head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.clx-shelf__name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clx-shelf__count { font-size: 12.5px; font-weight: 600; color: var(--text-3); }
+.clx-shelf__toggle {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.clx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 14px 10px;
+}
+
+.clx-tile,
+.clx-packtile {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.clx-tile:focus-visible,
+.clx-packtile:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; border-radius: var(--r-md); }
+
+.clx-tile__art {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  transition: transform .12s ease;
+}
+.clx-tile:active .clx-tile__art { transform: scale(.96); }
+img.clx-tile__img, video.clx-tile__img { width: 100%; height: 100%; object-fit: contain; }
+svg.clx-tile__img { width: 34%; height: 34%; color: var(--t-v-f); opacity: .5; }
+.clx-tile__art--more { font-size: 19px; font-weight: 700; color: var(--text-2); letter-spacing: -.02em; }
+
+.clx-tile__qty {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(10, 11, 13, .72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.clx-tile__cap,
+.clx-tile__sub {
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clx-tile__cap { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.clx-tile__sub { font-size: 11.5px; color: var(--text-2); }
+.clx-tile__sub--unknown { color: var(--warn); }
+
+/* Sealed packs: a horizontal rack above the shelves. */
+.clx-packs {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 2px 16px 6px;
+}
+.clx-packs::-webkit-scrollbar { display: none; }
+.clx-packtile { flex: 0 0 96px; gap: 6px; }
+.clx-packtile .clx-tile__sub { text-align: center; }
+
+.clx-pack {
+  --foil: linear-gradient(118deg, transparent 32%, rgba(255, 255, 255, .34) 46%, transparent 58%),
+          linear-gradient(165deg, #A35BC2 0%, #7A2E96 42%, #3D1450 100%);
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  padding: 14% 10% 16%;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--foil);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 6px 14px rgba(122, 46, 150, .22);
+  transition: transform .12s ease;
+}
+/* Heat-sealed crimp at both ends of the pack. */
+.clx-pack::before,
+.clx-pack::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8%;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .3) 0 1.5px, transparent 1.5px 4px), rgba(0, 0, 0, .14);
+}
+.clx-pack::before { top: 0; }
+.clx-pack::after { bottom: 0; }
+.clx-pack__mark {
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 46cqi;
+  font-weight: 800;
+  line-height: 1;
+  opacity: .92;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .18);
+}
+.clx-pack__name {
+  position: relative;
+  font-size: max(10.5px, 11cqi);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.01em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Item card: the picture is the subject. */
+.clx-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.clx-hero__art {
+  width: min(100%, 300px);
+  aspect-ratio: 1;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--sh-2);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.clx-hero__art--pack { width: min(62%, 200px); aspect-ratio: auto; background: none; box-shadow: none; overflow: visible; }
+.clx-hero__art--pack .clx-pack { border-radius: 14px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 14px 30px rgba(122, 46, 150, .3); }
+img.clx-hero__img, video.clx-hero__img { width: 100%; height: 100%; object-fit: contain; }
+svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; }
+.clx-hero__art:has(> svg) { width: 128px; }
+.clx-packtile:active .clx-pack { transform: scale(.96); }
+
+.clx-hero__tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.clx-hero__tag {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.clx-hero__tag:first-child { background: var(--t-v-b); color: var(--t-v-f); }
+.clx-hero__note { margin: 0; max-width: 32ch; text-align: center; font-size: 13px; line-height: 1.45; color: var(--text-2); }
+
+.clx-traits {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+.clx-trait {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  min-width: 0;
+}
+.clx-trait__label { font-size: 11.5px; color: var(--text-2); }
+.clx-trait__value { font-size: 13.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.clx-trait__rarity {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--rar-b, var(--surface-inset));
+  color: var(--rar-f, var(--text-2));
+  font-size: 11px;
+  font-weight: 700;
+}
+/* Rarity tiers recolour the pill and the card edge. */
+.clx-trait--common { --rar-b: var(--surface-inset); --rar-f: var(--text-2); }
+.clx-trait--rare { --rar-b: var(--t-b-b); --rar-f: var(--t-b-f); }
+.clx-trait--epic { --rar-b: var(--t-v-b); --rar-f: var(--t-v-f); }
+.clx-trait--legendary { --rar-b: var(--yellow-tint); --rar-f: #8A6A00; }
+[data-theme='dark'] .clx-trait--legendary { --rar-b: rgba(255, 221, 45, .16); --rar-f: var(--yellow); }
+.clx-trait[class*='clx-trait--'] { box-shadow: var(--sh-1), inset 0 -3px 0 var(--rar-b); }
+
+
+.pf-dstats:has(> :nth-child(2):last-child) { grid-template-columns: 1fr 1fr; }
+
+.clx-edit-actions { display: flex; gap: 8px; margin-top: 4px; }
+.clx-open-btn { background: var(--t-v-b); color: var(--t-v-f); }
+.clx-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.clx-editor .apf-label { display: flex; flex-direction: column; gap: 6px; }
+.clx-editor .apf-input { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.apf-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
+.apf-check input { width: 18px; height: 18px; accent-color: var(--t-v-f); margin: 0; color-scheme: light; }
+[data-theme='dark'] .apf-check input { color-scheme: dark; }
+
+/* NFT mark: a quiet label in the corner of the picture. */
+.clx-nft {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .78);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #0A0B0D;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.clx-hero__art { position: relative; }
+.clx-hero__art .clx-nft { top: 12px; left: 12px; padding: 3px 8px; font-size: 11px; border-radius: 8px; }
+.clx-hero__tag--sold { background: var(--text); color: var(--bg); }
+
+/* Plain (not upgraded) gifts sit apart from the upgraded collection. */
+.clx-shelf--plain { margin-top: 18px; border-top: 1px solid var(--line-soft); }
+.clx-tile--stack .clx-tile__art { box-shadow: 4px -4px 0 -1px var(--surface), 4px -4px 0 0 var(--line); }
+
+.clx-pencil {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: -6px -6px -6px 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-inset);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.clx-pencil svg { width: 15px; height: 15px; }
+.clx-pencil:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.pf-pos--sold { opacity: .8; }
+.clx-thumb {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--surface-inset);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.clx-thumb svg.clx-tile__img { width: 55%; height: 55%; }
+
+/* Lifetime cost analytics: the total and how it split. */
+.ica-total { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 12px; }
+.ica-total__label { font-size: 12.5px; color: var(--text-2); }
+.ica-total__value { font-size: 26px; font-weight: 800; letter-spacing: -.03em; color: var(--text); }
+.ica-bar { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; margin-bottom: 6px; }
+.ica-bar > span { min-width: 3px; }
+.ica-split { display: flex; flex-direction: column; gap: 5px; padding: 0 0 10px 46px; border-bottom: 1px solid var(--line-soft); margin-top: -6px; }
+.ica-split__row { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--text-2); }
+.ica-split__row span:last-child { color: var(--text); font-weight: 600; white-space: nowrap; }
+.ana-cat:has(+ .ica-split) { border-bottom: none; }
+.ica-legend { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin: 10px 0 8px; padding: 0; list-style: none; }
+.ica-legend li { display: grid; grid-template-columns: 8px 1fr; align-items: center; column-gap: 6px; font-size: 12px; color: var(--text-2); min-width: 0; }
+.ica-legend b { grid-column: 2; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.ica-legend__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ica-split:last-child { border-bottom: none; padding-bottom: 2px; }
+.ica-cur { display: flex; padding: 2px; border-radius: 999px; background: var(--surface-inset); }
+.ica-cur__btn { min-width: 32px; padding: 4px 10px; border: none; border-radius: 999px; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-2); cursor: pointer; }
+.ica-cur__btn--on { background: var(--surface); color: var(--text); box-shadow: var(--sh-1); }
+.ica-cur__btn:disabled { opacity: .5; cursor: progress; }
+.ica-cur__btn:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.ica-total__rate { margin-top: 2px; font-size: 12px; color: var(--text-2); }
+.pf-tsum__head .ica-cur { margin-left: auto; align-self: flex-start; flex-shrink: 0; }
+.pf-alloc__head .ica-cur { margin-left: 10px; flex-shrink: 0; }
+.pf-tsum__now .ica-total__rate,
+.pf-alloc > .ica-total__rate { display: block; margin: 4px 0 0; }
+.pf-alloc__head:has(.ica-cur) { justify-content: flex-start; }
+.pf-alloc__head:has(.ica-cur) .pf-alloc__meta { margin-left: auto; }
+.pf-tsum__grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pf-tsum__grid--two .pf-tsum__cell + .pf-tsum__cell { border-left: 1px solid var(--line, rgba(0,0,0,.08)); }

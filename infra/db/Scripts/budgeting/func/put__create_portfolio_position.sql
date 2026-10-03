@@ -52,6 +52,17 @@ BEGIN
         RAISE EXCEPTION 'Crypto positions must be created by transferring existing banking crypto to investments';
     END IF;
 
+    -- Accounting values (*_in_base) are computed by the ledger, never taken from the caller:
+    -- close and summary read them back from position metadata.
+    _metadata := COALESCE(
+        (SELECT jsonb_object_agg(key, value) FROM jsonb_each(COALESCE(_metadata, '{}'::jsonb)) WHERE key !~ '_in_base$'),
+        '{}'::jsonb
+    );
+
+    IF _normalized_asset_type = 'collectible' THEN
+        _metadata := budgeting.calc__collectible_metadata(_metadata);
+    END IF;
+
     IF _amount_in_currency IS NULL OR _amount_in_currency <= 0 THEN
         RAISE EXCEPTION 'Position amount must be positive';
     END IF;

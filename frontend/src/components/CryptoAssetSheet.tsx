@@ -87,6 +87,8 @@ function describeCounterparty(entry: CryptoAssetEntry): string {
   if (targetKind === 'bank') return 'В банк';
   if (sourceKind === 'swap') return fromSymbol ? `Обмен из ${fromSymbol}` : 'Обмен (получено)';
   if (targetKind === 'swap') return toSymbol ? `Обмен в ${toSymbol}` : 'Обмен (списано)';
+  if (targetKind === 'collection') return 'На счёт коллекций';
+  if (sourceKind === 'collection') return 'Со счёта коллекций';
   if (sourceKind === 'cross_account') return 'Перевод из другого счёта';
   if (targetKind === 'cross_account') return 'Перевод в другой счёт';
   if (sourceKind === 'defi_return') return protocolName ? `Возврат из ${protocolName}` : 'Возврат из DeFi';

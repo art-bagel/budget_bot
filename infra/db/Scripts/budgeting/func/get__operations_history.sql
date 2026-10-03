@@ -57,7 +57,7 @@ BEGIN
     END IF;
 
     IF _normalized_investment_asset_type IS NOT NULL
-       AND _normalized_investment_asset_type NOT IN ('security', 'deposit', 'crypto', 'other') THEN
+       AND _normalized_investment_asset_type NOT IN ('security', 'deposit', 'crypto', 'other', 'collectible') THEN
         RAISE EXCEPTION 'Unsupported investment asset type filter: %', _normalized_investment_asset_type;
     END IF;
 
