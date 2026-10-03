@@ -302,7 +302,7 @@ const TYPE_TILES = [
   { code: 'security', label: 'Ценные бумаги', sub: 'Акции, облигации, фонды', tint: 'b', icon: <TrendingUp size={20} strokeWidth={2} /> },
   { code: 'deposit', label: 'Депозит', sub: 'Вклад или накопительный', tint: 'g', icon: <Landmark size={20} strokeWidth={2} /> },
   { code: 'crypto', label: 'Крипта', sub: 'BTC, ETH, GRAM и другие', tint: 'o', icon: <Coins size={20} strokeWidth={2} /> },
-  { code: 'other', label: 'Другое', sub: 'Металлы, ЗПИФ и прочее', tint: 'p', icon: <Package size={20} strokeWidth={2} /> },
+  { code: 'other', label: 'Разное', sub: 'Краудлендинг и валюта', tint: 'p', icon: <Package size={20} strokeWidth={2} /> },
   { code: 'collectible', label: 'Коллекции', sub: 'Подарки, стикеры, скины, предметы', tint: 'v', icon: <Gift size={20} strokeWidth={2} /> },
 ] as const;
 const PA_SECURITY_KIND_META: Record<string, PaMeta> = {
@@ -6395,11 +6395,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               <div className="pf-new-account-form apf-body">
                 {(newAccountAssetType === 'other' || newAccountAssetType === 'currency') && (
                   <div className="apf-field">
-                    <label className="apf-label" htmlFor="other-account-type">Тип счёта в «Разном»</label>
+                    <label className="apf-label" htmlFor="other-account-type">Вид счёта в «Разном»</label>
                     <select id="other-account-type" className="apf-input" value={newAccountAssetType}
                       onChange={(e) => setNewAccountAssetType(e.target.value as 'other' | 'currency')}>
-                      <option value="other">Обычный — позиции вручную</option>
-                      <option value="currency">Валюта — автоматический учёт остатков</option>
+                      <option value="other">Краудлендинг</option>
+                      <option value="currency">Валюта</option>
                     </select>
                     {newAccountAssetType === 'currency' && <p className="pf-pos__sub">Переводите деньги на счёт: количество, себестоимость и оценка по курсу появятся автоматически.</p>}
                   </div>
@@ -6409,7 +6409,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   <input
                     className="apf-input"
                     type="text"
-                    placeholder={newAccountAssetType === 'currency' ? 'Например: Валюта' : newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : newAccountAssetType === 'collectible' ? 'Например: Подарки и стикеры' : 'Например: ИИС Тинькофф'}
+                    placeholder={newAccountAssetType === 'currency' ? 'Например: Валюта' : newAccountAssetType === 'other' ? 'Например: Краудлендинг' : newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : newAccountAssetType === 'collectible' ? 'Например: Подарки и стикеры' : 'Например: ИИС Тинькофф'}
                     value={newAccountName}
                     onChange={(e) => setNewAccountName(e.target.value)}
                     autoFocus

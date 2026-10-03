@@ -79,7 +79,7 @@ const ASSET_CHIP: Record<NonNullable<BankAccount['investment_asset_type']>, { to
   deposit:  { tone: 'invest-tile__chip--g', label: 'Депозиты',      abbr: 'ДП' },
   crypto:   { tone: 'invest-tile__chip--p', label: 'Криптовалюта',  abbr: 'КР' },
   other:    { tone: 'invest-tile__chip--r', label: 'Разное',        abbr: '••' },
-  currency: { tone: 'invest-tile__chip--r', label: 'Разное · Валюта', abbr: 'FX' },
+  currency: { tone: 'invest-tile__chip--r', label: 'Разное', abbr: 'FX' },
   collectible: { tone: 'invest-tile__chip--p', label: 'Коллекции',  abbr: 'КЛ' },
 };
 
@@ -789,18 +789,30 @@ export default function Settings({
                     <span className="st-field__lab">Тип актива</span>
                     <select
                       className="st-input"
-                      value={newInvestmentAssetType}
+                      value={newInvestmentAssetType === 'currency' ? 'other' : newInvestmentAssetType}
                       onChange={(e) => setNewInvestmentAssetType(e.target.value as NonNullable<BankAccount['investment_asset_type']>)}
                     >
                       <option value="security">Ценные бумаги</option>
                       <option value="deposit">Депозиты</option>
                       <option value="crypto">Криптовалюта</option>
                       <option value="other">Разное</option>
-                      <option value="currency">Разное · Валюта (автоматический учёт)</option>
                       <option value="collectible">Коллекции</option>
                     </select>
                   </label>
                 </div>
+                {(newInvestmentAssetType === 'other' || newInvestmentAssetType === 'currency') && (
+                  <label className="st-field">
+                    <span className="st-field__lab">Вид счёта в «Разном»</span>
+                    <select className="st-input" value={newInvestmentAssetType}
+                      onChange={(e) => setNewInvestmentAssetType(e.target.value as 'other' | 'currency')}>
+                      <option value="other">Краудлендинг</option>
+                      <option value="currency">Валюта</option>
+                    </select>
+                    <span className="row__sub">{newInvestmentAssetType === 'currency'
+                      ? 'Остатки, себестоимость и оценка по курсу учитываются автоматически после перевода.'
+                      : 'Добавляйте вложения и учитывайте выплаты по ним.'}</span>
+                  </label>
+                )}
                 <label className="st-field">
                   <span className="st-field__lab">
                     Провайдер <em className="st-field__opt">необязательно</em>
