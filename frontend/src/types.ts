@@ -37,6 +37,13 @@ export interface Currency {
   scale: number;
 }
 
+export interface FxRates {
+  source: string;
+  rate_date: string;
+  fetched_at: string;
+  rub_per_unit: Record<string, number>;
+}
+
 export interface DashboardBankBalance {
   asset_type?: 'fiat' | 'crypto';
   crypto_asset_id?: number | null;

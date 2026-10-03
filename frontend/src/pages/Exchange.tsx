@@ -5,20 +5,23 @@ import RefreshBar from '../components/RefreshBar';
 import {
   exchangeCurrency,
   fetchCurrencies,
+  fetchCurrencyRates,
   fetchDashboardOverview,
 } from '../api';
 import type {
   Currency,
   DashboardOverview,
   ExchangeCurrencyRequest,
+  FxRates,
   UserContext,
 } from '../types';
-import { formatAmount } from '../utils/format';
+import { currencyName, formatAmount, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
 export default function Exchange({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [rates, setRates] = useState<FxRates | null>(null);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +70,15 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
     void loadExchangeContext();
   }, [user.bank_account_id, refreshToken]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Pull-to-refresh also reloads the reference rates.
+  useEffect(() => {
+    let active = true;
+    void fetchCurrencyRates()
+      .then((data) => { if (active) setRates(data); })
+      .catch(() => { if (active) setRates(null); });
+    return () => { active = false; };
+  }, [refreshToken]);
+
   useEffect(() => {
     if (!currencies.some((item) => item.code === toCurrencyCode && item.code !== fromCurrencyCode)) {
       const firstAlternative = currencies.find((item) => item.code !== fromCurrencyCode);
@@ -81,6 +93,10 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
     fromCurrencyCode !== toCurrencyCode &&
     parseFloat(fromAmount) > 0 &&
     parseFloat(toAmount) > 0;
+
+  const referenceRate = rates?.rub_per_unit[fromCurrencyCode] && rates?.rub_per_unit[toCurrencyCode]
+    ? rates.rub_per_unit[fromCurrencyCode] / rates.rub_per_unit[toCurrencyCode]
+    : null;
 
   const handleSubmit = async () => {
     if (!canSubmit) {
@@ -174,7 +190,7 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
             <select className="input" value={fromCurrencyCode} onChange={(event) => setFromCurrencyCode(event.target.value)}>
               {currencies.map((currency) => (
                 <option key={currency.code} value={currency.code}>
-                  Отдать: {currency.code}
+                  Отдать: {currency.code} · {currencyName(currency.code)}
                 </option>
               ))}
             </select>
@@ -194,7 +210,7 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
                 .filter((currency) => currency.code !== fromCurrencyCode)
                 .map((currency) => (
                   <option key={currency.code} value={currency.code}>
-                    Получить: {currency.code}
+                    Получить: {currency.code} · {currencyName(currency.code)}
                   </option>
                 ))}
             </select>
@@ -222,6 +238,12 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
               {submitting ? '...' : 'Обменять'}
             </button>
           </div>
+
+          {referenceRate && rates && (
+            <p className="operations-hint">
+              Курс ЦБ на {rates.rate_date.split('-').reverse().join('.')}: 1 {fromCurrencyCode} = {formatNumericAmount(referenceRate, 4)} {toCurrencyCode}. Укажите фактические суммы обмена.
+            </p>
+          )}
 
           {submitError && (
             <p style={{ color: 'var(--tag-out-fg)', fontSize: '0.85rem', marginTop: 8 }}>

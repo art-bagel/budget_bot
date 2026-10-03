@@ -4,7 +4,7 @@ import BottomSheet from './BottomSheet';
 import { fetchBankAccountSnapshot, fetchBankAccounts, fetchPortfolioPositions, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, DashboardBankBalance } from '../types';
-import { formatAmount, formatNumericAmount } from '../utils/format';
+import { currencyName, currencySymbol, formatAmount, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import { getCryptoAssetId } from '../utils/portfolioPosition';
@@ -53,8 +53,6 @@ const MODE_LABEL: Partial<Record<string, string>> = {
   'investment>cash': 'Вывод из инвестиций',
   'credit>cash':     'Погашение долга',
 };
-const CUR_SYM: Record<string, string>  = { RUB: '₽', USD: '$', EUR: '€' };
-const CUR_NAME: Record<string, string> = { RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро' };
 
 function acctIcoClass(account: BankAccount, kind: AcctKind): string {
   if (kind === 'investment') return 'sheet-ico--b';
@@ -78,8 +76,6 @@ function AcctIcon({ kind }: { kind: AcctKind }) {
   );
 }
 
-function curSym(code: string)  { return CUR_SYM[code]  ?? code; }
-function curName(code: string) { return CUR_NAME[code] ?? code; }
 function assetKeyOfBalance(balance: DashboardBankBalance): string {
   return balance.asset_type === 'crypto' && balance.crypto_asset_id
     ? `crypto:${balance.crypto_asset_id}`
@@ -89,7 +85,7 @@ function assetCode(item: Pick<PickerItem, 'assetType' | 'currency' | 'symbol'>):
   return item.assetType === 'crypto' ? (item.symbol ?? item.currency) : item.currency;
 }
 function assetName(item: Pick<PickerItem, 'assetType' | 'currency' | 'networkCode'>): string {
-  return item.assetType === 'crypto' ? (item.networkCode ? `Крипта · ${item.networkCode}` : 'Крипта') : curName(item.currency);
+  return item.assetType === 'crypto' ? (item.networkCode ? `Крипта · ${item.networkCode}` : 'Крипта') : currencyName(item.currency);
 }
 function formatAssetAmount(amount: number, item: Pick<PickerItem, 'assetType' | 'currency' | 'symbol'>): string {
   return item.assetType === 'crypto'
@@ -112,7 +108,7 @@ function AssetMark({ item }: { item: Pick<PickerItem, 'assetType' | 'currency' |
 
   return (
     <span className={`atx__asset-mark${item.assetType === 'crypto' ? ' atx__asset-mark--crypto-text' : ''}`}>
-      {item.assetType === 'fiat' ? curSym(item.currency) : code.slice(0, 4)}
+      {item.assetType === 'fiat' ? currencySymbol(item.currency) : code.slice(0, 4)}
     </span>
   );
 }

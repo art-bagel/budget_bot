@@ -2,6 +2,7 @@ import type {
   UserContext,
   Category,
   Currency,
+  FxRates,
   DashboardOverview,
   GroupMember,
   IncomeSource,
@@ -427,6 +428,10 @@ export async function deleteAccount(confirmToken: string): Promise<{ status: str
 
 export async function fetchCurrencies(): Promise<Currency[]> {
   return apiFetch<Currency[]>('/currencies');
+}
+
+export async function fetchCurrencyRates(): Promise<FxRates> {
+  return apiFetch<FxRates>('/currencies/rates');
 }
 
 export async function fetchCryptoAssets(): Promise<CryptoAsset[]> {

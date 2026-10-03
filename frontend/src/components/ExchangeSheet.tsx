@@ -2,11 +2,11 @@ import { cryptoAssetLabel } from '../utils/cryptoAssetLabel';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useEffect, useMemo, useState } from 'react';
 
-import { exchangeCurrency, fetchCryptoAssets, fetchCurrencies } from '../api';
+import { exchangeCurrency, fetchCryptoAssets, fetchCurrencies, fetchCurrencyRates } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { hapticRigid } from '../telegram';
-import type { CryptoAsset, Currency, DashboardBankBalance } from '../types';
-import { formatNumericAmount } from '../utils/format';
+import type { CryptoAsset, Currency, DashboardBankBalance, FxRates } from '../types';
+import { currencyName, formatNumericAmount } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import BottomSheet from './BottomSheet';
 import { IconArrowRightLeft } from './Icons';
@@ -26,17 +26,6 @@ interface Props {
   onSuccess: () => void;
 }
 
-const CURRENCY_NAME: Record<string, string> = {
-  RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро', GBP: 'Фунты',
-  CNY: 'Юани', JPY: 'Иены', CHF: 'Франки', TRY: 'Лиры',
-  KZT: 'Тенге', UAH: 'Гривны', BYN: 'Бел. рубли', AMD: 'Драмы',
-  GEL: 'Лари', AZN: 'Манаты', UZS: 'Сумы',
-};
-
-function currencyName(code: string): string {
-  return CURRENCY_NAME[code] ?? code;
-}
-
 export default function ExchangeSheet({
   open,
   hasFamily,
@@ -53,6 +42,8 @@ export default function ExchangeSheet({
 
   const [account, setAccount] = useState<AccountKind>(initialAccount);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [rates, setRates] = useState<FxRates | null>(null);
+  const [ratesLoading, setRatesLoading] = useState(false);
   const [cryptoAssets, setCryptoAssets] = useState<CryptoAsset[]>([]);
   const [fromCode, setFromCode] = useState('');
   const [toCode, setToCode] = useState(`fiat:${baseCurrencyCode}`);
@@ -88,6 +79,18 @@ export default function ExchangeSheet({
   }, [balances]);
 
   /* ── load currencies once when opened ──────────────── */
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setRatesLoading(true);
+    setRates(null);
+    void fetchCurrencyRates()
+      .then((data) => { if (active) setRates(data); })
+      .catch(() => { if (active) setRates(null); })
+      .finally(() => { if (active) setRatesLoading(false); });
+    return () => { active = false; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -148,6 +151,10 @@ export default function ExchangeSheet({
   };
   const fromAsset = parseAssetKey(fromCode);
   const toAsset = parseAssetKey(toCode);
+  const referenceRate = fromAsset.type === 'fiat' && toAsset.type === 'fiat'
+    && rates?.rub_per_unit[fromAsset.code] && rates?.rub_per_unit[toAsset.code]
+    ? rates.rub_per_unit[fromAsset.code] / rates.rub_per_unit[toAsset.code]
+    : null;
 
   const rateLine = (() => {
     if (!fromCode || !toCode || fromCode === toCode) return null;
@@ -331,6 +338,13 @@ export default function ExchangeSheet({
         </div>
       </div>
 
+      {fromAsset.type === 'fiat' && toAsset.type === 'fiat' && fromCode !== toCode && (
+        <p className="fx__hint">
+          {referenceRate && rates
+            ? `Курс ЦБ на ${rates.rate_date.split('-').reverse().join('.')}: 1 ${fromAsset.code} = ${formatNumericAmount(referenceRate, 4)} ${toAsset.code}. Укажите фактические суммы обмена.`
+            : ratesLoading ? 'Загружаем курс ЦБ…' : 'Курс ЦБ временно недоступен. Можно указать суммы обмена вручную.'}
+        </p>
+      )}
       {submitError && <p className="fx__error">{submitError}</p>}
     </BottomSheet>
   );

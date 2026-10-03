@@ -4,7 +4,7 @@ import { mergeBankCryptoAsset } from '../api';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { DashboardBankBalance } from '../types';
-import { currencySymbol, formatNumericAmount } from '../utils/format';
+import { currencyName, currencySymbol, formatNumericAmount } from '../utils/format';
 import { cryptoNetworkSuffix } from '../utils/cryptoAssetLabel';
 import BottomSheet from './BottomSheet';
 
@@ -17,28 +17,6 @@ interface Props {
   balances: DashboardBankBalance[];
   ownerKind: 'personal' | 'family';
   onClose: () => void;
-}
-
-const CURRENCY_NAME: Record<string, string> = {
-  RUB: 'Рубли',
-  USD: 'Доллары',
-  EUR: 'Евро',
-  GBP: 'Фунты',
-  CNY: 'Юани',
-  JPY: 'Иены',
-  CHF: 'Франки',
-  TRY: 'Лиры',
-  KZT: 'Тенге',
-  UAH: 'Гривны',
-  BYN: 'Бел. рубли',
-  AMD: 'Драмы',
-  GEL: 'Лари',
-  AZN: 'Манаты',
-  UZS: 'Сумы',
-};
-
-function currencyName(code: string): string {
-  return CURRENCY_NAME[code] ?? code;
 }
 
 function formatBase(value: number): string {

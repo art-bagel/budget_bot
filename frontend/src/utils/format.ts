@@ -2,8 +2,19 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   RUB: '₽', USD: '$', EUR: '€', GBP: '£',
   CNY: '¥', JPY: '¥', CHF: '₣', TRY: '₺',
   KZT: '₸', UAH: '₴', BYN: 'Br', AMD: '֏',
-  GEL: '₾', AZN: '₼', UZS: 'сум',
+  GEL: '₾', AZN: '₼', UZS: 'сум', EGP: 'E£',
 };
+
+const CURRENCY_NAME: Record<string, string> = {
+  RUB: 'Рубли', USD: 'Доллары', EUR: 'Евро', GBP: 'Фунты',
+  CNY: 'Юани', JPY: 'Иены', CHF: 'Франки', TRY: 'Турецкие лиры',
+  KZT: 'Тенге', UAH: 'Гривны', BYN: 'Бел. рубли', AMD: 'Драмы',
+  GEL: 'Лари', AZN: 'Манаты', UZS: 'Сумы', EGP: 'Египетские фунты',
+};
+
+export function currencyName(code: string): string {
+  return CURRENCY_NAME[code] ?? code;
+}
 
 export function currencySymbol(code: string): string {
   return CURRENCY_SYMBOLS[code] ?? code;

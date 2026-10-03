@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -85,8 +85,8 @@ class Ledger(DataBase):
         self,
         base_currency_code: str,
         quote_currency_code: str,
-        rate: float,
-        fetched_at: Optional[str] = None,
+        rate: Decimal | float,
+        fetched_at: Optional[datetime] = None,
         source: Optional[str] = None,
     ) -> int:
         """

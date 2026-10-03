@@ -11,6 +11,7 @@ VALUES
     ('RUB', 'Russian Ruble', 2),
     ('USD', 'US Dollar', 2),
     ('EUR', 'Euro', 2),
+    ('EGP', 'Egyptian Pound', 2),
     ('CNY', 'Chinese Yuan', 2),
     ('KZT', 'Kazakhstani Tenge', 2),
     ('TRY', 'Turkish Lira', 2)

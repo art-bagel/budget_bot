@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
+import { fetchCurrencyRates } from './api';
 import SplashScreen from './components/SplashScreen';
 import Layout from './components/Layout';
 import type { Page } from './components/Layout';
@@ -30,6 +31,20 @@ export default function App() {
   const [familyBadge, setFamilyBadge] = useState(0);
   const { user, loading, error, needsLogin, needsAccount, refresh } = useAuth();
   const { syncFromServer } = useTheme();
+  const userId = user?.user_id;
+
+  useEffect(() => {
+    if (!userId) return;
+    const loadRates = () => {
+      if (document.visibilityState === 'visible') {
+        // Rates must not block opening the app; exchange screens handle unavailability.
+        void fetchCurrencyRates().catch(() => {});
+      }
+    };
+    loadRates();
+    document.addEventListener('visibilitychange', loadRates);
+    return () => document.removeEventListener('visibilitychange', loadRates);
+  }, [userId]);
 
   // refreshKeys — это больше не ключ ремонта, а токен обновления данных.
   // Раньше он стоял в key у ErrorBoundary, и любое переключение вкладки

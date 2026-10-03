@@ -80,6 +80,9 @@ jobs:
       - name: Lint backend
         run: ruff check backend storage
 
+      - name: Test fiat exchange rates
+        run: python -m unittest backend.tests.test_fx_rates
+
       - name: Validate backend modules
         run: |
           find backend storage -name '*.py' -not -path '*/.cache/*' -print0 \
