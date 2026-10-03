@@ -57,7 +57,7 @@ BEGIN
     END IF;
 
     IF _normalized_investment_asset_type IS NOT NULL
-       AND _normalized_investment_asset_type NOT IN ('security', 'deposit', 'crypto', 'other', 'collectible') THEN
+       AND _normalized_investment_asset_type NOT IN ('security', 'deposit', 'crypto', 'other', 'collectible', 'currency') THEN
         RAISE EXCEPTION 'Unsupported investment asset type filter: %', _normalized_investment_asset_type;
     END IF;
 
@@ -186,7 +186,7 @@ BEGIN
                       ON ba_asset_filter.id = be_asset_filter.bank_account_id
                     WHERE be_asset_filter.operation_id = o.id
                       AND ba_asset_filter.account_kind = 'investment'
-                      AND ba_asset_filter.investment_asset_type = _normalized_investment_asset_type
+                      AND (ba_asset_filter.investment_asset_type = _normalized_investment_asset_type OR (_normalized_investment_asset_type = 'other' AND ba_asset_filter.investment_asset_type = 'currency'))
                 )
                 OR EXISTS (
                     SELECT 1
@@ -195,7 +195,7 @@ BEGIN
                       ON cba_asset_filter.id = cbe_asset_filter.bank_account_id
                     WHERE cbe_asset_filter.operation_id = o.id
                       AND cba_asset_filter.account_kind = 'investment'
-                      AND cba_asset_filter.investment_asset_type = _normalized_investment_asset_type
+                      AND (cba_asset_filter.investment_asset_type = _normalized_investment_asset_type OR (_normalized_investment_asset_type = 'other' AND cba_asset_filter.investment_asset_type = 'currency'))
                 )
           )
         ORDER BY o.operated_on DESC, o.created_at DESC, o.id DESC

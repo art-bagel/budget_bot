@@ -673,7 +673,7 @@ export interface BankAccount {
   owner_family_id?: number | null;
   owner_name: string;
   account_kind: 'cash' | 'investment' | 'credit';
-  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | 'collectible' | null;
+  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | 'collectible' | 'currency' | null;
   credit_kind?: 'loan' | 'credit_card' | 'mortgage' | null;
   interest_rate?: number | null;
   payment_day?: number | null;
@@ -693,7 +693,7 @@ export interface CreateBankAccountRequest {
   name: string;
   owner_type?: 'user' | 'family';
   account_kind?: 'cash' | 'investment';
-  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | 'collectible';
+  investment_asset_type?: 'security' | 'deposit' | 'crypto' | 'other' | 'collectible' | 'currency';
   provider_name?: string;
   provider_account_ref?: string;
 }
@@ -929,7 +929,22 @@ export interface ChangeDepositRateRequest {
   comment?: string;
 }
 
+export interface CurrencyReserveBalance {
+  currency_code: string;
+  amount: number;
+  historical_cost_in_base: number;
+  base_currency_code: string;
+  rate: number | null;
+  fetched_at: string | null;
+  market_value_in_base: number | null;
+  unrealized_result_in_base: number | null;
+}
+
 export interface PortfolioSummaryItem {
+  investment_asset_type?: string | null;
+  cash_market_value_in_base?: number | null;
+  cash_valuation_complete?: boolean;
+  currency_balances?: CurrencyReserveBalance[];
   include_in_statistics?: boolean;
   investment_account_id: number;
   investment_account_name: string;

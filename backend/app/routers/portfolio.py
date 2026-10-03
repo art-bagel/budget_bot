@@ -13,6 +13,7 @@ from backend.app.services.deposit_interest import (
     should_capitalize,
 )
 from backend.app.storage import context, ledger, reports
+from backend.app.services.fx_rates import fx_rates
 
 
 router = APIRouter(prefix='/api/v1/portfolio', tags=['portfolio'])
@@ -206,13 +207,28 @@ class ChangeDepositRateRequest(BaseModel):
         return v
 
 
+class CurrencyReserveBalance(BaseModel):
+    currency_code: str
+    amount: float
+    historical_cost_in_base: float
+    base_currency_code: str
+    rate: float | None = None
+    fetched_at: str | None = None
+    market_value_in_base: float | None = None
+    unrealized_result_in_base: float | None = None
+
+
 class PortfolioSummaryItem(BaseModel):
     include_in_statistics: bool = True
     investment_account_id: int
+    investment_asset_type: str | None = None
     investment_account_name: str
     investment_account_owner_type: Literal['user', 'family']
     investment_account_owner_name: str
     cash_balance_in_base: float
+    cash_market_value_in_base: float | None = None
+    cash_valuation_complete: bool = True
+    currency_balances: list[CurrencyReserveBalance] = Field(default_factory=list)
     invested_principal_in_base: float
     realized_income_in_base: float
     position_contributed_in_base: float
@@ -309,7 +325,15 @@ def _is_term_deposit(position: dict) -> bool:
 async def get_portfolio_summary(
     user: CurrentUser = Depends(get_current_user),
 ) -> list:
-    return await reports.get__portfolio_summary(user.user_id)
+    items = await reports.get__portfolio_summary(user.user_id)
+    if any(item.get('investment_asset_type') == 'currency' for item in items):
+        try:
+            await fx_rates.get(reports, ledger)
+        except Exception:
+            # Existing snapshots remain usable; missing quotes are marked in the response.
+            return items
+        items = await reports.get__portfolio_summary(user.user_id)
+    return items
 
 
 @router.get('/analytics')

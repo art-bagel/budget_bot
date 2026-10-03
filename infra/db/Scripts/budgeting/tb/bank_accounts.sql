@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS budgeting.bank_accounts (
     CONSTRAINT chk_bank_accounts_investment_asset_type CHECK (
         (account_kind != 'investment' AND investment_asset_type IS NULL)
         OR
-        (account_kind = 'investment' AND investment_asset_type IN ('security', 'deposit', 'crypto', 'other', 'collectible'))
+        (account_kind = 'investment' AND investment_asset_type IN ('security', 'deposit', 'crypto', 'other', 'collectible', 'currency'))
     )
 );
 

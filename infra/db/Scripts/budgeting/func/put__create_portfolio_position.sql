@@ -85,6 +85,10 @@ BEGIN
         RAISE EXCEPTION 'Portfolio positions can only be created for investment accounts';
     END IF;
 
+    IF _investment_asset_type = 'currency' THEN
+        RAISE EXCEPTION 'Валютный счёт учитывает остатки автоматически. Используйте перевод между счетами';
+    END IF;
+
     IF COALESCE(NULLIF(BTRIM(_investment_asset_type), ''), _normalized_asset_type) <> _normalized_asset_type THEN
         RAISE EXCEPTION 'Investment account asset type mismatch: expected %, got %', _investment_asset_type, _normalized_asset_type;
     END IF;

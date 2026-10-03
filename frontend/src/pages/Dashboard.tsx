@@ -1,3 +1,4 @@
+import { portfolioCashValue } from '../utils/currencyReserve';
 import { isEmptyProtocolPosition, protocolMarketValue, walletMarketValue } from '../utils/cryptoProtocolValuation';
 import { useEffect, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
@@ -387,7 +388,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     .filter((p) => p.investment_account_id === accountId)
     .reduce((sum, p) => sum + (protocolMarketValue(p, cryptoLivePrices, user.base_currency_code).value ?? 0), 0);
   const includedAccounts = new Set(investmentAccounts.filter((a) => a.include_in_statistics !== false).map((a) => a.id));
-  const investmentValueIncomplete = openPositions.some((p) => includedAccounts.has(p.investment_account_id)
+  const investmentValueIncomplete = portfolioSummaryItems.some((item) => includedAccounts.has(item.investment_account_id) && item.cash_valuation_complete === false) || openPositions.some((p) => includedAccounts.has(p.investment_account_id)
     && (p.asset_type_code === 'collectible' || (p.asset_type_code === 'crypto' && getResolvedPositionValue(p) === null)))
     || openProtocols.some((p) => includedAccounts.has(p.investment_account_id)
       && protocolMarketValue(p, cryptoLivePrices, user.base_currency_code).value === null);
@@ -413,7 +414,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
       .filter((balance) => balance.asset_type === 'crypto')
       .reduce((sum, balance) => sum + (walletMarketValue(balance.amount, balance.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code)
         ?? 0), 0);
-    return summary.cash_balance_in_base + coinsValue + marketValue + getCryptoProtocolsValue(accountId);
+    return portfolioCashValue(summary) + coinsValue + marketValue + getCryptoProtocolsValue(accountId);
   };
 
   const investmentBankTotal = investmentAccounts.filter((account) => account.include_in_statistics !== false).reduce(

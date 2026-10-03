@@ -1,3 +1,6 @@
+import AccountTransferDialog from '../components/AccountTransferDialog';
+import CurrencyReserveBalances from '../components/CurrencyReserveBalances';
+import { portfolioCashValue, currencyReserveResult } from '../utils/currencyReserve';
 import InvestmentCostAnalytics from '../components/InvestmentCostAnalytics';
 import CurrencySwitch, { CurrencyNote, useDollarDisplay } from '../components/CurrencySwitch';
 import PaRow, { PA_COLORS } from '../components/PaRow';
@@ -488,7 +491,7 @@ function getPositionAccountKey(position: Pick<PortfolioPosition, 'investment_acc
 }
 
 function getInvestmentAccountAssetType(account: BankAccount): string {
-  return account.investment_asset_type ?? 'security';
+  return account.investment_asset_type === 'currency' ? 'other' : account.investment_asset_type ?? 'security';
 }
 
 function isSameAccountOwner(account: BankAccount, position: PortfolioPosition): boolean {
@@ -724,6 +727,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [cryptoAssets, setCryptoAssets] = useState<CryptoAsset[]>([]);
+  const [showCurrencyTransfer, setShowCurrencyTransfer] = useState(false);
   const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [activeAssetTypeCode, setActiveAssetTypeCode] = useState<string>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -1296,7 +1300,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     .filter((balance) => balance.asset_type === 'crypto')
     .reduce((sum, balance) => sum + (walletMarketValue(balance.amount, balance.crypto_asset_id ?? null, cryptoLivePrices, user.base_currency_code)
       ?? 0), 0)])), [accounts, cryptoLivePrices, user.base_currency_code]);
-  const getAccountCashValue = (accountId: number): number => Number(summaryByAccountId[accountId]?.cash_balance_in_base ?? 0)
+  const getAccountCashValue = (accountId: number): number => portfolioCashValue(summaryByAccountId[accountId])
     + (coinValueByAccountId.get(accountId) ?? 0);
 
   const getPositionScopedValue = (position: PortfolioPosition): number => {
@@ -1333,9 +1337,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     [summaryItems],
   );
 
+  const includedReserves = summaryItems.filter((item) => item.investment_asset_type === 'currency' && item.include_in_statistics !== false);
+  const reserveCost = includedReserves.reduce((sum, item) => sum + item.cash_balance_in_base, 0);
+  const reserveResult = includedReserves.reduce((sum, item) => sum + currencyReserveResult(item), 0);
+  const reserveValuationIncomplete = includedReserves.some((item) => item.cash_valuation_complete === false);
+
   const totalInvestedPrincipalInBase = useMemo(
-    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
-    [openPositions, excludedAccountIds],
+    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getPositionInvestedPrincipal(position), reserveCost),
+    [openPositions, excludedAccountIds, reserveCost],
   );
 
   const totalRealizedIncomeInBase = useMemo(
@@ -1345,7 +1354,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
 
   const totalInvestmentCashInBase = useMemo(
     () => summaryItems.filter((item) => item.include_in_statistics !== false)
-      .reduce((sum, item) => sum + item.cash_balance_in_base + (coinValueByAccountId.get(item.investment_account_id) ?? 0), 0),
+      .reduce((sum, item) => sum + portfolioCashValue(item) + (coinValueByAccountId.get(item.investment_account_id) ?? 0), 0),
     [summaryItems, coinValueByAccountId],
   );
 
@@ -1379,7 +1388,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       );
       const cashBalanceInBase = accounts
         .filter(({ account }) => getInvestmentAccountAssetType(account) === code && account.include_in_statistics !== false)
-        .reduce((sum, { account }) => sum + (summaryByAccountId[account.id]?.cash_balance_in_base ?? 0) + (coinValueByAccountId.get(account.id) ?? 0), 0);
+        .reduce((sum, { account }) => sum + portfolioCashValue(summaryByAccountId[account.id]) + (coinValueByAccountId.get(account.id) ?? 0), 0);
 
       return {
         code,
@@ -1390,7 +1399,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           .reduce((sum, position) => sum + getPositionInvestedPrincipal(position), 0),
         incomeInBase: includedPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
         totalInBase: currentOpenValueInBase + cashBalanceInBase + (code === 'crypto' ? knownProtocolValue : 0),
-        valuationIncomplete: code === 'crypto' && cryptoValuationIncomplete,
+        valuationIncomplete: (code === 'crypto' && cryptoValuationIncomplete) || accounts.some(({ account }) => getInvestmentAccountAssetType(account) === code && account.include_in_statistics !== false && summaryByAccountId[account.id]?.cash_valuation_complete === false),
       };
     });
     const allTab: PortfolioAssetTab = {
@@ -1436,7 +1445,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     () => activeAssetTypeCode === 'all'
       ? accounts
       : accounts.filter(
-          ({ account }) => !account.investment_asset_type || account.investment_asset_type === activeAssetTypeCode,
+          ({ account }) => !account.investment_asset_type || getInvestmentAccountAssetType(account) === activeAssetTypeCode,
         ),
     [accounts, activeAssetTypeCode],
   );
@@ -1485,15 +1494,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   );
 
   const totalPortfolioDisplayResult = useMemo(
-    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
-    [excludedAccountIds, moexPrices, openPositions, tinkoffLivePrices, valueMode],
+    () => openPositions.filter((p) => !excludedAccountIds.has(p.investment_account_id)).reduce((sum, position) => sum + getPositionDisplayResult(position), reserveResult),
+    [excludedAccountIds, moexPrices, openPositions, tinkoffLivePrices, valueMode, reserveResult],
   );
 
   const heroDisplayedPortfolioValue = valueMode === 'potential' ? totalWithPotential : totalRealPortfolioValue;
   const heroPnlValue = totalPortfolioDisplayResult;
   const heroPnlBase = totalInvestedPrincipalInBase;
   const heroPnlPercent = heroPnlBase > 0 ? (heroPnlValue / heroPnlBase) * 100 : 0;
-  const shouldShowHeroPnl = heroPnlBase > 0 && !hasIncludedCrypto;
+  const shouldShowHeroPnl = heroPnlBase > 0 && !hasIncludedCrypto && !reserveValuationIncomplete;
 
   const depositAccruedItems = useMemo(
     () => openPositions
@@ -2474,6 +2483,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         });
       });
 
+    // Currency balances are the positions: even an empty account needs its transfer action.
+    for (const { account } of filteredAccounts) {
+      const key = `${account.owner_type}:${account.id}`;
+      if (account.investment_asset_type === 'currency' && !grouped.has(key)) {
+        grouped.set(key, { accountId: account.id, accountName: account.name, ownerType: account.owner_type, positions: [] });
+      }
+    }
+
     // A collection account holding only coins is still listed with them.
     if (activeAssetTypeCode === 'collectible' || activeAssetTypeCode === 'all') {
       for (const { account, balances } of accounts) {
@@ -2485,7 +2502,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     }
 
     return Array.from(grouped.values());
-  }, [filteredOpenPositions, activeAssetTypeCode, accounts, coinBalancesByAccountId]);
+  }, [filteredOpenPositions, filteredAccounts, activeAssetTypeCode, accounts, coinBalancesByAccountId]);
 
   const getProtocolValuation = useCallback((position: CryptoProtocolPosition) =>
     protocolMarketValue(position, cryptoLivePrices, user.base_currency_code), [cryptoLivePrices, user.base_currency_code]);
@@ -2784,7 +2801,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       else cryptoBasis += Number(protocol.cost_basis_in_base);
       basisEstimated ||= protocol.metadata.basis_quality === 'estimated';
     }
-    const investedPrincipal = cryptoBasis + scopedOpenPositions.filter((p) => p.asset_type_code !== 'crypto').reduce((sum, position) => sum + (
+    const reserveSummaries = scopedGroups.map((group) => summaryByAccountId[group.accountId]).filter((item) => item?.investment_asset_type === 'currency');
+    const reserveBasis = reserveSummaries.reduce((sum, item) => sum + item.cash_balance_in_base, 0);
+    const investedPrincipal = reserveBasis + cryptoBasis + scopedOpenPositions.filter((p) => p.asset_type_code !== 'crypto').reduce((sum, position) => sum + (
       activeAssetTypeCode === 'security'
         ? getPositionVisibleInvestedPrincipal(position)
         : getPositionInvestedPrincipal(position)
@@ -2804,13 +2823,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       cashValue: activeAssetTypeCode === 'all'
         ? totalInvestmentCashInBase
         : scopedGroups.reduce((sum, group) => sum + getConnectedSecurityMetrics(group.accountId).cashValue, 0),
-      resultValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0),
+      resultValue: scopedOpenPositions.reduce((sum, position) => sum + getPositionDisplayResult(position), 0) + reserveSummaries.reduce((sum, item) => sum + currencyReserveResult(item), 0),
       nkdValue,
       resultLabel: 'Доход',
     };
   }, [
     activeAssetTypeCode,
     activeAccountTabKey,
+    summaryByAccountId,
     excludedAccountIds,
     cryptoProtocolValueInBase,
     fundingSymbols,
@@ -2839,7 +2859,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const activeScopeMarketIncomplete = (activeAssetTypeCode === 'all' ? openPositions : visibleOpenPositions)
     .filter((p) => activeAssetTypeCode === 'collectible' || activeAccountTabKey !== 'all' || !excludedAccountIds.has(p.investment_account_id))
     .some((position) => position.asset_type_code === 'collectible' || (position.asset_type_code === 'crypto' && Number(position.quantity ?? 0) !== 0 && !(Number(getCryptoLivePrice(position)?.price) > 0)))
-    || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null);
+    || scopedCryptoProtocols.some((position) => getLendingNetValue(position) === null)
+    || visibleOpenPositionGroups.some((group) => (activeAccountTabKey !== 'all' || !excludedAccountIds.has(group.accountId)) && summaryByAccountId[group.accountId]?.cash_valuation_complete === false);
   const activeScopeBasisLabel = ['crypto', 'collectible'].includes(activeAssetTypeCode) || activeScopeHasCrypto ? 'Себестоимость' : 'Вложено';
   const ActiveAssetIcon = (PA_ASSET_TYPE_META[activeAssetTypeCode] ?? PA_ASSET_TYPE_META.security).Icon;
 
@@ -2899,7 +2920,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         estimatedValue: estimatedValue + protocolValues.value,
         investedPrincipal: isCrypto ? cryptoBasis : investedPrincipal,
         nkdValue,
-        cashValue: (summaryByAccountId[group.accountId]?.cash_balance_in_base ?? 0) + (coinValueByAccountId.get(group.accountId) ?? 0),
+        cashValue: portfolioCashValue(summaryByAccountId[group.accountId]) + (coinValueByAccountId.get(group.accountId) ?? 0),
         resultValue,
         positionsCount: group.positions.length + protocols.length,
       };
@@ -3068,6 +3089,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         investment_asset_type: newAccountAssetType,
         provider_name: newAccountProvider.trim() || undefined,
       });
+      setActiveAssetTypeCode(newAccountAssetType === 'currency' ? 'other' : newAccountAssetType);
+      setActiveAccountTabKey('all');
       setShowNewAccountModal(false);
       setNewAccountStep('pick');
       setNewAccountName('');
@@ -3239,7 +3262,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           className="pf-alloc"
         >
           <div className="pf-alloc__head">
-            <span className="pf-alloc__tag">{cryptoValuationIncomplete ? 'Оценённые активы' : 'Распределение'}</span>
+            <span className="pf-alloc__tag">{cryptoValuationIncomplete || reserveValuationIncomplete ? 'Оценённые активы' : 'Распределение'}</span>
             <span className="pf-alloc__meta">{typeTabs.length} {typeTabs.length === 1 ? 'тип' : typeTabs.length < 5 ? 'типа' : 'типов'}</span>
             <CurrencySwitch display={display} />
           </div>
@@ -3307,7 +3330,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       <div className="pf-hero">
         <div className="pf-hero__toprow">
           <span className="pf-hero__eyebrow">
-            {cryptoValuationIncomplete ? 'Известная часть оценки' : valueMode === 'potential' ? 'Потенциал с доходом' : 'Сейчас в портфеле'}
+            {cryptoValuationIncomplete || reserveValuationIncomplete ? 'Известная часть оценки' : valueMode === 'potential' ? 'Потенциал с доходом' : 'Сейчас в портфеле'}
           </span>
           <button
             className={`pf-chiptog${valueMode === 'potential' ? ' pf-chiptog--on' : ''}`}
@@ -3497,6 +3520,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               const sections = getOpenPositionSections(group.positions.filter((p) => !isHiddenWalletAsset(p)));
               const groupAccount = accounts.find(({ account }) => account.id === group.accountId);
               const isCollectionAccount = groupAccount?.account.investment_asset_type === 'collectible';
+              const isCurrencyAccount = groupAccount?.account.investment_asset_type === 'currency';
               const money = isCollectionAccount ? groupAccount.balances.filter((b) => b.amount !== 0) : [];
               const positionsValue = activeAssetTypeCode === 'security'
                 ? getConnectedSecurityMetrics(group.accountId).estimatedValue
@@ -3514,7 +3538,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <div className="pf-grp__title">{group.accountName}</div>
                       <div className="pf-grp__meta">
                         {group.ownerType === 'family' ? 'Семейный' : 'Личный'}
-                        {activeAssetTypeCode === 'crypto' ? (() => {
+                        {isCurrencyAccount ? ' · Валюта' : activeAssetTypeCode === 'crypto' ? (() => {
                           const coins = group.positions.length - hiddenAssets.length;
                           return ` · ${coins} ${pluralRu(coins, ['монета', 'монеты', 'монет'])}`;
                         })() : activeAssetTypeCode === 'collectible'
@@ -3529,6 +3553,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-sym">{display.symbol}</span>
                     </div>
                   </div>
+                  {isCurrencyAccount && <>
+                    <CurrencyReserveBalances summary={summaryByAccountId[group.accountId]} baseCurrencyCode={user.base_currency_code} />
+                    <button type="button" className="sh-btn sh-btn--ghost" onClick={() => setShowCurrencyTransfer(true)}>Перевести деньги</button>
+                  </>}
                   {isCollectionAccount && money.length > 0 && <div className="pf-grp__subhead">Деньги на счёте</div>}
                   {accounts.find(({ account }) => account.id === group.accountId && account.investment_asset_type === 'collectible')?.balances.filter((b) => b.asset_type !== 'crypto' && b.amount !== 0).map((balance) => (
                     <div className="pf-pos" key={`cash:${balance.currency_code}`}>
@@ -5592,7 +5620,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             : 'Добавить позицию';
         const sheetAccounts = addSheetTypeCode
           ? accounts.filter(({ account }) =>
-              !account.investment_asset_type || account.investment_asset_type === addSheetTypeCode,
+              account.investment_asset_type !== 'currency' && (!account.investment_asset_type || account.investment_asset_type === addSheetTypeCode),
             )
           : accounts;
         const cryptoSheetAccounts = sheetAccounts.filter(({ account }) => account.investment_asset_type === 'crypto');
@@ -5983,7 +6011,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         const sheetTab = assetTabs.find((t) => t.code === heroTypeSheetCode);
         const sheetAccounts = heroTypeSheetCode
           ? accounts.filter(({ account }) =>
-              !account.investment_asset_type || account.investment_asset_type === heroTypeSheetCode,
+              !account.investment_asset_type || getInvestmentAccountAssetType(account) === heroTypeSheetCode,
             )
           : [];
         const heroIconColor = heroTypeSheetCode ? assetTypeIconColor(heroTypeSheetCode) : { icon: 'chart', color: 'b' };
@@ -6051,7 +6079,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       )}
                     </div>
                     <div className="pf-sheet-account__rows">
-                      {balances.map((b) => (
+                      {account.investment_asset_type === 'currency' && <CurrencyReserveBalances summary={summary} baseCurrencyCode={user.base_currency_code} />}
+                      {account.investment_asset_type !== 'currency' && balances.map((b) => (
                         <div key={b.currency_code} className="pf-sheet-account__row">
                           <span>Кэш {b.currency_code}</span>
                           <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(b.amount)} {currencySymbol(b.currency_code)}</strong>
@@ -6318,8 +6347,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         );
       })()}
 
+      {showCurrencyTransfer && <AccountTransferDialog
+        personalAccountId={user.bank_account_id} baseCurrencyCode={user.base_currency_code}
+        onClose={() => setShowCurrencyTransfer(false)}
+        onSuccess={() => { setShowCurrencyTransfer(false); void loadPortfolio(); }} />}
+
       {showNewAccountModal && (() => {
-        const selectedTile = TYPE_TILES.find((t) => t.code === newAccountAssetType);
+        const selectedTile = TYPE_TILES.find((t) => t.code === (newAccountAssetType === 'currency' ? 'other' : newAccountAssetType));
         const resetAndClose = () => {
           setShowNewAccountModal(false);
           setNewAccountStep('pick');
@@ -6359,12 +6393,23 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               </div>
             ) : (
               <div className="pf-new-account-form apf-body">
+                {(newAccountAssetType === 'other' || newAccountAssetType === 'currency') && (
+                  <div className="apf-field">
+                    <label className="apf-label" htmlFor="other-account-type">Тип счёта в «Разном»</label>
+                    <select id="other-account-type" className="apf-input" value={newAccountAssetType}
+                      onChange={(e) => setNewAccountAssetType(e.target.value as 'other' | 'currency')}>
+                      <option value="other">Обычный — позиции вручную</option>
+                      <option value="currency">Валюта — автоматический учёт остатков</option>
+                    </select>
+                    {newAccountAssetType === 'currency' && <p className="pf-pos__sub">Переводите деньги на счёт: количество, себестоимость и оценка по курсу появятся автоматически.</p>}
+                  </div>
+                )}
                 <div className="apf-field">
                   <label className="apf-label">Название счёта</label>
                   <input
                     className="apf-input"
                     type="text"
-                    placeholder={newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : newAccountAssetType === 'collectible' ? 'Например: Подарки и стикеры' : 'Например: ИИС Тинькофф'}
+                    placeholder={newAccountAssetType === 'currency' ? 'Например: Валюта' : newAccountAssetType === 'crypto' ? 'Например: Основной кошелёк' : newAccountAssetType === 'collectible' ? 'Например: Подарки и стикеры' : 'Например: ИИС Тинькофф'}
                     value={newAccountName}
                     onChange={(e) => setNewAccountName(e.target.value)}
                     autoFocus

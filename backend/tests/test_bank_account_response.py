@@ -28,10 +28,12 @@ class BankAccountResponseTests(unittest.IsolatedAsyncioTestCase):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app), base_url='http://test',
             ) as client:
-                for query in ('', '?account_kind=investment', '?account_kind=investment&include_archived=true'):
+                for asset_type, query in ((kind, query) for kind in ('collectible', 'currency')
+                                          for query in ('', '?account_kind=investment', '?account_kind=investment&include_archived=true')):
+                    account['investment_asset_type'] = asset_type
                     response = await client.get('/api/v1/bank-accounts' + query)
                     self.assertEqual(response.status_code, 200)
-                    self.assertEqual(response.json()[0]['investment_asset_type'], 'collectible')
+                    self.assertEqual(response.json()[0]['investment_asset_type'], asset_type)
 
 
 if __name__ == '__main__':

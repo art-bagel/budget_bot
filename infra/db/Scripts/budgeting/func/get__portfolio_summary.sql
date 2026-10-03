@@ -17,6 +17,8 @@ BEGIN
         SELECT
             ba.id,
             ba.name,
+            ba.investment_asset_type,
+            budgeting.get__owner_base_currency(ba.owner_type, ba.owner_user_id, ba.owner_family_id) AS base_currency_code,
             ba.include_in_statistics,
             ba.owner_type,
             ba.owner_user_id,
@@ -38,6 +40,37 @@ BEGIN
                 OR
                 (ba.owner_type = 'family' AND ba.owner_family_id = _family_id)
               )
+    ),
+    currency_rows AS (
+        SELECT cbb.bank_account_id, cbb.currency_code, cbb.amount,
+            cbb.historical_cost_in_base, sa.base_currency_code,
+            CASE WHEN cbb.currency_code = sa.base_currency_code THEN 1 ELSE fx.rate END AS rate,
+            fx.fetched_at,
+            CASE WHEN cbb.currency_code = sa.base_currency_code THEN cbb.amount
+                ELSE round(cbb.amount * fx.rate, 2) END AS market_value_in_base
+        FROM current_bank_balances cbb
+        JOIN scoped_accounts sa ON sa.id = cbb.bank_account_id AND sa.investment_asset_type = 'currency'
+        LEFT JOIN LATERAL (
+            SELECT rate, fetched_at FROM fx_rate_snapshots
+            WHERE base_currency_code = sa.base_currency_code AND quote_currency_code = cbb.currency_code
+                AND fetched_at <= current_timestamp
+            ORDER BY fetched_at DESC LIMIT 1
+        ) fx ON true
+        WHERE cbb.amount <> 0
+    ),
+    currency_by_account AS (
+        SELECT bank_account_id,
+            COALESCE(sum(market_value_in_base), 0) AS market_value_in_base,
+            bool_and(rate IS NOT NULL) AS valuation_complete,
+            jsonb_agg(jsonb_build_object(
+                'currency_code', currency_code, 'amount', amount,
+                'historical_cost_in_base', historical_cost_in_base,
+                'base_currency_code', base_currency_code,
+                'rate', rate, 'fetched_at', fetched_at,
+                'market_value_in_base', market_value_in_base,
+                'unrealized_result_in_base', market_value_in_base - historical_cost_in_base
+            ) ORDER BY currency_code) AS balances
+        FROM currency_rows GROUP BY bank_account_id
     ),
     cash_by_account AS (
         SELECT
@@ -197,11 +230,16 @@ BEGIN
         jsonb_agg(
             jsonb_build_object(
                 'investment_account_id', sa.id,
+                'investment_asset_type', sa.investment_asset_type,
                 'include_in_statistics', sa.include_in_statistics,
                 'investment_account_name', sa.name,
                 'investment_account_owner_type', sa.owner_type,
                 'investment_account_owner_name', sa.owner_name,
                 'cash_balance_in_base', COALESCE(ca.cash_balance_in_base, 0),
+                'cash_market_value_in_base', CASE WHEN sa.investment_asset_type = 'currency'
+                    THEN COALESCE(cr.market_value_in_base, 0) ELSE COALESCE(ca.cash_balance_in_base, 0) END,
+                'cash_valuation_complete', COALESCE(cr.valuation_complete, true),
+                'currency_balances', COALESCE(cr.balances, '[]'::jsonb),
                 'invested_principal_in_base', COALESCE(pa.invested_principal_in_base, 0),
                 'realized_income_in_base', COALESCE(ia.realized_income_in_base, 0),
                 'position_contributed_in_base',
@@ -223,6 +261,7 @@ BEGIN
     )
     INTO _result
     FROM scoped_accounts sa
+    LEFT JOIN currency_by_account cr ON cr.bank_account_id = sa.id
     LEFT JOIN cash_by_account ca
       ON ca.bank_account_id = sa.id
     LEFT JOIN principal_by_account pa

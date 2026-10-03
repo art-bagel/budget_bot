@@ -14,7 +14,7 @@ interface Props {
   personalAccountId: number;
   familyAccountId?: number | null;
   baseCurrencyCode: string;
-  personalBalances: DashboardBankBalance[];
+  personalBalances?: DashboardBankBalance[];
   familyBalances?: DashboardBankBalance[];
   onClose: () => void;
   onSuccess: () => void;
@@ -152,7 +152,7 @@ export default function AccountTransferDialog({
   useEffect(() => {
     let cancelled = false;
     const initialMap: Record<number, DashboardBankBalance[]> = {
-      [personalAccountId]: personalBalances,
+      ...(personalBalances ? { [personalAccountId]: personalBalances } : {}),
       ...(familyAccountId ? { [familyAccountId]: familyBalances } : {}),
     };
     const load = async () => {

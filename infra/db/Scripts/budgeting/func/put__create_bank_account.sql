@@ -28,8 +28,8 @@ BEGIN
         RAISE EXCEPTION 'Unsupported bank account kind: %', _account_kind;
     END IF;
 
-    IF _account_kind = 'investment' AND COALESCE(NULLIF(BTRIM(_investment_asset_type), ''), '') NOT IN ('security', 'deposit', 'crypto', 'other', 'collectible') THEN
-        RAISE EXCEPTION 'Investment account requires asset type (security, deposit, crypto, other, collectible)';
+    IF _account_kind = 'investment' AND COALESCE(NULLIF(BTRIM(_investment_asset_type), ''), '') NOT IN ('security', 'deposit', 'crypto', 'other', 'collectible', 'currency') THEN
+        RAISE EXCEPTION 'Investment account requires asset type (security, deposit, crypto, other, collectible, currency)';
     END IF;
 
     IF _owner_type = 'user' THEN
