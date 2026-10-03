@@ -1,4 +1,3 @@
-import AccountTransferDialog from '../components/AccountTransferDialog';
 import CurrencyReserveBalances from '../components/CurrencyReserveBalances';
 import { portfolioCashValue, currencyReserveResult } from '../utils/currencyReserve';
 import InvestmentCostAnalytics from '../components/InvestmentCostAnalytics';
@@ -727,7 +726,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [cryptoAssets, setCryptoAssets] = useState<CryptoAsset[]>([]);
-  const [showCurrencyTransfer, setShowCurrencyTransfer] = useState(false);
   const [summaryItems, setSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [activeAssetTypeCode, setActiveAssetTypeCode] = useState<string>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -3553,10 +3551,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-sym">{display.symbol}</span>
                     </div>
                   </div>
-                  {isCurrencyAccount && <>
-                    <CurrencyReserveBalances summary={summaryByAccountId[group.accountId]} baseCurrencyCode={user.base_currency_code} />
-                    <button type="button" className="sh-btn sh-btn--ghost" onClick={() => setShowCurrencyTransfer(true)}>Перевести деньги</button>
-                  </>}
+                  {isCurrencyAccount && <CurrencyReserveBalances summary={summaryByAccountId[group.accountId]} display={display} />}
                   {isCollectionAccount && money.length > 0 && <div className="pf-grp__subhead">Деньги на счёте</div>}
                   {accounts.find(({ account }) => account.id === group.accountId && account.investment_asset_type === 'collectible')?.balances.filter((b) => b.asset_type !== 'crypto' && b.amount !== 0).map((balance) => (
                     <div className="pf-pos" key={`cash:${balance.currency_code}`}>
@@ -6079,8 +6074,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       )}
                     </div>
                     <div className="pf-sheet-account__rows">
-                      {account.investment_asset_type === 'currency' && <CurrencyReserveBalances summary={summary} baseCurrencyCode={user.base_currency_code} />}
-                      {account.investment_asset_type !== 'currency' && balances.map((b) => (
+                      {balances.map((b) => (
                         <div key={b.currency_code} className="pf-sheet-account__row">
                           <span>Кэш {b.currency_code}</span>
                           <strong>{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(b.amount)} {currencySymbol(b.currency_code)}</strong>
@@ -6346,11 +6340,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           />
         );
       })()}
-
-      {showCurrencyTransfer && <AccountTransferDialog
-        personalAccountId={user.bank_account_id} baseCurrencyCode={user.base_currency_code}
-        onClose={() => setShowCurrencyTransfer(false)}
-        onSuccess={() => { setShowCurrencyTransfer(false); void loadPortfolio(); }} />}
 
       {showNewAccountModal && (() => {
         const selectedTile = TYPE_TILES.find((t) => t.code === (newAccountAssetType === 'currency' ? 'other' : newAccountAssetType));
