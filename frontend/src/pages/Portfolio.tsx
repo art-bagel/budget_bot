@@ -263,6 +263,7 @@ type PortfolioAnalyticsAccountItem = {
 
 type PortfolioAnalyticsLeader = {
   positionId: number;
+  assetTypeCode: string;
   title: string;
   ticker: string | null;
   accountName: string;
@@ -2935,6 +2936,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         const cryptoSymbol = getPositionMetadataText(position, 'asset_symbol') ?? position.title;
         return {
           positionId: position.id,
+          assetTypeCode: position.asset_type_code,
           title: position.title,
           ticker: isCrypto ? null : getPositionMetadataText(position, 'ticker'),
           accountName: position.investment_account_name,
@@ -3639,6 +3641,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             <div className="pf-pos__identity">
                               {position.asset_type_code === 'collectible' ? <CollectibleImage metadata={position.metadata} className="pf-pos__logo" /> : logoUrl ? (
                                 <img className="pf-pos__logo" src={logoUrl} alt="" loading="lazy" />
+                              ) : position.asset_type_code === 'other' ? (
+                                <div className="pf-pos__icon pf-pos__icon--lending" aria-hidden="true"><HandCoins strokeWidth={2} /></div>
                               ) : (
                                 <div className={`pf-pos__icon pf-pos__icon--${position.asset_type_code}`}>
                                   {position.title.slice(0, 1).toUpperCase()}
@@ -4081,8 +4085,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <div className="ana-cats">
                   {portfolioAnalyticsLeaders.map((item, index) => (
                     <PaRow key={item.positionId} onClick={() => void handleOpenPositionDetails(item.positionId)}
-                      icon={item.logoUrl ? <img src={item.logoUrl} alt="" loading="lazy" /> : item.title.slice(0, 1).toUpperCase()}
-                      color={PA_COLORS[index % PA_COLORS.length]} title={item.title}
+                      icon={item.logoUrl ? <img src={item.logoUrl} alt="" loading="lazy" /> : item.assetTypeCode === 'other' ? <HandCoins strokeWidth={2} /> : item.title.slice(0, 1).toUpperCase()}
+                      color={item.assetTypeCode === 'other' ? 'g' : PA_COLORS[index % PA_COLORS.length]} title={item.title}
                       amount={money(item.estimatedValue)} share={item.share}
                       foot={[item.accountName, item.quantityLabel, item.ticker].filter(Boolean).join(' · ')}
                       footRight={item.currentResult !== null
@@ -4097,7 +4101,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       })()}
 
       {(() => {
-        const posIconColor = selectedPosition ? assetTypeIconColor(selectedPosition.asset_type_code) : { icon: 'chart', color: 'b' };
+        // Positions in «Разное» are crowdlending loans.
+        const posIconColor = selectedPosition?.asset_type_code === 'other' ? { icon: 'handcoins', color: 'g' }
+          : selectedPosition ? assetTypeIconColor(selectedPosition.asset_type_code) : { icon: 'chart', color: 'b' };
         const posLogoName = selectedPosition ? getPositionMetadataText(selectedPosition, 'logo_name') : null;
         const posCryptoSymbol = selectedPosition
           ? getPositionMetadataText(selectedPosition, 'asset_symbol') ?? selectedPosition.title

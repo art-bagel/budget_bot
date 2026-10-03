@@ -6787,6 +6787,8 @@ select.dlg-row__ghost option {
 .pf-pos__icon--crypto   { background: #9B1C1C; }
 .pf-pos__icon--other    { background: #4B2D8F; }
 .pf-pos__icon--collectible { background: #7A2E96; }
+.pf-pos__icon--lending { background: var(--t-g-b); color: var(--t-g-f); }
+.pf-pos__icon--lending svg { width: 18px; height: 18px; }
 
 [data-theme='dark'] .pf-pos__icon--security { background: var(--yellow); color: #0A0B0D; }
 
