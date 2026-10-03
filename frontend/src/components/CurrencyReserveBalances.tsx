@@ -1,6 +1,22 @@
+import { useState } from 'react';
 import type { PortfolioSummaryItem } from '../types';
 import { currencyName, currencySymbol, formatAmount, formatNumericAmount } from '../utils/format';
 import type { DollarDisplay } from './CurrencySwitch';
+
+// Issuer's flag for each currency, from the same CDN as the coin icons; pinned version.
+const CURRENCY_COUNTRY: Record<string, string> = {
+  RUB: 'ru', USD: 'us', EUR: 'eu', GBP: 'gb', CNY: 'cn', JPY: 'jp', CHF: 'ch', TRY: 'tr',
+  KZT: 'kz', UAH: 'ua', BYN: 'by', AMD: 'am', GEL: 'ge', AZN: 'az', UZS: 'uz', EGP: 'eg',
+};
+
+function CurrencyEmblem({ code }: { code: string }) {
+  const country = CURRENCY_COUNTRY[code];
+  const [failed, setFailed] = useState(false);
+  return country && !failed
+    ? <img className="pf-pos__logo" src={`https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.5.0/flags/1x1/${country}.svg`} alt=""
+        loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+    : <div className="pf-pos__icon pf-pos__icon--other" aria-hidden="true">{currencySymbol(code).slice(0, 2)}</div>;
+}
 
 // Currency balances of a reserve account, as position rows: amount and rate on the left,
 // value and result in the base currency on the right.
@@ -18,7 +34,7 @@ export default function CurrencyReserveBalances({ summary, display }: {
         return (
           <div className="pf-pos" key={balance.currency_code}>
             <div className="pf-pos__identity">
-              <div className="pf-pos__icon pf-pos__icon--other" aria-hidden="true">{currencySymbol(balance.currency_code).slice(0, 2)}</div>
+              <CurrencyEmblem code={balance.currency_code} />
               <div className="pf-pos__copy">
                 <div className="pf-pos__title">{currencyName(balance.currency_code)}</div>
                 <div className="pf-pos__sub">
