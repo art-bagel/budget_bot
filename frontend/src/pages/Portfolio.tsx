@@ -6168,6 +6168,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
           && p.investment_account_id === cryptoAssetSheet.investmentAccountId
           && getCryptoAssetId(p) === cryptoAssetSheet.cryptoAssetId,
         );
+        // A coin at zero has only closed positions; a receipt on the latest one reopens the coin.
+        const incomePosition = targetPosition ?? positions
+          .filter((p) => p.asset_type_code === 'crypto'
+            && p.investment_account_id === cryptoAssetSheet.investmentAccountId
+            && getCryptoAssetId(p) === cryptoAssetSheet.cryptoAssetId)
+          .sort((a, b) => b.id - a.id)[0];
         const otherCryptoAccountsCount = targetPosition
           ? getCryptoInvestmentAccountsForPosition(targetPosition)
               .filter((a) => a.id !== targetPosition.investment_account_id).length
@@ -6195,9 +6201,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
               setCryptoAssetSheet(null);
               setCryptoTransferSheetPosition(targetPosition);
             } : undefined}
-            onOpenIncome={targetPosition ? () => {
+            onOpenIncome={incomePosition ? () => {
               setCryptoAssetSheet(null);
-              setCryptoIncomeSheetPosition(targetPosition);
+              setCryptoIncomeSheetPosition(incomePosition);
             } : undefined}
             canTransferBetweenAccounts={otherCryptoAccountsCount > 0}
           />

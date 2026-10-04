@@ -32,6 +32,9 @@ DECLARE
     _conversion_target record;
     _group_peer record;
     _group_key text;
+    _income_source record;
+    _income_asset record;
+    _income_position bigint;
     _old_source text := current_setting('budgeting.crypto_source_event_id',true);
     _old_index text := current_setting('budgeting.crypto_source_command_index',true);
 BEGIN
@@ -582,10 +585,39 @@ BEGIN
                 ('position_id','amount','currency_code','amount_in_base','quantity','income_kind','destination','comment')) THEN
                 RAISE EXCEPTION 'Unsupported reward argument';
             END IF;
-            IF NOT EXISTS(SELECT 1 FROM portfolio_positions WHERE id=(_payload->>'position_id')::bigint AND asset_type_code='crypto') THEN
+            SELECT * INTO _income_source FROM portfolio_positions
+                WHERE id=(_payload->>'position_id')::bigint AND asset_type_code='crypto';
+            IF NOT FOUND THEN
                 RAISE EXCEPTION 'Ручной криптожурнал поддерживает только криптоактивы';
             END IF;
-            _result:=budgeting.put__record_portfolio_income(_user_id,(_payload->>'position_id')::bigint,
+            _income_position:=_income_source.id;
+            -- A coin that went to zero closed its position. A later receipt (a reward)
+            -- lands on the open position of the same coin on the same account, created
+            -- empty when needed, like put__crypto_receive_reward does.
+            IF _income_source.status<>'open' THEN
+                PERFORM 1 FROM bank_accounts WHERE id=_income_source.investment_account_id FOR UPDATE;
+                SELECT id INTO _income_position FROM portfolio_positions
+                    WHERE investment_account_id=_income_source.investment_account_id AND asset_type_code='crypto'
+                      AND status='open' AND metadata->>'crypto_asset_id'=_income_source.metadata->>'crypto_asset_id'
+                    FOR UPDATE;
+                IF _income_position IS NULL THEN
+                    SELECT * INTO _income_asset FROM crypto_assets
+                        WHERE id=(_income_source.metadata->>'crypto_asset_id')::bigint;
+                    IF NOT FOUND THEN RAISE EXCEPTION 'Unknown income crypto asset'; END IF;
+                    INSERT INTO portfolio_positions(owner_type,owner_user_id,owner_family_id,
+                        investment_account_id,asset_type_code,title,quantity,amount_in_currency,
+                        currency_code,opened_at,metadata,created_by_user_id)
+                    VALUES(_income_source.owner_type,_income_source.owner_user_id,_income_source.owner_family_id,
+                        _income_source.investment_account_id,'crypto',_income_asset.symbol,0,0,
+                        budgeting.get__owner_base_currency(_income_source.owner_type,_income_source.owner_user_id,_income_source.owner_family_id),
+                        _accounting_date,
+                        jsonb_build_object('crypto_kind','spot','crypto_asset_id',_income_asset.id,
+                            'asset_symbol',_income_asset.symbol,'asset_name',_income_asset.name,
+                            'network_code',_income_asset.network_code,'contract_address',_income_asset.contract_address),_user_id)
+                    RETURNING id INTO _income_position;
+                END IF;
+            END IF;
+            _result:=budgeting.put__record_portfolio_income(_user_id,_income_position,
                 COALESCE((_payload->>'amount')::numeric,0),(_payload->>'currency_code')::char(3),
                 (_payload->>'amount_in_base')::numeric,_payload->>'income_kind',_accounting_date,_payload->>'comment',
                 _occurred_at,COALESCE(_payload->>'destination','position'),(_payload->>'quantity')::numeric);
