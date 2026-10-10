@@ -12,7 +12,6 @@ import {
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
-  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -54,12 +53,11 @@ export default function CryptoTransferSheet({
   );
 
   const defaultTarget = targets[0];
-  const defaultAmount = trimDecimal(position.quantity_exact ?? '');
 
   const [targetInvestmentAccountId, setTargetInvestmentAccountId] = useState<string>(
     defaultTarget ? String(defaultTarget.id) : '',
   );
-  const [amount, setAmount] = useState(defaultAmount);
+  const [amount, setAmount] = useState('');
   const [operatedAt, setOperatedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
   const [feeAmount, setFeeAmount] = useState('');

@@ -14,7 +14,6 @@ import {
   getPositionMetadataText,
   isSameAccountOwner,
   todayIso,
-  trimDecimal,
 } from '../utils/portfolioPosition';
 import type {
   BankAccount,
@@ -74,12 +73,11 @@ export default function CryptoSwapSheet({
     [accounts, position],
   );
 
-  const defaultAmount = trimDecimal(position.quantity_exact ?? '');
   const defaultTargetAsset = targetAssetCandidates[0];
   const defaultTargetAccount = targetAccounts.find((a) => a.id === position.investment_account_id)
     ?? targetAccounts[0];
 
-  const [fromAmount, setFromAmount] = useState(defaultAmount);
+  const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
   const [toCryptoAssetId, setToCryptoAssetId] = useState<string>(
     defaultTargetAsset ? String(defaultTargetAsset.id) : '',
