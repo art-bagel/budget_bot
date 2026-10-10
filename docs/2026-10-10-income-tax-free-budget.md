@@ -38,6 +38,9 @@
 
 Вернуть прежний `put__record_income_tax.sql` и выкатить.
 
-## Ограничения
+## Выкатка
 
-- На прод ещё не выкачено.
+10.10.2026 ~09:28–09:40 UTC: `git push origin HEAD:main` (fast-forward
+`46f4d9c..91677da`), GitHub Actions «Deploy Budget Bot» — success. На проде
+`put__record_income_tax` содержит проверку `FX Result`, `budget_bot_api`/`web`
+перезапущены, ошибок в логах API за 15 минут после старта нет.
