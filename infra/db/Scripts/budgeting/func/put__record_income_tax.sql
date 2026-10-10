@@ -23,6 +23,7 @@ DECLARE
     _account_kind                  text;
     _base_currency_code            char(3);
     _unallocated_category_id       bigint;
+    _fx_category_id                bigint;
     _bank_balance                  numeric(20, 8);
     _budget_balance                numeric(20, 2);
     _effective_tax_cost_in_base    numeric(20, 2);
@@ -146,16 +147,22 @@ BEGIN
         _expense_cost_base := _effective_tax_cost_in_base;
     END IF;
 
+    -- Free budget is Unallocated + FX Result, as in the UI and
+    -- put__allocate_budget; the tax still debits only Unallocated.
+    _fx_category_id := budgeting.get__owner_system_category_id(
+        _owner_type, _owner_user_id, _owner_family_id, 'FX Result');
+
     PERFORM 1
     FROM current_budget_balances
-    WHERE category_id = _unallocated_category_id
+    WHERE category_id IN (_unallocated_category_id, _fx_category_id)
       AND currency_code = _base_currency_code
+    ORDER BY category_id
     FOR UPDATE;
 
-    SELECT COALESCE(amount, 0)
+    SELECT COALESCE(sum(amount), 0)
     INTO _budget_balance
     FROM current_budget_balances
-    WHERE category_id = _unallocated_category_id
+    WHERE category_id IN (_unallocated_category_id, _fx_category_id)
       AND currency_code = _base_currency_code;
 
     _budget_balance := COALESCE(_budget_balance, 0);
