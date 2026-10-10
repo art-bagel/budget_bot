@@ -6357,6 +6357,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             iconUrl={iconUrl}
             livePrice={incomeAssetId ? cryptoLivePrices.get(incomeAssetId) ?? null : null}
             baseCurrencyCode={user.base_currency_code}
+            accountPositions={positions.filter((p) => p.investment_account_id === cryptoIncomeSheetPosition.investment_account_id)}
             onClose={() => setCryptoIncomeSheetPosition(null)}
             onSuccess={() => {
               setCryptoIncomeSheetPosition(null);

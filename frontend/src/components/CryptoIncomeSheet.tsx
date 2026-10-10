@@ -8,7 +8,9 @@ import { recordPortfolioIncome } from '../api';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { currencySymbol, formatNumericAmount } from '../utils/format';
 import { todayIso } from '../utils/portfolioPosition';
-import type { CryptoLivePrice } from '../types';
+import { DefiFeeField, EMPTY_FEE_DRAFT, manualFee } from './DefiFeeField';
+import type { DefiFeeDraft } from './DefiFeeField';
+import type { CryptoLivePrice, PortfolioPosition } from '../types';
 
 
 type IncomeKind = 'airdrop' | 'reward' | 'interest' | 'lp_fees' | 'fork' | 'other';
@@ -31,6 +33,7 @@ interface Props {
   iconUrl?: string | null;
   livePrice?: CryptoLivePrice | null;
   baseCurrencyCode: string;
+  accountPositions: PortfolioPosition[];
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -44,6 +47,7 @@ export default function CryptoIncomeSheet({
   iconUrl,
   livePrice,
   baseCurrencyCode,
+  accountPositions,
   onClose,
   onSuccess,
 }: Props) {
@@ -54,6 +58,7 @@ export default function CryptoIncomeSheet({
   const [incomeKind, setIncomeKind] = useState<IncomeKind>('airdrop');
   const [receivedAt, setReceivedAt] = useState(todayIso());
   const [comment, setComment] = useState('');
+  const [feeDraft, setFeeDraft] = useState<DefiFeeDraft>(EMPTY_FEE_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +68,7 @@ export default function CryptoIncomeSheet({
       setIncomeKind('airdrop');
       setReceivedAt(todayIso());
       setComment('');
+      setFeeDraft(EMPTY_FEE_DRAFT);
       setError(null);
     }
   }, [open]);
@@ -87,6 +93,7 @@ export default function CryptoIncomeSheet({
         destination: 'position' as const,
         received_at: receivedAt || undefined,
         comment: comment.trim() || undefined,
+        fee: manualFee(feeDraft, accountPositions),
       };
       await recordPortfolioIncome(positionId, { ...payload, request_id: manualRequest.requestId(payload) });
       manualRequest.completed();
@@ -164,6 +171,13 @@ export default function CryptoIncomeSheet({
           </span>
         )}
       </div>
+
+      <DefiFeeField
+        accountPositions={accountPositions}
+        value={feeDraft}
+        onChange={setFeeDraft}
+        disabled={submitting}
+      />
 
       <div className="field">
         <span className="fl">Дата</span>
