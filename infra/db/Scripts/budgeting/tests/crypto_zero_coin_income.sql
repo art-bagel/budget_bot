@@ -37,6 +37,17 @@ BEGIN
  PERFORM put__manual_crypto_movement(uid,gen_random_uuid(),'position_income',payload);
  ASSERT (SELECT quantity FROM portfolio_positions WHERE id=reopened)=5,'a second receipt joins the open position';
  ASSERT (SELECT count(*) FROM portfolio_positions WHERE investment_account_id=wallet AND status='open')=1,'one open position per coin';
+ PERFORM put__manual_crypto_movement(uid,gen_random_uuid(),'position_income',payload,NULL,
+   jsonb_build_object('source_position_id',reopened,'quantity','0.5'));
+ ASSERT (SELECT quantity FROM portfolio_positions WHERE id=reopened)=7,'income with a fee nets the fee out of the wallet';
+ BEGIN
+   PERFORM put__manual_crypto_movement(uid,gen_random_uuid(),'position_income',payload,NULL,
+     jsonb_build_object('source_position_id',reopened,'quantity','100'));
+   RAISE EXCEPTION 'Fee overspend test failed';
+ EXCEPTION WHEN raise_exception THEN
+   ASSERT SQLERRM='Сумма превышает остаток','fee above the balance rejects the whole income';
+ END;
+ ASSERT (SELECT quantity FROM portfolio_positions WHERE id=reopened)=7,'rejected income leaves the wallet unchanged';
 
  BEGIN
    PERFORM put__manual_crypto_movement(uid+1,gen_random_uuid(),'position_income',payload);

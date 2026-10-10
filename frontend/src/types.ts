@@ -891,6 +891,7 @@ export interface RecordPortfolioIncomeRequest {
   destination?: 'account' | 'position';
   received_at?: string;
   comment?: string;
+  fee?: { source_position_id: number; quantity: string };
 }
 
 export interface RecordPortfolioIncomeResponse {

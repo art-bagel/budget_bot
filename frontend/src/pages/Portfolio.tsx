@@ -134,6 +134,7 @@ type IncomeDraft = {
   destination: 'account' | 'position';
   receivedAt: string;
   comment: string;
+  fee: DefiFeeDraft;
 };
 
 type TopUpDraft = {
@@ -594,6 +595,7 @@ function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
     destination: position.asset_type_code === 'deposit' || position.asset_type_code === 'crypto' ? 'position' : 'account',
     receivedAt: todayIso(),
     comment: '',
+    fee: EMPTY_FEE_DRAFT,
   };
 }
 
@@ -1840,6 +1842,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         destination: isCryptoPosition ? 'position' : draft.destination,
         received_at: draft.receivedAt || undefined,
         comment: draft.comment.trim() || undefined,
+        fee: isCryptoPosition
+          ? manualFee(draft.fee, positions.filter((p) => p.investment_account_id === position.investment_account_id))
+          : undefined,
       });
       setIncomeDrafts((prev) => {
         const nextDrafts = { ...prev };
@@ -4798,6 +4803,14 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         <option value="position">Оставить в активе</option>
                       </select>
                     </div>
+                  )}
+                  {selectedPosition.asset_type_code === 'crypto' && (
+                    <DefiFeeField
+                      accountPositions={positions.filter((p) => p.investment_account_id === selectedPosition.investment_account_id)}
+                      value={incomeDrafts[selectedPosition.id].fee}
+                      onChange={(fee) => handleIncomeDraftChange(selectedPosition.id, { fee })}
+                      disabled={submittingIncomeId === selectedPosition.id}
+                    />
                   )}
                   <div className="apf-field">
                     <label className="apf-label">Дата</label>

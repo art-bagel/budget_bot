@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.dependencies import CurrentUser, get_current_user
+from backend.app.routers.crypto import ManualCryptoFee
 from backend.app.services.deposit_interest import (
     calculate_accrued_interest,
     get_accrual_base_date,
@@ -141,6 +142,7 @@ class RecordPortfolioIncomeRequest(BaseModel):
     destination: Literal['account', 'position'] = 'account'
     received_at: date | None = None
     comment: str | None = None
+    fee: ManualCryptoFee | None = None
 
     @field_validator('amount')
     @classmethod
@@ -566,9 +568,12 @@ async def record_portfolio_income(
         result = await ledger.put__manual_crypto_movement(
             user_id=user.user_id, request_id=body.request_id or uuid4(), kind='position_income',
             payload={'position_id': position_id, **body.model_dump(mode='json', exclude_none=True,
-                exclude={'request_id', 'received_at'})}, operated_at=body.received_at,
+                exclude={'request_id', 'received_at', 'fee'})}, operated_at=body.received_at,
+            fee=body.fee.model_dump(mode='json', exclude_none=True) if body.fee else None,
         )
         return RecordPortfolioIncomeResponse(**result)
+    if body.fee:
+        raise HTTPException(status_code=400, detail='Комиссия при зачислении доступна только для криптовалюты')
     result = await ledger.put__record_portfolio_income(
         user_id=user.user_id,
         position_id=position_id,
