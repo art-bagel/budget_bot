@@ -1,0 +1,195 @@
+# Прямые hex-цвета в styles.css вне токенов (селектор<TAB>цвет). Новые сюда не добавлять.
+.add-pos-type-tile	#eef0f3
+.add-pos-type-tile__sub	#6b7380
+.apf-balance	#6b7380
+.apf-balance	#eef0f3
+.apf-cancel	#e8eaed
+.apf-csel__btn	#eef0f3
+.apf-csel__drop	#fff
+.apf-csel__item--on	#b8860b
+.apf-csel__item:hover	#eef0f3
+.apf-input	#eef0f3
+.apf-label	#6b7380
+.apf-projection__label	#6b5800
+.apf-projection__value	#4a3b00
+.apf-segtog	#eef0f3
+.apf-segtog__opt	#6b7380
+.apf-submit	#0a0b0d
+.apf-submit:hover	#f0c800
+.apf-ticker-chosen	#0a0b0d
+.ca-sheet__hero-stale	#b88600
+.card-sec__ico--anal	#7a56c7
+.card-sec__ico--anal	#e7dff8
+.card-sec__ico--ops	#2f9e7f
+.card-sec__ico--ops	#dff1ea
+.cat-act--primary:hover	#e6c000
+.cat__name	#000
+.cat__name	#000
+.ccd-csel__btn	#eef0f3
+.ccd-csel__drop	#e2e4e8
+.ccd-csel__item--on	#fff9d6
+.ccd-grp-add	#e2e4e8
+.ccd-grp-add	#e2e4e8
+.ccd-grp-add	#eceef1
+.ccd-grp-pct--ok	#2e9e5b
+.ccd-grp-remove:hover	#fdecea
+.ccd-icon-btn	#e2e4e8
+.clx-nft	#0a0b0d
+.clx-pack	#3d1450
+.clx-pack	#7a2e96
+.clx-pack	#a35bc2
+.clx-pack	#fff
+.clx-tile__qty	#fff
+.clx-trait--legendary	#8a6a00
+.comp__seg--c1, .comp__dot--c1	#2f9e7f
+.comp__seg--c2, .comp__dot--c2	#4c7ae8
+.comp__seg--c3, .comp__dot--c3	#e8b23a
+.comp__seg--c4, .comp__dot--c4	#c84b6f
+.comp__seg--c5, .comp__dot--c5	#6e66c7
+.credits-chiptog--on	#0a0b0d
+.credits-chiptog--on .credits-chiptog__glyph	#0a0b0d
+.credits-hint	#d98500
+.hero--ink	#15171a
+.hero--ink	#1f2226
+.hero--ink	#f4f4f6
+.hero--ink .hero__mark--coral	#e86a4f
+.hero--ink .hero__mark--ink	#ffe066
+.hero--ink .hero__mark--mint	#2f9e7f
+.hero--ink .hero__row dd	#ffffff
+.hero--ink .hero__value	#ffffff
+.hero__mark--coral	#e86a4f
+.hero__mark--mint	#2f9e7f
+.hero__mark--warn	#b8301d
+.hero__potnote	#ffe066
+.hero__progress-fill	#ffe066
+.hero__progress-value strong	#ffe066
+.hero__row--neg dd	#b8301d
+.op-dot--alloc	#a9570a
+.op-dot--credit	#7a2e96
+.op-dot--exch	#593daa
+.op-dot--expense	#df3f36
+.op-dot--income	#117a4b
+.op-dot--invest	#1b559c
+.pf-add-pill	#0a0b0d
+.pf-alloc__legend li	#6b7380
+.pf-alloc__meta	#6b7380
+.pf-alloc__t-cell span	#6b7380
+.pf-alloc__t-pos	#137534
+.pf-alloc__tag	#6b7380
+.pf-chiptog--on	#0a0b0d
+.pf-chiptog--on .pf-chiptog__glyph	#0a0b0d
+.pf-close-sum__value--pos	#17a34a
+.pf-closed__toggle	#6b7380
+.pf-empty	#6b7380
+.pf-grp__meta	#6b7380
+.pf-grp__subhead	#6b7380
+.pf-grp__subhead	#eef0f3
+.pf-hero	#0a0b0d
+.pf-hero__pnl--neg	#9b1c1c
+.pf-hero__pnl--pos	#137534
+.pf-hero__row-dot--collectible	#7a2e96
+.pf-hero__row-dot--crypto	#9b1c1c
+.pf-hero__row-dot--deposit	#137534
+.pf-hero__row-dot--other	#4b2d8f
+.pf-hero__row-dot--security	#0a0b0d
+.pf-income-popup	#0a0b0d
+.pf-income-popup	#fff
+.pf-income-popup__row-val	#137534
+.pf-new-account-form__error	#e53935
+.pf-pos:active	#eef0f3
+.pf-pos__icon--collectible	#7a2e96
+.pf-pos__icon--crypto	#9b1c1c
+.pf-pos__icon--deposit	#137534
+.pf-pos__icon--other	#4b2d8f
+.pf-pos__icon--security	#0a0b0d
+.pf-pos__pnl--pos	#137534
+.pf-pos__sub	#6b7380
+.pf-sec__sub	#6b7380
+.pf-sheet-account	#eef0f3
+.pf-sheet-account__meta	#6b7380
+.pf-sheet-account__row	#6b7380
+.pf-sheet-account__row--pos strong	#137534
+.pf-sheet-empty	#6b7380
+.pf-sheet-sync-btn	#0a0b0d
+.pf-tsum__cell-label	#6b7380
+.pf-tsum__cell-note	#6b7380
+.pf-tsum__cell-value--pos	#137534
+.pf-tsum__delta--neg	#b8301d
+.pf-tsum__delta--neg	#fce4e2
+.pf-tsum__delta--pos	#137534
+.pf-tsum__delta--pos	#dff5e9
+.pf-tsum__icon	#0a0b0d
+.pf-tsum__icon	#e1e5eb
+.pf-tsum__meta	#a0a7b1
+.pf-tsum__now-label	#6b7380
+.pf-tsum__now-period	#6b7380
+.pf-viewtog__opt	#6b7380
+.portfolio-position-card__title	#000
+.portfolio-position-card__title	#000
+.portfolio-position-card__title	#000
+.portfolio-position-card__title	#000
+.ppc-sheet__summary	#f6f4ee
+.seg-row	#eef0f3
+.seg-row__btn	#6b7380
+.settings-page .add-pill-ink:hover	#1a1b1f
+.settings-page .dot--g	#2f9e7f
+.settings-page .invest-tile__chip--g	#2f9e7f
+.settings-page .invest-tile__chip--g	#dff1ea
+.settings-page .invest-tile__chip--y	#6e5800
+.settings-page .invest-tile__chip--y	#fff1b8
+.settings-page .member__avatar--c	#e86a4f
+.settings-page .member__avatar--c	#fbe3dc
+.settings-page .member__avatar--g	#2f9e7f
+.settings-page .member__avatar--g	#dff1ea
+.settings-page .prov__brand	#ffffff
+.settings-page .prov__brand--gu	#1f4dae
+.settings-page .prov__brand--gu	#2f70d6
+.settings-page .prov__brand--sber	#0e7a48
+.settings-page .prov__brand--sber	#1a9e5f
+.settings-page .prov__brand--ti	#0a0b0d
+.settings-page .prov__brand--ti	#f2ce14
+.settings-page .prov__brand--ti	#ffdd2d
+.settings-page .st-btn--danger:hover	#ffffff
+.settings-page .st-card-sec__ico--key	#e86a4f
+.settings-page .st-card-sec__ico--key	#fbe3dc
+.settings-page .st-card-sec__ico--plug	#6e5800
+.settings-page .st-card-sec__ico--plug	#fff1b8
+.settings-page .st-card-sec__ico--toggle	#2f9e7f
+.settings-page .st-card-sec__ico--toggle	#dff1ea
+.settings-page .st-card-sec__ico--trend	#2f9e7f
+.settings-page .st-card-sec__ico--trend	#dff1ea
+.settings-page .tcp-card	#ffffff
+.settings-page .tcp-half--dark	#0a0a0b
+.settings-page .tcp-half--light	#eef0f3
+.settings-page .theme-card__preview--dark	#0a0a0b
+.settings-page .theme-card__preview--dark .tcp-card, .settings-page .tcp-half--dark .tcp-card	#17181a
+.settings-page .theme-card__preview--light	#eef0f3
+.tabs-add-btn--yellow	#0a0b0d
+.tabs__item	#6b7380
+.tile__bank--y	#7a5f00
+.tile__next	#eef0f3
+.toggle::after	#fff
+.tok-row__hint	#6b7380
+[data-theme='dark'] .apf-csel__drop	#1c1d21
+[data-theme='dark'] .op-row__amt--pos	#6fd4a3
+[data-theme='dark'] .pf-income-popup	#1c1d21
+[data-theme='dark'] .pf-income-popup	#f5f5f7
+[data-theme='dark'] .pf-income-popup__row-val	#34c759
+[data-theme='dark'] .pf-pos__icon--security	#0a0b0d
+[data-theme='dark'] .pf-viewtog	#222
+[data-theme='dark'] .pf-viewtog__opt--on	#0a0b0d
+[data-theme='dark'] .settings-page .invest-tile__chip--y	#2a2405
+[data-theme='dark'] .settings-page .invest-tile__chip--y	#ffe066
+[data-theme='dark'] .settings-page .st-card-sec__ico--family	#1a1430
+[data-theme='dark'] .settings-page .st-card-sec__ico--family	#b29fe6
+[data-theme='dark'] .settings-page .st-card-sec__ico--key	#3b1f17
+[data-theme='dark'] .settings-page .st-card-sec__ico--key	#ff9272
+[data-theme='dark'] .settings-page .st-card-sec__ico--plug	#2a2405
+[data-theme='dark'] .settings-page .st-card-sec__ico--plug	#ffe066
+[data-theme='dark'] .settings-page .st-card-sec__ico--toggle, [data-theme='dark'] .settings-page .st-card-sec__ico--trend	#13362a
+[data-theme='dark'] .settings-page .st-card-sec__ico--toggle, [data-theme='dark'] .settings-page .st-card-sec__ico--trend	#6fd4a3
+[data-theme='dark'] .settings-page .st-card-sec__ico--user	#0f1e30
+[data-theme='dark'] .settings-page .st-card-sec__ico--user	#8dbdf0
+[data-theme='dark'] .tabs-add-btn--yellow	#0a0b0d
+[data-theme='dark'] .tile__bank--y	#d4a800
+[data-theme='dark'] .viewtog__opt--on	#0a0b0d

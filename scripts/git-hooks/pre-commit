@@ -1,0 +1,5 @@
+#!/bin/bash
+# Установка (один раз на репозиторий, действует во всех worktree):
+#   git config core.hooksPath scripts/git-hooks
+# Пропустить в крайнем случае: git commit --no-verify
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh" --fast
