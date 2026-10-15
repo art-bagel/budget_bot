@@ -3,6 +3,10 @@
 Обновлено: 2026-07-06. Источники: [ISSUES.md](ISSUES.md) (баги/безопасность) и
 [IMPROVEMENTS.md](IMPROVEMENTS.md) (улучшения). Порядок внутри блоков — рекомендуемый.
 
+## 0. Отложено (2026-10-15)
+
+- [ ] Разобрать WIP-аудит Codex в ветке `codex/audit-remediation-20261011` (коммит `654f613`, не в проде, мержить целиком нельзя): сгруппировать по темам (Idempotency-Key, cookie-сессии, формат ошибок, async replay, scheduler, deposit interest, удаления), оценить пользу и риск каждой, полезное выносить отдельными задачами от свежего `origin/main`
+
 ## 1. Безопасность и защита данных (из ISSUES.md — сделать первым) — ГОТОВО 2026-07-07
 
 - [x] Шифровать токен Тинькофф в `external_connections.credentials` — Fernet в приложении (`storage/secretbox.py`), ключ `CREDENTIALS_ENCRYPTION_KEY`, legacy plaintext читается и перешифровывается при пересохранении
