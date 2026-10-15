@@ -69,9 +69,15 @@ Codex для разбора позже.
 - Там же `Bash(git:*)` разрешает агенту `git push` без вопроса, а push в `main`
   деплоит в прод.
 
+## Дополнение: crypto-скрипты
+
+`scripts/crypto/` (77 файлов) и ручной прогон `backend/tests/test_crypto_compiled_main_api.py`
+скопированы в `../budget_bot_archive/scripts-crypto/` и удалены из репозитория. В CI они не участвовали.
+JSON-результаты в `infra/db/Scripts/budgeting/tests/crypto_accounting/` оставлены: в них
+пути скриптов записаны только как строки с хешами.
+
 ## Открытые вопросы
 
-- Удалить или перенести в архив `scripts/crypto/*` и связанные JSON-фикстуры.
 - Нужны ли промежуточные дампы в архиве (~1,3 ГБ).
 - Откатные копии прода после выпуска криптоучёта (`budget_pre_crypto_*`, теги
   `pre-crypto-20260929`) всё ещё на хосте (см. `2026-09-29-crypto-production-release.md`).
