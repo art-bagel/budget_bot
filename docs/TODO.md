@@ -5,7 +5,7 @@
 
 ## 00. Внедрение процесса доработок (AGENTS.md, 2026-10-15) — по порядку
 
-- [ ] `scripts/check.sh` — локально то же, что CI (ruff, typecheck, lint, юнит, SQL, API тесты) + git pre-commit хук на быструю часть; правило «готово = check.sh зелёный». Плюс проверка прямых цветов в CSS вне блока токенов
+- [x] `scripts/check.sh` — локально то же, что CI (ruff, typecheck, lint, юнит, SQL, API тесты) + git pre-commit хук на быструю часть; правило «готово = check.sh зелёный». Плюс проверка прямых цветов в CSS вне блока токенов
 - [ ] Перенести Playwright из ветки аудита (`frontend/playwright.config.ts`, `browser-tests/smoke.spec.ts`, скрипты в package.json) + синтетический тестовый сид для UI-тестов; добавить `@axe-core/playwright`
 - [ ] `docs/design-guide.md` — дизайн-справочник из `styles.css` и компонентов (задача уровня M)
 - [ ] Скиллы `.claude/skills/plan-review`, `impl-review`, `ui-review` — чек-листы ревьюеров из AGENTS.md

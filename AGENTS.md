@@ -142,11 +142,21 @@ UI-тесты, скриншоты и визуальные эталоны дел�
 
 ## Проверки
 
-- Backend: `./venv/bin/ruff check backend storage`.
-- Frontend (в `frontend/`): `npm run typecheck`, `npm run lint`.
-- Схема и SQL: полный набор — в `.github/workflows/budget_bot_ci_cd.yml`
-  (схема с нуля, откат миграций, SQL- и API-тесты, Playwright smoke). Изменения
-  БД проверяются локально тем же способом, что и в CI.
+**Готово = `scripts/check.sh` зелёный.** Скрипт локально повторяет job
+`verify` из `.github/workflows/budget_bot_ci_cd.yml` в том же порядке: frontend
+build/lint, ruff, юнит-тесты, `py_compile`, `bash -n`, прямые hex-цвета в
+`styles.css`, `docker compose config`, схема с нуля, SQL- и API-тесты. БД —
+одноразовый контейнер `postgres:17` (нужен Docker), dev-база и прод не
+трогаются. В конце — итог по шагам, код выхода ≠ 0 при любой ошибке.
+
+- `scripts/check.sh --fast` — ruff, typecheck, lint, hex-цвета, юниты (секунды).
+  Его же запускает git pre-commit хук. Установка один раз на репозиторий
+  (действует во всех worktree): `git config core.hooksPath scripts/git-hooks`.
+  `--no-verify` — только осознанно, с причиной в отчёте задачи.
+- Новый hex-цвет вне `:root` / `[data-theme=…]` → `var(--…)`. Старые записаны в
+  `scripts/css-hex-baseline.txt`; исправили старые — обновите baseline:
+  `scripts/check_css_hex.py --update-baseline`.
+- Меняете CI — меняйте `scripts/check.sh` тем же коммитом.
 - Нетривиальная денежная или security-логика оставляет после себя один
   запускаемый тест.
 
