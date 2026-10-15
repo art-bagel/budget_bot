@@ -144,10 +144,14 @@ sql_tests() {
     return $rc
 }
 
+# config.py читает backend/.env (load_dotenv не перекрывает окружение): всё, чего
+# нет в CI, задаём явно пустым, чтобы dev-значения не протекали в тест.
+# TTL-переменные пустыми задать нельзя (int('')) — их в dev .env нет.
 api_tests() {
     APP_ENV=development APP_HOST=127.0.0.1 APP_PORT=8000 \
     DB_HOST=127.0.0.1 DB_PORT="$PGPORT" DB_SCHEMA=budgeting POSTGRES_PASSWORD=budget_ci \
     TELEGRAM_BOT_TOKEN=ci-test-bot-token SIGNUP_INVITE_CODE=ci-test-invite-code \
+    FRONTEND_ORIGINS= CREDENTIALS_ENCRYPTION_KEY= \
         "$PY" -m backend.tests.test_auth_api
 }
 

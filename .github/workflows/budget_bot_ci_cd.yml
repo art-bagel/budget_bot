@@ -91,9 +91,14 @@ jobs:
       - name: Validate shell scripts
         run: |
           find . -name '*.sh' \
-            -not -path './venv/*' -not -path './node_modules/*' \
+            -not -path './venv/*' -not -path '*/node_modules/*' \
             -not -path './crypto-task/*' -not -path './.git/*' \
             -print0 | xargs -0 -r -n1 bash -n
+
+      # Новые прямые hex-цвета вне токенов (:root / [data-theme]) — только
+      # через var(--…). Старые записаны в scripts/css-hex-baseline.txt.
+      - name: Check hex colors in styles.css
+        run: python scripts/check_css_hex.py
 
       # Схема собирается с нуля ровно так же, как на свежей установке.
       # Именно этот шаг ловит расхождение tb/ с миграциями: без него таблица

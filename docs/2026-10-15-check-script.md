@@ -238,4 +238,21 @@ py_compile (тот же find) → bash -n → схема (тот же `PGOPTIONS
 - п. 6: `url(#fade)` больше не считается цветом (lookbehind), случай добавлен
   в `--self-test`; baseline не изменился (194).
 
-Вопросы владельцу (пп. 1, 5, 7) остаются открытыми.
+### Решения владельца (2026-10-15) и правки по ним
+
+- п. 1, да: в job `verify` добавлен шаг «Check hex colors in styles.css»
+  (`python scripts/check_css_hex.py`) после `bash -n`, на том же месте, что и в
+  `check.sh`. В `AGENTS.md` hex-цвета теперь в общем списке шагов CI.
+- п. 5, задать явно пустыми: `api_tests` передаёт `FRONTEND_ORIGINS=` и
+  `CREDENTIALS_ENCRYPTION_KEY=`. Проверено временным `backend/.env` с
+  `leak`-значениями: без пина они попадают в `settings`, с пином —
+  `[]`/`None`. Ограничения: `TELEGRAM_INIT_DATA_TTL_SECONDS` и
+  `SESSION_TTL_SECONDS` пустыми задать нельзя, потому что `int('')` падает.
+  В dev `.env` их нет, но если появятся, протекут. Пустой `FRONTEND_ORIGINS`
+  даёт `[]`, а в CI дефолтный список; API-тест от CORS не зависит.
+- п. 7, CI под скрипт: в «Validate shell scripts» исключение
+  `'*/node_modules/*'`.
+
+После правок: `scripts/check.sh` — GREEN (13 шагов), YAML workflow
+разбирается, порядок шагов `verify` совпадает с `check.sh`. Проверить новый
+CI-шаг на GitHub можно только после push в `main`.

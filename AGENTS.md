@@ -145,8 +145,8 @@ UI-тесты, скриншоты и визуальные эталоны дел�
 **Готово = `scripts/check.sh` зелёный.** Скрипт локально повторяет job
 `verify` из `.github/workflows/budget_bot_ci_cd.yml` теми же командами и в том
 же порядке: frontend build/lint, ruff, юнит-тесты, `py_compile`, `bash -n`,
-схема с нуля, SQL- и API-тесты, `docker compose config`. Сверх CI — проверка
-прямых hex-цветов в `styles.css`. БД —
+прямые hex-цвета в `styles.css`, схема с нуля, SQL- и API-тесты,
+`docker compose config`. БД —
 одноразовый контейнер `postgres:17` (нужен Docker), dev-база и прод не
 трогаются. В конце — итог по шагам, код выхода ≠ 0 при любой ошибке.
 
