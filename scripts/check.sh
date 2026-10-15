@@ -62,7 +62,8 @@ skip() {
 in_frontend() { (cd frontend && "$@"); }
 
 frontend_deps() {
-    [ -d frontend/node_modules ] && return 0
+    # Как CI: после смены lock-файла (rebase на свежий main) ставим заново.
+    [ frontend/node_modules/.package-lock.json -nt frontend/package-lock.json ] && return 0
     in_frontend npm ci
 }
 
@@ -110,7 +111,8 @@ start_test_db() {
 
     # Только наш контейнер: всё, что могло прийти из окружения (PGHOST на
     # dev-базу, PGSERVICE и т.п.), перекрывается.
-    unset PGSERVICE PGSERVICEFILE PGDATABASE PGUSER
+    # shellcheck disable=SC2046
+    unset $(compgen -v PG)
     export PGHOST=127.0.0.1 PGPORT="$port" PGPASSWORD=budget_ci
     export POSTGRES_USER=budget_ci DB_DATABASE=budget_ci
 
@@ -165,7 +167,6 @@ else
     step "py_compile" py_compile_all
     step "shell syntax" shell_syntax
     step "css hex colors" css_hex
-    step "docker compose config" compose_config
     step "start test db (postgres:17)" start_test_db
     if [ "$LAST_OK" = 1 ]; then
         step "schema from scratch" build_schema
@@ -178,6 +179,7 @@ else
     else
         skip "schema from scratch"; skip "sql tests"; skip "api tests"
     fi
+    step "docker compose config" compose_config
 fi
 
 echo

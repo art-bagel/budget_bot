@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CSS = ROOT / 'frontend/src/styles.css'
 BASELINE = ROOT / 'scripts/css-hex-baseline.txt'
 
-HEX = re.compile(r'#[0-9a-fA-F]{3,8}\b')
+HEX = re.compile(r'(?<![\w(-])#[0-9a-fA-F]{3,8}\b')  # не url(#fade)
 TOKEN_SELECTOR = re.compile(r':root|\[data-theme=[^\]]+\]|:root:not\(\[data-theme=[^\]]+\]\)')
 
 
@@ -73,6 +73,7 @@ def self_test() -> None:
     .btn { color: #ABC; background: var(--a); }
     [data-theme='dark'] .btn { color: #123456; }
     #id { color: var(--a); }
+    .mask { mask: url(#fade); }
     """
     got = [(sel, color) for _, sel, color in find_violations(css)]
     assert got == [('.btn', '#abc'), ("[data-theme='dark'] .btn", '#123456')], got
