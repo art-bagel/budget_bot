@@ -81,3 +81,9 @@ JSON-результаты в `infra/db/Scripts/budgeting/tests/crypto_accounting
 - Нужны ли промежуточные дампы в архиве (~1,3 ГБ).
 - Откатные копии прода после выпуска криптоучёта (`budget_pre_crypto_*`, теги
   `pre-crypto-20260929`) всё ещё на хосте (см. `2026-09-29-crypto-production-release.md`).
+
+## Деплой
+
+2026-10-15 11:42 UTC: `main` `74fe468..d67ffd1` запушен с аппрувом владельца.
+GitHub Actions run 38729277239: Verify Project — success, Deploy To Server —
+success (11:45:59 UTC). `https://budget.mrbagel.ru/health` → 200, `status: ok`.
