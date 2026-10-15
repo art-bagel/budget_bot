@@ -256,3 +256,14 @@ py_compile (тот же find) → bash -n → схема (тот же `PGOPTIONS
 После правок: `scripts/check.sh` — GREEN (13 шагов), YAML workflow
 разбирается, порядок шагов `verify` совпадает с `check.sh`. Проверить новый
 CI-шаг на GitHub можно только после push в `main`.
+
+## Деплой
+
+2026-10-15 ~20:04 UTC: `main` `d67ffd1..dca6820` запушен с аппрувом владельца
+(вместе с 4 коммитами локального `main`: `6f54775..1830aad`). GitHub Actions run
+38798991546: Verify Project — success, в т.ч. новый шаг «Check hex colors in
+styles.css»; Deploy To Server — success (20:06:31 UTC).
+`https://budget.mrbagel.ru/health` → 200, `status: ok`.
+
+Хук пока не включён: `git config core.hooksPath scripts/git-hooks` — за
+владельцем.
