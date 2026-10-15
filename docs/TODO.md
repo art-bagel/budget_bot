@@ -3,6 +3,14 @@
 Обновлено: 2026-07-06. Источники: [ISSUES.md](ISSUES.md) (баги/безопасность) и
 [IMPROVEMENTS.md](IMPROVEMENTS.md) (улучшения). Порядок внутри блоков — рекомендуемый.
 
+## 00. Внедрение процесса доработок (AGENTS.md, 2026-10-15) — по порядку
+
+- [ ] `scripts/check.sh` — локально то же, что CI (ruff, typecheck, lint, юнит, SQL, API тесты) + git pre-commit хук на быструю часть; правило «готово = check.sh зелёный». Плюс проверка прямых цветов в CSS вне блока токенов
+- [ ] Перенести Playwright из ветки аудита (`frontend/playwright.config.ts`, `browser-tests/smoke.spec.ts`, скрипты в package.json) + синтетический тестовый сид для UI-тестов; добавить `@axe-core/playwright`
+- [ ] `docs/design-guide.md` — дизайн-справочник из `styles.css` и компонентов (задача уровня M)
+- [ ] Скиллы `.claude/skills/plan-review`, `impl-review`, `ui-review` — чек-листы ревьюеров из AGENTS.md
+- [ ] Освежить `docs/TODO.md`: убрать сделанное, свести с ISSUES/IMPROVEMENTS
+
 ## 0. Отложено (2026-10-15)
 
 - [ ] Разобрать WIP-аудит Codex в ветке `codex/audit-remediation-20261011` (коммит `654f613`, не в проде, мержить целиком нельзя): сгруппировать по темам (Idempotency-Key, cookie-сессии, формат ошибок, async replay, scheduler, deposit interest, удаления), оценить пользу и риск каждой, полезное выносить отдельными задачами от свежего `origin/main`
