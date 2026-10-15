@@ -78,3 +78,62 @@ SQL-тесты → API-тест (`backend.tests.test_auth_api`).
 
 - В `AGENTS.md` упомянут «откат миграций» и Playwright smoke в CI — в текущем
   workflow их нет. Скрипт повторяет то, что есть в workflow.
+
+## Реализация (отчёт)
+
+Файлы: `scripts/check.sh`, `scripts/check_css_hex.py`,
+`scripts/css-hex-baseline.txt` (194 пары на момент старта),
+`scripts/git-hooks/pre-commit`; правки `AGENTS.md` («Проверки»), `CLAUDE.md`,
+`docs/TODO.md`.
+
+Как пользоваться:
+
+```bash
+scripts/check.sh            # полный, ~25 с на M-серии (Docker нужен)
+scripts/check.sh --fast     # ~8 с
+git config core.hooksPath scripts/git-hooks   # включить хук, один раз
+```
+
+### Проверка критериев (2026-10-15, worktree на `claude/check-script`)
+
+| # | Что сделано | Результат |
+|---|---|---|
+| 1 | `scripts/check.sh` на чистой ветке | GREEN, 13 шагов, 18/18 SQL-тестов, API-тест пройден |
+| 2 | `import os` в конец `backend/app/config.py` | `--fast` и полный: `FAIL ruff`, код 1 |
+| 3 | `frontend/src/__broken.ts` с TS2322 | `FAIL frontend typecheck` |
+| 4 | `tests/zz_broken.sql` с `RAISE EXCEPTION` | `FAIL sql tests`, остальные шаги идут дальше, код 1 |
+| 5 | `.zz-new { color: #123abc }` в `styles.css` | `FAIL css hex colors`, показана строка; старые 194 — OK. `--self-test` ok |
+| 6 | коммит с ошибкой ruff через `-c core.hooksPath=scripts/git-hooks` | коммит отклонён; зелёные коммиты ветки прошли через хук |
+| 7 | `SIGTERM` во время прогона | контейнер `budget-check-*` удалён, код 130; после обычных прогонов контейнеров не остаётся |
+| 8 | `AGENTS.md` «Проверки» | обновлён |
+
+Временные правки после проверок откатаны (`git status` чистый).
+
+### Что нашли по ходу
+
+- В worktree нет ни `venv/`, ни `frontend/node_modules`. Python берётся из venv
+  основного checkout-а, `node_modules` ставится `npm ci` при первом прогоне.
+- Локальный venv — Python 3.12, CI и прод — 3.10. Синтаксис новее 3.10
+  локальный `py_compile` не поймает — поймает CI.
+- psql на хосте 14, сервер в контейнере 17 — для `-f` скриптов работает.
+- Проверять готовность Postgres через `docker exec pg_isready` нельзя: init-
+  сервер образа слушает только сокет и отвечает «готов» до перезапуска.
+  Проверяем по TCP с хоста.
+- `biome check src` печатает ~157 warnings — не ошибки, как и в CI.
+- В `AGENTS.md` до правки упоминались «откат миграций» и Playwright smoke в
+  CI — в workflow их нет; формулировку убрал, Playwright — следующий пункт §00.
+
+### Известные ограничения / осознанные риски
+
+- Хук проверяет рабочую копию, а не только застейдженное: неготовая правка в
+  соседнем файле может заблокировать коммит. Обход — `--no-verify` осознанно.
+- Хук действует только после `git config core.hooksPath scripts/git-hooks`;
+  без него Codex коммитит без проверки. Включает владелец после мержа.
+- Hex-проверка — простой парсер: `url(#fade)` посчитался бы цветом. Сейчас таких
+  мест нет.
+- Если в baseline пара уже есть и её стало больше, в выводе показывается первое
+  место с этой парой, а не обязательно новое.
+
+### Откат
+
+`git revert` коммитов ветки; хук: `git config --unset core.hooksPath`.
