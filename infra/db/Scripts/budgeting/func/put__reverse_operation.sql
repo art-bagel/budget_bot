@@ -46,10 +46,12 @@ BEGIN
         RAISE EXCEPTION 'Access denied to operation %', _operation_id;
     END IF;
 
-    -- Journal operations have one way back: deleting their journal source
-    -- (no reversal row; blocked while later operations depend on it).
-    IF EXISTS (SELECT 1 FROM crypto_source_event_links
-        WHERE ledger_table='operations' AND ledger_id=_operation_id) THEN
+    -- Manual crypto and collection operations have one way back: deleting their
+    -- journal source (no reversal row; blocked while later operations depend on
+    -- it). Ordinary bank postings keep the reversal below.
+    IF EXISTS (SELECT 1 FROM crypto_source_event_links l JOIN crypto_source_events s ON s.id=l.source_event_id
+        WHERE l.ledger_table='operations' AND l.ledger_id=_operation_id
+          AND s.source_namespace IN ('manual-portfolio-v1','manual-collection-v1')) THEN
         PERFORM budgeting.put__delete_crypto_source(_user_id,(SELECT source_event_id FROM crypto_source_event_links
             WHERE ledger_table='operations' AND ledger_id=_operation_id),gen_random_uuid());
         RETURN jsonb_build_object('reversal_operation_id',NULL,'reversed_operation_id',_operation_id);

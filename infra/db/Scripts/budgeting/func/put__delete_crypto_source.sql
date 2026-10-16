@@ -1,4 +1,4 @@
--- Delete one manual journal source by rolling back exactly the rows it wrote.
+-- Delete one manual crypto/collection journal source by rolling back exactly the rows it wrote.
 -- Bank model: history is never recalculated. A source is deletable only when no
 -- later source or outside write touched its rows; otherwise those go first.
 DROP FUNCTION IF EXISTS budgeting.put__delete_crypto_source;
@@ -30,8 +30,9 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended('crypto-source:'||src.owner_key,0));
  SELECT * INTO src FROM crypto_source_events WHERE id=_source_event_id FOR UPDATE;
  IF src.id IS NULL THEN RAISE EXCEPTION 'Операция не найдена'; END IF;
- IF src.source_namespace NOT IN ('manual-portfolio-v1','manual-collection-v1','bank-posting-v1') THEN
-  RAISE EXCEPTION 'Импортированную операцию удалить нельзя';
+ -- Bank postings (ordinary expenses too) are undone by a reversal, not here.
+ IF src.source_namespace NOT IN ('manual-portfolio-v1','manual-collection-v1') THEN
+  RAISE EXCEPTION 'Эту операцию удалить нельзя, отмените её в истории операций';
  END IF;
  IF NOT src.reversible OR NOT EXISTS(SELECT 1 FROM crypto_source_mutations
    WHERE source_event_id=src.id AND revision=src.revision) THEN

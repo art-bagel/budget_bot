@@ -7,6 +7,7 @@ DECLARE
  uid bigint:=990000000951; other bigint:=990000000952; me jsonb; bank bigint; wallet bigint; coll bigint;
  coin bigint; coin2 bigint; item jsonb; item_b jsonb; item_c jsonb; r jsonb; before jsonb; err text; req uuid; close_req uuid;
  sid bigint; sid_b bigint; sid_sell bigint; sid_c bigint; sid_d bigint; pos bigint; ev record; pay jsonb;
+ member bigint:=990000000953; fam jsonb; fcoll bigint; coin3 bigint; cat bigint; e1 jsonb;
 BEGIN
  me:=put__register_user_context(uid,'RUB',NULL,'Undo','Owner');
  PERFORM put__register_user_context(other,'RUB',NULL,'Other','User');
@@ -156,5 +157,41 @@ BEGIN
  r:=put__reverse_operation(uid,(SELECT ledger_id FROM crypto_source_event_links WHERE source_event_id=ev.id AND ledger_table='operations' LIMIT 1));
  ASSERT r->>'reversal_operation_id' IS NULL AND NOT EXISTS(SELECT 1 FROM crypto_source_events WHERE id=ev.id),'cancel deletes source';
  ASSERT (SELECT count(*) FROM operations WHERE type='reversal' AND owner_user_id=uid)=1,'only the ordinary transfer was reversed';
+
+ -- 11. FIFO follows posting order: a past-dated lot posted later is consumed later.
+ coin3:=(put__ensure_crypto_asset('UNDO3','Undo coin 3','ton','0:undo-coin-3',9::smallint,'{}'::jsonb)->>'id')::bigint;
+ PERFORM put__buy_crypto_asset(uid,bank,'RUB',1000,coin3,10);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_transfer',
+  jsonb_build_object('from_account_id',bank,'to_account_id',coll,'crypto_asset_id',coin3,'amount','1'),current_date);
+ item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,
+  'crypto_asset_id',coin,'crypto_quantity','5','title','Fifo','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date-6);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_sell',
+  jsonb_build_object('position_id',item->'id','crypto_asset_id',coin3,'crypto_quantity','1'),current_date-2);
+ item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_receive',jsonb_build_object('investment_account_id',coll,
+  'title','Fee target','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_coin_fee',
+  jsonb_build_object('position_id',item->'id','crypto_asset_id',coin3,'crypto_quantity','1'),current_date);
+ ASSERT (SELECT (amount,cost_base_remaining)=(1::numeric,500::numeric) FROM current_crypto_balances
+  WHERE bank_account_id=coll AND crypto_asset_id=coin3),'fee took the lot posted first (100), the past-dated sale lot (500) stays';
+
+ -- Ordinary expenses of an owner with a journal keep their reversal, in any order.
+ cat:=put__create_category(uid,'Food','regular');
+ e1:=put__record_expense(uid,bank,cat,50,'RUB');
+ PERFORM put__record_expense(uid,bank,cat,70,'RUB');
+ ASSERT put__reverse_operation(uid,(e1->>'operation_id')::bigint)->>'reversal_operation_id' IS NOT NULL,'earlier expense reversed';
+
+ -- 6. A family member deletes a family operation; the founder sees the same journal.
+ PERFORM put__register_user_context(member,'RUB','undo_member','Family','Member');
+ fam:=put__create_family(uid,'Undo family');
+ PERFORM set__respond_family_invitation(member,(put__invite_family_member(uid,'undo_member')->>'invitation_id')::bigint,true);
+ fcoll:=(put__create_bank_account(uid,'Family gifts','family','investment','collectible')->>'id')::bigint;
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_receive',jsonb_build_object('investment_account_id',fcoll,
+  'title','Family gift','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
+ sid:=(SELECT max(id) FROM crypto_source_events WHERE anchor_account_id=fcoll);
+ BEGIN PERFORM put__delete_crypto_source(other,sid,gen_random_uuid()); RAISE EXCEPTION 'outsider deleted family operation';
+ EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
+ ASSERT err LIKE 'Нет доступа%','outsider denied: '||err;
+ PERFORM put__delete_crypto_source(member,sid,gen_random_uuid());
+ ASSERT NOT EXISTS(SELECT 1 FROM portfolio_positions WHERE investment_account_id=fcoll),'member deleted family gift';
 END $$;
 ROLLBACK;

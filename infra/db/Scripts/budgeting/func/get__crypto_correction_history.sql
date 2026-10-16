@@ -24,7 +24,7 @@ BEGIN
    (SELECT count(*)>0 FROM budgeting.crypto_source_revisions r WHERE r.source_event_id=s.id) corrected
  FROM budgeting.crypto_source_events s WHERE s.owner_key=ownerkey
  -- Only sources that can be deleted are listed.
- AND s.reversible AND s.source_namespace IN ('manual-portfolio-v1','manual-collection-v1','bank-posting-v1')
+ AND s.reversible AND s.source_namespace IN ('manual-portfolio-v1','manual-collection-v1')
  -- Collection editing includes either side of a transfer to this account.
  AND (a.investment_asset_type IS DISTINCT FROM 'collectible' OR (
    EXISTS (SELECT 1 FROM jsonb_array_elements(s.commands) c WHERE c->>'kind' LIKE 'collectible_%')
