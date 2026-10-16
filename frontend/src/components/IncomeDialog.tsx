@@ -320,7 +320,12 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   onChange={(e) => setNewIncomeSourceName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleCreateSource();
-                    if (e.key === 'Escape') { setShowAddSource(false); setNewIncomeSourceName(''); }
+                    if (e.key === 'Escape') {
+                      // Only cancel the new source; the sheet itself stays open.
+                      e.stopPropagation();
+                      setShowAddSource(false);
+                      setNewIncomeSourceName('');
+                    }
                   }}
                   disabled={creatingSource}
                 />

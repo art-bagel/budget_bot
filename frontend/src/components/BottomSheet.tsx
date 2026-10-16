@@ -14,6 +14,10 @@ interface Props {
   gray?: boolean;
 }
 
+// Open sheets, innermost last: Escape closes only the top one, wherever focus
+// is (a field that removed itself leaves focus on <body>, outside the sheet).
+const openSheets: string[] = [];
+
 export default function BottomSheet({ open, title, tag, icon, iconColor, onClose, children, actions, gray }: Props) {
   const [visible, setVisible] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -29,13 +33,26 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
     wasOpenRef.current = open;
     if (open) openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const opener = openerRef.current;
     const sheet = sheetRef.current;
     if (sheet && !sheet.contains(document.activeElement)) sheet.focus({ preventScroll: true });
-    return () => opener?.focus({ preventScroll: true });
-  }, [open]);
+
+    openSheets.push(titleId);
+    // A field that handles Escape itself stops propagation and keeps the sheet open.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && openSheets[openSheets.length - 1] === titleId) onCloseRef.current();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      openSheets.splice(openSheets.lastIndexOf(titleId), 1);
+      opener?.focus({ preventScroll: true });
+    };
+  }, [open, titleId]);
 
   useEffect(() => {
     if (open) {
@@ -71,16 +88,7 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
   if (!open && !visible) return null;
 
   return (
-    <div
-      className="sheet-root"
-      data-open={open ? '' : undefined}
-      onKeyDown={(e) => {
-        if (e.key !== 'Escape') return;
-        // Nested sheets: only the innermost one closes.
-        e.stopPropagation();
-        onClose();
-      }}
-    >
+    <div className="sheet-root" data-open={open ? '' : undefined}>
       <div className="sheet-backdrop" onClick={onClose} />
       <div
         ref={sheetRef}

@@ -27,4 +27,16 @@ test('login, main sections and a sheet from the keyboard', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
   await expect(opener).toBeFocused();
+
+  // Escape inside a field that handles it itself must not close the sheet.
+  await page.getByRole('button', { name: 'Пополнить', exact: true }).click();
+  const income = page.getByRole('dialog', { name: 'Пополнить счёт' });
+  await income.getByRole('button', { name: 'Новый', exact: true }).click();
+  const sourceName = income.getByPlaceholder('Название источника');
+  await sourceName.fill('Подработка');
+  await sourceName.press('Escape');
+  await expect(sourceName).toBeHidden();
+  await expect(income).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(income).toBeHidden();
 });

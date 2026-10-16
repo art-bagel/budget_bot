@@ -10,7 +10,8 @@ export async function login(page: Page) {
   await page.getByLabel('Email', { exact: true }).fill(EMAIL);
   await page.getByLabel('Пароль', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Войти', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Портфель', exact: true })).toBeVisible();
+  // The first test of a run hits a freshly started API (cold DB pools).
+  await expect(page.getByRole('button', { name: 'Портфель', exact: true })).toBeVisible({ timeout: 15_000 });
 }
 
 // Overview loaded and entrance animations finished (they fade colors in).
