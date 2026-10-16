@@ -20,6 +20,13 @@ DB=budget_test_ui
 API_PORT=18000
 WEB_PORT=15173
 
+# The next line drops a database: only on a local server (check.sh container
+# or the CI service), never on whatever PGHOST happens to be in a shell.
+case "${PGHOST:-}" in
+    127.0.0.1|localhost) ;;
+    *) echo "browser-tests: refusing PGHOST='${PGHOST:-}', only 127.0.0.1/localhost" >&2; exit 1 ;;
+esac
+
 PGOPTIONS='-c client_min_messages=warning' psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres \
     -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB"
 PGOPTIONS='-c client_min_messages=warning' DB_DATABASE=$DB bash -c '
@@ -36,6 +43,10 @@ export APP_ENV=development APP_HOST=127.0.0.1 APP_PORT=$API_PORT \
     POSTGRES_PASSWORD="$PGPASSWORD" \
     TELEGRAM_BOT_TOKEN=ui-test-bot-token SIGNUP_INVITE_CODE=ui-test-invite-code \
     FRONTEND_ORIGINS= CREDENTIALS_ENCRYPTION_KEY=
+# Offline: outbound HTTP (CBR, Bybit, tonapi, CoinGecko) from the seed and the
+# API goes to a dead proxy and fails at once, so screens never depend on the
+# internet or live prices.
+export HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 NO_PROXY=127.0.0.1,localhost
 
 "$PY" scripts/seed_ui_test.py
 
@@ -46,10 +57,7 @@ trap cleanup EXIT
 # Not test-results/: playwright wipes it on start.
 LOGS="$ROOT/frontend/browser-logs"
 mkdir -p "$LOGS"
-# Offline: outbound HTTP (CBR, Bybit, tonapi, CoinGecko) goes to a dead proxy
-# and fails at once, so the screens never depend on the internet or live prices.
-HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 NO_PROXY=127.0.0.1,localhost \
-    "$PY" -m uvicorn backend.app.main:app --host 127.0.0.1 --port $API_PORT > "$LOGS/api.log" 2>&1 &
+"$PY" -m uvicorn backend.app.main:app --host 127.0.0.1 --port $API_PORT > "$LOGS/api.log" 2>&1 &
 PIDS+=($!)
 # Production bundle via `vite preview`, not the dev server: a few files instead
 # of hundreds of modules (Docker Desktop port forwarding stalls on those), and
