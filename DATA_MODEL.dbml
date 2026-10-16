@@ -309,8 +309,9 @@ Table crypto_source_event_links {
 // these units are not additional assets or liabilities. Per-command owner-locked
 // conservation requires sum(units) = outstanding principal for each component loan.
 
-// Correction journal (043). Reversible is false for legacy envelopes without
-// captured before-images. No inferred baseline is silently invented.
+// Mutation journal (043): before/after images of every accounting row a source
+// wrote. Deleting a source (055) rolls them back; history replay was removed.
+// Reversible is false for legacy envelopes without captured before-images.
 Table crypto_source_mutations {
   id bigint [pk, increment]
   source_event_id bigint [not null, ref: > crypto_source_events.id]
@@ -328,6 +329,7 @@ Table crypto_source_revisions {
   superseded_at timestamptz [not null]
   indexes { (source_event_id, revision) [pk] }
 }
+// Legacy: written by the removed history recalculation, kept as history.
 Table crypto_source_corrections {
   request_id uuid [pk]
   source_event_id bigint [not null, ref: > crypto_source_events.id]
@@ -336,6 +338,22 @@ Table crypto_source_corrections {
   request jsonb [not null]
   result jsonb [not null]
   created_at timestamptz [not null]
+}
+// Deleted journal sources (055): audit and tombstone. No FK to the deleted event.
+Table crypto_source_deletions {
+  id bigint [pk, increment]
+  request_id uuid [not null, unique]
+  source_event_id bigint [not null, unique]
+  owner_key text [not null]
+  source_namespace text [not null]
+  source_id text [not null]
+  envelope jsonb [not null]
+  mutations jsonb [not null]
+  revisions jsonb [not null]
+  corrections jsonb [not null]
+  deleted_by_user_id bigint [ref: > users.id, note: 'ON DELETE SET NULL']
+  deleted_at timestamptz [not null]
+  indexes { (owner_key, source_namespace, source_id) }
 }
 
 Table crypto_asset_visibility {
