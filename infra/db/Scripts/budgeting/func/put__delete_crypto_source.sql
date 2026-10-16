@@ -73,8 +73,14 @@ BEGIN
    SELECT string_agg(format('t.%I=k.%I',key,key),' AND ' ORDER BY key) INTO predicate FROM jsonb_object_keys(m.row_key) key;
    EXECUTE format('SELECT to_jsonb(t) FROM budgeting.%I t, jsonb_populate_record(NULL::budgeting.%I,$1) k WHERE %s',
     m.table_name,m.table_name,predicate) INTO actual USING m.row_key;
-   IF actual IS DISTINCT FROM m.after_row THEN
-    RAISE EXCEPTION 'После этой операции данные (%) изменены операцией вне журнала. Сначала отмените её',m.table_name;
+   -- Values decide, not the touch time: a reversed outside write leaves the row as it was.
+   IF (actual-'updated_at') IS DISTINCT FROM (m.after_row-'updated_at') THEN
+    RAISE EXCEPTION 'После этой операции % изменён другой операцией (перевод, расход, правка). Сначала отмените её',
+     CASE WHEN m.table_name IN ('current_bank_balances','bank_entries') THEN 'остаток денег на счёте'
+          WHEN m.table_name IN ('current_crypto_balances','crypto_lots','crypto_bank_entries','crypto_lot_consumptions') THEN 'остаток монет'
+          WHEN m.table_name IN ('current_budget_balances','budget_entries') THEN 'бюджет'
+          WHEN m.table_name IN ('portfolio_positions','portfolio_events') THEN 'предмет или позиция'
+          ELSE 'учёт' END;
    END IF;
    IF m.before_row IS NULL THEN
     EXECUTE format('DELETE FROM budgeting.%I t USING jsonb_populate_record(NULL::budgeting.%I,$1) k WHERE %s',m.table_name,m.table_name,predicate) USING m.row_key;

@@ -3644,6 +3644,7 @@ input[type="date"].picker-v2::-webkit-calendar-picker-indicator { opacity: 0.4; 
 .sh-btn:disabled { opacity: .45; cursor: default; }
 .sh-btn--ghost { background: var(--surface-inset); color: var(--text); }
 .sh-btn--primary { background: var(--yellow); color: var(--ink-on-yellow); }
+.sh-btn--danger { background: var(--neg-bg); color: var(--neg); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .sh-btn--primary:hover { background: var(--yellow-deep); }
 
 /* ── Dialog v2 form cards ────────────────────────── */

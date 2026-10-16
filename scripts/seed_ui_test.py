@@ -89,6 +89,17 @@ def seed(client) -> None:
         }}],
     })
 
+    # A collection with one free gift: browser tests sell it by mistake and undo it.
+    gifts = call('POST', '/api/v1/bank-accounts', json={
+        'name': 'Тестовые подарки', 'account_kind': 'investment', 'investment_asset_type': 'collectible',
+    })['id']
+    call('POST', '/api/v1/portfolio/positions', json={
+        'request_id': '00000000-0000-4000-8000-0000000000a1', 'received_free': True,
+        'investment_account_id': gifts, 'asset_type_code': 'collectible', 'title': 'Тестовый подарок',
+        'quantity': 1, 'amount_in_currency': 0, 'currency_code': 'RUB', 'opened_at': '2026-01-12',
+        'metadata': {'item_kind': 'telegram_gift'},
+    })
+
 
 def main() -> None:
     assert_test_database(os.environ)

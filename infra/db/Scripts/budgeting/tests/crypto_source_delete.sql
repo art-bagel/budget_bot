@@ -93,7 +93,7 @@ BEGIN
  UPDATE portfolio_positions SET metadata=metadata||'{"outside":true}' WHERE id=pos;
  BEGIN PERFORM put__delete_crypto_source(uid,sid_d,gen_random_uuid()); RAISE EXCEPTION 'outside write ignored';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err LIKE '%вне журнала%','outside write: '||err;
+ ASSERT err LIKE 'После этой операции предмет или позиция изменён другой операцией%','outside write: '||err;
  ASSERT EXISTS(SELECT 1 FROM crypto_source_events WHERE id=sid_d),'blocked source kept';
  UPDATE portfolio_positions SET metadata=metadata-'outside' WHERE id=pos;
  -- A row outside the journal that hangs off the item would vanish by cascade.
@@ -103,6 +103,20 @@ BEGIN
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
  ASSERT err LIKE 'На эту операцию опираются%','cascade: '||err;
  DELETE FROM portfolio_events WHERE position_id=pos AND comment='outside';
+
+ -- Money taken out by an ordinary transfer blocks; reversing that transfer unblocks.
+ item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,
+  'crypto_asset_id',coin,'crypto_quantity','1','title','Spent','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',
+  jsonb_build_object('position_id',item->'id','close_currency_code','RUB','close_amount_in_currency',26),current_date);
+ sid:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
+ r:=put__transfer_between_accounts(uid,coll,bank,'RUB',10);
+ BEGIN PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid()); RAISE EXCEPTION 'spent money ignored';
+ EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
+ ASSERT err LIKE 'После этой операции остаток денег на счёте изменён%','spent money: '||err;
+ PERFORM put__reverse_operation(uid,(r->>'operation_id')::bigint);
+ PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid());
+ ASSERT COALESCE((SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='RUB'),0)=0,'sale undone after the transfer was reversed';
 
  -- 9, 10. Past dates: the operation keeps its date, the posting goes last.
  item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,
@@ -141,6 +155,6 @@ BEGIN
  -- Cancelling a journal operation deletes its source; no reversal row appears.
  r:=put__reverse_operation(uid,(SELECT ledger_id FROM crypto_source_event_links WHERE source_event_id=ev.id AND ledger_table='operations' LIMIT 1));
  ASSERT r->>'reversal_operation_id' IS NULL AND NOT EXISTS(SELECT 1 FROM crypto_source_events WHERE id=ev.id),'cancel deletes source';
- ASSERT NOT EXISTS(SELECT 1 FROM operations WHERE type='reversal' AND owner_user_id=uid),'no reversal rows';
+ ASSERT (SELECT count(*) FROM operations WHERE type='reversal' AND owner_user_id=uid)=1,'only the ordinary transfer was reversed';
 END $$;
 ROLLBACK;
