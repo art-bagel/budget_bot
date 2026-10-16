@@ -630,7 +630,7 @@ export interface ReverseOperationRequest {
 }
 
 export interface ReverseOperationResponse {
-  reversal_operation_id: number;
+  reversal_operation_id: number | null;
   reversed_operation_id: number;
 }
 

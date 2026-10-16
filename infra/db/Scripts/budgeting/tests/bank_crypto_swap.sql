@@ -52,8 +52,9 @@ BEGIN
     END;
     ASSERT err LIKE '%20 TUSDT уже потрачены вне бота%', format('reserved units named, got "%s"', err);
 
-    -- 4. Reversal restores the given coin and removes the received one.
-    PERFORM put__reverse_operation(uid, (op->>'operation_id')::bigint, NULL);
+    -- 4. Cancelling a journal swap deletes its source: the given coin is restored.
+    ASSERT put__reverse_operation(uid, (op->>'operation_id')::bigint, NULL)->>'reversal_operation_id' IS NULL, 'no reversal row';
+    ASSERT NOT EXISTS (SELECT 1 FROM crypto_source_events WHERE id = (op->>'source_event_id')::bigint), 'swap source deleted';
     ASSERT (SELECT (amount, cost_base_remaining) = (170::numeric, 22000::numeric) FROM current_crypto_balances
             WHERE bank_account_id = bank AND crypto_asset_id = usdt), 'USDT restored';
     ASSERT COALESCE((SELECT amount FROM current_crypto_balances WHERE bank_account_id = bank AND crypto_asset_id = usdc), 0) = 0,

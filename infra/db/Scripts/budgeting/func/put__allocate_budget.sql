@@ -51,7 +51,7 @@ BEGIN
     INTO _from_kind, _from_name, _owner_type, _owner_user_id, _owner_family_id
     FROM categories
     WHERE id = _from_category_id
-      AND (is_active OR current_setting('budgeting.crypto_replaying',true)='on');
+      AND is_active;
 
     IF _from_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active source category %', _from_category_id;
@@ -73,7 +73,7 @@ BEGIN
     INTO _to_kind, _to_name, _to_owner_type, _to_owner_user_id, _to_owner_family_id
     FROM categories
     WHERE id = _to_category_id
-      AND (is_active OR current_setting('budgeting.crypto_replaying',true)='on');
+      AND is_active;
 
     IF _to_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active destination category %', _to_category_id;

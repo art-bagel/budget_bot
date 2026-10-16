@@ -51,7 +51,7 @@ BEGIN
     INTO _category_kind, _category_owner_type, _category_owner_user_id, _category_owner_family_id
     FROM categories
     WHERE id = _category_id
-      AND (is_active OR current_setting('budgeting.crypto_replaying',true)='on');
+      AND is_active;
 
     IF _category_kind IS NULL THEN
         RAISE EXCEPTION 'Unknown active category %', _category_id;

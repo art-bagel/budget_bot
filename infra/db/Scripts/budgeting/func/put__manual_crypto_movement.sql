@@ -75,22 +75,18 @@ BEGIN
         RAISE EXCEPTION 'Существующий долг требует восстановления заёмных единиц перед изменением';
     END IF;
     IF NOT isfinite(_day) THEN RAISE EXCEPTION 'Некорректная дата операции'; END IF;
-    IF EXISTS(SELECT 1 FROM portfolio_events e JOIN portfolio_positions p ON p.id=e.position_id
-        WHERE p.owner_type=_account.owner_type
-          AND p.owner_user_id IS NOT DISTINCT FROM _account.owner_user_id
-          AND p.owner_family_id IS NOT DISTINCT FROM _account.owner_family_id
-          AND p.asset_type_code='crypto' AND e.event_at>_day)
-       OR EXISTS(SELECT 1 FROM crypto_source_events WHERE owner_key=_owner_key AND accounting_date>_day) THEN
-        RAISE EXCEPTION 'После этой даты уже есть операции. Для изменения прошлого нужен пересчёт зависимой истории';
+    IF EXISTS(SELECT 1 FROM crypto_source_deletions d WHERE d.owner_key=_owner_key
+        AND d.source_namespace='manual-portfolio-v1' AND d.source_id=_request_id::text) THEN
+        RAISE EXCEPTION 'Операция была удалена. Повторите ввод как новую';
     END IF;
-    IF _kind IN ('bank_buy','bank_cash_sell','bank_to_portfolio','bank_withdraw') AND EXISTS(
-        SELECT 1 FROM operations WHERE owner_type=_account.owner_type
-        AND owner_user_id IS NOT DISTINCT FROM _account.owner_user_id
-        AND owner_family_id IS NOT DISTINCT FROM _account.owner_family_id AND operated_on>_day) THEN
-        RAISE EXCEPTION 'После этой даты уже есть банковские операции. Для изменения прошлого нужен пересчёт';
+    IF _day>current_date+1 THEN RAISE EXCEPTION 'Дата операции в будущем'; END IF;
+    IF (to_jsonb(_position)->>'opened_at')::date>_day THEN
+        RAISE EXCEPTION 'Дата операции раньше открытия позиции';
     END IF;
-    -- Forms specify a day, not an on-chain timestamp. Append at the end of that UTC day.
-    _time:=(_day::timestamp + interval '1 day' - interval '1 microsecond') AT TIME ZONE 'UTC';
+    -- Bank model: a past date stays on the operation, posting joins the end of
+    -- the journal and coin FIFO follows posting order.
+    SELECT GREATEST((_day::timestamp + interval '1 day' - interval '1 microsecond') AT TIME ZONE 'UTC',max(occurred_at))
+        INTO _time FROM crypto_source_events WHERE owner_key=_owner_key;
     SELECT COALESCE(max(order_in_timestamp)+1,0) INTO _order FROM crypto_source_events
         WHERE owner_key=_owner_key AND occurred_at=_time;
     _command_payload:=CASE WHEN _kind='swap' THEN
@@ -137,7 +133,7 @@ BEGIN
         _commands:=_commands||jsonb_build_array(jsonb_build_object('kind','fee','payload',_fee));
     END IF;
     _result:=budgeting.put__crypto_source_event(_user_id,_account.id,'manual-portfolio-v1',
-        _request_id::text,_time,_order,_day,_commands,_evidence);
+        _request_id::text,_time,_order,(_time AT TIME ZONE 'UTC')::date,_commands,_evidence);
     RETURN (_result->'results'->_result_index)||jsonb_build_object('source_event_id',_result->'source_event_id');
 END
 $function$;

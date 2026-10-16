@@ -3,7 +3,7 @@ BEGIN;
 SET search_path TO budgeting;
 DO $$
 DECLARE uid bigint:=990000000903; me jsonb; bank bigint; coll bigint; coin bigint; item jsonb; r jsonb;
- request uuid; payload jsonb; budget_before numeric; sid bigint; preview jsonb; err text; before_qty numeric;
+ request uuid; payload jsonb; budget_before numeric; sid bigint; err text; before_qty numeric;
 BEGIN
  me:=put__register_user_context(uid,'RUB',NULL,'Collection','Journal');
  bank:=(me->>'bank_account_id')::bigint;
@@ -30,11 +30,13 @@ BEGIN
  ASSERT r->>'status'='closed','full sale closes';
  ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=109,'coins 100-40-10-1+60';
  ASSERT (SELECT cost_base_remaining FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=990,'only fee consumed cost';
- request:=gen_random_uuid();
- preview:=put__correct_crypto_source(uid,sid,1,request,'[{"command_index":0,"field":"crypto_quantity","value":"42"}]','Purchase correction',false,NULL);
- PERFORM put__correct_crypto_source(uid,sid,1,request,'[{"command_index":0,"field":"crypto_quantity","value":"42"}]','Purchase correction',true,preview->>'preview_token');
- ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=107,'purchase correction propagates';
- ASSERT (SELECT cost_base_remaining FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=990,'correction preserves cost';
+ -- A mistaken last sale is deleted and entered again.
+ PERFORM put__delete_crypto_source(uid,(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid),gen_random_uuid());
+ ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=79,'sale deleted';
+ ASSERT (SELECT status FROM portfolio_positions WHERE id=(item->>'id')::bigint)='open','item back';
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_sell',payload||'{"crypto_quantity":"30"}',current_date);
+ ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=109,'sale entered again';
+ ASSERT (SELECT cost_base_remaining FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=990,'cost unchanged';
  payload:=jsonb_build_object('investment_account_id',coll,'title','Free NFT','quantity','1','metadata','{"item_kind":"nft"}'::jsonb);
  item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_receive',payload,current_date);
  ASSERT (item->'metadata'->>'amount_in_base')::numeric=0,'free receipt cost zero';
@@ -52,7 +54,7 @@ BEGIN
  ASSERT COALESCE((SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin),0)=0,'collection empty';
 END $$;
 DO $$
-DECLARE uid bigint:=990000000904; me jsonb; bank bigint; coll bigint; item jsonb; r jsonb; payload jsonb; req uuid:=gen_random_uuid(); sid bigint; preview jsonb;
+DECLARE uid bigint:=990000000904; me jsonb; bank bigint; coll bigint; item jsonb; r jsonb; payload jsonb; req uuid:=gen_random_uuid(); sid bigint;
 BEGIN
  me:=put__register_user_context(uid,'RUB',NULL,'Fiat','Journal');
  bank:=(me->>'bank_account_id')::bigint;
@@ -70,10 +72,9 @@ BEGIN
  ASSERT (r->>'quantity')::numeric=2 AND (r->'metadata'->>'amount_in_base')::numeric=2500,'fiat partial';
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',jsonb_build_object('position_id',item->'id','close_amount_in_currency',3000,'close_currency_code','RUB'),current_date);
  ASSERT (SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='RUB')=10900,'fiat balance';
- req:=gen_random_uuid();
- preview:=put__correct_crypto_source(uid,sid,1,req,'[{"command_index":0,"field":"amount_in_currency","value":"4200"}]','Fiat correction',false,NULL);
- PERFORM put__correct_crypto_source(uid,sid,1,req,'[{"command_index":0,"field":"amount_in_currency","value":"4200"}]','Fiat correction',true,preview->>'preview_token');
- ASSERT (SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='RUB')=10700,'fiat correction replay';
+ PERFORM put__delete_crypto_source(uid,(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid),gen_random_uuid());
+ ASSERT (SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='RUB')=7900,'fiat close deleted';
+ ASSERT (SELECT status FROM portfolio_positions WHERE id=(item->>'id')::bigint)='open','fiat item back';
 END $$;
 DO $$
 DECLARE uid bigint:=990000000905; me jsonb; bank bigint; coll bigint; item jsonb; cost numeric;

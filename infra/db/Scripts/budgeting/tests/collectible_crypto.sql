@@ -7,7 +7,7 @@ DO $$
 DECLARE
     uid bigint := 990000000902;
     me jsonb; bank bigint; free bigint; wallet bigint; coll bigint; misc bigint; coin bigint;
-    request uuid := gen_random_uuid(); payload jsonb; source_id bigint; preview jsonb; pos bigint; item jsonb; sold jsonb; r jsonb; err text; free_before numeric; op bigint;
+    request uuid := gen_random_uuid(); payload jsonb; source_id bigint; pos bigint; item jsonb; sold jsonb; r jsonb; err text; free_before numeric; op bigint;
 BEGIN
     me := put__register_user_context(uid, 'RUB', NULL, 'Coins', 'Owner');
     bank := (me->>'bank_account_id')::bigint;
@@ -76,16 +76,13 @@ BEGIN
     ASSERT (SELECT quantity FROM portfolio_positions WHERE id = pos) = 105, 'wallet 40 + 65';
     ASSERT (SELECT amount FROM current_budget_balances WHERE category_id = free) = free_before, 'free budget still unchanged';
 
-    -- Correction traverses the item and its coin lots, preserving identities.
-    request := gen_random_uuid();
-    preview := put__correct_crypto_source(uid,source_id,1,request,
-        '[{"command_index":0,"field":"quantity","value":"61"}]','Transfer correction',false,NULL);
-    ASSERT NOT (preview->>'applied')::boolean, 'preview rolls back';
-    PERFORM put__correct_crypto_source(uid,source_id,1,request,
-        '[{"command_index":0,"field":"quantity","value":"61"}]','Transfer correction',true,preview->>'preview_token');
-    ASSERT (SELECT quantity FROM portfolio_positions WHERE id=pos)=104, 'wallet after correction';
-    ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=coin)=1, 'collection after correction';
-    ASSERT (SELECT count(*) FROM portfolio_positions WHERE investment_account_id=coll)=1, 'replay preserves item identity';
+    -- The first transfer funded everything after it: it cannot be deleted first.
+    err := '';
+    BEGIN
+        PERFORM put__delete_crypto_source(uid, source_id, gen_random_uuid());
+    EXCEPTION WHEN raise_exception THEN err := SQLERRM; END;
+    ASSERT err LIKE 'Сначала удалите более поздние операции%', 'dependent transfer kept: '||err;
+    ASSERT (SELECT quantity FROM portfolio_positions WHERE id=pos)=105, 'wallet unchanged';
 
     -- 6. Only collection accounts hold coins outside the bank.
     err := '';
@@ -114,7 +111,7 @@ END $$;
 -- improvement and personal consumption through a bank category. No fake RUB sale.
 DO $$
 DECLARE uid bigint:=990000000916; me jsonb; bank bigint; wallet bigint; coll bigint;
- ton bigint; stars bigint; pos bigint; starpos bigint; category bigint; item jsonb; budget_before numeric; aitem jsonb; bitem jsonb; req uuid; payload jsonb; result jsonb; err text; allocation_source bigint; preview jsonb;
+ ton bigint; stars bigint; pos bigint; starpos bigint; category bigint; item jsonb; budget_before numeric; aitem jsonb; bitem jsonb; req uuid; payload jsonb; result jsonb; err text; allocation_source bigint;
 BEGIN
  me:=put__register_user_context(uid,'RUB',NULL,'Custom unit','Owner');
  bank:=(me->>'bank_account_id')::bigint;
@@ -166,10 +163,10 @@ BEGIN
  ASSERT err='Выберите предметы без повторений','duplicate selection rejected';
  ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=stars)=2,'failed allocations leave payment untouched';
  SELECT id INTO allocation_source FROM crypto_source_events WHERE source_id=req::text AND source_namespace='manual-collection-v1';
- req:=gen_random_uuid();
- preview:=put__correct_crypto_source(uid,allocation_source,1,req,'[{"command_index":0,"field":"crypto_quantity","value":"2"}]','Adjust allocated cost',false,NULL);
- ASSERT (SELECT amount FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=stars)=2,'correction preview changes nothing';
- PERFORM put__correct_crypto_source(uid,allocation_source,1,req,'[{"command_index":0,"field":"crypto_quantity","value":"2"}]','Adjust allocated cost',true,preview->>'preview_token');
+ PERFORM put__delete_crypto_source(uid,allocation_source,gen_random_uuid());
+ ASSERT (SELECT (amount,cost_base_remaining)=(3::numeric,4.5::numeric) FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=stars),'allocation deleted';
+ ASSERT (SELECT (metadata->>'amount_in_base')::numeric FROM portfolio_positions WHERE id=(aitem->>'id')::bigint)=0,'first item cost back';
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_coin_topup',payload||'{"crypto_quantity":"2"}',current_date);
  ASSERT (SELECT (metadata->>'amount_in_base')::numeric FROM portfolio_positions WHERE id=(aitem->>'id')::bigint)=1,'correction recalculates first item';
  ASSERT (SELECT (metadata->>'amount_in_base')::numeric FROM portfolio_positions WHERE id=(bitem->>'id')::bigint)=2,'correction recalculates other selected items';
  ASSERT (SELECT (amount,cost_base_remaining)=(1::numeric,1.5::numeric) FROM current_crypto_balances WHERE bank_account_id=coll AND crypto_asset_id=stars),'corrected allocation conserves basis';

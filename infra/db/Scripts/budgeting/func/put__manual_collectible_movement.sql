@@ -34,16 +34,22 @@ BEGIN
         IF prior.evidence IS DISTINCT FROM evidence THEN RAISE EXCEPTION 'Запрос уже проведён с другими данными'; END IF;
         RETURN prior.result->'results'->0;
     END IF;
-    IF EXISTS(SELECT 1 FROM crypto_source_events s WHERE s.owner_key=owner_scope AND accounting_date>day)
-       OR EXISTS(SELECT 1 FROM operations o WHERE o.owner_type=a.owner_type
-          AND o.owner_user_id IS NOT DISTINCT FROM a.owner_user_id
-          AND o.owner_family_id IS NOT DISTINCT FROM a.owner_family_id AND operated_on>day) THEN
-        RAISE EXCEPTION 'После этой даты уже есть операции. Для изменения прошлого нужен пересчёт';
+    IF EXISTS(SELECT 1 FROM crypto_source_deletions d WHERE d.owner_key=owner_scope
+        AND d.source_namespace='manual-collection-v1' AND d.source_id=_request_id::text) THEN
+        RAISE EXCEPTION 'Операция была удалена. Повторите ввод как новую';
     END IF;
-    stamp:=(day::timestamp + interval '1 day' - interval '1 microsecond') AT TIME ZONE 'UTC';
+    IF day>current_date+1 THEN RAISE EXCEPTION 'Дата операции в будущем'; END IF;
+    IF _kind NOT IN ('collectible_transfer','collectible_receive','collectible_buy','collectible_fiat_buy','collectible_details') THEN
+        IF day<p.opened_at OR EXISTS(SELECT 1 FROM portfolio_events e WHERE e.position_id=p.id AND e.event_at>day) THEN
+            RAISE EXCEPTION 'Дата раньше получения предмета или его последней операции';
+        END IF;
+    END IF;
+    -- Bank model: a past date stays on the operation, posting joins the end of the journal.
+    SELECT GREATEST((day::timestamp + interval '1 day' - interval '1 microsecond') AT TIME ZONE 'UTC',max(occurred_at))
+        INTO stamp FROM crypto_source_events s WHERE s.owner_key=owner_scope;
     SELECT COALESCE(max(order_in_timestamp)+1,0) INTO ord FROM crypto_source_events s
         WHERE s.owner_key=owner_scope AND occurred_at=stamp;
     result:=put__crypto_source_event(_user_id,a.id,'manual-collection-v1',_request_id::text,
-        stamp,ord,day,jsonb_build_array(jsonb_build_object('kind',_kind,'payload',_payload)),evidence);
+        stamp,ord,(stamp AT TIME ZONE 'UTC')::date,jsonb_build_array(jsonb_build_object('kind',_kind,'payload',_payload)),evidence);
     RETURN result->'results'->0;
 END $f$;

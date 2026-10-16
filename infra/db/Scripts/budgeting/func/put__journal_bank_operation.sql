@@ -25,6 +25,10 @@ BEGIN
   END IF;
   RETURN (prior.result->'results'->0)||jsonb_build_object('source_event_id',prior.id);
  END IF;
+ IF EXISTS(SELECT 1 FROM crypto_source_deletions d WHERE d.owner_key=owner
+  AND d.source_namespace='bank-posting-v1' AND d.source_id=_request_id::text) THEN
+  RAISE EXCEPTION 'Операция была удалена. Повторите ввод как новую';
+ END IF;
  effective:=(_payload->>'operated_at')::date;
  IF effective IS NULL OR NOT isfinite(effective) THEN RAISE EXCEPTION 'Некорректная дата операции'; END IF;
  -- Late categorisation appends after existing sources while retaining its date.

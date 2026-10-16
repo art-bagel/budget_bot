@@ -202,7 +202,8 @@ class ReverseOperationRequest(BaseModel):
 
 
 class ReverseOperationResponse(BaseModel):
-    reversal_operation_id: int
+    # None: a journal operation was cancelled by deleting its source.
+    reversal_operation_id: Optional[int]
     reversed_operation_id: int
 
 

@@ -63,7 +63,7 @@ BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended('crypto-source:'||_owner_key,0));
     SELECT * INTO _prior FROM crypto_source_events
         WHERE owner_key=_owner_key AND source_namespace=_source_namespace AND source_id=_source_id;
-    IF FOUND AND current_setting('budgeting.crypto_replay_source',true) IS DISTINCT FROM _prior.id::text THEN
+    IF FOUND THEN
         IF _prior.anchor_account_id IS DISTINCT FROM _anchor_account_id
             OR _prior.occurred_at IS DISTINCT FROM _occurred_at
             OR _prior.order_in_timestamp IS DISTINCT FROM _order_in_timestamp
@@ -73,17 +73,18 @@ BEGIN
         END IF;
         RETURN _prior.result;
     END IF;
-    IF current_setting('budgeting.crypto_replay_source',true) IS DISTINCT FROM COALESCE(_prior.id::text,'missing') AND EXISTS(SELECT 1 FROM crypto_source_events WHERE owner_key=_owner_key
+    IF EXISTS(SELECT 1 FROM crypto_source_events WHERE owner_key=_owner_key
         AND (occurred_at,order_in_timestamp)>=(_occurred_at,_order_in_timestamp)) THEN
         RAISE EXCEPTION 'Source event is out of order; rebuild dependent history';
     END IF;
-    IF _prior.id IS NOT NULL AND current_setting('budgeting.crypto_replay_source',true)=_prior.id::text THEN
-        _id:=_prior.id;
-    ELSE
     INSERT INTO crypto_source_events(owner_key,anchor_account_id,source_namespace,source_id,
         occurred_at,order_in_timestamp,accounting_date,commands,evidence,created_by_user_id)
     VALUES(_owner_key,_anchor_account_id,_source_namespace,_source_id,_occurred_at,
         _order_in_timestamp,_accounting_date,_commands,_evidence,_user_id) RETURNING id INTO _id;
+    -- Manual sources post at the end of the journal (bank model); executors get
+    -- the operation date the user entered, which may be earlier than posting.
+    IF _source_namespace IN ('manual-portfolio-v1','manual-collection-v1') THEN
+        _accounting_date:=COALESCE((_evidence->>'requested_date')::date,_accounting_date);
     END IF;
     UPDATE crypto_source_events SET reversible=true WHERE id=_id;
     PERFORM set_config('budgeting.crypto_source_event_id',_id::text,true);
@@ -200,23 +201,23 @@ BEGIN
             _result:=put__create_portfolio_position(_user_id,(_payload->>'investment_account_id')::bigint,
                 'collectible',_payload->>'title',(_payload->>'quantity')::numeric,
                 (_payload->>'amount_in_currency')::numeric,(_payload->>'currency_code')::char(3),
-                _accounting_date,_payload->>'comment',_payload->'metadata');
+                _accounting_date,_payload->>'comment',_payload->'metadata',_operation_at=>_accounting_date::timestamptz);
         WHEN 'collectible_fiat_close' THEN
             _result:=put__close_portfolio_position(_user_id,(_payload->>'position_id')::bigint,
                 (_payload->>'close_amount_in_currency')::numeric,(_payload->>'close_currency_code')::char(3),
-                (_payload->>'close_amount_in_base')::numeric,_accounting_date,_payload->>'comment');
+                (_payload->>'close_amount_in_base')::numeric,_accounting_date,_payload->>'comment',_operation_at=>_accounting_date::timestamptz);
         WHEN 'collectible_fiat_partial' THEN
             _result:=put__partial_close_portfolio_position(_user_id,(_payload->>'position_id')::bigint,
                 (_payload->>'return_amount_in_currency')::numeric,(_payload->>'return_currency_code')::char(3),
                 (_payload->>'principal_reduction_in_currency')::numeric,(_payload->>'return_amount_in_base')::numeric,
-                (_payload->>'closed_quantity')::numeric,_accounting_date,_payload->>'comment');
+                (_payload->>'closed_quantity')::numeric,_accounting_date,_payload->>'comment',_operation_at=>_accounting_date::timestamptz);
         WHEN 'collectible_fiat_topup' THEN
             _result:=put__top_up_portfolio_position(_user_id,(_payload->>'position_id')::bigint,
                 (_payload->>'amount_in_currency')::numeric,(_payload->>'currency_code')::char(3),
-                (_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment');
+                (_payload->>'quantity')::numeric,_accounting_date,_payload->>'comment',_operation_at=>_accounting_date::timestamptz);
         WHEN 'collectible_fiat_fee' THEN
             _result:=put__record_portfolio_fee(_user_id,(_payload->>'position_id')::bigint,
-                (_payload->>'amount')::numeric,(_payload->>'currency_code')::char(3),_accounting_date,_payload->>'comment');
+                (_payload->>'amount')::numeric,(_payload->>'currency_code')::char(3),_accounting_date,_payload->>'comment',_operation_at=>_accounting_date::timestamptz);
         WHEN 'collectible_details' THEN
             _result:=put__edit_collectible_details(_user_id,(_payload->>'position_id')::bigint,_payload-'position_id');
         WHEN 'collectible_receive' THEN

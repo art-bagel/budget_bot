@@ -46,6 +46,15 @@ BEGIN
         RAISE EXCEPTION 'Access denied to operation %', _operation_id;
     END IF;
 
+    -- Journal operations have one way back: deleting their journal source
+    -- (no reversal row; blocked while later operations depend on it).
+    IF EXISTS (SELECT 1 FROM crypto_source_event_links
+        WHERE ledger_table='operations' AND ledger_id=_operation_id) THEN
+        PERFORM budgeting.put__delete_crypto_source(_user_id,(SELECT source_event_id FROM crypto_source_event_links
+            WHERE ledger_table='operations' AND ledger_id=_operation_id),gen_random_uuid());
+        RETURN jsonb_build_object('reversal_operation_id',NULL,'reversed_operation_id',_operation_id);
+    END IF;
+
     IF _original_type = 'reversal' THEN
         RAISE EXCEPTION 'Reversal operation cannot be reversed';
     END IF;
