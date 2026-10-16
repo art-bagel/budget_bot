@@ -218,3 +218,8 @@ node_modules/
 # Local dependency symlinks used by isolated worktrees (also match symlinks).
 /frontend/node_modules
 /venv
+
+# Playwright (frontend/browser-tests): outputs and server logs of scripts/browser-tests.sh
+/frontend/test-results/
+/frontend/playwright-report/
+/frontend/browser-logs/

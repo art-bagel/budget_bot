@@ -10,6 +10,9 @@ export default defineConfig({
   server: {
     port: 8080,
     strictPort: true,
+    // Playwright runner in docker (scripts/browser-tests.sh) reaches `vite preview`
+    // by this name; preview inherits server.allowedHosts and server.proxy.
+    allowedHosts: ['host.docker.internal'],
     proxy: {
       '/api': {
         target: apiTarget,
