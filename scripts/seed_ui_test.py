@@ -58,6 +58,8 @@ def seed(client) -> None:
         'bank_account_id': account, 'amount': 150000, 'currency_code': 'RUB',
         'comment': 'Зарплата', 'operated_at': '2026-01-05',
     })
+    for name in ('Зарплата', 'Фриланс'):
+        call('POST', '/api/v1/income-sources', json={'name': name})
     for name, budget, spent in (('Продукты', 30000, 8450), ('Транспорт', 6000, 1200), ('Кафе', 8000, 2350)):
         category = call('POST', '/api/v1/categories', json={'name': name, 'kind': 'regular'})['id']
         call('POST', '/api/v1/operations/allocate', json={

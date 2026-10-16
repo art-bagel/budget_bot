@@ -4,6 +4,7 @@ import CurrencyPicker from './CurrencyPicker';
 import { Plus } from 'lucide-react';
 
 import {
+  archiveIncomeSource,
   createIncomeSource,
   fetchBankAccounts,
   fetchCurrencies,
@@ -66,6 +67,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [incomeDate, setIncomeDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [submitting, setSubmitting] = useState(false);
   const [creatingSource, setCreatingSource] = useState(false);
+  const [archivingSource, setArchivingSource] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Pattern state
@@ -140,9 +143,10 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
     setCreatingSource(true);
     setError(null);
     try {
+      // An archived source with this name comes back with the same id.
       const result = await createIncomeSource(name);
       const created: IncomeSource = { id: result.id, name, is_active: true, created_at: new Date().toISOString() };
-      setIncomeSources((prev) => [...prev, created]);
+      setIncomeSources((prev) => (prev.some((s) => s.id === created.id) ? prev : [...prev, created]));
       setIncomeSourceId(String(created.id));
       setNewIncomeSourceName('');
       setShowAddSource(false);
@@ -150,6 +154,24 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setCreatingSource(false);
+    }
+  };
+
+  const handleArchiveSource = async () => {
+    if (!selectedSource) return;
+    if (!confirmArchive) { setConfirmArchive(true); return; }
+    setArchivingSource(true);
+    setError(null);
+    try {
+      await archiveIncomeSource(selectedSource.id);
+      const rest = incomeSources.filter((s) => s.id !== selectedSource.id);
+      setIncomeSources(rest);
+      setIncomeSourceId(rest.length > 0 ? String(rest[0].id) : '');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArchivingSource(false);
+      setConfirmArchive(false);
     }
   };
 
@@ -276,7 +298,19 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
         <>
           {/* ── Источник дохода ── */}
           <div className="field">
-            <span className="fl">Источник дохода</span>
+            <div className="fl-row">
+              <span className="fl">Источник дохода</span>
+              {selectedSource && (
+                <button
+                  type="button"
+                  className="dlg-tag-btn"
+                  onClick={handleArchiveSource}
+                  disabled={submitting || archivingSource}
+                >
+                  {archivingSource ? '...' : confirmArchive ? 'Точно?' : 'В архив'}
+                </button>
+              )}
+            </div>
 
             <div className="seg-src">
               {incomeSources.map((source) => (
@@ -284,7 +318,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   key={source.id}
                   type="button"
                   className={`seg-src__o${incomeSourceId === String(source.id) ? ' seg-src__o--on' : ''}`}
-                  onClick={() => { setIncomeSourceId(String(source.id)); setShowAddSource(false); }}
+                  onClick={() => { setIncomeSourceId(String(source.id)); setShowAddSource(false); setConfirmArchive(false); }}
                   disabled={submitting}
                 >
                   {source.name}

@@ -3308,6 +3308,9 @@ select.input option {
   padding-left: 2px;
 }
 
+.fl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fl-row .dlg-tag-btn { color: var(--text); }
+
 .amt {
   display: flex;
   align-items: baseline;

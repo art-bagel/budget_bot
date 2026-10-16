@@ -671,6 +671,10 @@ export async function createIncomeSource(name: string): Promise<{ id: number }> 
   });
 }
 
+export async function archiveIncomeSource(incomeSourceId: number): Promise<IncomeSource> {
+  return apiFetch<IncomeSource>(`/income-sources/${incomeSourceId}/archive`, { method: 'POST' });
+}
+
 export async function recordIncome(data: RecordIncomeRequest): Promise<RecordIncomeResponse> {
   return apiFetch<RecordIncomeResponse>('/operations/income', {
     method: 'POST',
