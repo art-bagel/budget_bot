@@ -97,6 +97,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   }, []);
 
   useEffect(() => {
+    // "Точно?" applies to the source it was asked for, not to the next one.
+    setConfirmArchive(false);
     if (!incomeSourceId) {
       setPattern(null);
       return;
@@ -318,7 +320,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                   key={source.id}
                   type="button"
                   className={`seg-src__o${incomeSourceId === String(source.id) ? ' seg-src__o--on' : ''}`}
-                  onClick={() => { setIncomeSourceId(String(source.id)); setShowAddSource(false); setConfirmArchive(false); }}
+                  onClick={() => { setIncomeSourceId(String(source.id)); setShowAddSource(false); }}
                   disabled={submitting}
                 >
                   {source.name}

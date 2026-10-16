@@ -18,6 +18,15 @@ test('income source goes to the archive and comes back by name', async ({ page }
   const { violations } = await new AxeBuilder({ page }).include('.fl-row .dlg-tag-btn').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(violations.flatMap((v) => v.nodes.map((n) => `${v.id} ${n.target.join(' ')}`))).toEqual([]);
 
+  // A pending "Точно?" does not carry over to another source.
+  // Picking a source via "Новый" (an existing name selects it) resets it too.
+  await sheet.getByRole('button', { name: 'В архив' }).click();
+  await sheet.getByRole('button', { name: 'Новый' }).click();
+  await sheet.getByPlaceholder('Название источника').fill('Зарплата');
+  await sheet.getByRole('button', { name: 'Добавить', exact: true }).click();
+  await expect(sheet.getByRole('button', { name: 'В архив' })).toBeVisible();
+  await chip.click();
+
   await sheet.getByRole('button', { name: 'В архив' }).click();
   await sheet.getByRole('button', { name: 'Точно?' }).click();
   await expect(chip).toHaveCount(0);
