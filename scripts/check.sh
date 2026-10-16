@@ -3,7 +3,7 @@
 # Локальная копия job `verify` из .github/workflows/budget_bot_ci_cd.yml.
 # Готово = этот скрипт зелёный.
 #
-#   scripts/check.sh          полный прогон (как CI), нужен Docker
+#   scripts/check.sh          полный прогон (как CI, с браузерными тестами), нужен Docker
 #   scripts/check.sh --fast   ruff + typecheck + lint + hex-цвета + юниты (pre-commit)
 #
 # БД для полного прогона — одноразовый контейнер postgres:17 (как в CI) на
@@ -69,7 +69,7 @@ frontend_deps() {
 
 ruff_check() { "$VENV/bin/ruff" check backend storage; }
 
-unit_tests() { "$PY" -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response; }
+unit_tests() { "$PY" -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard; }
 
 py_compile_all() {
     find backend storage -name '*.py' -not -path '*/.cache/*' -print0 \
@@ -155,6 +155,10 @@ api_tests() {
         "$PY" -m backend.tests.test_auth_api
 }
 
+# Playwright on the synthetic seed in its own budget_test_ui database of the
+# same throwaway container; the runner is the Playwright docker image.
+browser_tests() { PY="$PY" bash scripts/browser-tests.sh; }
+
 if [ "$MODE" = fast ]; then
     step "frontend deps" frontend_deps
     step "ruff" ruff_check
@@ -177,11 +181,12 @@ else
         if [ "$LAST_OK" = 1 ]; then
             step "sql tests" sql_tests
             step "api tests" api_tests
+            step "browser tests" browser_tests
         else
-            skip "sql tests"; skip "api tests"
+            skip "sql tests"; skip "api tests"; skip "browser tests"
         fi
     else
-        skip "schema from scratch"; skip "sql tests"; skip "api tests"
+        skip "schema from scratch"; skip "sql tests"; skip "api tests"; skip "browser tests"
     fi
     step "docker compose config" compose_config
 fi

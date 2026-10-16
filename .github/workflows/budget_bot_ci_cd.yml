@@ -81,7 +81,7 @@ jobs:
         run: ruff check backend storage
 
       - name: Test fiat rates and account response compatibility
-        run: python -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response
+        run: python -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard
 
       - name: Validate backend modules
         run: |
@@ -133,6 +133,24 @@ jobs:
           TELEGRAM_BOT_TOKEN: ci-test-bot-token
           SIGNUP_INVITE_CODE: ci-test-invite-code
         run: python -m backend.tests.test_auth_api
+
+      # Playwright на синтетическом сиде: своя база budget_test_ui в том же
+      # сервисе postgres, раннер — Docker-образ Playwright, поэтому снимки
+      # совпадают с локальными (scripts/check.sh). Бэкенд без внешней сети.
+      - name: Browser tests
+        run: bash scripts/browser-tests.sh
+
+      # Только синтетические данные: отчёт, трассы и логи серверов теста.
+      - name: Upload browser test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            frontend/browser-logs/
+          retention-days: 7
 
       - name: Validate docker compose
         env:
