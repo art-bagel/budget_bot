@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 
@@ -18,6 +18,24 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
   const [visible, setVisible] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  // Keyboard users land inside the sheet and return to the opener on close.
+  // The opener is captured during render: by the time effects run, an
+  // autoFocus field inside the sheet has already taken focus.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  if (open !== wasOpenRef.current) {
+    wasOpenRef.current = open;
+    if (open) openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+  useEffect(() => {
+    if (!open) return;
+    const opener = openerRef.current;
+    const sheet = sheetRef.current;
+    if (sheet && !sheet.contains(document.activeElement)) sheet.focus({ preventScroll: true });
+    return () => opener?.focus({ preventScroll: true });
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -53,9 +71,26 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
   if (!open && !visible) return null;
 
   return (
-    <div className="sheet-root" data-open={open ? '' : undefined}>
+    <div
+      className="sheet-root"
+      data-open={open ? '' : undefined}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') return;
+        // Nested sheets: only the innermost one closes.
+        e.stopPropagation();
+        onClose();
+      }}
+    >
       <div className="sheet-backdrop" onClick={onClose} />
-      <div ref={sheetRef} className={`sheet${gray ? ' sheet--gray' : ''}`} data-visible={visible ? '' : undefined}>
+      <div
+        ref={sheetRef}
+        className={`sheet${gray ? ' sheet--gray' : ''}`}
+        data-visible={visible ? '' : undefined}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <div
           className="sheet__handle"
           onTouchStart={handleDragTouchStart}
@@ -70,7 +105,7 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
             {icon && <div className={`sheet-ico${iconColor ? ` sheet-ico--${iconColor}` : ''}`}>{icon}</div>}
             <div>
               {tag && <div className="sheet__tag">{tag}</div>}
-              <div className="sheet__title">{title}</div>
+              <div className="sheet__title" id={titleId}>{title}</div>
             </div>
           </div>
           <button className="sheet__close" type="button" onClick={onClose} aria-label="Закрыть">

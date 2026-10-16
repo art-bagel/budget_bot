@@ -1575,6 +1575,8 @@ input { font: inherit; color: inherit; }
   max-height: 88vh;
   overflow: hidden;
 }
+/* Focus lands on the sheet itself (BottomSheet); it is not a control. */
+.sheet:focus { outline: none; }
 .sheet[data-visible] { transform: translateY(0); opacity: 1; pointer-events: auto; }
 .sheet--gray { background: var(--bg); }
 [data-theme='dark'] .sheet--gray { background: var(--bg-deep); }
