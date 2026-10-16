@@ -730,3 +730,18 @@
 ссылка-вставка.
 
 Итог: замечания 1–3 закрыты, блокирующих замечаний нет.
+
+## Деплой
+
+- 16.10.2026: аппрув владельца на мерж, `scripts/check.sh` (полный) зелёный,
+  push `3858edb..07bd43b` в `main` fast-forward.
+- GitHub Actions run 38954629259: Verify Project и Deploy To Server — success.
+- Прод (readonly): миграция `055_crypto_source_deletions.sql` применена
+  19:26 UTC. `crypto_source_deletions` есть, `put__delete_crypto_source` есть,
+  `put__correct_crypto_source` и триггеры `aa_crypto_identity` удалены.
+  Событие 3197 (продажа за 26 RUB) на месте — его удаляет владелец через
+  «История операций».
+- Не проверено напрямую: что API отвечает после перезапуска. В деплое нет
+  health-check приложения, адреса прод-хоста у агента нет.
+- Следующий шаг (отдельно): разбор, почему B-Day Candle #145397 (позиция 3215)
+  не продаётся за 20.38.
