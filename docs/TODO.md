@@ -6,8 +6,9 @@
 ## 00. Внедрение процесса доработок (AGENTS.md, 2026-10-15) — по порядку
 
 - [x] `scripts/check.sh` — локально то же, что CI (ruff, typecheck, lint, юнит, SQL, API тесты) + git pre-commit хук на быструю часть; правило «готово = check.sh зелёный». Плюс проверка прямых цветов в CSS вне блока токенов
-- [ ] Перенести Playwright из ветки аудита (`frontend/playwright.config.ts`, `browser-tests/smoke.spec.ts`, скрипты в package.json) + синтетический тестовый сид для UI-тестов; добавить `@axe-core/playwright`
+- [x] Playwright + синтетический сид + `@axe-core/playwright`, в `check.sh` и CI `verify` ([отчёт](2026-10-15-playwright.md))
 - [ ] `docs/design-guide.md` — дизайн-справочник из `styles.css` и компонентов (задача уровня M)
+- [ ] Доступность «Обзора» (список `KNOWN` в `frontend/browser-tests/a11y.spec.ts`): контраст токена `--text-3` в обеих темах (≈2.3–3.4 при норме 4.5), разметка `dl`/`dt` в hero и `ul > li[role=button]` в категориях. Вместе с дизайн-справочником
 - [ ] Скиллы `.claude/skills/plan-review`, `impl-review`, `ui-review` — чек-листы ревьюеров из AGENTS.md
 - [ ] Освежить `docs/TODO.md`: убрать сделанное, свести с ISSUES/IMPROVEMENTS
 
