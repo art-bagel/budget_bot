@@ -11,7 +11,9 @@ test('income source goes to the archive and comes back by name', async ({ page }
   const chip = sheet.getByRole('button', { name: 'Фриланс', exact: true });
   await chip.click();
   await expect(sheet.getByRole('button', { name: 'В архив' })).toBeVisible();
-  await expect(sheet).toHaveScreenshot('income-sheet.png');
+  // The native date control renders by the host locale, which differs
+  // between a local docker run and CI.
+  await expect(sheet).toHaveScreenshot('income-sheet.png', { mask: [sheet.locator('input[type="date"]')] });
 
   // Only the new control: the rest of the sheet has the known --text-3
   // contrast debt listed in a11y.spec.ts, which belongs to the design guide.
