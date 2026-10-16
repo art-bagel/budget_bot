@@ -4500,7 +4500,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={closeDrafts[selectedPosition.id].amount}
-                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { amount: event.target.value })}
+                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { amount: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingCloseId === selectedPosition.id}
                       />
                     </div>
@@ -4583,7 +4583,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={closeDrafts[selectedPosition.id].baseAmount}
-                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { baseAmount: event.target.value })}
+                        onChange={(event) => handleCloseDraftChange(selectedPosition.id, { baseAmount: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingCloseId === selectedPosition.id}
                       />
                     </div>
@@ -4618,7 +4618,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={partialCloseDrafts[selectedPosition.id].returnAmount}
-                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnAmount: event.target.value })}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnAmount: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingPartialCloseId === selectedPosition.id}
                       />
                     </div>
@@ -4647,7 +4647,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={partialCloseDrafts[selectedPosition.id].principalReduction}
-                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { principalReduction: event.target.value })}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { principalReduction: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingPartialCloseId === selectedPosition.id}
                       />
                     </div>
@@ -4660,7 +4660,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           inputMode="decimal"
                           placeholder="0"
                           value={partialCloseDrafts[selectedPosition.id].closedQuantity}
-                          onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { closedQuantity: event.target.value })}
+                          onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { closedQuantity: sanitizeDecimalInput(event.target.value) })}
                           disabled={submittingPartialCloseId === selectedPosition.id}
                         />
                       </div>
@@ -4685,7 +4685,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={partialCloseDrafts[selectedPosition.id].returnBaseAmount}
-                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnBaseAmount: event.target.value })}
+                        onChange={(event) => handlePartialCloseDraftChange(selectedPosition.id, { returnBaseAmount: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingPartialCloseId === selectedPosition.id}
                       />
                     </div>
@@ -4736,7 +4736,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           inputMode="decimal"
                           placeholder="0"
                           value={incomeDrafts[selectedPosition.id].amount}
-                          onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: event.target.value })}
+                          onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { amount: sanitizeDecimalInput(event.target.value) })}
                           disabled={submittingIncomeId === selectedPosition.id}
                         />
                       </div>
@@ -4833,7 +4833,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={incomeDrafts[selectedPosition.id].baseAmount}
-                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { baseAmount: event.target.value })}
+                        onChange={(event) => handleIncomeDraftChange(selectedPosition.id, { baseAmount: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingIncomeId === selectedPosition.id}
                       />
                     </div>
@@ -4904,7 +4904,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       inputMode="decimal"
                       placeholder="0"
                       value={topUpDrafts[selectedPosition.id].amount}
-                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { amount: event.target.value })}
+                      onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { amount: sanitizeDecimalInput(event.target.value) })}
                       disabled={submittingTopUpId === selectedPosition.id}
                     />
                   </div>
@@ -4917,7 +4917,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="—"
                         value={topUpDrafts[selectedPosition.id].quantity}
-                        onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { quantity: event.target.value })}
+                        onChange={(event) => handleTopUpDraftChange(selectedPosition.id, { quantity: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingTopUpId === selectedPosition.id}
                       />
                     </div>}
@@ -4963,7 +4963,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         inputMode="decimal"
                         placeholder="0"
                         value={feeDrafts[selectedPosition.id].amount}
-                        onChange={(event) => handleFeeDraftChange(selectedPosition.id, { amount: event.target.value })}
+                        onChange={(event) => handleFeeDraftChange(selectedPosition.id, { amount: sanitizeDecimalInput(event.target.value) })}
                         disabled={submittingFeeId === selectedPosition.id}
                       />
                     </div>
@@ -5031,7 +5031,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         value={rateChangeDrafts[selectedPosition.id].newRate}
                         onChange={(event) => setRateChangeDrafts((prev) => ({
                           ...prev,
-                          [selectedPosition.id]: { ...prev[selectedPosition.id], newRate: event.target.value },
+                          [selectedPosition.id]: { ...prev[selectedPosition.id], newRate: sanitizeDecimalInput(event.target.value) },
                         }))}
                         disabled={submittingRateChangeId === selectedPosition.id}
                       />
