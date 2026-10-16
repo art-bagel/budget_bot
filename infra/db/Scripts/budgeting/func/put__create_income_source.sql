@@ -1,10 +1,11 @@
 -- Description:
---   Creates a user income source for income analytics.
+--   Creates a user income source for income analytics. An existing source with
+--   the same name is returned instead, and an archived one is restored.
 -- Parameters:
 --   _user_id bigint - Income source owner.
 --   _name text - Income source name.
 -- Returns:
---   bigint - Identifier of the created income source.
+--   bigint - Identifier of the created or restored income source.
 DROP FUNCTION IF EXISTS budgeting.put__create_income_source;
 CREATE FUNCTION budgeting.put__create_income_source(
     _user_id bigint,
@@ -33,6 +34,8 @@ BEGIN
 
     INSERT INTO income_sources (user_id, name)
     VALUES (_user_id, _normalized_name)
+    ON CONFLICT ON CONSTRAINT uq_income_sources_user_name
+    DO UPDATE SET is_active = true
     RETURNING id
     INTO _income_source_id;
 

@@ -76,6 +76,17 @@ async def create_income_source(
     return CreateIncomeSourceResponse(id=income_source_id)
 
 
+@router.post('/{income_source_id}/archive', response_model=IncomeSourceItem)
+async def archive_income_source(
+    income_source_id: int,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    return await context.set__archive_income_source(
+        user_id=user.user_id,
+        income_source_id=income_source_id,
+    )
+
+
 @router.get('/{income_source_id}/pattern', response_model=Optional[PatternItem])
 async def get_income_source_pattern(
     income_source_id: int,

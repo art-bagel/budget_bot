@@ -23,6 +23,7 @@ class Context(DataBase):
     F_PUT__INVITE_FAMILY_MEMBER = 'put__invite_family_member'
     F_PUT__CREATE_CATEGORY = 'put__create_category'
     F_PUT__CREATE_INCOME_SOURCE = 'put__create_income_source'
+    F_SET__ARCHIVE_INCOME_SOURCE = 'set__archive_income_source'
     F_SET__UPDATE_CATEGORY = 'set__update_category'
     F_SET__ARCHIVE_CATEGORY = 'set__archive_category'
     F_SET__RESPOND_FAMILY_INVITATION = 'set__respond_family_invitation'
@@ -445,6 +446,19 @@ class Context(DataBase):
             self._fn(self.F_PUT__CREATE_INCOME_SOURCE),
             user_id,
             name,
+        )
+
+    async def set__archive_income_source(self, user_id: int, income_source_id: int) -> dict:
+        """
+        Архивирует источник дохода. Создание источника с тем же именем возвращает его.
+        :param user_id: Идентификатор владельца источника дохода.
+        :param income_source_id: Идентификатор архивируемого источника.
+        :return: Словарь с данными архивированного источника.
+        """
+        return await self.call_function(
+            self._fn(self.F_SET__ARCHIVE_INCOME_SOURCE),
+            user_id,
+            income_source_id,
         )
 
     async def set__update_category(self, user_id: int, category_id: int, name: str) -> dict:
