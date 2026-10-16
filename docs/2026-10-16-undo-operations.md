@@ -232,3 +232,161 @@
    области?
 3. Сразу после выпуска удалить событие 3197 (26 RUB) вы сделаете сами через
    интерфейс? Ручной SQL на проде не нужен.
+
+## Ревью плана
+
+Ревьюер: свежая сессия, 16.10.2026. План сверен с кодом ветки на `8398564`.
+
+### Механизм удаления
+
+1. **Исправить.** Проверка `actual = after_row` не ловит ситуацию A→B→A
+   (ABA). Событие X записало строку, Y её изменило, Z вернуло ровно прежнее
+   значение. X проходит проверку, откат возвращает `before_row` X. Цепочка
+   мутаций Y/Z становится неоткатываемой, а Y мог быть возможен только благодаря
+   X. У агрегатов балансов ABA закрыт полем `updated_at`
+   (`tb/current_crypto_balances.sql:7`). У `crypto_lots`, `fx_lots` и
+   `portfolio_positions` такого поля нет (`tb/crypto_lots.sql:3-14`), а ABA там
+   реален: правка названия предмета туда и обратно, количество и сумма позиции
+   вернулись к прежним. Правило: удалять нельзя, если в `crypto_source_mutations`
+   есть более поздняя мутация с тем же `(table_name, row_key)`. Сравнение
+   `actual = after_row` оставить только для правок вне журнала. Нужен индекс по
+   `(table_name, row_key)`, сейчас есть только по событию
+   (`tb/crypto_source_revisions.sql:14`). Тест: ABA на `collectible_details`.
+2. **Исправить.** Каскады FK удаляют чужие строки молча. При откате `INSERT`
+   позиции выполняется `DELETE portfolio_positions`, а у
+   `portfolio_events.position_id` стоит `ON DELETE CASCADE`
+   (`tb/portfolio_events.sql:5`). Строка события, которую вставили вне журнала и
+   которая не трогает саму позицию, исчезнет без проверки. У
+   `operations` (`tb/bank_entries.sql:5`, `tb/crypto_bank_entries.sql:5`,
+   `tb/budget_entries.sql:5`, `tb/lot_consumptions.sql:5`) то же самое. Решение:
+   на время отката не отключать захват мутаций полностью
+   (`func/capture__crypto_mutation.sql:8`), а собирать все изменённые строки во
+   временную таблицу. Затем проверять, что их набор совпадает с набором
+   `row_key` мутаций события. Иначе — исключение.
+3. **Исправить.** Ссылки FK без каскада (`operations.reversal_of_operation_id`,
+   `tb/operations.sql:11`; `portfolio_events.linked_operation_id`,
+   `tb/portfolio_events.sql:11`; `crypto_lots.opened_by_operation_id`) дают
+   сырую ошибку `23503`. Данные целы, но вместо текста владелец увидит
+   «foreign key violation». Перехватить `foreign_key_violation` и выдать
+   «…изменена операцией вне журнала». Пример: обычный `put__reverse_operation`
+   журнальную операцию не запрещает (`func/put__reverse_operation.sql:48-60`),
+   поэтому после него банковский расход из журнала дойдёт до этой ошибки.
+4. **Исправить.** Повторить предусловия отката из пересчёта:
+   `budgeting.crypto_source_event_id = ''` на время отката
+   (`func/put__correct_crypto_source.sql:106`). Иначе вставка `before_row` в
+   `operations` и `portfolio_events` через `capture__crypto_source_event_link`
+   (`func/capture__crypto_source_event_link.sql:7`) создаст лишние ссылки.
+   Мутации брать с `revision = событие.revision`
+   (`func/put__correct_crypto_source.sql:109-110`). Отказывать, если
+   `NOT reversible` или у события нет мутаций, а ссылки в
+   `crypto_source_event_links` есть: такое событие удалило бы только конверт.
+5. **Исправить.** Перед `DELETE crypto_source_events` нужно разобраться со
+   строками в `crypto_source_revisions` и `crypto_source_corrections`: у них FK
+   на событие без каскада (`tb/crypto_source_revisions.sql:16,24`). На проде их
+   0, но в тестах пересчёта они есть. Переносить их в аудит удаления или
+   отказывать с понятным текстом. У `crypto_source_deletions.source_event_id`
+   FK на события быть не должно.
+6. **Исправить.** Освобождение `(source_namespace, source_id)` опасно. Если
+   исходный запрос (тот же `request_id`) запоздало повторится после удаления,
+   операция проведётся заново: идемпотентность смотрит только живые события
+   (`func/put__manual_collectible_movement.sql:31-36`,
+   `func/put__manual_crypto_movement.sql:52-66`,
+   `func/put__journal_bank_operation.sql:20-27`). Решение: во всех трёх
+   обёртках проверять `crypto_source_deletions` по
+   `(owner_key, namespace, source_id)` и выдавать «Операция была удалена».
+   Повторный ввод в форме получает новый `request_id`.
+7. **Исправить.** Идемпотентность самого удаления: `request_id` должен быть
+   UNIQUE в `crypto_source_deletions`. При повторе нужно сверять
+   `source_event_id` и `actor_user_id` (как
+   `func/put__correct_crypto_source.sql:24-27`) и заново проверять
+   `has__owner_access` по `anchor_account_id` из конверта. Иначе чужой
+   `request_id` вернёт чужой конверт.
+8. **Исправить (безопасность).** Ограничение «только ручные источники» сделать
+   в SQL, а не только в UI. `put__delete_crypto_source` отказывает для всех
+   namespace, кроме `manual-portfolio-v1`, `manual-collection-v1` и
+   `bank-posting-v1`. Импорты откатывать никто не планировал, и тестов на них
+   нет.
+9. Замечание без действия. Таблицы, которые пишут исполнители `collectible_*`,
+   `swap` и `transfer`: `portfolio_positions`, `portfolio_events`,
+   `operations`, `bank_entries`, `budget_entries`, `fx_lots`,
+   `lot_consumptions`, `crypto_lots`, `crypto_lot_consumptions`,
+   `crypto_bank_entries`, `current_*_balances`, `crypto_protocol_*`,
+   `crypto_liability_events`. Все они под триггером
+   (`func/capture__crypto_mutation.sql:44-47`). Вне захвата только
+   `crypto_assets` (`put__ensure_crypto_asset`): после удаления останется новая
+   монета без балансов. Это безвредно, но стоит написать в отчёте. Списание лотов
+   (`crypto_lot_consumptions`) всегда сопровождается `UPDATE crypto_lots`, поэтому
+   зависимость «прочитал, но не записал» через лоты ловится. При соблюдении
+   п. 1–2 зависимостей только на чтение я не нашёл: себестоимость позиций
+   читается из строк, которые затем обновляются.
+
+### Дата задним числом
+
+10. **Исправить.** `payload.operated_at` нельзя класть в каждую команду. У
+    крипто-видов строгие белые списки ключей: `swap`
+    (`func/put__crypto_source_event.sql:709`), `transfer` (`:742`), `fee`
+    (`:757`) и др. Лишний ключ дает «Unsupported argument». Кроме того,
+    дополнительные команды `fee` и `borrow`
+    (`func/put__manual_crypto_movement.sql:126-138`) даты не получат. Проще
+    брать дату из конверта: `COALESCE((_evidence->>'requested_date')::date,
+    _accounting_date)`. `requested_date` уже есть в обеих ручных обёртках
+    (`put__manual_collectible_movement.sql:30`,
+    `put__manual_crypto_movement.sql:50-51`). Банковские виды читают
+    `payload.operated_at` сами (`put__crypto_source_event.sql:252`, дата туда не
+    передаётся), их не трогать. `get__crypto_correction_history.sql:12`
+    дополнить тем же `COALESCE`. Если `requested_date` = NULL (дата не выбрана),
+    передавать `current_date`, а не дату проведения.
+11. **Исправить.** Критерий 10 сейчас верен только для `collectible_sell`
+    (`put__sell_collectible_for_crypto.sql:42`) и монетных fee/topup
+    (`put__charge_collectible_coin.sql:20`,
+    `put__allocate_collectible_coin.sql:20`). У `collectible_fiat_close`,
+    `_partial`, `_topup` и `_fee` проверки нет
+    (`put__close_portfolio_position.sql:178` пишет `closed_at` без сравнения).
+    От даты раньше покупки их защищал только убираемый глобальный запрет
+    (`put__manual_collectible_movement.sql:37-42`). Как раз прод-кейс 3197 —
+    `fiat_close`. Нужна единая проверка в `put__manual_collectible_movement`
+    для видов с `position_id`: дата ≥ `opened_at` и ≥ `max(event_at)` событий
+    этой позиции. Иначе продажа задним числом встанет раньше уже записанной
+    комиссии или доплаты, и `closed_at` окажется раньше последнего события.
+    Тест — на `fiat_close` и на `sell`.
+12. **Исправить.** Проверки «дата не в будущем» нет нигде: в
+    `put__manual_collectible_movement.sql:12` только `isfinite`. С
+    `posted = GREATEST(…, max(occurred_at))` одна ошибочная будущая дата
+    сдвинет `occurred_at` всех последующих операций владельца. Добавить
+    `day <= current_date + 1` (запас на часовой пояс) в обе обёртки.
+13. Замечание без действия. FIFO при датах задним числом действительно идёт в
+    порядке проведения: лоты сортируются по `created_at, id`
+    (`put__sell_crypto_asset.sql:90`, `put__transfer_bank_crypto.sql:98`,
+    `put__swap_bank_crypto_asset.sql:67`, `put__record_expense.sql:146`,
+    `put__charge_collectible_coin.sql:27`), `opened_at` в FIFO не участвует.
+    Исполнители `swap`/`transfer` получают дату как `_operated_at` и пишут её в
+    `opened_at`/`valuation_date` новой позиции, ничего не сравнивая. Однако
+    `get__portfolio_analytics.sql:58` и далее фильтруют по
+    `event_at <= _date_to`. За период, который кончается между датой операции и
+    датой проведения, аналитика может показать промежуточный «минус». Это стоит
+    записать в «Известные риски».
+14. **Исправить (UI).** История сортируется по проведению
+    (`get__crypto_correction_history.sql:11`), а показывает дату операции.
+    Операции задним числом окажутся в списке «не на своём месте». Ошибка
+    «сначала удалите более поздние» тоже должна говорить о порядке проведения.
+    Нужна подпись или сортировка — решить в дизайне.
+
+### Документы и прочее
+
+15. **Исправить.** `BUSINESS_LOGIC.md:265-268` прямо запрещает вставку до
+    существующей истории без воспроизведения и обещает, что «числовые
+    исправления воспроизводят зависимые команды».
+    `docs/crypto-accounting-policy.md:491-500` фиксирует решение владельца
+    «замену удалением не реализовывать до отдельного решения» и перечисляет, что
+    проверить: отсутствие автоматического каскада, аудит, повторный ввод задним
+    числом. План это решение отменяет. Нужно явно сослаться на него в «Цели» и
+    обновить оба документа. П. 2, 6 и 11 закрывают пункты этого чек-листа.
+16. **Вопрос владельцу.** Обычная отмена (`put__reverse_operation`) не
+    запрещает операции банковского журнала (`bank-posting-v1`), так что у одной
+    операции будет два способа отмены. Запретить reversal для операций со
+    ссылкой в `crypto_source_event_links` в этой задаче или отдельной?
+17. **Вопрос владельцу (вариант проще).** Критерий 4 (удаление не последней
+    операции) при агрегатах балансов срабатывает только для разных счетов или
+    монет. Если владельцу достаточно «удалять с конца», можно проверять только
+    «нет более поздних мутаций тех же строк» (п. 1). Код почти тот же, а п. 2 и
+    п. 9 упрощаются. Рекомендую оставить критерий 4, но с правилом из п. 1.
