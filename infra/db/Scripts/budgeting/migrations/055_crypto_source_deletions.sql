@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS budgeting.crypto_source_deletions (
  mutations jsonb NOT NULL,
  revisions jsonb NOT NULL DEFAULT '[]'::jsonb,
  corrections jsonb NOT NULL DEFAULT '[]'::jsonb,
- deleted_by_user_id bigint NOT NULL REFERENCES budgeting.users(id),
+ -- Audit outlives the account: deleting the user clears the reference.
+ deleted_by_user_id bigint REFERENCES budgeting.users(id) ON DELETE SET NULL,
  deleted_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS crypto_source_deletions_source

@@ -57,11 +57,9 @@ class Ledger(DataBase):
             self._fn('get__crypto_source_events'), user_id, anchor_account_id, limit, offset,
         )
 
-    async def put__correct_crypto_source(self, user_id, source_event_id, expected_revision,
-                                          request_id, changes, reason, apply=False, preview_token=None):
+    async def put__delete_crypto_source(self, user_id, source_event_id, request_id):
         return await self.call_function(
-            self._fn('put__correct_crypto_source'), user_id, source_event_id,
-            expected_revision, request_id, changes, reason, apply, preview_token,
+            self._fn('put__delete_crypto_source'), user_id, source_event_id, request_id,
         )
 
     async def get__crypto_correction_history(self, user_id, anchor_account_id, limit=30, offset=0):

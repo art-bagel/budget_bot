@@ -72,53 +72,10 @@ async def get_crypto_source_events(anchor_account_id: int = Query(gt=0),
     return await ledger.get__crypto_source_events(user.user_id, anchor_account_id, limit, offset)
 
 
-class CryptoCorrectionChange(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    command_index: int = Field(ge=0, le=99)
-    field: Literal['from_amount', 'to_amount', 'quantity', 'amount', 'debt_qty',
-                   'interest_qty', 'collateral_qty', 'collateral_fee_qty', 'principal_qty',
-                   'secondary_principal_qty', 'rewards_qty', 'secondary_rewards_qty',
-                   'return_quantity', 'secondary_return_quantity', 'secondary_quantity',
-                   'fiat_amount', 'repay_qty']
-    value: str = Field(min_length=1, max_length=80)
-
-    @field_validator('value')
-    @classmethod
-    def exact_value(cls, value: str) -> str:
-        try:
-            number = Decimal(value)
-        except Exception as exc:
-            raise ValueError('Нужно десятичное количество') from exc
-        if not number.is_finite() or number < 0 or number.as_tuple().exponent < -18:
-            raise ValueError('Неотрицательное количество, не более 18 знаков после запятой')
-        return value
-
-
-class CryptoCorrectionRequest(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    expected_revision: int = Field(gt=0)
-    request_id: UUID
-    changes: list[CryptoCorrectionChange] = Field(min_length=1, max_length=30)
-    reason: str = Field(min_length=1, max_length=1000)
-    apply: bool = False
-    preview_token: Optional[str] = Field(default=None, max_length=64)
-
-    @field_validator('reason')
-    @classmethod
-    def reason_not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError('Укажите причину исправления')
-        return value.strip()
-
-
-@router.post('/source-events/{source_event_id}/correct')
-async def correct_crypto_source(source_event_id: int, body: CryptoCorrectionRequest,
-                                user: CurrentUser = Depends(get_current_user)) -> dict:
-    return await ledger.put__correct_crypto_source(
-        user.user_id, source_event_id, body.expected_revision, body.request_id,
-        [change.model_dump() for change in body.changes], body.reason,
-        body.apply, body.preview_token,
-    )
+@router.delete('/source-events/{source_event_id}')
+async def delete_crypto_source(source_event_id: int, request_id: UUID = Query(...),
+                               user: CurrentUser = Depends(get_current_user)) -> dict:
+    return await ledger.put__delete_crypto_source(user.user_id, source_event_id, request_id)
 
 
 @router.get('/correction-history')

@@ -289,6 +289,33 @@ def main() -> None:
             headers={'X-Telegram-Init-Data': tampered},
         ).status_code == 401
 
+        # 13. Операцию коллекции удаляет только её владелец; повтор безопасен.
+        owner = {'X-Telegram-Init-Data': fresh_tg}
+        stranger = {'X-Telegram-Init-Data': telegram_init_data(TG_USER_ID)}
+        response = client.post('/api/v1/bank-accounts', headers=owner, json={
+            'name': 'E2E gifts', 'account_kind': 'investment', 'investment_asset_type': 'collectible'})
+        assert response.status_code == 200, response.text
+        gifts = response.json()['id']
+        response = client.post('/api/v1/portfolio/positions', headers=owner, json={
+            'request_id': '00000000-0000-4000-8000-000000000013', 'received_free': True,
+            'investment_account_id': gifts, 'asset_type_code': 'collectible', 'title': 'E2E gift',
+            'quantity': 1, 'amount_in_currency': 0, 'currency_code': 'RUB', 'metadata': {'item_kind': 'other'}})
+        assert response.status_code == 200, response.text
+        history = client.get('/api/v1/crypto/correction-history', headers=owner,
+                             params={'anchor_account_id': gifts}).json()
+        assert len(history) == 1, history
+        source = f"/api/v1/crypto/source-events/{history[0]['id']}"
+        delete_id = {'request_id': '00000000-0000-4000-8000-000000000014'}
+        response = client.delete(source, headers=stranger, params=delete_id)
+        assert response.status_code == 400 and 'Нет доступа' in response.text, response.text
+        response = client.delete(source, headers=owner, params=delete_id)
+        assert response.status_code == 200 and response.json()['deleted'], response.text
+        assert client.delete(source, headers=owner, params=delete_id).json() == response.json(), 'повтор'
+        assert client.get('/api/v1/crypto/correction-history', headers=owner,
+                          params={'anchor_account_id': gifts}).json() == [], 'операции нет'
+        assert client.get('/api/v1/portfolio/positions', headers=owner,
+                          params={'investment_account_id': gifts}).json() == [], 'предмета нет'
+
         cleanup(client)
         print('auth api: все проверки пройдены')
 

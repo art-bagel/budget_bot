@@ -14,7 +14,7 @@ BEGIN
  SELECT * INTO prior FROM crypto_source_deletions WHERE request_id=_request_id;
  IF prior.id IS NOT NULL THEN
   -- A retry answers only the same actor for the same source, with access rechecked.
-  IF prior.source_event_id<>_source_event_id OR prior.deleted_by_user_id<>_user_id
+  IF prior.source_event_id<>_source_event_id OR prior.deleted_by_user_id IS DISTINCT FROM _user_id
      OR NOT EXISTS(SELECT 1 FROM bank_accounts a WHERE a.id=(prior.envelope->>'anchor_account_id')::bigint
        AND has__owner_access(_user_id,a.owner_type,a.owner_user_id,a.owner_family_id)) THEN
    RAISE EXCEPTION 'Нет доступа к операции';

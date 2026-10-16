@@ -9,7 +9,8 @@ BEGIN
  IF _limit NOT BETWEEN 1 AND 100 OR _offset<0 THEN RAISE EXCEPTION 'Некорректная страница'; END IF;
  ownerkey:=a.owner_type||':'||CASE WHEN a.owner_type='user' THEN a.owner_user_id ELSE a.owner_family_id END;
  RETURN (SELECT COALESCE(jsonb_agg(to_jsonb(e) ORDER BY occurred_at DESC,order_in_timestamp DESC),'[]'::jsonb) FROM (
- SELECT s.id,COALESCE((s.commands->0->'payload'->>'operated_at')::date,s.accounting_date) accounting_date,s.occurred_at,s.order_in_timestamp,s.revision,s.reversible,
+ SELECT s.id,COALESCE((s.evidence->>'requested_date')::date,(s.commands->0->'payload'->>'operated_at')::date,s.accounting_date) accounting_date,
+ s.accounting_date posted_on,s.occurred_at,s.order_in_timestamp,s.revision,s.reversible,
  (SELECT jsonb_agg(c||jsonb_build_object('editable_fields',budgeting.get__crypto_correction_fields(c->>'kind')) ORDER BY ord)
  FROM jsonb_array_elements(s.commands) WITH ORDINALITY v(c,ord)) commands,
  (SELECT string_agg(DISTINCT COALESCE(p.title,c->'payload'->>'title',pp.protocol_name,ca.symbol)||CASE WHEN c->>'kind'='swap' THEN ' → '||COALESCE(ca.symbol,'') ELSE '' END,' / ')
@@ -20,16 +21,10 @@ BEGIN
  AND c->>'kind' IN ('borrow','repay','liquidate','accrue_interest','protocol_yield','close_protocol','partial_close_protocol','top_up_protocol')
  LEFT JOIN budgeting.crypto_assets ca ON ca.id=COALESCE(c->'payload'->>'crypto_asset_id',c->'payload'->>'to_crypto_asset_id')::bigint) context,
 
-   COALESCE((SELECT jsonb_agg(jsonb_build_object('revision',r.revision,'commands',r.envelope->'commands',
-     'superseded_at',r.superseded_at) ORDER BY r.revision DESC) FROM budgeting.crypto_source_revisions r
-     WHERE r.source_event_id=s.id),'[]'::jsonb) previous_versions
+   (SELECT count(*)>0 FROM budgeting.crypto_source_revisions r WHERE r.source_event_id=s.id) corrected
  FROM budgeting.crypto_source_events s WHERE s.owner_key=ownerkey
- -- Filter non-editable metadata events before pagination.
- AND s.reversible AND EXISTS (
-   SELECT 1 FROM jsonb_array_elements(s.commands) c,
-     unnest(budgeting.get__crypto_correction_fields(c->>'kind')) field
-   WHERE c->'payload'->field IS NOT NULL AND c->'payload'->field <> 'null'::jsonb
- )
+ -- Only sources that can be deleted are listed.
+ AND s.reversible AND s.source_namespace IN ('manual-portfolio-v1','manual-collection-v1','bank-posting-v1')
  -- Collection editing includes either side of a transfer to this account.
  AND (a.investment_asset_type IS DISTINCT FROM 'collectible' OR (
    EXISTS (SELECT 1 FROM jsonb_array_elements(s.commands) c WHERE c->>'kind' LIKE 'collectible_%')
@@ -51,8 +46,7 @@ BEGIN
        WHERE p.id=(c->'payload'->>'position_id')::bigint
        AND c->>'kind' IN ('borrow','repay','liquidate','accrue_interest','protocol_yield','close_protocol','partial_close_protocol','top_up_protocol')),
       (c->'payload'->>'bank_account_id')::bigint)
-   WHERE cardinality(budgeting.get__crypto_correction_fields(c->>'kind'))>0
-    AND NOT visible.is_archived
+   WHERE NOT visible.is_archived
   )))
  ORDER BY occurred_at DESC,order_in_timestamp DESC LIMIT _limit OFFSET _offset) e);
 END $f$;
