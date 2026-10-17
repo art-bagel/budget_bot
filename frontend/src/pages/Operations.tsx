@@ -8,7 +8,6 @@ import {
   fetchOperationsHistory,
   reverseOperation,
 } from '../api';
-import BottomSheet from '../components/BottomSheet';
 import { journalTitle, readableCancelReason } from '../utils/journalKinds';
 import { hapticLight } from '../telegram';
 import { IconTag, IconPlus, IconArrowRightLeft, IconPortfolio, IconCredit, IconChevronRight } from '../components/Icons';
@@ -718,145 +717,116 @@ function portfolioEventLabel(event: OperationHistoryPortfolioEvent): string {
             : event.event_type;
 }
 
-// Bank model: a row opens its details; cancel is checked by the server first
-// (a dry run, so the reason matches the real cancel) and always confirmed.
-function OperationDetailSheet({ item, onClose, onCancelled }: {
-  item: OperationHistoryItem | null;
-  onClose: () => void;
-  onCancelled: () => void;
-}) {
-  const [check, setCheck] = useState<CancelCheckResponse | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
+// Bank model: a tapped row unfolds its details with a red «Отменить». The
+// server checks the cancel on press (a dry run, so the reason matches the real
+// cancel): it either asks to confirm or tells why it is impossible.
+function OperationDetail({ item, onCancelled }: { item: OperationHistoryItem; onCancelled: () => void }) {
+  const [phase, setPhase] = useState<'idle' | 'checking' | 'confirm' | 'busy'>('idle');
+  const [reason, setReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const cancelled = !!item?.has_reversal;
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt re-runs a failed check
-  useEffect(() => {
-    setCheck(null); setConfirming(false); setError(null);
-    if (!item || item.has_reversal) return;
-    let active = true;
-    fetchCancelCheck(cancelTarget(item))
-      .then((result) => { if (active) setCheck(result); })
-      .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : String(e)); });
-    return () => { active = false; };
-  }, [item, attempt]);
-
-  if (!item) return null;
-  const amt = getOpAmount(item);
   const comment = getOpComment(item);
   const events = portfolioEventsOf(item);
+  const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+  const ask = async () => {
+    setPhase('checking'); setReason(null); setError(null);
+    try {
+      const check: CancelCheckResponse = await fetchCancelCheck(cancelTarget(item));
+      if (check.can_cancel) setPhase('confirm');
+      else { setReason(readableCancelReason(check.reason ?? 'Эту операцию нельзя отменить')); setPhase('idle'); }
+    } catch (e: unknown) {
+      setError(message(e)); setPhase('idle');
+    }
+  };
 
   const cancel = async () => {
-    setBusy(true); setError(null);
+    setPhase('busy'); setError(null);
     try {
       await reverseOperation(cancelTarget(item));
       onCancelled();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
       // A retry after a lost response: it is already done.
-      if (message.includes('уже отменена')) onCancelled();
-      else { setError(readableCancelReason(message)); setConfirming(false); }
-    } finally {
-      setBusy(false);
+      if (message(e).includes('уже отменена')) onCancelled();
+      else { setError(readableCancelReason(message(e))); setPhase('idle'); }
     }
   };
 
-  const footer = cancelled ? undefined : (
-    <div className="tk-foot pf-sheet-actions">
-      {error && <div className="tk-error" role="alert"><span>{error}</span></div>}
-      {check && !check.can_cancel ? (
-        <p className="op-sheet__reason" role="status">{readableCancelReason(check.reason ?? 'Эту операцию нельзя отменить')}</p>
-      ) : confirming ? (
-        <>
-          <p className="op-sheet__reason op-sheet__confirm" role="status">Отменить операцию? Балансы вернутся к состоянию до неё.</p>
-          <div className="tk-foot__row">
-            <button className="sh-btn sh-btn--ghost" type="button" disabled={busy} onClick={() => setConfirming(false)}>Назад</button>
-            <button className="sh-btn sh-btn--danger" type="button" disabled={busy} onClick={() => void cancel()}>
-              {busy ? 'Отменяем…' : 'Отменить'}
-            </button>
-          </div>
-        </>
-      ) : !check && error ? (
-        <button className="sh-btn sh-btn--ghost" type="button" onClick={() => { setError(null); setAttempt((n) => n + 1); }}>
-          Проверить ещё раз
-        </button>
-      ) : (
-        <button className="sh-btn sh-btn--danger" type="button" disabled={!check || busy} onClick={() => setConfirming(true)}>
-          {check ? 'Отменить операцию' : 'Проверяем…'}
-        </button>
-      )}
-    </div>
-  );
-
   return (
-    <BottomSheet open title={getOperationTitle(item)} tag={formatDateGroupLabel(item.operated_at ?? item.created_at.slice(0, 10))}
-      onClose={() => { if (!busy) onClose(); }} actions={footer}>
-      <div className="op-sheet">
-        <div className={`op-sheet__head${cancelled ? ' op-sheet__head--cancelled' : ''}`}>
-          {amt && <strong className={`op-sheet__amt${amt.cls ? ` ${amt.cls}` : ''}`}>{amt.text}</strong>}
-          {cancelled && <span className="op-row__tag">Отменена</span>}
+    <div className="op-row__detail">
+      {comment && <div className="op-detail__comment">{comment}</div>}
+      {item.bank_entries.length > 0 && (
+        <div className="op-detail__entries op-detail__entries--bank">
+          {item.bank_entries.map((entry, i) => (
+            <div className="op-detail__entry" key={i}>
+              <span className="op-detail__name">{getBankEntryLabel(entry.bank_account_owner_type, entry.bank_account_kind, entry.bank_account_name, entry.bank_account_id)}</span>
+              <span className="op-detail__amt">{formatSignedAmount(entry.amount, entry.currency_code)}</span>
+            </div>
+          ))}
         </div>
-        <div className="op-row__sub op-sheet__sub">{getOpSubtitle(item)}</div>
-        {comment && <div className="op-detail__comment">{comment}</div>}
-        {item.bank_entries.length > 0 && (
-          <div className="op-detail__entries op-detail__entries--bank">
-            {item.bank_entries.map((entry, i) => (
+      )}
+      {item.budget_entries.length > 0 && (
+        <div className="op-detail__entries">
+          {item.budget_entries.map((entry, i) => {
+            const parsed = parseCategoryIcon(entry.category_name);
+            const colorKey = CAT_COLOR_KEYS[entry.category_id % CAT_COLOR_KEYS.length];
+            return (
               <div className="op-detail__entry" key={i}>
-                <span className="op-detail__name">{getBankEntryLabel(entry.bank_account_owner_type, entry.bank_account_kind, entry.bank_account_name, entry.bank_account_id)}</span>
+                <span className={`op-detail__ico op-ico--cat-${colorKey}`}>
+                  {parsed.kind === 'svg' && parsed.icon
+                    ? <CategorySvgIcon code={parsed.icon} />
+                    : parsed.kind === 'emoji' && parsed.icon
+                      ? <span className="op-ico__emoji">{parsed.icon}</span>
+                      : <IconTag />}
+                </span>
+                <span className="op-detail__name">{getBudgetEntryLabel(entry.category_name)}</span>
                 <span className="op-detail__amt">{formatSignedAmount(entry.amount, entry.currency_code)}</span>
               </div>
-            ))}
-          </div>
-        )}
-        {item.budget_entries.length > 0 && (
-          <div className="op-detail__entries">
-            {item.budget_entries.map((entry, i) => {
-              const parsed = parseCategoryIcon(entry.category_name);
-              const colorKey = CAT_COLOR_KEYS[entry.category_id % CAT_COLOR_KEYS.length];
-              return (
-                <div className="op-detail__entry" key={i}>
-                  <span className={`op-detail__ico op-ico--cat-${colorKey}`}>
-                    {parsed.kind === 'svg' && parsed.icon
-                      ? <CategorySvgIcon code={parsed.icon} />
-                      : parsed.kind === 'emoji' && parsed.icon
-                        ? <span className="op-ico__emoji">{parsed.icon}</span>
-                        : <IconTag />}
-                  </span>
-                  <span className="op-detail__name">{getBudgetEntryLabel(entry.category_name)}</span>
-                  <span className="op-detail__amt">{formatSignedAmount(entry.amount, entry.currency_code)}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {events.length > 0 && (
-          <div className="op-detail__entries op-detail__entries--bank">
-            {events.map((event) => (
-              <div className="op-detail__entry" key={event.id}>
-                <span className="op-detail__name">
-                  {[event.investment_account_name, event.position_title, portfolioEventLabel(event)].filter(Boolean).join(' · ')}
+            );
+          })}
+        </div>
+      )}
+      {events.length > 0 && (
+        <div className="op-detail__entries op-detail__entries--bank">
+          {events.map((event) => (
+            <div className="op-detail__entry" key={event.id}>
+              <span className="op-detail__name">
+                {[event.investment_account_name, event.position_title, portfolioEventLabel(event)].filter(Boolean).join(' · ')}
+              </span>
+              {event.quantity ? (
+                <span className="op-detail__amt">
+                  {formatSignedQuantity(
+                    ['transfer_out', 'swap_out', 'close', 'partial_close', 'fee'].includes(event.event_type)
+                      ? -Math.abs(event.quantity)
+                      : Math.abs(event.quantity),
+                    getPortfolioEventSymbol(event),
+                  )}
                 </span>
-                {event.quantity ? (
-                  <span className="op-detail__amt">
-                    {formatSignedQuantity(
-                      ['transfer_out', 'swap_out', 'close', 'partial_close', 'fee'].includes(event.event_type)
-                        ? -Math.abs(event.quantity)
-                        : Math.abs(event.quantity),
-                      getPortfolioEventSymbol(event),
-                    )}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-        {item.reversal_of_operation_id && (
-          <div className="op-detail__note">Отмена операции #{item.reversal_of_operation_id}</div>
-        )}
-      </div>
-    </BottomSheet>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+      {item.reversal_of_operation_id && (
+        <div className="op-detail__note">Отмена операции #{item.reversal_of_operation_id}</div>
+      )}
+      {!item.has_reversal && (phase === 'confirm' || phase === 'busy' ? (
+        <div className="op-cancel">
+          <span className="op-cancel__question" role="status">Отменить операцию? Балансы вернутся к состоянию до неё.</span>
+          <span className="op-cancel__actions">
+            <button className="op-row__cancel" type="button" disabled={phase === 'busy'} onClick={() => void cancel()}>
+              {phase === 'busy' ? 'Отменяем…' : 'Да, отменить'}
+            </button>
+            <button className="op-cancel__back" type="button" disabled={phase === 'busy'} onClick={() => setPhase('idle')}>Нет</button>
+          </span>
+        </div>
+      ) : (
+        <button className="op-row__cancel" type="button" disabled={phase === 'checking'} onClick={() => void ask()}>
+          {phase === 'checking' ? 'Проверяем…' : 'Отменить'}
+        </button>
+      ))}
+      {reason && <div className="op-cancel__reason" role="status">{reason}</div>}
+      {error && <div className="op-cancel__reason op-cancel__reason--error" role="alert">{error}</div>}
+    </div>
   );
 }
 
@@ -960,7 +930,7 @@ export default function Operations({
   const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(
     () => new Set(['income', 'expense', 'exchange', 'cancelled']),
   );
-  const [selectedItem, setSelectedItem] = useState<OperationHistoryItem | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
   // Sentinel хранится в state (callback ref): при пустом фильтре элемент
@@ -1214,7 +1184,8 @@ export default function Operations({
   }, [historyItems, investmentHistoryFilter, viewMode, embedded, historyScope, bankingTypeFilter, historyTypeFilter, showHistoryTypeFilter]);
 
   const handleCancelled = async () => {
-    setSelectedItem(null);
+    // The reloaded list starts folded, as after any other change.
+    setExpandedRows(new Set());
     onChanged?.();
     await loadHistory(0, true);
     if (viewMode === 'analytics') {
@@ -1404,7 +1375,15 @@ export default function Operations({
                       <div className="op-group__head">{group.dateLabel}</div>
                       {group.items.map((item) => {
                         const amt = getOpAmount(item);
+                        const key = rowKey(item);
+                        const expanded = expandedRows.has(key);
+                        const toggle = () => setExpandedRows((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(key)) next.delete(key); else next.add(key);
+                          return next;
+                        });
                         return (
+                          <div className={`op-item${item.has_reversal ? ' op-item--cancelled' : ''}`} key={key}>
                           <button
                             type="button"
                             className={[
@@ -1412,8 +1391,8 @@ export default function Operations({
                               'op-row--expandable',
                               item.has_reversal ? 'op-row--cancelled' : '',
                             ].filter(Boolean).join(' ')}
-                            key={rowKey(item)}
-                            onClick={() => setSelectedItem(item)}
+                            aria-expanded={expanded}
+                            onClick={toggle}
                           >
                             <span className={`op-ico ${getOpIcoClass(item)}`}>
                               {getOpIcoContent(item)}
@@ -1430,7 +1409,7 @@ export default function Operations({
                                   {amt && (
                                     <strong className={`op-row__amt${amt.cls ? ' ' + amt.cls : ''}`}>{amt.text}</strong>
                                   )}
-                                  <span className="op-row__chevron">
+                                  <span className={`op-row__chevron${expanded ? ' op-row__chevron--open' : ''}`}>
                                     <IconChevronRight />
                                   </span>
                                 </span>
@@ -1438,6 +1417,8 @@ export default function Operations({
                               <span className="op-row__sub">{getOpSubtitle(item)}</span>
                             </span>
                           </button>
+                          {expanded && <OperationDetail item={item} onCancelled={() => void handleCancelled()} />}
+                          </div>
                         );
                       })}
                     </div>
@@ -1446,7 +1427,6 @@ export default function Operations({
               )}
 
               {!activeFilterEmpty && <div ref={setLoadMoreSentinel} className="op-sentinel" />}
-              <OperationDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} onCancelled={() => void handleCancelled()} />
               {loadingHistory && <div className="op-loading">...</div>}
             </>
             );

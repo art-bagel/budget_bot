@@ -61,6 +61,8 @@
   --pos-bg: #DFF5E9;
   --neg: #DF3F36;
   --neg-bg: #FCE4E2;
+  /* Red text on light surfaces: --neg is below 4.5:1 there. */
+  --neg-text: #C2302A;
   --warn: #D98500;
 
   --t-g-b: #DFF5E9; --t-g-f: #117A4B;
@@ -156,6 +158,7 @@
   --pos-bg: #0E2A1E;
   --neg: #F05E55;
   --neg-bg: #2E1513;
+  --neg-text: var(--neg);
   --warn: #FFB52B;
 
   --t-g-b: #0F2A1A; --t-g-f: #6FD4A3;
@@ -236,6 +239,7 @@
     --pos-bg: #0E2A1E;
     --neg: #F05E55;
     --neg-bg: #2E1513;
+    --neg-text: var(--neg);
     --warn: #FFB52B;
 
     --t-g-b: #0F2A1A; --t-g-f: #6FD4A3;
@@ -5331,7 +5335,10 @@ select.dlg-row__ghost option {
   border-radius: 10px;
   transition: background .14s ease;
 }
-/* Rows are buttons: they open the operation sheet. */
+/* A row is a button that unfolds its details below (.op-item wraps both). */
+.op-item { border-bottom: 1px solid var(--line); }
+.op-item:last-child { border-bottom: 0; }
+.op-item > .op-row { border-bottom: 0; }
 button.op-row {
   width: 100%;
   border-top: 0; border-left: 0; border-right: 0;
@@ -11800,27 +11807,39 @@ button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-off
 .pf-act-group .sec-tag { padding-left: 2px; }
 .pf-act-group__tiles { margin-bottom: 0; }
 
-/* Operation sheet: details and the cancel action */
-.op-sheet { display: flex; flex-direction: column; gap: 10px; }
-.op-sheet__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.op-sheet__amt {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -.02em;
-  font-variant-numeric: tabular-nums lining-nums;
-  overflow-wrap: anywhere;
+/* Unfolded operation: details and the red cancel line */
+.op-row__detail {
+  margin: 0 8px 12px 56px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
-.op-sheet__head--cancelled .op-sheet__amt {
-  text-decoration: line-through;
-  text-decoration-thickness: 2px;
-  /* --text-3 fails AA contrast; the strike and the tag already say "cancelled". */
-  color: var(--text-2);
+.op-row__detail .op-detail__name { white-space: normal; overflow-wrap: anywhere; }
+.op-row__chevron--open { transform: rotate(90deg); }
+.op-row__cancel,
+.op-cancel__back {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neg-text);
+  text-align: left;
+  cursor: pointer;
 }
-.op-sheet__sub { white-space: normal; color: var(--text-2); }
-/* The sheet has room: long category and account names wrap instead of ellipsis. */
-.op-sheet .op-detail__name { white-space: normal; overflow-wrap: anywhere; }
-.op-sheet__reason { font-size: 12.5px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
-.op-sheet__confirm { font-size: 14px; font-weight: 600; color: var(--text); }
+.op-row__cancel:disabled { cursor: default; opacity: .6; }
+.op-cancel__back { color: var(--text-2); }
+.op-cancel { display: flex; flex-direction: column; gap: 2px; }
+.op-cancel__question { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.op-cancel__actions { display: flex; gap: 20px; }
+.op-cancel__reason { font-size: 12.5px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
+.op-cancel__reason--error { color: var(--neg-text); }
 
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
 .pf-view .op-row__top { align-items: flex-start; }
