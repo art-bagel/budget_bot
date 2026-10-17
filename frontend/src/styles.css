@@ -11825,6 +11825,9 @@ button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-off
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
 .pf-view .op-row__top { align-items: flex-start; }
 .pf-view .op-row__name-text { white-space: normal; mask-image: none; line-height: 1.25; }
+/* ...and long item amounts ("+1 Тестовый подарок") wrap instead of taking the whole row. */
+.pf-view .op-row__top-r { flex-shrink: 1; min-width: 0; max-width: 55%; }
+.pf-view .op-row__amt { flex-shrink: 1; min-width: 0; text-align: right; overflow-wrap: anywhere; }
 
 /* Settings: investment account tiles open a settings sheet */
 .settings-page .invest-tile--btn {
