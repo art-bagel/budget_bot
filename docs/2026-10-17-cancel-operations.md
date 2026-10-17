@@ -500,3 +500,55 @@ cancelled_operations
    нажатием). Ок?
 4. Отменённые операции в банковском списке видны по умолчанию (сейчас скрыты
    фильтром). Ок?
+
+## Аппрув плана
+
+17.10.2026 владелец утвердил план. Ответы:
+
+1. Детали — как в банковских приложениях: шторка снизу.
+2. Всё, что было в «Истории операций», показывать в обычном списке операций:
+   крипта — в крипте, коллекции — в коллекциях. Правки параметров предмета
+   (`collectible_details`) не показывать: это не финансовая операция, их
+   поправляют повторной правкой.
+3. Подтверждение отмены — везде, и в банковских операциях тоже.
+4. Отменённые в банковском списке показывать по умолчанию. Переработка
+   фильтров — в будущем, отдельной задачей.
+
+### Дополнение плана по ответу 2: журнальные события без строки `operations`
+
+На проде таких ручных событий крипты 14 (`repay`, `close_protocol`,
+`protocol_yield`, `observation`, `accrue_interest`, `fee`, `receive_unknown`,
+`lp_reward + fee`, `partial_close_protocol`), коллекций — только
+`collectible_details` (не показываются).
+
+- `get__operations_history` добавляет в выборку «журнальные строки»: события
+  `manual-portfolio-v1` / `manual-collection-v1`, `reversible`, без ссылки на
+  `operations`, кроме событий из одних `collectible_details`. Владелец — по
+  `owner_key` (`user:<id>` / `family:<id>`).
+  - `operation_id = NULL`, `source_event_id = id`, `type =
+    'investment_journal'`, `operated_at` — дата операции
+    (`evidence.requested_date`, иначе `accounting_date`), `created_at` —
+    `created_at` события;
+  - `portfolio_events` — по `crypto_source_event_links` (`ledger_table =
+    'portfolio_events'`), в том же формате, что у операций;
+  - `commands` — виды команд и контекст (протокол / монета), чтобы фронтенд
+    назвал строку (словарь видов переносится из `CryptoCorrectionSheet`);
+  - фильтры: `investment` — да, `banking` — нет; вид актива — по
+    `investment_asset_type` якорного счёта; архивный якорный счёт — скрыто.
+- Отмена: `put__cancel_operation(_user_id, _operation_id, _source_event_id)` —
+  ровно один из двух. По операции — `put__reverse_operation`, по событию —
+  `put__delete_crypto_source` с той же проверкой «уже отменена».
+  `get__operation_cancel_check` принимает ту же пару. API: `POST
+  /operations/reverse` принимает `operation_id` **или** `source_event_id`;
+  `GET /operations/cancel-check?operation_id=…|source_event_id=…`.
+- Снимок: `cancelled_operations` получает суррогатный `id`, `operation_id`
+  (nullable, unique) и `source_event_id` (событие журнала, nullable). Для
+  журнальной строки снимок снимается той же функцией истории (параметр
+  `_source_event_ids`).
+- Критерий 9: журнальное событие без операции (например, `protocol_yield`)
+  видно во «Портфель → Крипта → Операции», не видно в коллекциях и в
+  банковском списке; отменяется из шторки и остаётся с меткой «Отменена».
+  `collectible_details` в списке нет. Тест — `tests/cancelled_operations.sql`.
+
+Второй раунд ревью плана не проводится: дополнение не меняет механизм отката
+(тот же `put__delete_crypto_source`). Финальное ревью проверяет его отдельно.
