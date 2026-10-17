@@ -11,15 +11,34 @@ test('focus stays inside an open bottom sheet', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'Продукты' });
   await expect(dialog).toBeVisible();
 
-  const stops = await dialog.evaluate(
-    (el) => el.querySelectorAll('button:not([disabled]), input:not([disabled]), select, textarea, [tabindex="0"]').length,
-  );
-  for (const key of ['Tab', 'Shift+Tab']) {
-    for (let i = 0; i < stops + 2; i++) {
-      await page.keyboard.press(key);
-      expect(await focusInDialog(page), `${key} #${i + 1}`).toBe(true);
-    }
+  // Walk Tab until focus comes back to the first stop: every step stays in
+  // the dialog, and Shift+Tab from the first stop lands on the last one.
+  const mark = () =>
+    page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el?.closest('[role="dialog"]')) return null;
+      el.dataset.stop ??= String(document.querySelectorAll('[data-stop]').length);
+      return el.dataset.stop;
+    });
+  await page.keyboard.press('Tab');
+  const first = await mark();
+  expect(first).not.toBeNull();
+  // A date input keeps focus while Tab walks its day/month/year parts:
+  // repeats of the same stop are not new stops.
+  const seen = [first];
+  for (let i = 0; i < 50; i++) {
+    await page.keyboard.press('Tab');
+    const stop = await mark();
+    expect(stop, `Tab #${i + 2}`).not.toBeNull();
+    if (stop === seen[seen.length - 1]) continue;
+    if (stop === first) break;
+    seen.push(stop);
   }
+  expect(seen.length, 'more than one stop').toBeGreaterThan(1);
+  expect(await mark(), 'Tab wraps to the first stop').toBe(first);
+  await page.keyboard.press('Shift+Tab');
+  expect(await mark(), 'Shift+Tab wraps to the last stop').toBe(seen[seen.length - 1]);
+  expect(await focusInDialog(page)).toBe(true);
 });
 
 test('overview hero rows are buttons that work from the keyboard', async ({ page }) => {

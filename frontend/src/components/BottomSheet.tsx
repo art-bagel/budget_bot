@@ -23,7 +23,11 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 // Tab wraps from the last field to the first (Shift+Tab the other way), so
 // keyboard focus never lands on the page under the sheet.
 function trapTab(e: KeyboardEvent, sheet: HTMLElement) {
-  const stops = [...sheet.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+  // Only what the browser itself would Tab to: visible, not tabindex=-1, not
+  // inside a disabled fieldset or an inert subtree.
+  const stops = [...sheet.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (el) => el.tabIndex >= 0 && el.getClientRects().length > 0 && !el.closest('fieldset:disabled, [inert]'),
+  );
   if (stops.length === 0) {
     e.preventDefault();
     sheet.focus();

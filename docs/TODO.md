@@ -32,8 +32,8 @@
   `BottomSheet`** — 2026-10-17, [отчёт](2026-10-17-design-guide.md).
 - [ ] **Долг из справочника** (S–M, по частям) — раздел 9 `docs/design-guide.md`:
   легаси-токены `--text-tertiary` и др. (контраст 2.7:1), `.dlg-error` на
-  `--neg`, тема `system` не слушает `colorScheme` Telegram, `role="button"`
-  на `div` в `Credits.tsx`, axe на остальных экранах.
+  `--neg`, тема `system` не слушает `colorScheme` Telegram, axe на Портфеле,
+  Операциях, Настройках и шторках.
 - [ ] **Скиллы ревьюеров** `.claude/skills/plan-review`, `impl-review`,
   `ui-review` (S) — чек-листы из AGENTS.md, чтобы ревью было одинаковым.
 
