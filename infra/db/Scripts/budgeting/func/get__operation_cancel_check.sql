@@ -20,6 +20,11 @@ BEGIN
    SELECT co.owner_type, co.owner_user_id, co.owner_family_id INTO o_type, o_user, o_family FROM cancelled_operations co
     JOIN crypto_source_deletions d ON d.id = co.deletion_id WHERE d.source_event_id = _source_event_id LIMIT 1;
   END IF;
+  -- Deleted before cancelled rows were kept (migration 056): same answer as the cancel.
+  IF o_type IS NULL AND EXISTS(SELECT 1 FROM crypto_source_deletions d WHERE d.source_event_id = _source_event_id
+    AND d.owner_key IN ('user:' || _user_id, 'family:' || get__user_family_id(_user_id))) THEN
+   RETURN jsonb_build_object('can_cancel', false, 'reason', 'Операция уже отменена');
+  END IF;
  END IF;
  IF o_type IS NULL THEN RAISE EXCEPTION 'Операция не найдена'; END IF;
  IF NOT has__owner_access(_user_id, o_type, o_user, o_family) THEN

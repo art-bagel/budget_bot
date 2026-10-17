@@ -75,6 +75,10 @@ BEGIN
  BEGIN PERFORM put__reverse_operation(uid,op); RAISE EXCEPTION 'second reverse passed';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
  ASSERT err='Операция уже отменена','second reverse: '||err;
+ BEGIN PERFORM put__cancel_operation(uid,NULL,sid); RAISE EXCEPTION 'second cancel by event passed';
+ EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
+ ASSERT err='Операция уже отменена','second cancel by event: '||err;
+ ASSERT get__operation_cancel_check(uid,NULL,sid)->>'reason'='Операция уже отменена','check by event on cancelled';
  BEGIN PERFORM put__cancel_operation(other,op,NULL); RAISE EXCEPTION 'foreign cancelled passed';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
  ASSERT err LIKE 'Нет доступа%','foreign on cancelled: '||err;

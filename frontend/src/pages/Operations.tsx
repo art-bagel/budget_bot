@@ -729,8 +729,10 @@ function OperationDetailSheet({ item, onClose, onCancelled }: {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const cancelled = !!item?.has_reversal;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt re-runs a failed check
   useEffect(() => {
     setCheck(null); setConfirming(false); setError(null);
     if (!item || item.has_reversal) return;
@@ -739,7 +741,7 @@ function OperationDetailSheet({ item, onClose, onCancelled }: {
       .then((result) => { if (active) setCheck(result); })
       .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : String(e)); });
     return () => { active = false; };
-  }, [item]);
+  }, [item, attempt]);
 
   if (!item) return null;
   const amt = getOpAmount(item);
@@ -776,6 +778,10 @@ function OperationDetailSheet({ item, onClose, onCancelled }: {
             </button>
           </div>
         </>
+      ) : !check && error ? (
+        <button className="sh-btn sh-btn--ghost" type="button" onClick={() => { setError(null); setAttempt((n) => n + 1); }}>
+          Проверить ещё раз
+        </button>
       ) : (
         <button className="sh-btn sh-btn--danger" type="button" disabled={!check || busy} onClick={() => setConfirming(true)}>
           {check ? 'Отменить операцию' : 'Проверяем…'}

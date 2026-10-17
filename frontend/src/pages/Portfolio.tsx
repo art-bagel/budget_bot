@@ -722,7 +722,6 @@ function protocolDisplayName(position: CryptoProtocolPosition): string {
 }
 
 export default function Portfolio({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
-  // Remounts the embedded history after a journal operation is deleted.
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
