@@ -862,44 +862,38 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
         )}
 
         {credits.length > 0 && (
-          <dl className="hero__rows">
+          <div className="hero__rows">
             {hasMortgage && (
-              <div
+              <button
+                type="button"
                 className="hero__row"
-                role="button"
-                tabIndex={0}
                 onClick={() => setFilterTab(filterTab === 'mortgage' ? 'all' : 'mortgage')}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterTab(filterTab === 'mortgage' ? 'all' : 'mortgage'); } }}
               >
-                <dt><span className="hero__mark hero__mark--ink" />Ипотека</dt>
-                <dd>{formatAmount(mortgageDebt, user.base_currency_code)}</dd>
-              </div>
+                <span className="hero__row-label"><span className="hero__mark hero__mark--ink" />Ипотека</span>
+                <span className="hero__row-value">{formatAmount(mortgageDebt, user.base_currency_code)}</span>
+              </button>
             )}
             {hasLoans && (
-              <div
+              <button
+                type="button"
                 className="hero__row"
-                role="button"
-                tabIndex={0}
                 onClick={() => setFilterTab(filterTab === 'loan' ? 'all' : 'loan')}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterTab(filterTab === 'loan' ? 'all' : 'loan'); } }}
               >
-                <dt><span className="hero__mark hero__mark--mint" />Кредиты</dt>
-                <dd>{formatAmount(loanDebt, user.base_currency_code)}</dd>
-              </div>
+                <span className="hero__row-label"><span className="hero__mark hero__mark--mint" />Кредиты</span>
+                <span className="hero__row-value">{formatAmount(loanDebt, user.base_currency_code)}</span>
+              </button>
             )}
             {hasCards && (
-              <div
+              <button
+                type="button"
                 className="hero__row"
-                role="button"
-                tabIndex={0}
                 onClick={() => setFilterTab(filterTab === 'credit_card' ? 'all' : 'credit_card')}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterTab(filterTab === 'credit_card' ? 'all' : 'credit_card'); } }}
               >
-                <dt><span className="hero__mark hero__mark--coral" />Карты</dt>
-                <dd>{formatAmount(cardDebt, user.base_currency_code)}</dd>
-              </div>
+                <span className="hero__row-label"><span className="hero__mark hero__mark--coral" />Карты</span>
+                <span className="hero__row-value">{formatAmount(cardDebt, user.base_currency_code)}</span>
+              </button>
             )}
-          </dl>
+          </div>
         )}
 
         {termCredits.length > 0 && totalTermLimit > 0 && (
