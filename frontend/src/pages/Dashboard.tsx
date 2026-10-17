@@ -1037,6 +1037,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
             initialViewMode="history"
             allowedModes={['history']}
             historyScope="banking"
+            onChanged={() => void loadOverview()}
           />
         )}
       </div>

@@ -1,3 +1,5 @@
+import { formatAmount } from './format';
+
 // Russian names of manual crypto and collection journal commands.
 export const JOURNAL_KINDS: Record<string,string> = { swap:'Обмен',transfer:'Перевод',create_protocol:'Размещение в DeFi',
   top_up_protocol:'Пополнение DeFi',close_protocol:'Закрытие DeFi',partial_close_protocol:'Вывод из DeFi',
@@ -10,7 +12,10 @@ export function journalTitle(commands: { kind: string }[] | undefined): string {
   return (commands ?? []).map((c) => JOURNAL_KINDS[c.kind] ?? 'Операция').join(' + ') || 'Операция';
 }
 
-// The server names blocking operations by command kinds; show them in Russian.
+// The server names blocking operations by command kinds and amounts as
+// "37000.00 RUB"; show both the way the app does.
 export function readableCancelReason(message: string): string {
-  return message.replace(/\b[a-z][a-z_]*\b/g, (kind) => JOURNAL_KINDS[kind] ?? kind);
+  return message
+    .replace(/\b[a-z][a-z_]*\b/g, (kind) => JOURNAL_KINDS[kind] ?? kind)
+    .replace(/(-?\d+(?:\.\d+)?) ([A-Z]{3})\b/g, (_, amount: string, code: string) => formatAmount(Number(amount), code));
 }

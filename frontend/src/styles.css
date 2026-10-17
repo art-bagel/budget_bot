@@ -11814,7 +11814,7 @@ button.op-row {
   text-decoration-thickness: 2px;
   color: var(--text-3);
 }
-.op-sheet__sub { white-space: normal; }
+.op-sheet__sub { white-space: normal; color: var(--text-2); }
 .op-sheet__reason { font-size: 12.5px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
 
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
