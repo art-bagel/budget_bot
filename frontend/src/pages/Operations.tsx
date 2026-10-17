@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { TouchEvent as ReactTouchEvent } from 'react';
 
 import {
+  fetchCancelCheck,
   fetchOperationsAnalytics,
   fetchOperationsAnalyticsDetails,
   fetchOperationsHistory,
   reverseOperation,
 } from '../api';
+import { journalTitle, readableCancelReason } from '../utils/journalKinds';
 import { hapticLight } from '../telegram';
 import { IconTag, IconPlus, IconArrowRightLeft, IconPortfolio, IconCredit, IconChevronRight } from '../components/Icons';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
@@ -19,6 +21,7 @@ import type {
   OperationAnalyticsResponse,
   OperationHistoryItem,
   OperationHistoryPortfolioEvent,
+  CancelCheckResponse,
   UserContext,
 } from '../types';
 import { currencySymbol, formatAmount, pluralRu } from '../utils/format';
@@ -78,11 +81,6 @@ const BANKING_TYPE_FILTER_OPTIONS = [
   { value: 'cancelled', label: 'Отменённые' },
 ] as const;
 
-type OperationLine = {
-  label: string;
-  amount?: string;
-};
-
 type OperationsViewMode = 'history' | 'investment' | 'analytics';
 type InvestmentHistoryFilter = (typeof INVESTMENT_HISTORY_FILTER_OPTIONS)[number]['value'];
 
@@ -106,6 +104,8 @@ type OperationsProps = {
   allowedModes?: OperationsViewMode[];
   historyScope?: OperationsHistoryScope;
   investmentAssetTypeCode?: string | null;
+  // Balances changed (an operation was cancelled): the host refreshes its data.
+  onChanged?: () => void;
 };
 
 
@@ -456,6 +456,7 @@ function getProtocolLabel(type: ProtocolPositionType): string {
 
 
 function getOperationTitle(item: OperationHistoryItem): string {
+  if (item.type === 'investment_journal') return journalTitle(item.commands);
   if (item.comment?.includes('Платёж по кредиту')) return 'Платёж по кредиту';
   if (item.comment?.includes('Частичное закрытие позиции')) return 'Частичное закрытие позиции';
   if (item.comment?.includes('Пополнение позиции')) return 'Пополнение позиции';
@@ -539,7 +540,7 @@ function getOpIcoClass(item: OperationHistoryItem): string {
   if (isCrossAccountPortfolioTransfer(item) || isBankToPortfolioTransfer(item)) return 'op-ico--xfer';
   if (item.type === 'allocate' || item.type === 'group_allocate') return 'op-ico--alloc';
   if (item.type === 'exchange') return 'op-ico--exch';
-  if (item.type === 'investment_trade' || item.type === 'investment_income' || item.type === 'investment_adjustment') return 'op-ico--invest';
+  if (item.type.startsWith('investment_')) return 'op-ico--invest';
   if (item.type === 'credit_repayment') return 'op-ico--credit';
   if (item.type === 'expense') {
     const colorKeys = CAT_COLOR_KEYS;
@@ -561,7 +562,7 @@ function getOpIcoContent(item: OperationHistoryItem): React.ReactNode {
   if (item.type === 'income') return <IconPlus />;
   if (isPortfolioSwap(item)) return <IconArrowRightLeft />;
   if (isCrossAccountPortfolioTransfer(item) || isBankToPortfolioTransfer(item)) return <IconArrowRightLeft />;
-  if (item.type === 'investment_trade' || item.type === 'investment_income' || item.type === 'investment_adjustment') return <IconPortfolio />;
+  if (item.type.startsWith('investment_')) return <IconPortfolio />;
   if (item.type === 'credit_repayment') return <IconCredit />;
   return <IconArrowRightLeft />;
 }
@@ -646,6 +647,9 @@ function getOpSubtitle(item: OperationHistoryItem): string {
     const to = portfolioEventsOf(item).find((event) => event.event_type === 'open' || event.event_type === 'top_up' || event.event_type === 'transfer_in')?.investment_account_name;
     return [from && to ? `${from} → ${to}` : null, time].filter(Boolean).join(' · ');
   }
+  if (item.type === 'investment_journal') {
+    return [item.commands?.map((c) => c.context).find(Boolean), time].filter(Boolean).join(' · ');
+  }
   if (getProtocolPositionType(item)) {
     const events = portfolioEventsOf(item);
     const protocolName = events.map((event) => metadataText(event.metadata, 'protocol_name')).find(Boolean);
@@ -690,11 +694,13 @@ function getOpComment(item: OperationHistoryItem): string | null {
   return item.comment;
 }
 
-function isCancellable(item: OperationHistoryItem): boolean {
-  return !item.has_reversal
-    && item.type !== 'investment_income'
-    && item.type !== 'investment_trade'
-    && item.type !== 'investment_adjustment';
+// A history row is an operation or a journal event that wrote no operations row.
+function rowKey(item: OperationHistoryItem): string {
+  return item.operation_id != null ? `op:${item.operation_id}` : `src:${item.source_event_id}`;
+}
+
+function cancelTarget(item: OperationHistoryItem): { operation_id: number } | { source_event_id: number } {
+  return item.operation_id != null ? { operation_id: item.operation_id } : { source_event_id: item.source_event_id ?? 0 };
 }
 
 function hasOpDetail(item: OperationHistoryItem): boolean {
@@ -704,61 +710,64 @@ function hasOpDetail(item: OperationHistoryItem): boolean {
   if (item.budget_entries.length === 1 && (item.type === 'allocate' || item.type === 'group_allocate')) return true;
   if (item.bank_entries.length > 1) return true;
   if (portfolioEventsOf(item).length > 0) return true;
-  if (isCancellable(item)) return true;
   return false;
 }
 
+// Bank model: the unfolded row has a red «Отменить». The server checks the
+// cancel on press (a dry run, so the reason matches the real cancel): it either
+// asks to confirm or tells why it is impossible.
+function CancelLine({ item, onCancelled }: { item: OperationHistoryItem; onCancelled: () => void }) {
+  const [phase, setPhase] = useState<'idle' | 'checking' | 'confirm' | 'busy'>('idle');
+  const [reason, setReason] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-function getOperationLines(item: OperationHistoryItem): OperationLine[] {
-  const lines: OperationLine[] = [];
+  const ask = async () => {
+    setPhase('checking'); setReason(null); setError(null);
+    try {
+      const check: CancelCheckResponse = await fetchCancelCheck(cancelTarget(item));
+      if (check.can_cancel) setPhase('confirm');
+      else { setReason(readableCancelReason(check.reason ?? 'Эту операцию нельзя отменить')); setPhase('idle'); }
+    } catch (e: unknown) {
+      setError(message(e)); setPhase('idle');
+    }
+  };
 
-  item.bank_entries.forEach((entry) => {
-    lines.push({
-      label: getBankEntryLabel(
-        entry.bank_account_owner_type,
-        entry.bank_account_kind,
-        entry.bank_account_name,
-        entry.bank_account_id,
-      ),
-      amount: formatSignedAmount(entry.amount, entry.currency_code),
-    });
-  });
+  const cancel = async () => {
+    setPhase('busy'); setError(null);
+    try {
+      await reverseOperation(cancelTarget(item));
+      onCancelled();
+    } catch (e: unknown) {
+      // A retry after a lost response: it is already done.
+      if (message(e).includes('уже отменена')) onCancelled();
+      else { setError(readableCancelReason(message(e))); setPhase('idle'); }
+    }
+  };
 
-  item.budget_entries.forEach((entry) => {
-    lines.push({
-      label: getBudgetEntryLabel(entry.category_name),
-      amount: formatSignedAmount(entry.amount, entry.currency_code),
-    });
-  });
-
-  portfolioEventsOf(item).forEach((event) => {
-    const eventLabel = event.event_type === 'transfer_out'
-      ? 'Списано'
-      : event.event_type === 'transfer_in'
-        ? 'Зачислено'
-        : event.event_type === 'top_up' || event.event_type === 'open'
-          ? 'Пополнение'
-          : event.event_type === 'close' || event.event_type === 'partial_close'
-            ? 'Вывод'
-            : event.event_type;
-    lines.push({
-      label: [event.investment_account_name, event.position_title, eventLabel].filter(Boolean).join(' · '),
-      amount: event.quantity ? formatSignedQuantity(
-        ['transfer_out', 'swap_out', 'close', 'partial_close', 'fee'].includes(event.event_type)
-          ? -Math.abs(event.quantity)
-          : Math.abs(event.quantity),
-        getPortfolioEventSymbol(event),
-      ) : undefined,
-    });
-  });
-
-  if (item.reversal_of_operation_id) {
-    lines.push({ label: 'Отмена операции #' + item.reversal_of_operation_id });
-  }
-
-  return lines;
+  // Clicks here must not fold the row.
+  return (
+    <div className="op-cancel" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      {phase === 'confirm' || phase === 'busy' ? (
+        <>
+          <span className="op-cancel__question" role="status">Отменить операцию? Балансы вернутся к состоянию до неё.</span>
+          <span className="op-cancel__actions">
+            <button className="op-row__cancel" type="button" disabled={phase === 'busy'} onClick={() => void cancel()}>
+              {phase === 'busy' ? 'Отменяем…' : 'Да, отменить'}
+            </button>
+            <button className="op-row__cancel op-cancel__back" type="button" disabled={phase === 'busy'} onClick={() => setPhase('idle')}>Нет</button>
+          </span>
+        </>
+      ) : (
+        <button className="op-row__cancel" type="button" disabled={phase === 'checking'} onClick={() => void ask()}>
+          {phase === 'checking' ? 'Проверяем…' : 'Отменить'}
+        </button>
+      )}
+      {reason && <span className="op-cancel__reason" role="status">{reason}</span>}
+      {error && <span className="op-cancel__reason op-cancel__reason--error" role="alert">{error}</span>}
+    </div>
+  );
 }
-
 
 function buildAnalyticsSegments(items: OperationAnalyticsItem[], totalAmount: number): AnalyticsSegment[] {
   if (totalAmount <= 0 || items.length === 0) {
@@ -808,7 +817,13 @@ function buildDonutGradient(segments: AnalyticsSegment[]): string {
   return `conic-gradient(${parts.join(', ')})`;
 }
 
+const PROTOCOL_KINDS = ['borrow', 'repay', 'liquidate', 'accrue_interest', 'protocol_yield', 'create_protocol',
+  'top_up_protocol', 'partial_close_protocol', 'close_protocol', 'group_lending', 'lp_snapshot', 'lp_withdraw', 'lp_reward'];
+
 function getInvestmentHistoryKind(item: OperationHistoryItem): InvestmentHistoryFilter {
+  if (item.type === 'investment_journal') {
+    return item.commands?.some((c) => PROTOCOL_KINDS.includes(c.kind)) ? 'defi' : 'trade';
+  }
   if (isPortfolioSwap(item)) return 'swap';
   if (isBankToPortfolioTransfer(item)) return 'transfer';
   if (isCrossAccountPortfolioTransfer(item)) return 'transfer';
@@ -830,6 +845,7 @@ export default function Operations({
   allowedModes,
   historyScope = 'all',
   investmentAssetTypeCode = null,
+  onChanged,
 }: OperationsProps) {
   const resolvedAllowedModes = useMemo<OperationsViewMode[]>(
     () => (allowedModes && allowedModes.length > 0 ? allowedModes : ['history', 'investment', 'analytics']),
@@ -845,15 +861,15 @@ export default function Operations({
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  // Cancelled rows stay visible by default, as in a bank statement.
   const [historyTypeFilter, setHistoryTypeFilter] = useState<Set<string>>(
-    () => new Set(['income', 'expense', 'exchange']),
+    () => new Set(['income', 'expense', 'exchange', 'cancelled']),
   );
   const [investmentHistoryFilter, setInvestmentHistoryFilter] = useState<InvestmentHistoryFilter>('all');
   const [bankingTypeFilter, setBankingTypeFilter] = useState<Set<string>>(
-    () => new Set(['income', 'expense', 'exchange']),
+    () => new Set(['income', 'expense', 'exchange', 'cancelled']),
   );
-  const [reversingOperationId, setReversingOperationId] = useState<number | null>(null);
-  const [expandedOps, setExpandedOps] = useState<Set<number>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const typeFilterRef = useRef<HTMLDivElement>(null);
   // Sentinel хранится в state (callback ref): при пустом фильтре элемент
@@ -948,8 +964,8 @@ export default function Operations({
       if (generation !== historyGenerationRef.current) return;
       setHistoryItems((prev) => {
         if (replace) return result.items;
-        const knownIds = new Set(prev.map((item) => item.operation_id));
-        return [...prev, ...result.items.filter((item) => !knownIds.has(item.operation_id))];
+        const knownIds = new Set(prev.map(rowKey));
+        return [...prev, ...result.items.filter((item) => !knownIds.has(rowKey(item)))];
       });
       setHistoryTotalCount(result.total_count);
     } catch (error: unknown) {
@@ -1106,20 +1122,13 @@ export default function Operations({
     return items;
   }, [historyItems, investmentHistoryFilter, viewMode, embedded, historyScope, bankingTypeFilter, historyTypeFilter, showHistoryTypeFilter]);
 
-  const handleReverseOperation = async (operationId: number) => {
-    setReversingOperationId(operationId);
-    setHistoryError(null);
-
-    try {
-      await reverseOperation({ operation_id: operationId });
-      await loadHistory(0, true);
-      if (viewMode === 'analytics') {
-        await loadAnalytics();
-      }
-    } catch (error: unknown) {
-      setHistoryError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setReversingOperationId(null);
+  const handleCancelled = async () => {
+    // The reloaded list starts folded, as after any other change.
+    setExpandedRows(new Set());
+    onChanged?.();
+    await loadHistory(0, true);
+    if (viewMode === 'analytics') {
+      await loadAnalytics();
     }
   };
 
@@ -1305,14 +1314,16 @@ export default function Operations({
                       <div className="op-group__head">{group.dateLabel}</div>
                       {group.items.map((item) => {
                         const amt = getOpAmount(item);
-                        const canExpand = hasOpDetail(item);
-                        const expanded = expandedOps.has(item.operation_id);
+                        const key = rowKey(item);
+                        // Any live operation unfolds: «Отменить» is decided by the server.
+                        const canExpand = !item.has_reversal || hasOpDetail(item);
+                        const expanded = expandedRows.has(key);
                         const comment = getOpComment(item);
 
                         const toggleExpand = canExpand
-                          ? () => setExpandedOps((prev) => {
+                          ? () => setExpandedRows((prev) => {
                               const next = new Set(prev);
-                              next.has(item.operation_id) ? next.delete(item.operation_id) : next.add(item.operation_id);
+                              if (next.has(key)) next.delete(key); else next.add(key);
                               return next;
                             })
                           : undefined;
@@ -1324,7 +1335,7 @@ export default function Operations({
                               item.has_reversal ? 'op-row--cancelled' : '',
                               canExpand ? 'op-row--expandable' : '',
                             ].filter(Boolean).join(' ')}
-                            key={item.operation_id}
+                            key={key}
                             onClick={toggleExpand}
                           >
                             <span className={`op-ico ${getOpIcoClass(item)}`}>
@@ -1350,15 +1361,8 @@ export default function Operations({
                                 </div>
                               </div>
                               <span className="op-row__sub">{getOpSubtitle(item)}</span>
-                              {expanded && isCancellable(item) && (
-                                <button
-                                  className="op-row__cancel"
-                                  type="button"
-                                  disabled={reversingOperationId === item.operation_id}
-                                  onClick={(e) => { e.stopPropagation(); handleReverseOperation(item.operation_id); }}
-                                >
-                                  {reversingOperationId === item.operation_id ? '...' : 'Отменить'}
-                                </button>
+                              {expanded && !item.has_reversal && (
+                                <CancelLine item={item} onCancelled={() => void handleCancelled()} />
                               )}
                               {expanded && (
                                 <div className="op-row__detail">

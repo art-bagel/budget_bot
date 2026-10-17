@@ -4,7 +4,7 @@ from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.app.dependencies import CurrentUser, get_current_user
 from backend.app.storage import ledger, reports
@@ -197,14 +197,26 @@ class AccountTransferResponse(BaseModel):
 
 
 class ReverseOperationRequest(BaseModel):
-    operation_id: int
-    comment: Optional[str] = None
+    # Exactly one: a history row is an operation or a journal event without one.
+    operation_id: Optional[int] = Field(None, gt=0)
+    source_event_id: Optional[int] = Field(None, gt=0)
+
+    @model_validator(mode='after')
+    def one_target(self) -> 'ReverseOperationRequest':
+        if (self.operation_id is None) == (self.source_event_id is None):
+            raise ValueError('Нужен ровно один из operation_id и source_event_id')
+        return self
 
 
 class ReverseOperationResponse(BaseModel):
-    # None: a journal operation was cancelled by deleting its source.
-    reversal_operation_id: Optional[int]
-    reversed_operation_id: int
+    # None: a journal operation was cancelled by rolling its source back.
+    reversal_operation_id: Optional[int] = None
+    reversed_operation_id: Optional[int] = None
+
+
+class CancelCheckResponse(BaseModel):
+    can_cancel: bool
+    reason: Optional[str] = None
 
 
 class OperationBankEntry(BaseModel):
@@ -252,7 +264,12 @@ class OperationPortfolioEvent(BaseModel):
 
 class OperationHistoryItem(BaseModel):
     comment_is_system: bool = False
-    operation_id: int
+    # Journal events without an operations row carry only source_event_id.
+    # New fields stay optional: cancelled_operations keeps old item snapshots.
+    operation_id: Optional[int] = None
+    source_event_id: Optional[int] = None
+    is_cancelled: bool = False
+    commands: List[Dict[str, Any]] = Field(default_factory=list)
     type: str
     comment: Optional[str] = None
     operated_at: Optional[str] = None
@@ -559,12 +576,22 @@ async def reverse_operation(
     body: ReverseOperationRequest,
     user: CurrentUser = Depends(get_current_user),
 ) -> ReverseOperationResponse:
-    result = await ledger.put__reverse_operation(
-        user_id=user.user_id,
-        operation_id=body.operation_id,
-        comment=body.comment,
+    result = await ledger.put__cancel_operation(user.user_id, body.operation_id, body.source_event_id)
+    return ReverseOperationResponse(
+        reversal_operation_id=result.get('reversal_operation_id'),
+        reversed_operation_id=result.get('reversed_operation_id'),
     )
-    return ReverseOperationResponse(**result)
+
+
+@router.get('/cancel-check', response_model=CancelCheckResponse)
+async def check_operation_cancel(
+    operation_id: Optional[int] = Query(None, gt=0),
+    source_event_id: Optional[int] = Query(None, gt=0),
+    user: CurrentUser = Depends(get_current_user),
+) -> CancelCheckResponse:
+    if (operation_id is None) == (source_event_id is None):
+        raise HTTPException(status_code=422, detail='Нужен ровно один из operation_id и source_event_id')
+    return CancelCheckResponse(**await ledger.get__operation_cancel_check(user.user_id, operation_id, source_event_id))
 
 
 @router.get('/history', response_model=OperationHistoryResponse)

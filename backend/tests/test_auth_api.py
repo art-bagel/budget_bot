@@ -289,7 +289,7 @@ def main() -> None:
             headers={'X-Telegram-Init-Data': tampered},
         ).status_code == 401
 
-        # 13. Операцию коллекции удаляет только её владелец; повтор безопасен.
+        # 13. Операцию коллекции отменяет только её владелец; отменённая остаётся в истории.
         owner = {'X-Telegram-Init-Data': fresh_tg}
         stranger = {'X-Telegram-Init-Data': telegram_init_data(TG_USER_ID)}
         response = client.post('/api/v1/bank-accounts', headers=owner, json={
@@ -301,20 +301,33 @@ def main() -> None:
             'investment_account_id': gifts, 'asset_type_code': 'collectible', 'title': 'E2E gift',
             'quantity': 1, 'amount_in_currency': 0, 'currency_code': 'RUB', 'metadata': {'item_kind': 'other'}})
         assert response.status_code == 200, response.text
-        history = client.get('/api/v1/crypto/correction-history', headers=owner,
-                             params={'anchor_account_id': gifts}).json()
-        assert len(history) == 1, history
-        source = f"/api/v1/crypto/source-events/{history[0]['id']}"
-        delete_id = {'request_id': '00000000-0000-4000-8000-000000000014'}
-        response = client.delete(source, headers=stranger, params=delete_id)
+        def gift_row():
+            items = client.get('/api/v1/operations/history', headers=owner, params={
+                'operation_type': 'investment', 'investment_asset_type': 'collectible'}).json()['items']
+            return [i for i in items if any(e['position_title'] == 'E2E gift' for e in i['portfolio_events'])]
+        [row] = gift_row()
+        target = {'operation_id': row['operation_id']} if row['operation_id'] else {'source_event_id': row['source_event_id']}
+        response = client.get('/api/v1/operations/cancel-check', headers=stranger, params=target)
         assert response.status_code == 400 and 'Нет доступа' in response.text, response.text
-        response = client.delete(source, headers=owner, params=delete_id)
-        assert response.status_code == 200 and response.json()['deleted'], response.text
-        assert client.delete(source, headers=owner, params=delete_id).json() == response.json(), 'повтор'
-        assert client.get('/api/v1/crypto/correction-history', headers=owner,
-                          params={'anchor_account_id': gifts}).json() == [], 'операции нет'
+        response = client.get('/api/v1/operations/cancel-check', headers=owner, params=target)
+        assert response.status_code == 200 and response.json() == {'can_cancel': True, 'reason': None}, response.text
+        assert client.get('/api/v1/operations/cancel-check', headers=owner).status_code == 422, 'нужна цель'
+        response = client.post('/api/v1/operations/reverse', headers=stranger, json=target)
+        assert response.status_code == 400 and 'Нет доступа' in response.text, response.text
+        response = client.post('/api/v1/operations/reverse', headers=owner, json=target)
+        assert response.status_code == 200, response.text
+        response = client.post('/api/v1/operations/reverse', headers=owner, json=target)
+        assert response.status_code == 400 and 'уже отменена' in response.text, 'повтор'
+        [row] = gift_row()
+        assert row['has_reversal'] and row['is_cancelled'], 'отменённая операция осталась в истории'
+        assert client.get('/api/v1/operations/cancel-check', headers=owner, params=target).json() == {
+            'can_cancel': False, 'reason': 'Операция уже отменена'}
         assert client.get('/api/v1/portfolio/positions', headers=owner,
                           params={'investment_account_id': gifts}).json() == [], 'предмета нет'
+        assert client.get('/api/v1/crypto/correction-history', headers=owner,
+                          params={'anchor_account_id': gifts}).status_code == 404, 'старой истории нет'
+        assert client.delete('/api/v1/crypto/source-events/1', headers=owner,
+                             params={'request_id': '00000000-0000-4000-8000-000000000014'}).status_code in (404, 405)
 
         cleanup(client)
         print('auth api: все проверки пройдены')

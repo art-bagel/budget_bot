@@ -34,7 +34,6 @@ class Ledger(DataBase):
     F_PUT__LENDING_TAKE_MORE_DEBT = 'put__lending_take_more_debt'
     F_PUT__LENDING_REPAY_DEBT = 'put__lending_repay_debt'
     F_PUT__CRYPTO_PAY_FEE = 'put__crypto_pay_fee'
-    F_PUT__REVERSE_OPERATION = 'put__reverse_operation'
 
     async def put__manual_crypto_movement(self, user_id, request_id, kind, payload,
                                           operated_at=None, fee=None):
@@ -57,14 +56,14 @@ class Ledger(DataBase):
             self._fn('get__crypto_source_events'), user_id, anchor_account_id, limit, offset,
         )
 
-    async def put__delete_crypto_source(self, user_id, source_event_id, request_id):
+    async def put__cancel_operation(self, user_id, operation_id, source_event_id):
         return await self.call_function(
-            self._fn('put__delete_crypto_source'), user_id, source_event_id, request_id,
+            self._fn('put__cancel_operation'), user_id, operation_id, source_event_id,
         )
 
-    async def get__crypto_correction_history(self, user_id, anchor_account_id, limit=30, offset=0):
+    async def get__operation_cancel_check(self, user_id, operation_id, source_event_id):
         return await self.call_function(
-            self._fn('get__crypto_correction_history'), user_id, anchor_account_id, limit, offset,
+            self._fn('get__operation_cancel_check'), user_id, operation_id, source_event_id,
         )
 
     async def get__pending_crypto_fiat_expenses(self, user_id, limit=50, offset=0):
@@ -895,19 +894,4 @@ class Ledger(DataBase):
             comment,
             operated_at,
             tax_percent,
-        )
-
-    async def put__reverse_operation(self, user_id: int, operation_id: int, comment: Optional[str] = None) -> dict:
-        """
-        Создает reversal для операции.
-        :param user_id: Идентификатор владельца операции.
-        :param operation_id: Идентификатор отменяемой операции.
-        :param comment: Комментарий к reversal-операции.
-        :return: Словарь с идентификатором reversal-операции и исходной операции.
-        """
-        return await self.call_function(
-            self._fn(self.F_PUT__REVERSE_OPERATION),
-            user_id,
-            operation_id,
-            comment,
         )

@@ -11,12 +11,11 @@ import LiquidityActionSheet from '../components/LiquidityActionSheet';
 import { walletPositions } from '../utils/cryptoWalletPositions';
 import { setCryptoAssetHidden } from '../api';
 import { isEmptyProtocolPosition, protocolMarketValue, sumProtocolValues, knownProtocolValues, walletMarketValue } from '../utils/cryptoProtocolValuation';
-import CryptoCorrectionSheet from '../components/CryptoCorrectionSheet';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SplashScreen from '../components/SplashScreen';
 import RefreshBar from '../components/RefreshBar';
-import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown, Pencil, Check, ChevronRight, Plus, ArrowDownToLine, ArrowUpFromLine, HandCoins, Percent, Gift, RefreshCw, Link2, X, Zap, Ticket, PieChart, Droplets, History as HistoryIcon, type LucideIcon } from 'lucide-react';
+import { TrendingUp, Landmark, Coins, Package, Info, Trash2, ChevronDown, Pencil, Check, ChevronRight, Plus, ArrowDownToLine, ArrowUpFromLine, HandCoins, Percent, Gift, RefreshCw, Link2, X, Zap, Ticket, PieChart, Droplets, type LucideIcon } from 'lucide-react';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 import {
@@ -723,9 +722,6 @@ function protocolDisplayName(position: CryptoProtocolPosition): string {
 }
 
 export default function Portfolio({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
-  const [correctionsOpen, setCorrectionsOpen] = useState(false);
-  // Remounts the embedded history after a journal operation is deleted.
-  const [opsVersion, setOpsVersion] = useState(0);
   const [accounts, setAccounts] = useState<AccountWithBalances[]>([]);
   const [cashAccounts, setCashAccounts] = useState<BankAccount[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -3482,12 +3478,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         ))}
       </div>
 
-      {['crypto','collectible'].includes(activeAssetTypeCode) && accounts.some(a => a.account.investment_asset_type === activeAssetTypeCode) && (
-        <CryptoCorrectionSheet accounts={accounts.filter(a => a.account.investment_asset_type === activeAssetTypeCode).map(a => ({id:a.account.id,name:a.account.name}))} open={correctionsOpen} anchorAccountId={(accounts.find(a => a.account.investment_asset_type === activeAssetTypeCode && a.account.owner_type + ':' + a.account.id === activeAccountTabKey) ?? accounts.find(a => a.account.investment_asset_type === activeAssetTypeCode))!.account.id}
-          assetType={activeAssetTypeCode === 'collectible' ? 'collectible' : 'crypto'}
-          onClose={() => setCorrectionsOpen(false)} onSuccess={() => { setOpsVersion(v => v + 1); void loadPortfolio(); }} />
-      )}
-
       {/* ══ Positions pane ══ */}
       {portfolioView === 'positions' && (
         <div className="pf-view">
@@ -3878,20 +3868,13 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       {/* ══ Operations pane ══ */}
       {portfolioView === 'ops' && (
         <div className="pf-view">
-          {['crypto','collectible'].includes(activeAssetTypeCode) && accounts.some(a => a.account.investment_asset_type === activeAssetTypeCode) && (
-            <div className="pf-ops-tools">
-              <button type="button" className="credits-textbtn" onClick={() => setCorrectionsOpen(true)}>
-                <HistoryIcon strokeWidth={2} /> История операций
-              </button>
-            </div>
-          )}
           <Operations
-            key={opsVersion}
             user={user}
             embedded
             initialViewMode="investment"
             allowedModes={['investment']}
             investmentAssetTypeCode={activeAssetTypeCode}
+            onChanged={() => void loadPortfolio()}
           />
         </div>
       )}

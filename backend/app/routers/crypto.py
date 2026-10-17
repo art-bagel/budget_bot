@@ -72,20 +72,6 @@ async def get_crypto_source_events(anchor_account_id: int = Query(gt=0),
     return await ledger.get__crypto_source_events(user.user_id, anchor_account_id, limit, offset)
 
 
-@router.delete('/source-events/{source_event_id}')
-async def delete_crypto_source(source_event_id: int, request_id: UUID = Query(...),
-                               user: CurrentUser = Depends(get_current_user)) -> dict:
-    return await ledger.put__delete_crypto_source(user.user_id, source_event_id, request_id)
-
-
-@router.get('/correction-history')
-async def crypto_correction_history(anchor_account_id: int = Query(gt=0),
-                                    limit: int = Query(30, ge=1, le=100),
-                                    offset: int = Query(0, ge=0),
-                                    user: CurrentUser = Depends(get_current_user)) -> list[dict]:
-    return await ledger.get__crypto_correction_history(user.user_id, anchor_account_id, limit, offset)
-
-
 class PendingFiatExpenseCategory(BaseModel):
     id: int
     name: str

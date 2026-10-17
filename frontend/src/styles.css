@@ -61,6 +61,8 @@
   --pos-bg: #DFF5E9;
   --neg: #DF3F36;
   --neg-bg: #FCE4E2;
+  /* Red text on light surfaces: --neg is below 4.5:1 there. */
+  --neg-text: #C2302A;
   --warn: #D98500;
 
   --t-g-b: #DFF5E9; --t-g-f: #117A4B;
@@ -156,6 +158,7 @@
   --pos-bg: #0E2A1E;
   --neg: #F05E55;
   --neg-bg: #2E1513;
+  --neg-text: var(--neg);
   --warn: #FFB52B;
 
   --t-g-b: #0F2A1A; --t-g-f: #6FD4A3;
@@ -236,6 +239,7 @@
     --pos-bg: #0E2A1E;
     --neg: #F05E55;
     --neg-bg: #2E1513;
+    --neg-text: var(--neg);
     --warn: #FFB52B;
 
     --t-g-b: #0F2A1A; --t-g-f: #6FD4A3;
@@ -5451,7 +5455,7 @@ select.dlg-row__ghost option {
 .op-row__cancel {
   font-size: 11px;
   font-weight: 600;
-  color: var(--neg);
+  color: var(--neg-text);
   cursor: pointer;
   background: none;
   border: none;
@@ -11793,7 +11797,6 @@ select.dlg-row__ghost option {
   cursor: pointer;
 }
 .pf-pos__amount--none { color: var(--text-3); }
-.pf-ops-tools { display: flex; justify-content: flex-end; padding: 0 4px 6px; }
 
 /* DeFi sheet */
 .pf-detail-ticker--raw { text-transform: none; letter-spacing: 0; }
@@ -11815,45 +11818,22 @@ select.dlg-row__ghost option {
 .pf-act-group .sec-tag { padding-left: 2px; }
 .pf-act-group__tiles { margin-bottom: 0; }
 
-/* Past crypto operation correction */
-.cx-list {
-  display: flex;
-  flex-direction: column;
-  background: var(--surface-inset);
-  border-radius: var(--r-md);
-  overflow: hidden;
-}
-.cx-row {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
-  border: 0;
-  border-bottom: 1px solid var(--line-soft);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  color: var(--text);
-  cursor: pointer;
-}
-.cx-row:last-child { border-bottom: 0; }
-.cx-row:disabled { cursor: default; opacity: .55; }
-.cx-row:not(:disabled):active { background: var(--line-soft); }
-.cx-row__top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.cx-row__title { font-size: 14px; font-weight: 600; }
-.cx-row__date { flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
-.cx-row__sub { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
-.cx-row__flags { display: flex; gap: 4px; margin-top: 2px; }
-.cx-row__flags .pf-grp__flag { margin-left: 0; }
-.cx-back { align-self: flex-start; margin: 0 -8px; }
-.cx-page { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
-.cx-meta { font-size: 12.5px; font-weight: 500; color: var(--text-3); }
-.cx-versions summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 4px 0; }
-.cx-versions .pf-dcond__row-value { font-weight: 500; }
+/* Red cancel line of an unfolded operation: confirm or the reason it is impossible */
+.op-cancel { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 2px; cursor: default; }
+.op-cancel .op-row__cancel { margin-top: 0; }
+.op-row__cancel:disabled { cursor: default; opacity: .6; }
+.op-cancel__question { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.op-cancel__actions { display: flex; gap: 20px; }
+.op-cancel__back { color: var(--text-2); }
+.op-cancel__reason { font-size: 12px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
+.op-cancel__reason--error { color: var(--neg-text); }
 
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
 .pf-view .op-row__top { align-items: flex-start; }
 .pf-view .op-row__name-text { white-space: normal; mask-image: none; line-height: 1.25; }
+/* ...and long item amounts ("+1 Тестовый подарок") wrap instead of taking the whole row. */
+.pf-view .op-row__top-r { flex-shrink: 1; min-width: 0; max-width: 55%; }
+.pf-view .op-row__amt { flex-shrink: 1; min-width: 0; text-align: right; overflow-wrap: anywhere; }
 
 /* Settings: investment account tiles open a settings sheet */
 .settings-page .invest-tile--btn {

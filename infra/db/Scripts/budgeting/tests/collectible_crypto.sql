@@ -81,7 +81,7 @@ BEGIN
     BEGIN
         PERFORM put__delete_crypto_source(uid, source_id, gen_random_uuid());
     EXCEPTION WHEN raise_exception THEN err := SQLERRM; END;
-    ASSERT err LIKE 'Сначала удалите более поздние операции%', 'dependent transfer kept: '||err;
+    ASSERT err LIKE 'Сначала отмените более поздние операции%', 'dependent transfer kept: '||err;
     ASSERT (SELECT quantity FROM portfolio_positions WHERE id=pos)=105, 'wallet unchanged';
 
     -- 6. Only collection accounts hold coins outside the bank.
