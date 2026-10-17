@@ -71,7 +71,7 @@ BEGIN
  -- - a later merge of the coin: the cancel would revive the merged coin.
  SELECT max(id) INTO last_mutation FROM crypto_source_mutations WHERE source_event_id=src.id AND revision=src.revision;
  WITH mine AS (SELECT * FROM crypto_source_mutations WHERE source_event_id=src.id AND revision=src.revision),
- later_spends AS (
+ spends AS (
   SELECT c2.operation_id FROM mine JOIN crypto_lots x ON x.id=(mine.after_row->>'lot_id')::bigint
    JOIN crypto_lots y ON y.bank_account_id=x.bank_account_id AND y.crypto_asset_id=x.crypto_asset_id
    JOIN crypto_lot_consumptions c2 ON c2.lot_id=y.id AND c2.id>(mine.row_key->>'id')::bigint
@@ -83,6 +83,10 @@ BEGIN
    JOIN lot_consumptions c2 ON c2.lot_id=y.id AND c2.id>(mine.row_key->>'id')::bigint
   WHERE mine.table_name='lot_consumptions' AND mine.before_row IS NULL
    AND NOT EXISTS(SELECT 1 FROM mine m2 WHERE m2.table_name='lot_consumptions' AND (m2.row_key->>'id')::bigint=c2.id)),
+ -- A reversed spend gave its coins back, and the reversal itself is no spend.
+ later_spends AS (
+  SELECT s.operation_id FROM spends s JOIN operations o ON o.id=s.operation_id
+  WHERE o.type<>'reversal' AND NOT EXISTS(SELECT 1 FROM operations r WHERE r.reversal_of_operation_id=o.id)),
  later_events AS (
   SELECT later.source_event_id id FROM mine
   JOIN crypto_source_mutations later ON later.table_name=mine.table_name AND later.row_key=mine.row_key

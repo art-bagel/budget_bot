@@ -228,10 +228,15 @@ BEGIN
   'title','M','quantity','1','amount_in_currency',100,'currency_code','USD','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
  x1:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
  ASSERT EXISTS(SELECT 1 FROM crypto_source_mutations WHERE source_event_id=x1 AND table_name='lot_consumptions'),'USD purchase spends lots';
- PERFORM put__transfer_between_accounts(uid,coll,bank,'USD',20,'USD out');
+ r:=put__transfer_between_accounts(uid,coll,bank,'USD',20,'USD out');
  BEGIN PERFORM put__delete_crypto_source(uid,x1,gen_random_uuid()); RAISE EXCEPTION 'later USD spend ignored';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
  ASSERT err LIKE 'Сначала отмените более поздние операции%USD out%','ordinary spend named: '||err;
+ -- Once that transfer is reversed, nothing spends after the purchase any more.
+ PERFORM put__reverse_operation(uid,(r->>'operation_id')::bigint);
+ PERFORM put__delete_crypto_source(uid,x1,gen_random_uuid());
+ ASSERT NOT EXISTS(SELECT 1 FROM portfolio_positions WHERE investment_account_id=coll AND title='M'),'USD purchase undone';
+ ASSERT pg_temp.drift(uid)=0,'balances match entries after the USD cancel';
 
  -- 13. A later merge of the coin blocks: the cancel would revive the old coin.
  mfrom:=(put__ensure_crypto_asset('SMRG','Merge coin','ton','',9::smallint,'{}'::jsonb)->>'id')::bigint;
