@@ -5331,6 +5331,15 @@ select.dlg-row__ghost option {
   border-radius: 10px;
   transition: background .14s ease;
 }
+/* Rows are buttons: they open the operation sheet. */
+button.op-row {
+  width: 100%;
+  border-top: 0; border-left: 0; border-right: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
 .op-row:hover { background: var(--surface-inset); }
 [data-theme='dark'] .op-row:hover { background: var(--surface-2); }
 .op-row:last-child { border-bottom: 0; }
@@ -5393,7 +5402,6 @@ select.dlg-row__ghost option {
   transition: transform .2s ease;
 }
 .op-row__chevron svg { width: 14px; height: 14px; }
-.op-row__chevron--open { transform: rotate(90deg); }
 .op-row__name {
   font-size: 14px;
   font-weight: 600;
@@ -5447,29 +5455,6 @@ select.dlg-row__ghost option {
   flex-shrink: 0;
 }
 [data-theme='dark'] .op-row__tag { background: var(--surface-2); }
-
-.op-row__cancel {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--neg);
-  cursor: pointer;
-  background: none;
-  border: none;
-  font-family: inherit;
-  padding: 0;
-  margin-top: 2px;
-  text-align: left;
-}
-
-.op-row__detail {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  padding-right: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
 .op-detail__comment {
   font-size: 12.5px;
@@ -11793,7 +11778,6 @@ select.dlg-row__ghost option {
   cursor: pointer;
 }
 .pf-pos__amount--none { color: var(--text-3); }
-.pf-ops-tools { display: flex; justify-content: flex-end; padding: 0 4px 6px; }
 
 /* DeFi sheet */
 .pf-detail-ticker--raw { text-transform: none; letter-spacing: 0; }
@@ -11815,41 +11799,23 @@ select.dlg-row__ghost option {
 .pf-act-group .sec-tag { padding-left: 2px; }
 .pf-act-group__tiles { margin-bottom: 0; }
 
-/* Past crypto operation correction */
-.cx-list {
-  display: flex;
-  flex-direction: column;
-  background: var(--surface-inset);
-  border-radius: var(--r-md);
-  overflow: hidden;
+/* Operation sheet: details and the cancel action */
+.op-sheet { display: flex; flex-direction: column; gap: 10px; }
+.op-sheet__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.op-sheet__amt {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  overflow-wrap: anywhere;
 }
-.cx-row {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
-  border: 0;
-  border-bottom: 1px solid var(--line-soft);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  color: var(--text);
-  cursor: pointer;
+.op-sheet__head--cancelled .op-sheet__amt {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  color: var(--text-3);
 }
-.cx-row:last-child { border-bottom: 0; }
-.cx-row:disabled { cursor: default; opacity: .55; }
-.cx-row:not(:disabled):active { background: var(--line-soft); }
-.cx-row__top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.cx-row__title { font-size: 14px; font-weight: 600; }
-.cx-row__date { flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
-.cx-row__sub { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
-.cx-row__flags { display: flex; gap: 4px; margin-top: 2px; }
-.cx-row__flags .pf-grp__flag { margin-left: 0; }
-.cx-back { align-self: flex-start; margin: 0 -8px; }
-.cx-page { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
-.cx-meta { font-size: 12.5px; font-weight: 500; color: var(--text-3); }
-.cx-versions summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 4px 0; }
-.cx-versions .pf-dcond__row-value { font-weight: 500; }
+.op-sheet__sub { white-space: normal; }
+.op-sheet__reason { font-size: 12.5px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
 
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
 .pf-view .op-row__top { align-items: flex-start; }

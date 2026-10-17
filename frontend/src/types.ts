@@ -559,7 +559,12 @@ export interface OperationHistoryPortfolioEvent {
 
 export interface OperationHistoryItem {
   comment_is_system?: boolean;
-  operation_id: number;
+  // null for a manual journal event without an operations row (DeFi fee, yield…).
+  operation_id: number | null;
+  source_event_id?: number | null;
+  // A cancelled journal operation: a frozen copy of the row.
+  is_cancelled?: boolean;
+  commands?: { kind: string; context: string | null }[];
   type: string;
   comment?: string | null;
   operated_at?: string | null;
@@ -624,14 +629,16 @@ export interface OperationAnalyticsDetailsResponse {
   offset: number;
 }
 
-export interface ReverseOperationRequest {
-  operation_id: number;
-  comment?: string;
+export type ReverseOperationRequest = { operation_id: number } | { source_event_id: number };
+
+export interface CancelCheckResponse {
+  can_cancel: boolean;
+  reason: string | null;
 }
 
 export interface ReverseOperationResponse {
   reversal_operation_id: number | null;
-  reversed_operation_id: number;
+  reversed_operation_id: number | null;
 }
 
 export interface FamilyInfo {

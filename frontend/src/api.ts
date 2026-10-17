@@ -22,6 +22,7 @@ import type {
   RecordIncomeResponse,
   ReverseOperationRequest,
   ReverseOperationResponse,
+  CancelCheckResponse,
   FamilyInfo,
   FamilyMember,
   FamilyInvitation,
@@ -147,10 +148,6 @@ function normalizeApiErrorMessage(rawText: string, status: number): string {
 
   if (text.includes('Credit account is already fully repaid')) {
     return 'Этот кредит уже полностью погашен';
-  }
-
-  if (text.includes('Credit repayment can only be reversed from newest to oldest')) {
-    return 'Сначала нужно отменить более поздний платёж по этому кредиту';
   }
 
   if (text.includes('Cannot delete investment account: account still has money')) {
@@ -781,6 +778,12 @@ export async function reverseOperation(data: ReverseOperationRequest): Promise<R
   });
 }
 
+// Dry run of the cancel on the server: whether it would pass and, if not, why.
+export function fetchCancelCheck(target: ReverseOperationRequest): Promise<CancelCheckResponse> {
+  const params = new URLSearchParams(Object.entries(target).map(([k, v]) => [k, String(v)]));
+  return apiFetch<CancelCheckResponse>(`/operations/cancel-check?${params.toString()}`);
+}
+
 export async function archiveCategory(categoryId: number): Promise<{ category_id: number; kind: string; name: string; is_active: boolean }> {
   return apiFetch<{ category_id: number; kind: string; name: string; is_active: boolean }>(`/categories/${categoryId}/archive`, {
     method: 'POST',
@@ -1259,17 +1262,6 @@ export async function groupLendingPositions(positionId: number, data: {
   return apiFetch(`/crypto/protocol-positions/${positionId}/group-with`, {
     method: 'POST', body: JSON.stringify(data),
   });
-}
-
-export type CryptoEditableSource = {
-  id:number; accounting_date:string; posted_on:string; revision:number; reversible:boolean; context:string|null;
-  commands:{kind:string;payload:Record<string,unknown>;editable_fields?:string[]}[];
-};
-export function fetchCryptoCorrectionHistory(anchorAccountId:number,offset=0):Promise<CryptoEditableSource[]> {
-  return apiFetch(`/crypto/correction-history?anchor_account_id=${anchorAccountId}&limit=30&offset=${offset}`);
-}
-export function deleteCryptoSource(id:number,requestId:string):Promise<{source_event_id:number;deleted:boolean}> {
-  return apiFetch(`/crypto/source-events/${id}?request_id=${encodeURIComponent(requestId)}`,{method:'DELETE'});
 }
 
 export function setCryptoAssetHidden(accountId: number, assetId: number, hidden: boolean): Promise<{ hidden: boolean }> {
