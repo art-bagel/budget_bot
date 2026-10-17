@@ -867,6 +867,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
               <button
                 type="button"
                 className="hero__row"
+                aria-pressed={filterTab === 'mortgage'}
                 onClick={() => setFilterTab(filterTab === 'mortgage' ? 'all' : 'mortgage')}
               >
                 <span className="hero__row-label"><span className="hero__mark hero__mark--ink" />Ипотека</span>
@@ -877,6 +878,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
               <button
                 type="button"
                 className="hero__row"
+                aria-pressed={filterTab === 'loan'}
                 onClick={() => setFilterTab(filterTab === 'loan' ? 'all' : 'loan')}
               >
                 <span className="hero__row-label"><span className="hero__mark hero__mark--mint" />Кредиты</span>
@@ -887,6 +889,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
               <button
                 type="button"
                 className="hero__row"
+                aria-pressed={filterTab === 'credit_card'}
                 onClick={() => setFilterTab(filterTab === 'credit_card' ? 'all' : 'credit_card')}
               >
                 <span className="hero__row-label"><span className="hero__mark hero__mark--coral" />Карты</span>
