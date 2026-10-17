@@ -58,7 +58,12 @@ BEGIN
  SELECT max(id) INTO last_mutation FROM crypto_source_mutations WHERE source_event_id=src.id AND revision=src.revision;
  SELECT string_agg(label,'; ' ORDER BY posted DESC) INTO blockers FROM (
   SELECT DISTINCT e.occurred_at posted, to_char(COALESCE((e.evidence->>'requested_date')::date,e.accounting_date),'DD.MM.YYYY')
-   ||' '||COALESCE((SELECT string_agg(c->>'kind',' + ') FROM jsonb_array_elements(e.commands) c),'') label
+   ||' '||COALESCE((SELECT string_agg(c->>'kind',' + ') FROM jsonb_array_elements(e.commands) c),'')
+   -- Name the item: several sales on one day read the same otherwise.
+   ||COALESCE(' «'||(SELECT string_agg(DISTINCT COALESCE(p.title,c->'payload'->>'title'),'», «')
+     FROM jsonb_array_elements(e.commands) c
+     LEFT JOIN portfolio_positions p ON c->>'kind' LIKE 'collectible_%'
+      AND p.id=COALESCE(c->'payload'->>'source_position_id',c->'payload'->>'position_id')::bigint)||'»','') label
   FROM crypto_source_mutations mine
   JOIN crypto_source_mutations later ON later.table_name=mine.table_name AND later.row_key=mine.row_key
    AND later.id>last_mutation

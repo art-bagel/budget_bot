@@ -14,8 +14,12 @@ export function journalTitle(commands: { kind: string }[] | undefined): string {
 
 // The server names blocking operations by command kinds and amounts as
 // "37000.00 RUB"; show both the way the app does.
+// Item names come in «…» and stay as they are.
 export function readableCancelReason(message: string): string {
   return message
-    .replace(/\b[a-z][a-z_]*\b/g, (kind) => JOURNAL_KINDS[kind] ?? kind)
-    .replace(/(-?\d+(?:\.\d+)?) ([A-Z]{3})\b/g, (_, amount: string, code: string) => formatAmount(Number(amount), code));
+    .split(/(«[^»]*»)/)
+    .map((part) => part.startsWith('«') ? part : part
+      .replace(/\b[a-z][a-z_]*\b/g, (kind) => JOURNAL_KINDS[kind] ?? kind)
+      .replace(/(-?\d+(?:\.\d+)?) ([A-Z]{3})\b/g, (_, amount: string, code: string) => formatAmount(Number(amount), code)))
+    .join('');
 }

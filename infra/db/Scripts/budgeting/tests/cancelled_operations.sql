@@ -91,7 +91,7 @@ BEGIN
  op:=(SELECT l.ledger_id FROM crypto_source_event_links l JOIN crypto_source_events s ON s.id=l.source_event_id
   WHERE l.ledger_table='operations' AND s.commands->0->>'kind'='collectible_buy');
  c:=get__operation_cancel_check(uid,op,NULL);
- ASSERT NOT (c->>'can_cancel')::boolean AND c->>'reason' LIKE 'Сначала отмените более поздние%','dependent: '||c;
+ ASSERT NOT (c->>'can_cancel')::boolean AND c->>'reason' LIKE 'Сначала отмените более поздние%collectible_sell «Candle»%','dependent names the item: '||c;
 
  -- 9. A journal event without an operations row is listed in its asset type and cancelled.
  PERFORM put__manual_crypto_movement(uid,gen_random_uuid(),'bank_to_portfolio',jsonb_build_object(
