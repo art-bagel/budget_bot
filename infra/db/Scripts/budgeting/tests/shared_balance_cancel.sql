@@ -187,7 +187,7 @@ BEGIN
  UPDATE bank_accounts SET is_active=false WHERE id=coll;
  BEGIN PERFORM put__delete_crypto_source(uid,x2,gen_random_uuid()); RAISE EXCEPTION 'inactive account relaxed';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err LIKE 'Не отменить: после этой операции остаток монет изменён%','inactive account: '||err;
+ ASSERT err LIKE 'Сначала отмените более поздние операции%«J»%','inactive account: '||err;
  UPDATE bank_accounts SET is_active=true WHERE id=coll;
  PERFORM put__delete_crypto_source(uid,x2,gen_random_uuid());
  ASSERT pg_temp.drift(uid)=0,'balances match entries after the coin cancels';
@@ -204,13 +204,34 @@ BEGIN
  ASSERT EXISTS(SELECT 1 FROM crypto_source_mutations WHERE source_event_id=xw AND table_name='current_budget_balances'),'withdrawal fills the free budget';
  spare:=(SELECT sum(amount) FROM current_budget_balances WHERE currency_code='RUB'
   AND category_id IN (free,get__owner_system_category_id('user',uid,NULL,'FX Result')))-500;
- PERFORM put__allocate_budget(uid,free,cat,spare);
+ PERFORM put__journal_bank_operation(uid,bank,'budget_allocate',jsonb_build_object('from_category_id',free,
+  'to_category_id',cat,'amount',spare::text,'operated_at',current_date));
  BEGIN PERFORM put__delete_crypto_source(uid,xw,gen_random_uuid()); RAISE EXCEPTION 'spent budget ignored';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
  ASSERT err LIKE 'Не отменить: в свободном остатке не хватает 500.00 RUB','budget shortfall: '||err;
- PERFORM put__allocate_budget(uid,cat,free,spare);
+ PERFORM put__journal_bank_operation(uid,bank,'budget_allocate',jsonb_build_object('from_category_id',cat,
+  'to_category_id',free,'amount',spare::text,'operated_at',current_date));
  PERFORM put__delete_crypto_source(uid,xw,gen_random_uuid());
  ASSERT pg_temp.drift(uid)=0,'balances match entries after the budget cancel';
+
+ -- 12, currency lots: a purchase that spent USD, then an ordinary transfer of
+ -- USD from the same account: blocked, the ordinary operation is named.
+ c:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,
+  'crypto_asset_id',coin,'crypto_quantity','1','title','K','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
+ d:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,
+  'crypto_asset_id',coin,'crypto_quantity','1','title','L','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',jsonb_build_object('position_id',c->'id',
+  'close_currency_code','USD','close_amount_in_currency',100,'close_amount_in_base',9000),current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',jsonb_build_object('position_id',d->'id',
+  'close_currency_code','USD','close_amount_in_currency',50,'close_amount_in_base',4600),current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_buy',jsonb_build_object('investment_account_id',coll,
+  'title','M','quantity','1','amount_in_currency',100,'currency_code','USD','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
+ x1:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
+ ASSERT EXISTS(SELECT 1 FROM crypto_source_mutations WHERE source_event_id=x1 AND table_name='lot_consumptions'),'USD purchase spends lots';
+ PERFORM put__transfer_between_accounts(uid,coll,bank,'USD',20,'USD out');
+ BEGIN PERFORM put__delete_crypto_source(uid,x1,gen_random_uuid()); RAISE EXCEPTION 'later USD spend ignored';
+ EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
+ ASSERT err LIKE 'Сначала отмените более поздние операции%USD out%','ordinary spend named: '||err;
 
  -- 13. A later merge of the coin blocks: the cancel would revive the old coin.
  mfrom:=(put__ensure_crypto_asset('SMRG','Merge coin','ton','',9::smallint,'{}'::jsonb)->>'id')::bigint;

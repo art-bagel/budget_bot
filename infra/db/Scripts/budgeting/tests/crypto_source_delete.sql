@@ -105,7 +105,8 @@ BEGIN
  ASSERT err LIKE 'На эту операцию опираются%','cascade: '||err;
  DELETE FROM portfolio_events WHERE position_id=pos AND comment='outside';
 
- -- Money taken out by an ordinary transfer blocks; reversing that transfer unblocks.
+ -- Money taken out by an ordinary transfer: the cancel would leave the account
+ -- short, so it is refused like a reversal; reversing the transfer unblocks.
  item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,
   'crypto_asset_id',coin,'crypto_quantity','1','title','Spent','quantity','1','metadata','{"item_kind":"telegram_gift"}'::jsonb),current_date);
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',
@@ -114,7 +115,7 @@ BEGIN
  r:=put__transfer_between_accounts(uid,coll,bank,'RUB',10);
  BEGIN PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid()); RAISE EXCEPTION 'spent money ignored';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err LIKE 'Не отменить: после этой операции остаток денег на счёте изменён%','spent money: '||err;
+ ASSERT err='Не отменить: на счёте «Gifts» не хватает 10.00 RUB — деньги уже потрачены','spent money: '||err;
  PERFORM put__reverse_operation(uid,(r->>'operation_id')::bigint);
  PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid());
  ASSERT COALESCE((SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='RUB'),0)=0,'sale undone after the transfer was reversed';
