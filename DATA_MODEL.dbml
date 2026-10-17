@@ -356,6 +356,23 @@ Table crypto_source_deletions {
   indexes { (owner_key, source_namespace, source_id) }
 }
 
+Table cancelled_operations {
+  id bigint [pk, increment]
+  deletion_id bigint [not null, ref: > crypto_source_deletions.id, note: 'ON DELETE CASCADE']
+  operation_id bigint [unique, note: 'rolled-back operations row; NULL for a journal event without one']
+  owner_type text [not null]
+  owner_user_id bigint
+  owner_family_id bigint
+  operated_on date [not null]
+  created_at timestamptz [not null]
+  item jsonb [note: 'get__operations_history item at cancel time; NULL if it was hidden']
+  is_investment boolean [not null]
+  is_banking boolean [not null]
+  asset_types "text[]" [not null]
+  indexes { (owner_type, owner_user_id, owner_family_id, operated_on) }
+  Note: 'Frozen history rows of cancelled journal operations (bank model: cancelled stays listed).'
+}
+
 Table crypto_asset_visibility {
   user_id bigint [not null, ref: > users.id]
   investment_account_id bigint [not null, ref: > bank_accounts.id]
