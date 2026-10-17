@@ -950,3 +950,22 @@ true`. Отмена 3206: остаток счёта 1134 по GRAM 86.3852 → 6
 | 2–4 | не менялись («Можно не исправлять») | — |
 
 Полный `scripts/check.sh` на `79e98c0` — **GREEN** (браузерные тесты 11 passed, 1 skipped).
+
+## Деплой
+
+17.10.2026 владелец дал аппрув на мерж. `d090cfc` запушен в `main`
+(`6d50639..d090cfc`), [CI #405](https://github.com/art-bagel/budget_bot/actions/runs/39050942130):
+
+- `Verify Project` — успешно;
+- `Deploy To Server` — упал через 44 с, уже после миграций: дамп
+  `pre-migrate-dumps/20261017T165046Z.dump` снят, `run_migrations: готово`.
+  Затем сборка образа API не смогла получить `python:3.10-slim`: `TLS
+  handshake timeout` до `registry-1.docker.io`. Сетевой сбой хоста, не код.
+
+Состояние прода после падения (readonly: MCP и `master_agent` по SSH):
+SQL-функции новые (`put__delete_crypto_source` с новым правилом,
+`get__shared_balance_gap`), все функции на месте. Код на хосте — `d090cfc`,
+рабочая копия чистая. Контейнеры API и web не пересобраны (образы прежнего
+деплоя), health API — 200. Новые функции совместимы со старым API: API в
+задаче не менялся. Не задеплоен только перевод `bank_asset_merge` во
+фронтенде. Через несколько минут TLS до Docker Hub с хоста проходил.
