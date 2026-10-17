@@ -554,66 +554,58 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           </span>
           <span className="hero__sym">{currencySymbol(overview.base_currency_code)}</span>
         </div>
-        <dl className="hero__rows">
-          <div
+        <div className="hero__rows">
+          <button
+            type="button"
             className="hero__row"
-            role="button"
-            tabIndex={0}
             onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setAccountSheet('personal'); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAccountSheet('personal'); }}
           >
-            <dt><span className="hero__mark hero__mark--ink" />&nbsp;Личный счёт</dt>
-            <dd>
+            <span className="hero__row-label"><span className="hero__mark hero__mark--ink" />&nbsp;Личный счёт</span>
+            <span className="hero__row-value">
               <span className="hero__row-amount">
                 {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(personalBankTotal)}
                 <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
               </span>
               <span className="hero__row-chev"><IconChevronRight /></span>
-            </dd>
-          </div>
+            </span>
+          </button>
           {hasFamily && (
-            <div
+            <button
+              type="button"
               className="hero__row"
-              role="button"
-              tabIndex={0}
               onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; setAccountSheet('family'); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAccountSheet('family'); }}
             >
-              <dt><span className="hero__mark hero__mark--coral" />&nbsp;Семейный счёт</dt>
-              <dd>
+              <span className="hero__row-label"><span className="hero__mark hero__mark--coral" />&nbsp;Семейный счёт</span>
+              <span className="hero__row-value">
                 <span className="hero__row-amount">
                   {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(familyBankTotal)}
                   <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
                 </span>
                 <span className="hero__row-chev"><IconChevronRight /></span>
-              </dd>
-            </div>
+              </span>
+            </button>
           )}
-          <div
+          <button
+            type="button"
             className="hero__row"
-            role="button"
-            tabIndex={0}
             onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('portfolio'); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate?.('portfolio'); }}
           >
-            <dt><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</dt>
-            <dd>
+            <span className="hero__row-label"><span className="hero__mark hero__mark--mint" />&nbsp;Инвестиции</span>
+            <span className="hero__row-value">
               <span className="hero__row-amount">
                 {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(investmentBankTotal)}
                 <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
               </span>
               <span className="hero__row-chev"><IconChevronRight /></span>
-            </dd>
-          </div>
-          <div
+            </span>
+          </button>
+          <button
+            type="button"
             className={`hero__row${totalCreditDebtInBase > 0 ? ' hero__row--neg' : ''}`}
-            role="button"
-            tabIndex={0}
             onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('credits'); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate?.('credits'); }}
           >
-            <dt><span className={`hero__mark${totalCreditDebtInBase > 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</dt>
-            <dd>
+            <span className="hero__row-label"><span className={`hero__mark${totalCreditDebtInBase > 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</span>
+            <span className="hero__row-value">
               <span className="hero__row-amount">
                 {totalCreditDebtInBase > 0
                   ? `−${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(totalCreditDebtInBase)}`
@@ -621,9 +613,9 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
                 <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
               </span>
               <span className="hero__row-chev"><IconChevronRight /></span>
-            </dd>
-          </div>
-        </dl>
+            </span>
+          </button>
+        </div>
       </article>
 
       {/* Quick actions row */}
@@ -756,7 +748,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           {regularBudgetCategories.length === 0 ? (
             <p className="sec__sub" style={{ padding: '4px' }}>Обычных категорий пока нет.</p>
           ) : (
-            <ul className="catgrid">
+            <div className="catgrid">
               {[
                 ...personalRegular,
                 ...(hasFamily && familyRegular.length > 0 && personalRegular.length > 0 ? [null] : []),
@@ -764,9 +756,9 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
               ].map((category, idx) => {
                 if (category === null) {
                   return (
-                    <li className="catgrid__sep" key="cat-family-divider" aria-hidden="true">
+                    <div className="catgrid__sep" key="cat-family-divider" aria-hidden="true">
                       <span>Семейные</span>
-                    </li>
+                    </div>
                   );
                 }
 
@@ -781,7 +773,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
                 const isWarn = category.balance >= 0 && category.balance < 500;
 
                 return (
-                  <li
+                  <div
                     className={[
                       'cat',
                       category.owner_type === 'family' ? 'cat--fam' : '',
@@ -864,10 +856,10 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
                         </span>
                       </>
                     )}
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
         </div>
 
@@ -881,7 +873,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
                 Группа
               </button>
             </div>
-            <ul className="groups">
+            <div className="groups">
               {[
                 ...[...personalGroups].sort((a, b) => {
                   const am = groupMembersByGroupId[a.category_id] ?? [];
@@ -901,11 +893,11 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
               ].map((category) => {
                 if (category === null) {
                   return (
-                    <li key="family-group-divider" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 2px', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+                    <div key="family-group-divider" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 2px', fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em' }}>
                       <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
                       <span>Семейные</span>
                       <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                    </li>
+                    </div>
                   );
                 }
 
@@ -922,7 +914,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
                 const lgColors = ['lg--1', 'lg--2', 'lg--3', 'lg--4'] as const;
 
                 return (
-                  <li
+                  <div
                     className={[
                       'group',
                       isDropTarget ? 'group--drop-target' : '',
@@ -1009,10 +1001,10 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
                     {groupMembers.length === 0 && (
                       <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Состав группы пока не настроен</span>
                     )}
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </div>
         )}
         {groupBudgetCategories.length === 0 && (

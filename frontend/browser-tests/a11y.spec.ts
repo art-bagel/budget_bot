@@ -1,27 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, openOverview, test } from './fixtures';
 
-// Violations that existed when the check was introduced (2026-10-15), see
-// docs/2026-10-15-playwright.md «Известные уязвимости». Anything else fails.
-// Fixed one? Remove it from the list.
+// Deliberate exceptions, see docs/design-guide.md «Доступность». Anything
+// else fails; a new exception needs the owner's decision and a reason here.
 const KNOWN = new Set([
-  // --text-3 token is below 4.5:1 in both themes; belongs to the design-guide task.
-  'color-contrast .bar__hello',
-  'color-contrast .sec-tag',
-  'color-contrast .bottom-nav__item:nth-child(2) > .bottom-nav__item-label',
-  'color-contrast .bottom-nav__item:nth-child(3) > .bottom-nav__item-label',
-  'color-contrast .bottom-nav__item:nth-child(4) > .bottom-nav__item-label',
-  // Hero rows: <div role="button"> between <dl> and <dt>/<dd>.
-  'definition-list dl',
-  'dlitem .hero__row[role="button"]:nth-child(1) > dt',
-  'dlitem .hero__row[role="button"]:nth-child(1) > dd',
-  'dlitem .hero__row[role="button"]:nth-child(2) > dt',
-  'dlitem .hero__row[role="button"]:nth-child(2) > dd',
-  'dlitem .hero__row[role="button"]:nth-child(3) > dt',
-  'dlitem .hero__row[role="button"]:nth-child(3) > dd',
-  // Category list: <li role="button"> inside <ul>.
-  'list ul',
-  // Deliberate: pinch-zoom breaks the Telegram WebApp layout.
+  // user-scalable=no: pinch-zoom breaks the Telegram WebApp layout and gestures.
   'meta-viewport meta[name="viewport"]',
 ]);
 

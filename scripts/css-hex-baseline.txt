@@ -55,7 +55,7 @@
 .hero--ink .hero__mark--coral	#e86a4f
 .hero--ink .hero__mark--ink	#ffe066
 .hero--ink .hero__mark--mint	#2f9e7f
-.hero--ink .hero__row dd	#ffffff
+.hero--ink .hero__row-value	#ffffff
 .hero--ink .hero__value	#ffffff
 .hero__mark--coral	#e86a4f
 .hero__mark--mint	#2f9e7f
@@ -63,7 +63,7 @@
 .hero__potnote	#ffe066
 .hero__progress-fill	#ffe066
 .hero__progress-value strong	#ffe066
-.hero__row--neg dd	#b8301d
+.hero__row--neg .hero__row-value	#b8301d
 .op-dot--alloc	#a9570a
 .op-dot--credit	#7a2e96
 .op-dot--exch	#593daa

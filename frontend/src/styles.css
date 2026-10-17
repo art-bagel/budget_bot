@@ -44,8 +44,8 @@
   --surface-2: #FFFFFF;
 
   --text: #0A0B0D;
-  --text-2: #646870;
-  --text-3: #9AA0A8;
+  --text-2: #50545B;
+  --text-3: #676B73;
 
   --line: #E3E6EA;
   --line-soft: #EDEFF2;
@@ -142,7 +142,7 @@
 
   --text: #F5F5F7;
   --text-2: #9CA0A7;
-  --text-3: #62666D;
+  --text-3: #83878F;
 
   --line: #26282B;
   --line-soft: #1C1D20;
@@ -227,7 +227,7 @@
 
     --text: #F5F5F7;
     --text-2: #9CA0A7;
-    --text-3: #62666D;
+    --text-3: #83878F;
 
     --line: #26282B;
     --line-soft: #1C1D20;
@@ -1018,6 +1018,12 @@ input { font: inherit; color: inherit; }
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  /* <button>: drop the native look; the flex column stretches it full width. */
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
   padding: 10px 2px;
   margin: 0 -2px;
   border-bottom: 1px solid rgba(10, 11, 13, 0.08);
@@ -1028,8 +1034,9 @@ input { font: inherit; color: inherit; }
 .hero__row:hover { background-color: rgba(10, 11, 13, 0.04); }
 .hero__row:active { background-color: rgba(10, 11, 13, 0.07); }
 .hero__row:last-child { border-bottom: 0; padding-bottom: 4px; }
+.hero__row:focus-visible { outline: 2px solid var(--ink-on-yellow); outline-offset: 1px; }
 
-.hero__row dt {
+.hero__row-label {
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -1038,7 +1045,7 @@ input { font: inherit; color: inherit; }
   color: rgba(10, 11, 13, 0.78);
 }
 
-.hero__row dd {
+.hero__row-value {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1048,7 +1055,7 @@ input { font: inherit; color: inherit; }
   letter-spacing: -.015em;
 }
 
-.hero__row--neg dd { color: #B8301D; }
+.hero__row--neg .hero__row-value { color: #B8301D; }
 
 .hero__row-amount {
   display: inline-flex;
@@ -7602,8 +7609,8 @@ select.dlg-row__ghost option {
 .hero--ink .hero__row:hover { background-color: rgba(255, 255, 255, .04); }
 .hero--ink .hero__row:active { background-color: rgba(255, 255, 255, .07); transform: scale(.995); }
 .hero--ink .hero__row:focus-visible { outline-color: rgba(255, 221, 45, .65); }
-.hero--ink .hero__row dt { color: rgba(255, 255, 255, .76); }
-.hero--ink .hero__row dd { color: #FFFFFF; }
+.hero--ink .hero__row-label { color: rgba(255, 255, 255, .76); }
+.hero--ink .hero__row-value { color: #FFFFFF; }
 .hero--ink .hero__row-chev { color: rgba(255, 255, 255, .35); }
 .hero--ink .hero__mark--ink { background: #FFE066; }
 .hero--ink .hero__mark--mint { background: #2F9E7F; }
