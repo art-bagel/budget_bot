@@ -1,7 +1,7 @@
 # Дизайн-справочник, доступность «Обзора», ловушка фокуса — 17.10.2026
 
 Уровень **M** + UI/UX-трек. Ветка `claude/design-guide`.
-Статус: **план утверждён владельцем 17.10.2026, реализация**.
+Статус: **реализовано, `check.sh` зелёный; ждёт дизайн-ревью и финального ревью**.
 
 ## Цель
 
@@ -156,30 +156,80 @@ Shift+Tab — на последний; `preventDefault`. Без новых за�
    `docs/TODO.md` — пункты отмечены.
 10. Полный `scripts/check.sh` зелёный.
 
-## Тесты
+## Что сделано
 
-| # | Тест |
-|---|---|
-| 1, 2 | Ручная сверка + скрипт-проверка классов из справочника по `styles.css` (в отчёте, не в CI) |
-| 3 | axe `color-contrast` в `a11y.spec.ts` (обе темы); таблица расчёта в отчёте |
-| 4 | Новый Playwright: клик по «Инвестиции» в hero → Портфель; Enter на «Личный счёт» → шторка счёта |
-| 5 | Существующие тесты (`getByRole('button', { name: /^Продукты/ })`) + Enter на категории открывает её шторку |
-| 6 | `a11y.spec.ts` с пустым `KNOWN` (кроме viewport) |
-| 7 | Новый Playwright `focus-trap.spec.ts`: открыть шторку категории, N×Tab и N×Shift+Tab, после каждого нажатия `document.activeElement` внутри `[role=dialog]`, и цикл замыкается |
-| 8 | `visual.spec.ts`, `cancel.spec.ts`, `income-source-archive.spec.ts` — снимки перегенерированы и просмотрены |
-| 10 | `scripts/check.sh` |
+1. `BottomSheet.tsx`: функция `trapTab` в существующем `keydown` верхней
+   шторки. Фокусируемые элементы — видимые (`getClientRects`), без
+   `disabled`. С последнего Tab → первый, с первого (или с самой шторки)
+   Shift+Tab → последний. Фокус вне шторки возвращается внутрь. Сначала
+   написан тест `browser-tests/keyboard.spec.ts`, он упал на старом коде
+   (`Tab #7` в светлой теме, `Tab #8` в тёмной), после правки прошёл.
+2. `styles.css`: светлая `--text-2` `#646870` → `#50545B`, `--text-3`
+   `#9AA0A8` → `#676B73`; тёмная `--text-3` `#62666D` → `#83878F` (в
+   `[data-theme="dark"]` и в media-блоке).
+3. `Dashboard.tsx`: hero — `<div class="hero__rows">` и
+   `<button type="button" class="hero__row">` с `.hero__row-label` /
+   `.hero__row-value`, самописные `onKeyDown` убраны. CSS: сброс вида кнопки
+   (`font: inherit`, без фона и рамки, `text-align: left`) и
+   `.hero__row:focus-visible`. Селекторы `.hero__row dt/dd` переименованы. В
+   `scripts/css-hex-baseline.txt` поменялись два селектора, цвета те же
+   (194 записи, как было).
+4. `Dashboard.tsx`: `ul.catgrid`/`ul.groups` → `div`, карточки `li` → `div` с
+   прежними `role="button"`, `tabIndex`, Enter/пробел. Вложенный
+   `ul.group__legend` остался списком. Глобальный сброс `ul` в CSS на вид не
+   влиял, стили карточек не менялись.
+5. `a11y.spec.ts`: в `KNOWN` остался только `meta-viewport` с комментарием.
+6. Снимки: все шесть эталонов перегенерированы (`--update-snapshots=all`).
+   Обычный прогон их **не уронил**: смена `--text-2/--text-3` укладывается в
+   порог сравнения Playwright (`threshold: 0.2`). Изменение проверено по
+   пикселям: в подписи навбара самый тёмный пиксель «до» — `R=154` (`#9A`),
+   «после» — `R=103` (`#67`); на снимке «Обзора» отличаются 6606 пикселей.
+   Правило про `--update-snapshots=all` дописано в `AGENTS.md`.
+7. `docs/design-guide.md` — справочник. Все упомянутые CSS-классы, файлы и
+   функции проверены скриптом по `styles.css` и `frontend/src`.
+8. `AGENTS.md`: UI/UX-трек ссылается на справочник без «пока нет», правило
+   обновлять справочник вместе с правкой токена. `docs/TODO.md`: три пункта P2
+   закрыты, долг справочника — отдельным пунктом.
+9. Ветка перенесена на локальный `main`: там 6 неотправленных коммитов с
+   документами (ревизия бэклога, записи о деплоях). Без них `docs/TODO.md`
+   конфликтовал бы.
 
-Ловушку проверяю на падение: тест сначала пишется и падает на текущем коде.
+## Скриншоты до и после
+
+390×844, синтетический сид, Linux-образ Playwright. Файлы в
+`docs/assets/2026-10-17-design-guide/`.
+
+| | До | После |
+|---|---|---|
+| Обзор, светлая | ![](assets/2026-10-17-design-guide/before-overview-light-linux.png) | ![](assets/2026-10-17-design-guide/after-overview-light-linux.png) |
+| Обзор, тёмная | ![](assets/2026-10-17-design-guide/before-overview-dark-linux.png) | ![](assets/2026-10-17-design-guide/after-overview-dark-linux.png) |
+| Пополнение, светлая | ![](assets/2026-10-17-design-guide/before-income-sheet-light-linux.png) | ![](assets/2026-10-17-design-guide/after-income-sheet-light-linux.png) |
+| Пополнение, тёмная | ![](assets/2026-10-17-design-guide/before-income-sheet-dark-linux.png) | ![](assets/2026-10-17-design-guide/after-income-sheet-dark-linux.png) |
+| Отмена, светлая | ![](assets/2026-10-17-design-guide/before-cancel-reason-light-linux.png) | ![](assets/2026-10-17-design-guide/after-cancel-reason-light-linux.png) |
+| Отмена, тёмная | ![](assets/2026-10-17-design-guide/before-cancel-reason-dark-linux.png) | ![](assets/2026-10-17-design-guide/after-cancel-reason-dark-linux.png) |
+
+## Критерии приёмки и тесты
+
+| # | Критерий | Тест |
+|---|---|---|
+| 1, 2 | Справочник покрывает разделы, ссылки реальные | скрипт сверки классов/файлов (п. 7 выше), ревью |
+| 3 | Контраст `--text-2/--text-3` | axe `color-contrast` в `a11y.spec.ts`, обе темы; расчёт — таблица в «Решениях» |
+| 4 | Hero — кнопки, клик и Enter работают | `keyboard.spec.ts` «overview hero rows…»: Enter на «Личный счёт» → шторка, клик «Инвестиции» → Портфель |
+| 5 | Категории без `li[role=button]`, клик и Enter открывают | axe `list`; `smoke.spec.ts` (Enter на «Продукты» → шторка) |
+| 6 | `KNOWN` — только `meta-viewport` | `a11y.spec.ts` |
+| 7 | Ловушка фокуса | `keyboard.spec.ts` «focus stays inside…»: N+2 нажатий Tab и Shift+Tab, после каждого фокус внутри `[role=dialog]` |
+| 8 | Эталоны обновлены осознанно | раздел «Скриншоты до и после» |
+| 9 | `AGENTS.md`, `TODO.md` | дифф |
+| 10 | `scripts/check.sh` | полный — GREEN, 17.10.2026 (браузерных тестов 15 + 1 пропуск по теме) |
 
 ## Затронутые области
 
-- `frontend/src/styles.css` — три значения токенов, стили `.hero__row*`,
-  селекторы `ul/li` категорий (если есть).
-- `frontend/src/pages/Dashboard.tsx` — разметка hero, `catgrid`, `groups`.
-- `frontend/src/components/BottomSheet.tsx` — Tab в `handleKeyDown`.
-- `frontend/browser-tests/` — `a11y.spec.ts`, новый `focus-trap.spec.ts`
-  (и тест hero), снимки `*-snapshots/*.png`.
-- `docs/design-guide.md` (новый), `AGENTS.md`, `docs/TODO.md`.
+- `frontend/src/styles.css`, `frontend/src/pages/Dashboard.tsx`,
+  `frontend/src/components/BottomSheet.tsx`;
+- `frontend/browser-tests/a11y.spec.ts`, новый `keyboard.spec.ts`, снимки
+  `*-snapshots/*.png`; `scripts/css-hex-baseline.txt`;
+- `docs/design-guide.md` (новый), `docs/assets/2026-10-17-design-guide/`,
+  `AGENTS.md`, `docs/TODO.md`.
 
 Миграций БД нет. Бэкенда не касается.
 
@@ -187,12 +237,17 @@ Shift+Tab — на последний; `preventDefault`. Без новых за�
 
 `git revert` коммитов ветки. Данных и схемы задача не меняет.
 
-## Вопросы владельцу
+## Известные уязвимости / осознанные риски
 
-1. **Цвета.** Согласны с `--text-2` `#50545B` в светлой теме (вторичный текст
-   станет заметно темнее по всему приложению) и `--text-3` `#676B73` /
-   `#83878F`? Альтернатива — не трогать `--text-2`, но тогда `--text-3` почти
-   неотличим от него.
-2. **Категории.** Достаточно `div role="button"` (минимальная правка, drag&drop
-   не трогаем), или нужен `ul > li > button` с сохранением семантики списка
-   (больше правок в CSS сетки и в drag&drop)?
+- `user-scalable=no` — отступление от WCAG 1.4.4, решение владельца из-за
+  Telegram WebApp. Описано в справочнике, остаётся в `KNOWN`.
+- Карточки категорий — `div role="button"`, а не список с кнопками (решение
+  владельца): диктор не объявляет число категорий.
+
+## Открытые вопросы
+
+- Долг справочника (раздел 9 `design-guide.md`) — отдельные задачи, пункт в
+  `docs/TODO.md`.
+- Порог визуальных снимков не ловит смену токена цвета. Ужесточать ли
+  `threshold` — отдельное решение: с жёстким порогом снимки чаще падают от
+  сглаживания.
