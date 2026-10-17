@@ -189,7 +189,7 @@ async def main():
                 await sql('SELECT budgeting.put__reverse_operation($1,$2)', uid, allocated['results'][0]['operation_id'])
                 check('linked_expense_reversal_rejected', False)
             except asyncpg.RaiseError as exc:
-                check('linked_expense_reversal_rejected', 'historical correction' in str(exc))
+                check('linked_expense_reversal_rejected', 'оплата картой' in str(exc))
             # A later failing command rolls the settlement and its marker back together.
             await post(envelope('usd-sale-two', 14, [sale]))
             second = await sql("SELECT max(id) FROM budgeting.portfolio_events WHERE position_id=$1", usd_sale['position_id'])
