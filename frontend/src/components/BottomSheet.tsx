@@ -18,6 +18,30 @@ interface Props {
 // is (a field that removed itself leaves focus on <body>, outside the sheet).
 const openSheets: string[] = [];
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Tab wraps from the last field to the first (Shift+Tab the other way), so
+// keyboard focus never lands on the page under the sheet.
+function trapTab(e: KeyboardEvent, sheet: HTMLElement) {
+  const stops = [...sheet.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+  if (stops.length === 0) {
+    e.preventDefault();
+    sheet.focus();
+    return;
+  }
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  const active = document.activeElement;
+  const outside = !(active instanceof HTMLElement) || !sheet.contains(active) || active === sheet;
+  if (e.shiftKey && (outside || active === first)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (outside || active === last)) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 export default function BottomSheet({ open, title, tag, icon, iconColor, onClose, children, actions, gray }: Props) {
   const [visible, setVisible] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -44,7 +68,9 @@ export default function BottomSheet({ open, title, tag, icon, iconColor, onClose
     openSheets.push(titleId);
     // A field that handles Escape itself stops propagation and keeps the sheet open.
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && openSheets[openSheets.length - 1] === titleId) onCloseRef.current();
+      if (openSheets[openSheets.length - 1] !== titleId) return;
+      if (e.key === 'Escape') onCloseRef.current();
+      if (e.key === 'Tab' && sheet) trapTab(e, sheet);
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => {
