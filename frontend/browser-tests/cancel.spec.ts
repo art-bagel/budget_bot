@@ -28,15 +28,15 @@ test('a mistaken collection sale is cancelled from the operations list', async (
   await page.getByRole('tab', { name: 'Операции' }).last().click();
   await expect(page.getByRole('button', { name: 'История операций' })).toHaveCount(0);
 
-  const live = page.locator('.op-item:not(.op-item--cancelled)', { hasText: '26' }).first();
-  await live.locator('button.op-row').click();
+  const live = page.locator('.op-row:not(.op-row--cancelled)', { hasText: '26' }).first();
+  await live.locator('.op-row__name').click();
   await live.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(live.getByText('Отменить операцию? Балансы вернутся к состоянию до неё.')).toBeVisible();
   await live.getByRole('button', { name: 'Да, отменить' }).click();
 
-  const cancelled = page.locator('.op-item--cancelled', { hasText: '26' }).first();
+  const cancelled = page.locator('.op-row--cancelled', { hasText: '26' }).first();
   await expect(cancelled.getByText('Отменена')).toBeVisible();
-  await cancelled.locator('button.op-row').click();
+  await cancelled.locator('.op-row__name').click();
   await expect(cancelled.locator('.op-row__detail')).toBeVisible();
   await expect(cancelled.getByRole('button', { name: 'Отменить', exact: true })).toHaveCount(0);
 
@@ -48,8 +48,8 @@ test('a mistaken collection sale is cancelled from the operations list', async (
 test('an operation that cannot be cancelled shows the reason', async ({ page }) => {
   await login(page);
   await page.getByRole('tab', { name: 'Операции', exact: true }).click();
-  const income = page.locator('.op-item', { hasText: 'Доход' }).first();
-  await income.locator('button.op-row').click();
+  const income = page.locator('.op-row', { hasText: 'Доход' }).first();
+  await income.locator('.op-row__name').click();
   await income.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(income.getByText(/^Не отменить: на счёте «.+» не хватает .+ — деньги уже потрачены$/)).toBeVisible();
   await expect(income.getByText('Отменить операцию?')).toHaveCount(0);
@@ -58,7 +58,7 @@ test('an operation that cannot be cancelled shows the reason', async ({ page }) 
   await page.addStyleTag({ content: '.bottom-nav { visibility: hidden; }' });
   await expect(income).toHaveScreenshot('cancel-reason.png', { mask: [income.locator('.op-row__sub')] });
 
-  const { violations } = await new AxeBuilder({ page }).include('.op-item').withTags(['wcag2a', 'wcag2aa']).analyze();
+  const { violations } = await new AxeBuilder({ page }).include('.op-row--expandable').withTags(['wcag2a', 'wcag2aa']).analyze();
   // Row subtitles (--text-3) and green amounts (--pos) are the known token
   // contrast issue of every operations row (a11y.spec.ts KNOWN, design guide task).
   const found = violations.flatMap((v) => v.nodes.map((n) => `${v.id} ${n.target.join(' ')}`));

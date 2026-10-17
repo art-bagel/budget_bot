@@ -5335,20 +5335,7 @@ select.dlg-row__ghost option {
   border-radius: 10px;
   transition: background .14s ease;
 }
-/* A row is a button that unfolds its details below (.op-item wraps both). */
-.op-item { border-bottom: 1px solid var(--line); }
-.op-item:last-child { border-bottom: 0; }
-.op-item > .op-row { border-bottom: 0; }
-button.op-row {
-  width: 100%;
-  border-top: 0; border-left: 0; border-right: 0;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-}
 .op-row:hover { background: var(--surface-inset); }
-button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: -2px; }
 [data-theme='dark'] .op-row:hover { background: var(--surface-2); }
 .op-row:last-child { border-bottom: 0; }
 
@@ -5410,6 +5397,7 @@ button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-off
   transition: transform .2s ease;
 }
 .op-row__chevron svg { width: 14px; height: 14px; }
+.op-row__chevron--open { transform: rotate(90deg); }
 .op-row__name {
   font-size: 14px;
   font-weight: 600;
@@ -5463,6 +5451,29 @@ button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-off
   flex-shrink: 0;
 }
 [data-theme='dark'] .op-row__tag { background: var(--surface-2); }
+
+.op-row__cancel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neg-text);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  padding: 0;
+  margin-top: 2px;
+  text-align: left;
+}
+
+.op-row__detail {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 .op-detail__comment {
   font-size: 12.5px;
@@ -11807,38 +11818,14 @@ button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-off
 .pf-act-group .sec-tag { padding-left: 2px; }
 .pf-act-group__tiles { margin-bottom: 0; }
 
-/* Unfolded operation: details and the red cancel line */
-.op-row__detail {
-  margin: 0 8px 12px 56px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-.op-row__detail .op-detail__name { white-space: normal; overflow-wrap: anywhere; }
-.op-row__chevron--open { transform: rotate(90deg); }
-.op-row__cancel,
-.op-cancel__back {
-  align-self: flex-start;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--neg-text);
-  text-align: left;
-  cursor: pointer;
-}
+/* Red cancel line of an unfolded operation: confirm or the reason it is impossible */
+.op-cancel { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 2px; cursor: default; }
+.op-cancel .op-row__cancel { margin-top: 0; }
 .op-row__cancel:disabled { cursor: default; opacity: .6; }
-.op-cancel__back { color: var(--text-2); }
-.op-cancel { display: flex; flex-direction: column; gap: 2px; }
-.op-cancel__question { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.op-cancel__question { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.4; }
 .op-cancel__actions { display: flex; gap: 20px; }
-.op-cancel__reason { font-size: 12.5px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
+.op-cancel__back { color: var(--text-2); }
+.op-cancel__reason { font-size: 12px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
 .op-cancel__reason--error { color: var(--neg-text); }
 
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
