@@ -8,6 +8,7 @@ CREATE FUNCTION budgeting.put__delete_crypto_source(
 DECLARE
  src record; prior record; m record; t text; predicate text; actual jsonb; assigns text;
  blockers text; last_mutation bigint; muts jsonb; result jsonb; old_source text; old_index text;
+ snaps jsonb; deletion bigint;
 BEGIN
  SET search_path TO budgeting;
  IF _request_id IS NULL OR _source_event_id IS NULL THEN RAISE EXCEPTION 'Некорректный запрос удаления'; END IF;
@@ -22,21 +23,27 @@ BEGIN
   RETURN jsonb_build_object('source_event_id',_source_event_id,'deleted',true);
  END IF;
  SELECT * INTO src FROM crypto_source_events WHERE id=_source_event_id;
- IF src.id IS NULL THEN RAISE EXCEPTION 'Операция не найдена'; END IF;
+ IF src.id IS NULL THEN
+  IF EXISTS(SELECT 1 FROM crypto_source_deletions d WHERE d.source_event_id=_source_event_id
+    AND d.owner_key IN ('user:'||_user_id,'family:'||get__user_family_id(_user_id))) THEN
+   RAISE EXCEPTION 'Операция уже отменена';
+  END IF;
+  RAISE EXCEPTION 'Операция не найдена';
+ END IF;
  IF NOT EXISTS(SELECT 1 FROM bank_accounts a WHERE a.id=src.anchor_account_id
    AND has__owner_access(_user_id,a.owner_type,a.owner_user_id,a.owner_family_id)) THEN
   RAISE EXCEPTION 'Нет доступа к операции';
  END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('crypto-source:'||src.owner_key,0));
  SELECT * INTO src FROM crypto_source_events WHERE id=_source_event_id FOR UPDATE;
- IF src.id IS NULL THEN RAISE EXCEPTION 'Операция не найдена'; END IF;
+ IF src.id IS NULL THEN RAISE EXCEPTION 'Операция уже отменена'; END IF;
  -- Bank postings (ordinary expenses too) are undone by a reversal, not here.
  IF src.source_namespace NOT IN ('manual-portfolio-v1','manual-collection-v1') THEN
-  RAISE EXCEPTION 'Эту операцию удалить нельзя, отмените её в истории операций';
+  RAISE EXCEPTION 'Эту операцию нельзя отменить таким способом';
  END IF;
  IF NOT src.reversible OR NOT EXISTS(SELECT 1 FROM crypto_source_mutations
    WHERE source_event_id=src.id AND revision=src.revision) THEN
-  RAISE EXCEPTION 'У этой операции нет журнала изменений, удалить её нельзя';
+  RAISE EXCEPTION 'Эту операцию нельзя отменить: у неё нет журнала изменений';
  END IF;
  -- Ordinary bank writers do not take the journal lock; block all accounting
  -- writes in one fixed order while the rows are compared and rolled back.
@@ -58,7 +65,21 @@ BEGIN
   JOIN crypto_source_events e ON e.id=later.source_event_id AND e.revision=later.revision
   WHERE mine.source_event_id=src.id AND mine.revision=src.revision AND e.id<>src.id) b;
  IF blockers IS NOT NULL THEN
-  RAISE EXCEPTION 'Сначала удалите более поздние операции, которые её затрагивают: %',blockers;
+  RAISE EXCEPTION 'Сначала отмените более поздние операции, которые её затрагивают: %',blockers;
+ END IF;
+ -- Bank model: the cancelled operation stays listed. Keep its history rows as
+ -- the live query renders them now, before the rows are rolled back.
+ SELECT jsonb_agg(get__cancel_snapshot(_user_id,o.id,NULL)||jsonb_build_object('operation_id',o.id,
+   'owner_type',o.owner_type,'owner_user_id',o.owner_user_id,'owner_family_id',o.owner_family_id,
+   'operated_on',o.operated_on,'created_at',o.created_at) ORDER BY o.id) INTO snaps
+  FROM crypto_source_event_links l JOIN operations o ON o.id=l.ledger_id
+  WHERE l.source_event_id=src.id AND l.ledger_table='operations';
+ IF snaps IS NULL THEN
+  SELECT jsonb_build_array(get__cancel_snapshot(_user_id,NULL,src.id)||jsonb_build_object('operation_id',NULL,
+    'owner_type',a.owner_type,'owner_user_id',a.owner_user_id,'owner_family_id',a.owner_family_id,
+    'operated_on',COALESCE((src.evidence->>'requested_date')::date,(src.commands->0->'payload'->>'operated_at')::date,src.accounting_date),
+    'created_at',src.created_at)) INTO snaps
+   FROM bank_accounts a WHERE a.id=src.anchor_account_id;
  END IF;
  SELECT COALESCE(jsonb_agg(to_jsonb(mu) ORDER BY mu.id),'[]'::jsonb) INTO muts
   FROM crypto_source_mutations mu WHERE source_event_id=src.id AND revision=src.revision;
@@ -76,7 +97,7 @@ BEGIN
     m.table_name,m.table_name,predicate) INTO actual USING m.row_key;
    -- Values decide, not the touch time: a reversed outside write leaves the row as it was.
    IF (actual-'updated_at') IS DISTINCT FROM (m.after_row-'updated_at') THEN
-    RAISE EXCEPTION 'После этой операции % изменён другой операцией (перевод, расход, правка). Сначала отмените её',
+    RAISE EXCEPTION 'Не отменить: после этой операции % изменён другой операцией (перевод, расход, правка). Сначала отмените её',
      CASE WHEN m.table_name IN ('current_bank_balances','bank_entries') THEN 'остаток денег на счёте'
           WHEN m.table_name IN ('current_crypto_balances','crypto_lots','crypto_bank_entries','crypto_lot_consumptions') THEN 'остаток монет'
           WHEN m.table_name IN ('current_budget_balances','budget_entries') THEN 'бюджет'
@@ -94,13 +115,13 @@ BEGIN
    END IF;
   END LOOP;
  EXCEPTION WHEN foreign_key_violation THEN
-  RAISE EXCEPTION 'На эту операцию ссылается более поздняя (например, сторно). Сначала удалите её';
+  RAISE EXCEPTION 'На эту операцию ссылается более поздняя (например, отмена). Сначала отмените её';
  END;
  -- A cascade removed a row this source never inserted: someone depended on it.
  IF EXISTS(SELECT 1 FROM pg_temp.crypto_restore_deleted d WHERE NOT EXISTS(
    SELECT 1 FROM crypto_source_mutations mu WHERE mu.source_event_id=src.id AND mu.revision=src.revision
     AND mu.before_row IS NULL AND mu.table_name=d.table_name AND d.row_data @> mu.row_key)) THEN
-  RAISE EXCEPTION 'На эту операцию опираются более поздние записи. Сначала удалите их';
+  RAISE EXCEPTION 'На эту операцию опираются более поздние записи. Сначала отмените их';
  END IF;
  PERFORM set_config('budgeting.crypto_restoring','off',true);
  PERFORM set_config('budgeting.crypto_source_event_id',COALESCE(old_source,''),true);
@@ -110,7 +131,13 @@ BEGIN
  VALUES(_request_id,src.id,src.owner_key,src.source_namespace,src.source_id,to_jsonb(src),muts,
   COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM crypto_source_revisions r WHERE r.source_event_id=src.id),'[]'::jsonb),
   COALESCE((SELECT jsonb_agg(to_jsonb(c)) FROM crypto_source_corrections c WHERE c.source_event_id=src.id),'[]'::jsonb),
-  _user_id);
+  _user_id) RETURNING id INTO deletion;
+ INSERT INTO cancelled_operations(deletion_id,operation_id,owner_type,owner_user_id,owner_family_id,operated_on,created_at,
+  item,is_investment,is_banking,asset_types)
+ SELECT deletion,(x->>'operation_id')::bigint,x->>'owner_type',(x->>'owner_user_id')::bigint,(x->>'owner_family_id')::bigint,
+  (x->>'operated_on')::date,(x->>'created_at')::timestamptz,NULLIF(x->'item','null'::jsonb),
+  (x->>'is_investment')::boolean,(x->>'is_banking')::boolean,ARRAY(SELECT jsonb_array_elements_text(x->'asset_types'))
+ FROM jsonb_array_elements(snaps) x;
  DELETE FROM crypto_source_corrections WHERE source_event_id=src.id;
  DELETE FROM crypto_source_revisions WHERE source_event_id=src.id;
  DELETE FROM crypto_source_mutations WHERE source_event_id=src.id;

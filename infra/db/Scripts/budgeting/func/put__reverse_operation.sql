@@ -30,20 +30,34 @@ DECLARE
     _credit_payment_id bigint;
     _credit_payment_at timestamptz;
     _credit_account_id bigint;
+    _account_name text;
 BEGIN
     SET search_path TO budgeting;
 
+    -- The row lock serialises two cancels of the same operation.
     SELECT type, owner_type, owner_user_id, owner_family_id
     INTO _original_type, _owner_type, _owner_user_id, _owner_family_id
     FROM operations
-    WHERE id = _operation_id;
+    WHERE id = _operation_id
+    FOR UPDATE;
 
     IF _original_type IS NULL THEN
-        RAISE EXCEPTION 'Unknown operation %', _operation_id;
+        -- A cancelled journal operation left only its history row.
+        SELECT owner_type, owner_user_id, owner_family_id
+        INTO _owner_type, _owner_user_id, _owner_family_id
+        FROM cancelled_operations
+        WHERE operation_id = _operation_id;
+        IF _owner_type IS NULL THEN
+            RAISE EXCEPTION 'Операция не найдена';
+        END IF;
+        IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
+            RAISE EXCEPTION 'Нет доступа к операции';
+        END IF;
+        RAISE EXCEPTION 'Операция уже отменена';
     END IF;
 
     IF NOT budgeting.has__owner_access(_user_id, _owner_type, _owner_user_id, _owner_family_id) THEN
-        RAISE EXCEPTION 'Access denied to operation %', _operation_id;
+        RAISE EXCEPTION 'Нет доступа к операции';
     END IF;
 
     -- Manual crypto and collection operations have one way back: deleting their
@@ -58,16 +72,16 @@ BEGIN
     END IF;
 
     IF _original_type = 'reversal' THEN
-        RAISE EXCEPTION 'Reversal operation cannot be reversed';
+        RAISE EXCEPTION 'Это запись отмены, её нельзя отменить';
     END IF;
 
     IF EXISTS (SELECT 1 FROM portfolio_events WHERE
         metadata->'manual_expense_settlement'->'result'->>'operation_id'=_operation_id::text) THEN
-        RAISE EXCEPTION 'Linked card allocation reversal requires historical correction';
+        RAISE EXCEPTION 'Не отменить: к операции привязана оплата картой из портфеля';
     END IF;
 
     IF _original_type IN ('investment_trade', 'investment_income', 'investment_adjustment') THEN
-        RAISE EXCEPTION 'Investment operations reversal is not supported yet';
+        RAISE EXCEPTION 'Эту операцию нельзя отменить: для неё отмена пока не поддерживается';
     END IF;
 
     SELECT cpe.id, cpe.payment_at, cpe.credit_account_id
@@ -80,7 +94,7 @@ BEGIN
     WHERE reversal_of_operation_id = _operation_id;
 
     IF FOUND THEN
-        RAISE EXCEPTION 'Operation % has already been reversed', _operation_id;
+        RAISE EXCEPTION 'Операция уже отменена';
     END IF;
 
     IF _credit_payment_id IS NOT NULL THEN
@@ -94,7 +108,7 @@ BEGIN
           );
 
         IF FOUND THEN
-            RAISE EXCEPTION 'Credit repayment can only be reversed from newest to oldest';
+            RAISE EXCEPTION 'Не отменить: сначала отмените более поздние платежи по этому кредиту';
         END IF;
     END IF;
 
@@ -105,9 +119,7 @@ BEGIN
     LOOP
         IF _created_lot.amount_remaining <> _created_lot.amount_initial
            OR _created_lot.cost_base_remaining <> _created_lot.cost_base_initial THEN
-            RAISE EXCEPTION 'Cannot reverse operation % because created FX lot % was already used',
-                _operation_id,
-                _created_lot.id;
+            RAISE EXCEPTION 'Не отменить: полученная валюта уже потрачена';
         END IF;
     END LOOP;
 
@@ -118,9 +130,7 @@ BEGIN
     LOOP
         IF _created_crypto_lot.amount_remaining <> _created_crypto_lot.amount_initial
            OR _created_crypto_lot.cost_base_remaining <> _created_crypto_lot.cost_base_initial THEN
-            RAISE EXCEPTION 'Cannot reverse operation % because created crypto lot % was already used',
-                _operation_id,
-                _created_crypto_lot.id;
+            RAISE EXCEPTION 'Не отменить: полученные монеты уже потрачены';
         END IF;
     END LOOP;
 
@@ -135,29 +145,29 @@ BEGIN
             SELECT
                 ba.account_kind,
                 ba.credit_limit,
+                ba.name,
                 COALESCE((
                     SELECT amount
                     FROM current_bank_balances
                     WHERE bank_account_id = _bank_entry.bank_account_id
                       AND currency_code = _bank_entry.currency_code
                 ), 0)
-            INTO _bank_account_kind, _bank_credit_limit, _current_balance
+            INTO _bank_account_kind, _bank_credit_limit, _account_name, _current_balance
             FROM bank_accounts ba
             WHERE ba.id = _bank_entry.bank_account_id;
 
             IF _bank_account_kind = 'credit' THEN
                 IF _bank_credit_limit IS NULL THEN
-                    RAISE EXCEPTION 'Credit limit is not configured for bank account %', _bank_entry.bank_account_id;
+                    RAISE EXCEPTION 'Не отменить: у кредитной карты «%» не задан лимит', _account_name;
                 END IF;
 
                 IF (_current_balance - _bank_entry.amount) < -_bank_credit_limit THEN
-                    RAISE EXCEPTION 'Cannot reverse operation %, credit limit exceeded for bank account %',
-                        _operation_id,
-                        _bank_entry.bank_account_id;
+                    RAISE EXCEPTION 'Не отменить: на кредитной карте «%» будет превышен лимит', _account_name;
                 END IF;
             ELSIF _current_balance < _bank_entry.amount THEN
-                RAISE EXCEPTION 'Cannot reverse operation %, insufficient bank balance in currency %',
-                    _operation_id,
+                RAISE EXCEPTION 'Не отменить: на счёте «%» не хватает % % — деньги уже потрачены',
+                    _account_name,
+                    round(_bank_entry.amount - _current_balance, 2),
                     _bank_entry.currency_code;
             END IF;
         END IF;
@@ -179,8 +189,8 @@ BEGIN
             INTO _current_balance;
 
             IF _current_balance < _crypto_entry.amount THEN
-                RAISE EXCEPTION 'Cannot reverse operation %, insufficient crypto balance',
-                    _operation_id;
+                RAISE EXCEPTION 'Не отменить: на счёте «%» не хватает монет — они уже потрачены',
+                    (SELECT name FROM bank_accounts WHERE id = _crypto_entry.bank_account_id);
             END IF;
         END IF;
     END LOOP;
@@ -206,9 +216,9 @@ BEGIN
                    WHERE c.id = _budget_entry.category_id AND c.kind = 'system' AND c.name = 'Unallocated'));
 
             IF _current_budget < _budget_entry.amount THEN
-                RAISE EXCEPTION 'Cannot reverse operation %, insufficient budget in category %',
-                    _operation_id,
-                    _budget_entry.category_id;
+                RAISE EXCEPTION 'Не отменить: в свободном остатке не хватает % %',
+                    round(_budget_entry.amount - _current_budget, 2),
+                    _budget_entry.currency_code;
             END IF;
         END IF;
     END LOOP;

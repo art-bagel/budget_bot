@@ -1,11 +1,18 @@
 DROP FUNCTION IF EXISTS budgeting.get__operations_history(bigint, integer, integer, text);
 DROP FUNCTION IF EXISTS budgeting.get__operations_history(bigint, integer, integer, text, text);
+DROP FUNCTION IF EXISTS budgeting.get__operations_history(bigint, integer, integer, text, text, bigint[], bigint[]);
+-- The history lists live operations, manual journal events without an operations
+-- row, and frozen rows of cancelled journal operations (cancelled_operations).
+-- _operation_ids / _source_event_ids (internal, not exposed by the API) render
+-- just those rows: put__delete_crypto_source keeps them before the rollback.
 CREATE FUNCTION budgeting.get__operations_history(
     _user_id bigint,
     _limit integer DEFAULT 20,
     _offset integer DEFAULT 0,
     _operation_type text DEFAULT NULL,
-    _investment_asset_type text DEFAULT NULL
+    _investment_asset_type text DEFAULT NULL,
+    _operation_ids bigint[] DEFAULT NULL,
+    _source_event_ids bigint[] DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -15,6 +22,7 @@ DECLARE
     _normalized_operation_type text;
     _normalized_investment_asset_type text;
     _family_id bigint;
+    _snapshot boolean := _operation_ids IS NOT NULL OR _source_event_ids IS NOT NULL;
 BEGIN
     SET search_path TO budgeting;
 
@@ -48,6 +56,7 @@ BEGIN
             'investment_trade',
             'investment_income',
             'investment_adjustment',
+            'investment_journal',
             'reversal',
             'cancelled'
         );
@@ -82,33 +91,12 @@ BEGIN
         WHERE (scoped_operation.owner_type = 'user' AND scoped_operation.owner_user_id = _user_id)
            OR (scoped_operation.owner_type = 'family' AND scoped_operation.owner_family_id = _family_id)
         GROUP BY am.operation_id
-    ), selected_operations AS (
-        SELECT
-            o.id,
-            o.type,
-            o.comment,
-            o.operated_on,
-            o.created_at,
-            o.reversal_of_operation_id,
-            o.actor_user_id,
-            actor.username AS actor_username,
-            o.owner_type,
-            o.owner_user_id,
-            o.owner_family_id,
-            EXISTS (
-                SELECT 1
-                FROM operations ro
-                WHERE ro.reversal_of_operation_id = o.id
-            ) AS has_reversal,
-            ins.name AS income_source_name,
-            count(*) OVER () AS total_count
+    ), live_operations AS (
+        SELECT o.id, o.operated_on, o.created_at
         FROM operations o
         LEFT JOIN account_visibility av ON av.operation_id = o.id
-        LEFT JOIN users actor
-          ON actor.id = o.actor_user_id
-        LEFT JOIN income_sources ins
-          ON ins.id = o.income_source_id
-        WHERE (
+        WHERE (NOT _snapshot OR COALESCE(o.id = ANY(_operation_ids), false))
+          AND (
                 (o.owner_type = 'user' AND o.owner_user_id = _user_id)
                 OR
                 (o.owner_type = 'family' AND o.owner_family_id = _family_id)
@@ -198,8 +186,107 @@ BEGIN
                       AND (cba_asset_filter.investment_asset_type = _normalized_investment_asset_type OR (_normalized_investment_asset_type = 'other' AND cba_asset_filter.investment_asset_type = 'currency'))
                 )
           )
-        ORDER BY o.operated_on DESC, o.created_at DESC, o.id DESC
+    ),
+    -- Manual journal events that wrote no operations row (DeFi fees, protocol
+    -- yield...). Item parameter edits are not financial operations.
+    journal_events AS (
+        SELECT
+            s.id,
+            COALESCE((s.evidence->>'requested_date')::date, (s.commands->0->'payload'->>'operated_at')::date, s.accounting_date) AS operated_on,
+            s.created_at,
+            s.created_by_user_id,
+            s.commands,
+            a.owner_type,
+            a.owner_user_id,
+            a.owner_family_id
+        FROM crypto_source_events s
+        JOIN bank_accounts a ON a.id = s.anchor_account_id
+        WHERE s.source_namespace IN ('manual-portfolio-v1', 'manual-collection-v1')
+          AND s.reversible
+          AND NOT a.is_archived
+          AND ((a.owner_type = 'user' AND a.owner_user_id = _user_id)
+               OR (a.owner_type = 'family' AND a.owner_family_id = _family_id))
+          AND (NOT _snapshot OR COALESCE(s.id = ANY(_source_event_ids), false))
+          AND NOT EXISTS (
+              SELECT 1 FROM crypto_source_event_links l
+              WHERE l.source_event_id = s.id AND l.ledger_table = 'operations')
+          AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements(s.commands) c
+              WHERE c->>'kind' <> 'collectible_details')
+          AND (
+                _normalized_operation_type IS NULL
+                OR _normalized_operation_type = 'investment'
+                OR (_normalized_operation_type NOT IN ('investment', 'banking', 'cancelled')
+                    AND 'investment_journal' = ANY(string_to_array(_normalized_operation_type, ',')))
+          )
+          AND (
+                _normalized_investment_asset_type IS NULL
+                OR a.investment_asset_type = _normalized_investment_asset_type
+                OR (_normalized_investment_asset_type = 'other' AND a.investment_asset_type = 'currency')
+          )
+    ),
+    -- Cancelled journal operations: filters were evaluated by this query before the rollback.
+    snapshots AS (
+        SELECT co.id, co.operated_on, co.created_at, co.item
+        FROM cancelled_operations co
+        WHERE NOT _snapshot
+          AND co.item IS NOT NULL
+          AND ((co.owner_type = 'user' AND co.owner_user_id = _user_id)
+               OR (co.owner_type = 'family' AND co.owner_family_id = _family_id))
+          AND (
+                _normalized_operation_type IS NULL
+                OR _normalized_operation_type = 'cancelled'
+                OR (_normalized_operation_type = 'investment' AND co.is_investment)
+                OR (_normalized_operation_type = 'banking' AND co.is_banking)
+                OR (_normalized_operation_type NOT IN ('investment', 'banking', 'cancelled')
+                    AND co.item->>'type' = ANY(string_to_array(_normalized_operation_type, ',')))
+          )
+          AND (_normalized_investment_asset_type IS NULL OR _normalized_investment_asset_type = ANY(co.asset_types))
+    ),
+    page AS (
+        SELECT
+            u.kind,
+            u.id,
+            row_number() OVER (ORDER BY u.operated_on DESC, u.created_at DESC, u.id DESC) AS ord,
+            count(*) OVER () AS total_count
+        FROM (
+            SELECT 'op'::text AS kind, id, operated_on, created_at FROM live_operations
+            UNION ALL
+            SELECT 'journal', id, operated_on, created_at FROM journal_events
+            UNION ALL
+            SELECT 'snapshot', id, operated_on, created_at FROM snapshots
+        ) u
+        ORDER BY u.operated_on DESC, u.created_at DESC, u.id DESC
         LIMIT _limit OFFSET _offset
+    ),
+    selected_operations AS (
+        SELECT
+            o.id,
+            o.type,
+            o.comment,
+            o.operated_on,
+            o.created_at,
+            o.reversal_of_operation_id,
+            o.actor_user_id,
+            actor.username AS actor_username,
+            o.owner_type,
+            o.owner_user_id,
+            o.owner_family_id,
+            EXISTS (
+                SELECT 1
+                FROM operations ro
+                WHERE ro.reversal_of_operation_id = o.id
+            ) AS has_reversal,
+            ins.name AS income_source_name,
+            p.ord,
+            p.total_count
+        FROM page p
+        JOIN operations o ON o.id = p.id
+        LEFT JOIN users actor
+          ON actor.id = o.actor_user_id
+        LEFT JOIN income_sources ins
+          ON ins.id = o.income_source_id
+        WHERE p.kind = 'op'
     ),
     fiat_bank_entries AS (
         SELECT
@@ -287,9 +374,22 @@ BEGIN
           ON so.id = bue.operation_id
         GROUP BY bue.operation_id
     ),
+    portfolio_event_targets AS (
+        SELECT 'op'::text AS kind, so.id AS target_id, pe.id AS event_id
+        FROM portfolio_events pe
+        JOIN selected_operations so
+          ON so.id = pe.linked_operation_id
+        UNION ALL
+        SELECT 'journal', p.id, l.ledger_id
+        FROM page p
+        JOIN crypto_source_event_links l
+          ON l.source_event_id = p.id AND l.ledger_table = 'portfolio_events'
+        WHERE p.kind = 'journal'
+    ),
     portfolio_event_agg AS (
         SELECT
-            pe.linked_operation_id AS operation_id,
+            t.kind,
+            t.target_id,
             jsonb_agg(
                 jsonb_build_object(
                     'id', pe.id,
@@ -314,16 +414,15 @@ BEGIN
                 )
                 ORDER BY pe.event_at, pe.id
             ) AS portfolio_events
-        FROM portfolio_events pe
+        FROM portfolio_event_targets t
+        JOIN portfolio_events pe
+          ON pe.id = t.event_id
         JOIN portfolio_positions pp
           ON pp.id = pe.position_id
         JOIN bank_accounts ba
           ON ba.id = pp.investment_account_id
-        JOIN selected_operations so
-          ON so.id = pe.linked_operation_id
-        WHERE pe.linked_operation_id IS NOT NULL
-          AND NOT ba.is_archived
-        GROUP BY pe.linked_operation_id
+        WHERE NOT ba.is_archived
+        GROUP BY t.kind, t.target_id
     ),
     items AS (
         SELECT
@@ -346,6 +445,7 @@ BEGIN
                 'budget_entries', COALESCE(bga.budget_entries, '[]'::jsonb),
                 'portfolio_events', COALESCE(pea.portfolio_events, '[]'::jsonb)
             ) AS item,
+            so.ord,
             so.total_count
         FROM selected_operations so
         LEFT JOIN bank_agg ba
@@ -353,11 +453,65 @@ BEGIN
         LEFT JOIN budget_agg bga
           ON bga.operation_id = so.id
         LEFT JOIN portfolio_event_agg pea
-          ON pea.operation_id = so.id
-        ORDER BY so.operated_on DESC, so.created_at DESC, so.id DESC
+          ON pea.kind = 'op' AND pea.target_id = so.id
+        UNION ALL
+        SELECT
+            jsonb_build_object(
+                'operation_id', NULL,
+                'source_event_id', je.id,
+                'type', 'investment_journal',
+                'comment', NULL,
+                'comment_is_system', false,
+                'operated_at', je.operated_on,
+                'created_at', je.created_at,
+                'reversal_of_operation_id', NULL,
+                'has_reversal', false,
+                'actor_user_id', je.created_by_user_id,
+                'actor_username', actor.username,
+                'owner_type', je.owner_type,
+                'owner_user_id', je.owner_user_id,
+                'owner_family_id', je.owner_family_id,
+                'income_source_name', NULL,
+                'bank_entries', '[]'::jsonb,
+                'budget_entries', '[]'::jsonb,
+                'portfolio_events', COALESCE(pea.portfolio_events, '[]'::jsonb),
+                'commands', (
+                    SELECT jsonb_agg(jsonb_build_object(
+                        'kind', c->>'kind',
+                        'context', COALESCE(cpp.protocol_name, pos.title, c->'payload'->>'title', ca.symbol)
+                    ) ORDER BY ord)
+                    FROM jsonb_array_elements(je.commands) WITH ORDINALITY v(c, ord)
+                    LEFT JOIN portfolio_positions pos
+                      ON pos.id = COALESCE(c->'payload'->>'source_position_id', c->'payload'->>'position_id')::bigint
+                     AND c->>'kind' NOT IN ('borrow', 'repay', 'liquidate', 'accrue_interest', 'protocol_yield',
+                         'close_protocol', 'partial_close_protocol', 'top_up_protocol', 'group_lending',
+                         'lp_snapshot', 'lp_withdraw', 'lp_reward')
+                    LEFT JOIN crypto_protocol_positions cpp
+                      ON cpp.id = (c->'payload'->>'position_id')::bigint
+                     AND c->>'kind' IN ('borrow', 'repay', 'liquidate', 'accrue_interest', 'protocol_yield',
+                         'close_protocol', 'partial_close_protocol', 'top_up_protocol', 'group_lending',
+                         'lp_snapshot', 'lp_withdraw', 'lp_reward')
+                    LEFT JOIN crypto_assets ca
+                      ON ca.id = COALESCE(c->'payload'->>'crypto_asset_id', c->'payload'->>'to_crypto_asset_id')::bigint
+                )
+            ),
+            p.ord,
+            p.total_count
+        FROM page p
+        JOIN journal_events je ON je.id = p.id
+        LEFT JOIN users actor ON actor.id = je.created_by_user_id
+        LEFT JOIN portfolio_event_agg pea
+          ON pea.kind = 'journal' AND pea.target_id = je.id
+        WHERE p.kind = 'journal'
+        UNION ALL
+        -- Read-time flags: older snapshots never need a rewrite.
+        SELECT sn.item || jsonb_build_object('has_reversal', true, 'is_cancelled', true), p.ord, p.total_count
+        FROM page p
+        JOIN snapshots sn ON sn.id = p.id
+        WHERE p.kind = 'snapshot'
     )
     SELECT jsonb_build_object(
-        'items',       COALESCE((SELECT jsonb_agg(item) FROM items), '[]'::jsonb),
+        'items',       COALESCE((SELECT jsonb_agg(item ORDER BY ord) FROM items), '[]'::jsonb),
         'total_count', COALESCE((SELECT total_count FROM items LIMIT 1), 0),
         'limit',       _limit,
         'offset',      _offset

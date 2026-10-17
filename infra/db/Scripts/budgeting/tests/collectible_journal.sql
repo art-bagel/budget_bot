@@ -105,15 +105,14 @@ BEGIN
    jsonb_build_object('investment_account_id',coll,'title','History item','quantity',1,
      'amount_in_currency',1000,'currency_code','RUB','metadata','{"item_kind":"physical"}'::jsonb),current_date);
  sid:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
- -- Every deletable source is listed, newest posting first, with both dates.
+ -- Both manual operations are listed in the ordinary history, by operation date.
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_receive',
    jsonb_build_object('investment_account_id',coll,'title','Free item','quantity',1,
      'metadata','{"item_kind":"physical"}'::jsonb),current_date-3);
- history:=get__crypto_correction_history(uid,coll);
- ASSERT jsonb_array_length(history)=2,'all manual sources listed';
- ASSERT (history->1->>'id')::bigint=sid,'purchase listed after the later posting';
- ASSERT history->1->>'context'='History item','collection item title available';
- ASSERT (history->0->>'accounting_date')::date=current_date-3 AND (history->0->>'posted_on')::date>=current_date,'operation and posting dates';
- ASSERT get__crypto_correction_history(uid,other_coll)='[]'::jsonb,'selected collection isolated';
+ history:=get__operations_history(uid,20,0,'investment','collectible')->'items';
+ ASSERT (SELECT count(*) FROM jsonb_array_elements(history) i WHERE jsonb_array_length(i->'portfolio_events')>0)=2,
+  'both manual operations listed: '||history::text;
+ ASSERT history->0->'portfolio_events'->0->>'position_title'='History item','collection item title available';
+ ASSERT (history->-1->>'operated_at')::date=current_date-3,'operation date kept, sorted by it';
 END $$;
 ROLLBACK;

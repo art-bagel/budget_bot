@@ -51,7 +51,7 @@ BEGIN
  ASSERT err LIKE 'Нет доступа%','foreign retry denied: '||err;
  BEGIN PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid()); RAISE EXCEPTION 'second delete passed';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err='Операция не найдена','already deleted: '||err;
+ ASSERT err='Операция уже отменена','already deleted: '||err;
  -- Tombstone: a late retry of the deleted request does not post again.
  BEGIN PERFORM put__manual_collectible_movement(uid,close_req,'collectible_fiat_close',pay,current_date); RAISE EXCEPTION 'tombstone passed';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
@@ -72,7 +72,7 @@ BEGIN
  before:=get__crypto_correction_state(coll);
  BEGIN PERFORM put__delete_crypto_source(uid,sid_b,gen_random_uuid()); RAISE EXCEPTION 'dependent delete passed';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err LIKE 'Сначала удалите более поздние операции%collectible_sell%','blocker named: '||err;
+ ASSERT err LIKE 'Сначала отмените более поздние операции%collectible_sell%','blocker named: '||err;
  ASSERT get__crypto_correction_state(coll)=before,'blocked delete changes nothing';
  PERFORM put__delete_crypto_source(uid,sid_sell,gen_random_uuid());
  PERFORM put__delete_crypto_source(uid,sid_b,gen_random_uuid());
@@ -94,7 +94,7 @@ BEGIN
  UPDATE portfolio_positions SET metadata=metadata||'{"outside":true}' WHERE id=pos;
  BEGIN PERFORM put__delete_crypto_source(uid,sid_d,gen_random_uuid()); RAISE EXCEPTION 'outside write ignored';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err LIKE 'После этой операции предмет или позиция изменён другой операцией%','outside write: '||err;
+ ASSERT err LIKE 'Не отменить: после этой операции предмет или позиция изменён другой операцией%','outside write: '||err;
  ASSERT EXISTS(SELECT 1 FROM crypto_source_events WHERE id=sid_d),'blocked source kept';
  UPDATE portfolio_positions SET metadata=metadata-'outside' WHERE id=pos;
  -- A row outside the journal that hangs off the item would vanish by cascade.
@@ -114,7 +114,7 @@ BEGIN
  r:=put__transfer_between_accounts(uid,coll,bank,'RUB',10);
  BEGIN PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid()); RAISE EXCEPTION 'spent money ignored';
  EXCEPTION WHEN raise_exception THEN GET STACKED DIAGNOSTICS err=MESSAGE_TEXT; END;
- ASSERT err LIKE 'После этой операции остаток денег на счёте изменён%','spent money: '||err;
+ ASSERT err LIKE 'Не отменить: после этой операции остаток денег на счёте изменён%','spent money: '||err;
  PERFORM put__reverse_operation(uid,(r->>'operation_id')::bigint);
  PERFORM put__delete_crypto_source(uid,sid,gen_random_uuid());
  ASSERT COALESCE((SELECT amount FROM current_bank_balances WHERE bank_account_id=coll AND currency_code='RUB'),0)=0,'sale undone after the transfer was reversed';
