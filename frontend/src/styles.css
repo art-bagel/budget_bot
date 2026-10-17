@@ -5341,6 +5341,7 @@ button.op-row {
   text-align: left;
 }
 .op-row:hover { background: var(--surface-inset); }
+button.op-row:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: -2px; }
 [data-theme='dark'] .op-row:hover { background: var(--surface-2); }
 .op-row:last-child { border-bottom: 0; }
 
@@ -11812,10 +11813,14 @@ button.op-row {
 .op-sheet__head--cancelled .op-sheet__amt {
   text-decoration: line-through;
   text-decoration-thickness: 2px;
-  color: var(--text-3);
+  /* --text-3 fails AA contrast; the strike and the tag already say "cancelled". */
+  color: var(--text-2);
 }
 .op-sheet__sub { white-space: normal; color: var(--text-2); }
+/* The sheet has room: long category and account names wrap instead of ellipsis. */
+.op-sheet .op-detail__name { white-space: normal; overflow-wrap: anywhere; }
 .op-sheet__reason { font-size: 12.5px; font-weight: 500; color: var(--text-2); line-height: 1.45; }
+.op-sheet__confirm { font-size: 14px; font-weight: 600; color: var(--text); }
 
 /* Portfolio operations: long crypto amounts must not squeeze titles to a few letters */
 .pf-view .op-row__top { align-items: flex-start; }

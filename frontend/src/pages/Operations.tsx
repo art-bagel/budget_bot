@@ -768,7 +768,7 @@ function OperationDetailSheet({ item, onClose, onCancelled }: {
         <p className="op-sheet__reason" role="status">{readableCancelReason(check.reason ?? 'Эту операцию нельзя отменить')}</p>
       ) : confirming ? (
         <>
-          <p className="op-sheet__reason" role="status">Отменить операцию? Балансы вернутся к состоянию до неё.</p>
+          <p className="op-sheet__reason op-sheet__confirm" role="status">Отменить операцию? Балансы вернутся к состоянию до неё.</p>
           <div className="tk-foot__row">
             <button className="sh-btn sh-btn--ghost" type="button" disabled={busy} onClick={() => setConfirming(false)}>Назад</button>
             <button className="sh-btn sh-btn--danger" type="button" disabled={busy} onClick={() => void cancel()}>
