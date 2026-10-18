@@ -3810,7 +3810,7 @@ select.dlg-row__ghost option {
 
 .dlg-error {
   font-size: 13px;
-  color: var(--neg);
+  color: var(--neg-text);
   padding: 0 4px;
 }
 
@@ -5207,7 +5207,7 @@ select.dlg-row__ghost option {
 }
 
 .ana-cat__ops-note--error {
-  color: var(--neg);
+  color: var(--neg-text);
 }
 
 .ana-op {
@@ -7405,7 +7405,7 @@ select.dlg-row__ghost option {
 
 .apf-error {
   font-size: 13px;
-  color: var(--neg);
+  color: var(--neg-text);
   font-weight: 500;
 }
 
@@ -9173,7 +9173,7 @@ select.dlg-row__ghost option {
   margin: 0;
   padding: 10px 12px;
   background: var(--neg-bg);
-  color: var(--neg);
+  color: var(--neg-text);
   border-radius: var(--r-md);
   font-size: 12.5px;
   border-left: 3px solid var(--neg);
@@ -9442,7 +9442,7 @@ select.dlg-row__ghost option {
 
 .fx__error {
   margin: 8px 4px 0;
-  color: var(--neg);
+  color: var(--neg-text);
   font-size: 12.5px;
   font-weight: 500;
 }
@@ -10035,7 +10035,7 @@ select.dlg-row__ghost option {
 .settings-page .danger-card__error {
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--neg);
+  color: var(--neg-text);
   margin-top: 6px;
 }
 .settings-page .danger-card__action {
@@ -10775,7 +10775,7 @@ select.dlg-row__ghost option {
   padding: 10px 12px;
   background: var(--neg-bg);
   border-radius: var(--r-sm);
-  color: var(--neg);
+  color: var(--neg-text);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.4;
@@ -11103,7 +11103,7 @@ select.dlg-row__ghost option {
   background: var(--neg-bg);
   border-radius: 8px;
   font-size: 11.5px;
-  color: var(--neg);
+  color: var(--neg-text);
   line-height: 1.4;
   font-weight: 500;
   margin: 0;
