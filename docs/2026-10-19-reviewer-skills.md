@@ -42,3 +42,5 @@
 ## Откат
 
 `git revert` коммита.
+
+`scripts/check.sh` (полный) — GREEN, 19.10.2026.
