@@ -43,8 +43,8 @@
   легаси-токены `--text-tertiary` и др. (контраст 2.7:1), `.dlg-error` на
   `--neg`, тема `system` не слушает `colorScheme` Telegram, axe на Портфеле,
   Операциях, Настройках и шторках.
-- [ ] **Скиллы ревьюеров** `.claude/skills/plan-review`, `impl-review`,
-  `ui-review` (S) — чек-листы из AGENTS.md, чтобы ревью было одинаковым.
+- [x] **Скиллы ревьюеров** `.claude/skills/plan-review`, `impl-review`,
+  `ui-review` — 2026-10-19 ([отчёт](2026-10-19-reviewer-skills.md)).
 
 ## P3 — отмена операций: хвосты
 
