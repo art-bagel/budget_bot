@@ -41,3 +41,15 @@ CORS-источников. Это лишние сведения о конфиг�
 `git revert` коммита. Миграций нет.
 
 `scripts/check.sh` (полный) — GREEN, 19.10.2026.
+
+## Деплой
+
+19.10.2026 владелец дал аппрув. `2291a0d` запушен в `main` fast-forward
+(`99d881e..2291a0d`, вместе с записью о деплое дизайн-справочника и правками
+бэклога), [CI #407](https://github.com/art-bagel/budget_bot/actions/runs/39173152890):
+`Verify Project` и `Deploy To Server` — успешно с первой попытки.
+
+Проверено (readonly): контейнеры `budget_bot_api` и `budget_bot_web`
+пересозданы в 22:43 UTC 18.10 по часам хоста; `/health` отвечает
+`{"status":"ok"}` из контейнера API, через nginx и снаружи
+(`budget.mrbagel.ru/health`); ошибок в логах API нет.
