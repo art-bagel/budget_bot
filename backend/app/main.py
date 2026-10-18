@@ -77,10 +77,7 @@ async def postgres_exception_handler(_request: Request, exc: asyncpg.PostgresErr
     return PlainTextResponse('Внутренняя ошибка сервера', status_code=500)
 
 
+# Public liveness probe (nginx, CI, uptime checks): it must not reveal config.
 @app.get('/health')
 async def healthcheck() -> dict:
-    return {
-        'status': 'ok',
-        'schema': settings.db_schema,
-        'frontend_origins': settings.frontend_origins,
-    }
+    return {'status': 'ok'}

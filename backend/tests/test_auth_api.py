@@ -89,6 +89,10 @@ def main() -> None:
     with TestClient(app) as client:
         cleanup(client)
 
+        # 0. /health открыт без авторизации и не раскрывает конфигурацию.
+        response = client.get('/health')
+        assert response.status_code == 200 and response.json() == {'status': 'ok'}, response.text
+
         # 1. Регистрация по email закрыта без кода-приглашения.
         signup_body = {'email': EMAIL, 'password': PASSWORD, 'base_currency_code': 'RUB'}
         response = client.post('/api/v1/auth/signup', json=signup_body)
