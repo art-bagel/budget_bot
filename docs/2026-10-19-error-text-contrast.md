@@ -47,3 +47,15 @@ WCAG требуют 3:1, справочник оставляет им `--neg`.
 `git revert` коммитов ветки.
 
 `scripts/check.sh` (полный) — GREEN, 19.10.2026.
+
+## Деплой
+
+19.10.2026 владелец дал аппрув. `380243b` запушен в `main` fast-forward
+(`d5dd950..380243b`, вместе с записью о деплое скиллов ревьюеров),
+[CI #409](https://github.com/art-bagel/budget_bot/actions/runs/39213476858) —
+успешно с первой попытки.
+
+Проверено на хосте (readonly): код `380243b`, `budget_bot_api` и
+`budget_bot_web` пересозданы в 07:07 UTC, перезапусков 0; в CSS сборки
+`.dlg-error{…color:var(--neg-text)…}`; `/health` — `{"status":"ok"}` изнутри
+и снаружи; ошибок в логах API нет.
