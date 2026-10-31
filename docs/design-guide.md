@@ -107,7 +107,9 @@
   сумма hero — −.045em).
 - Суммы — `Intl.NumberFormat('ru-RU')`: пробел-разделитель тысяч, запятая в
   дробях (`formatNumericAmount`, `formatAmount` в `frontend/src/utils/format.ts`).
-  Символ валюты — `currencySymbol`, после суммы через пробел.
+  Символ валюты — `currencySymbol`, после суммы через пробел. Число знаков —
+  по валюте (`currencyFractionDigits`): у донга (₫) дробей нет. Курсы меньше
+  1 — `formatRate` (4 значащие цифры, «0,003142»).
 
 ## 2. Темы
 
@@ -253,6 +255,11 @@
   ломается (`docs/2026-10-16-decimal-comma.md`; тест
   `frontend/tests/decimalInput.test.ts`). Показ сумм — с запятой через
   `Intl` (раздел 1).
+- **Валюта без дробей (VND).** Точка и запятая перед тремя цифрами —
+  разделитель тысяч: в поле остаётся «2.435.060», при уходе с поля — «2435060».
+  Дробь вроде «12.5» — ошибка формы «Сумма в VND — без дробной части,
+  например 45000». Как подключить поле — `DEVELOPMENT_GUIDELINES.md` §8
+  (`docs/2026-10-31-vnd-currency.md`).
 - **Пикеры:** валюта — `CurrencyPicker` (выпадающий список `.cur-drop` с
   группами), иконка категории — `EmojiPicker` (`.emoji-picker`, эмодзи и
   SVG-иконки `CategorySvgIcon`), источник дохода — чипы в `IncomeDialog`.
