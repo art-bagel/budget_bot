@@ -56,7 +56,7 @@ export const test = base.extend<{ consoleErrors: string[] }>({
             source: 'cbr',
             rate_date: '2026-01-20',
             fetched_at: '2026-01-20T09:00:00+00:00',
-            rub_per_unit: { RUB: 1, USD: 90, EUR: 100 },
+            rub_per_unit: { RUB: 1, USD: 90, EUR: 100, VND: 0.00314223 },
           },
         }),
       );
