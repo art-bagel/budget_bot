@@ -22,7 +22,10 @@ test('whole-unit amounts resolve thousands and refuse fractions', () => {
   assert.equal(normalizeAmountInput('45000.00', 0), '45000');
   assert.equal(normalizeAmountInput('45,00', 0), '45');
   assert.equal(normalizeAmountInput('45000', 0), '45000');
-  for (const ambiguous of ['12.5', '2.435060', '1.000,50', '']) {
+  assert.equal(normalizeAmountInput('45.0', 0), '45');
+  // More than two zeros after four digits is a misplaced group, not a fraction:
+  // "1.000000" lost a dot of "1.000.000", "1,000.000" mixes separators.
+  for (const ambiguous of ['12.5', '2.435060', '1.000,50', '', '1000.000', '1.000000', '1.000,000']) {
     assert.equal(normalizeAmountInput(ambiguous, 0), null, ambiguous);
   }
   assert.equal(canonicalAmountInput('45.000', 0), '45000');

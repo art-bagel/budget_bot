@@ -20,15 +20,16 @@ export function sanitizeDecimalInput(value: string, fractionDigits?: number): st
 
 /**
  * Resolves an amount field's text for its currency, or null when ambiguous.
- * Whole-unit currencies: "2.435.060" and "45,000" group thousands, "45000.00"
- * drops a zero fraction, anything else ("12.5") is refused. Currencies with
+ * Whole-unit currencies: "2.435.060" and "45,000" group thousands with one
+ * separator, "45000.00" drops a zero fraction of up to two digits, anything
+ * else ("12.5", "1000.000", "1.000000") is refused. Currencies with
  * kopecks keep their text unless it has several separators, which only a
  * whole-unit entry left behind after a currency switch.
  */
 export function normalizeAmountInput(text: string, fractionDigits: number): string | null {
   if (fractionDigits > 0) return (text.match(/[.,]/g) ?? []).length > 1 ? null : text.replace(',', '.');
-  if (/^\d{1,3}([.,]\d{3})+$/.test(text)) return text.replace(/[.,]/g, '');
-  return /^(\d+)([.,]0*)?$/.exec(text)?.[1] ?? null;
+  if (/^\d{1,3}([.,])\d{3}(\1\d{3})*$/.test(text)) return text.replace(/[.,]/g, '');
+  return /^(\d+)([.,]0{0,2})?$/.exec(text)?.[1] ?? null;
 }
 
 /** Blur fixes a whole-unit entry to plain digits ("45.000" → "45000") before any currency switch. */
