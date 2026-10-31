@@ -6,6 +6,8 @@ import {
   receiptDateForExpense,
   receiptExpenseAmount,
   receiptItemsDiff,
+  receiptRowsReady,
+  receiptRowsTotal,
   replaceReceiptBlock,
 } from '../src/utils/receiptScan.ts';
 
@@ -24,13 +26,32 @@ test('items diff is exact across scales and signs', () => {
   assert.equal(receiptItemsDiff('99.99', []), '99.99');
 });
 
-test('expense amount is the total minus removed rows', () => {
-  assert.equal(receiptExpenseAmount('144.80', []), '144.80');
-  assert.equal(receiptExpenseAmount('144.80', [milk]), '54.9');
-  assert.equal(receiptExpenseAmount('144.80', [discount]), '154.8');
-  assert.equal(receiptExpenseAmount(null, []), null);
-  assert.equal(receiptExpenseAmount('50', [milk]), null, 'nothing left to spend');
-  assert.equal(receiptExpenseAmount('89.9', [milk]), null);
+test('total is the sum of the current rows, keeping cents', () => {
+  assert.equal(receiptRowsTotal([bread, milk]), '144.80');
+  assert.equal(receiptRowsTotal([bread, { ...milk, amount: '100' }]), '154.90', 'edited amount');
+  assert.equal(receiptRowsTotal([bread]), '54.90', 'removed row');
+  assert.equal(receiptRowsTotal([bread, milk, discount]), '134.80', 'discount keeps its sign');
+  assert.equal(receiptRowsTotal([{ ...bread, amount: '1250000' }, { ...milk, amount: '2' }]), '1250002');
+  assert.equal(receiptRowsTotal([bread, { ...milk, amount: '' }, { ...milk, amount: '12.' }]), '54.90', 'unfinished rows skipped');
+  assert.equal(receiptRowsTotal([]), '0');
+  assert.equal(receiptRowsTotal([discount]), '-10');
+});
+
+test('rows are ready when every row has a name and an amount', () => {
+  assert.equal(receiptRowsReady([bread, milk, discount]), true);
+  assert.equal(receiptRowsReady([]), true);
+  assert.equal(receiptRowsReady([bread, { name_ru: '  ', amount: '5' }]), false, 'no name');
+  for (const amount of ['', '12.', '.5', '1,5', 'abc']) {
+    assert.equal(receiptRowsReady([{ name_ru: 'Сыр', amount }]), false, `amount ${JSON.stringify(amount)}`);
+  }
+});
+
+test('expense amount is the total when it is above zero', () => {
+  assert.equal(receiptExpenseAmount('144.80'), '144.80');
+  assert.equal(receiptExpenseAmount('0'), null);
+  assert.equal(receiptExpenseAmount('0.00'), null);
+  assert.equal(receiptExpenseAmount('-10'), null);
+  assert.equal(receiptExpenseAmount(null), null);
 });
 
 test('comment lists Russian names with comma amounts', () => {

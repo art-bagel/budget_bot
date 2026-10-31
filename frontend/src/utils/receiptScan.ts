@@ -21,8 +21,8 @@ function parse(value: string): { units: bigint; scale: number } {
   return { units: BigInt(sign + whole + fraction), scale: fraction.length };
 }
 
-/** a + Σ sign·b over the values, exactly, as a plain decimal without trailing zeros. */
-function sum(values: string[], signs: number[]): string {
+/** Σ sign·value, exactly; trailing zeros are trimmed unless keepScale (a total shows cents). */
+function sum(values: string[], signs: number[], keepScale = false): string {
   const parsed = values.map(parse);
   const scale = Math.max(0, ...parsed.map((p) => p.scale));
   let units = 0n;
@@ -32,9 +32,13 @@ function sum(values: string[], signs: number[]): string {
   const negative = units < 0n;
   const digits = (negative ? -units : units).toString().padStart(scale + 1, '0');
   const whole = digits.slice(0, digits.length - scale);
-  const fraction = digits.slice(digits.length - scale).replace(/0+$/, '');
+  const fraction = keepScale ? digits.slice(digits.length - scale) : digits.slice(digits.length - scale).replace(/0+$/, '');
   const text = fraction ? `${whole}.${fraction}` : whole;
-  return negative && text !== '0' ? `-${text}` : text;
+  return negative && /[1-9]/.test(text) ? `-${text}` : text;
+}
+
+function isAmount(value: string): boolean {
+  return DECIMAL.test(value.trim());
 }
 
 /** Total minus the sum of items: "0" when the receipt adds up. */
@@ -42,12 +46,20 @@ export function receiptItemsDiff(total: string, items: Amount[]): string {
   return sum([total, ...items.map((i) => i.amount)], [1, ...items.map(() => -1)]);
 }
 
-/** What goes into the expense amount: the total minus removed rows, or null when there is nothing to fill. */
-export function receiptExpenseAmount(total: string | null, removed: Amount[]): string | null {
-  if (total === null) return null;
-  if (removed.length === 0) return total;
-  const rest = receiptItemsDiff(total, removed);
-  return rest.startsWith('-') || rest === '0' ? null : rest;
+/** Sum of the rows as they are now (edited, removed, added); rows still being typed are skipped. */
+export function receiptRowsTotal(rows: Amount[]): string {
+  const amounts = rows.map((row) => row.amount).filter(isAmount);
+  return sum(amounts, amounts.map(() => 1), true);
+}
+
+/** Every row has a name and a finished amount, so the comment and total can be applied. */
+export function receiptRowsReady(rows: NamedAmount[]): boolean {
+  return rows.every((row) => row.name_ru.trim() !== '' && isAmount(row.amount));
+}
+
+/** What goes into the expense amount: the total if it is above zero. */
+export function receiptExpenseAmount(total: string | null): string | null {
+  return total !== null && !total.startsWith('-') && /[1-9]/.test(total) ? total : null;
 }
 
 /** 1250000 → "1 250 000", -10 → "−10", 54.90 → "54,90" (digits as printed). */

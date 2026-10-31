@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import BottomSheet from './BottomSheet';
@@ -12,7 +12,10 @@ import {
   receiptDateForExpense,
   receiptExpenseAmount,
   receiptItemsDiff,
+  receiptRowsReady,
+  receiptRowsTotal,
 } from '../utils/receiptScan';
+import { sanitizeDecimalInput } from '../utils/validation';
 
 export interface ReceiptApplyResult {
   /** Only set when the currency was recognised and the account has it. */
@@ -27,6 +30,27 @@ interface Props {
   availableCurrencies: string[];
   onApply: (result: ReceiptApplyResult) => void;
   onClose: () => void;
+}
+
+/** A line of the list as the user edits it. */
+interface Row {
+  key: number;
+  /** The printed text, kept only when the model translated it into something else. */
+  original: string | null;
+  name: string;
+  /** Absolute value as typed; the iOS decimal keypad has no minus, so the sign lives apart. */
+  amount: string;
+  negative: boolean;
+}
+
+function rowsFromScan(scan: ReceiptScan): Row[] {
+  return scan.items.map((item, index) => ({
+    key: index,
+    original: item.name !== item.name_ru ? item.name : null,
+    name: item.name_ru,
+    amount: item.amount.replace(/^-/, ''),
+    negative: item.amount.startsWith('-'),
+  }));
 }
 
 type Step =
@@ -77,8 +101,9 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
   const abortRef = useRef<AbortController | null>(null);
   const [step, setStep] = useState<Step>({ kind: 'pick' });
   const [preview, setPreview] = useState<string | null>(null);
-  const [names, setNames] = useState<string[]>([]);
-  const [removed, setRemoved] = useState<Set<number>>(() => new Set());
+  const [rows, setRows] = useState<Row[]>([]);
+  const nextKeyRef = useRef(0);
+  const [focusKey, setFocusKey] = useState<number | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -117,8 +142,8 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     try {
       const scan = await scanReceipt(photo, controller.signal);
       if (controller.signal.aborted) return;
-      setNames(scan.items.map((item) => item.name_ru));
-      setRemoved(new Set());
+      setRows(rowsFromScan(scan));
+      nextKeyRef.current = scan.items.length;
       setStep({ kind: 'result', scan });
     } catch (reason) {
       if (controller.signal.aborted) return;
@@ -133,43 +158,61 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
 
   const scan = step.kind === 'result' ? step.scan : null;
   const isEmpty = scan !== null && scan.total === null && scan.items.length === 0;
-  const kept = scan
-    ? scan.items
-      .map((item, index) => ({ ...item, name_ru: names[index]?.trim() || item.name_ru, index }))
-      .filter((item) => !removed.has(item.index))
-    : [];
+  const signed = rows.map((row) => ({
+    name_ru: row.name.trim(),
+    amount: row.amount === '' ? '' : `${row.negative ? '-' : ''}${row.amount}`,
+  }));
   // Rows keep their fields across scans («Другое фото»), so every scan refits them all.
   const listRef = useRef<HTMLUListElement>(null);
   useLayoutEffect(() => {
     if (scan) listRef.current?.querySelectorAll('textarea').forEach(fitHeight);
   }, [scan]);
-  const removedItems = scan ? scan.items.filter((_, index) => removed.has(index)) : [];
-  const amount = scan ? receiptExpenseAmount(scan.total, removedItems) : null;
+  useEffect(() => {
+    if (focusKey === null) return;
+    listRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-key="${focusKey}"]`)?.focus();
+    setFocusKey(null);
+  }, [focusKey]);
+
+  // The total is the rows as they are now; the printed one only stays while the
+  // model found no lines at all (a terminal screen) and none were added by hand.
+  const usesPrintedTotal = scan !== null && scan.items.length === 0 && rows.length === 0;
+  const total = scan ? (usesPrintedTotal ? scan.total : receiptRowsTotal(signed)) : null;
+  const ready = receiptRowsReady(signed);
+  const amount = receiptExpenseAmount(total);
   const currencyOk = Boolean(scan?.currency && availableCurrencies.includes(scan.currency));
   const date = scan ? receiptDateForExpense(scan.date, localToday()) : null;
 
   const hints: string[] = [];
   if (scan && !isEmpty) {
-    if (scan.total === null) hints.push('Итог не найден — введите сумму вручную.');
-    else if (!scan.currency) hints.push('Валюта не распознана — введите сумму вручную.');
+    // total is null only for an empty scan, which has its own state above.
+    if (!scan.currency) hints.push('Валюта не распознана — введите сумму вручную.');
     else if (!currencyOk) hints.push(`На выбранном счёте нет ${scan.currency} — введите сумму вручную.`);
-    else if (amount === null) hints.push('Удалённые позиции стоят не меньше итога — введите сумму вручную.');
+    else if (amount === null) hints.push('Итог должен быть больше нуля — введите сумму вручную.');
     if (scan.date && date === null) hints.push(`Дата на чеке ${formatDate(scan.date)} — проверьте.`);
-    if (scan.items.length === 0) hints.push('Позиции не найдены — подставим только сумму.');
+    if (usesPrintedTotal) hints.push('Позиции не найдены — подставим итог с чека.');
   }
-  const diff = scan?.total && scan.items.length > 0 ? receiptItemsDiff(scan.total, scan.items) : '0';
-  const diffText = diff === '0'
-    ? null
-    : `Сумма позиций на ${displayReceiptAmount(diff.replace('-', ''))} ${diff.startsWith('-') ? 'больше' : 'меньше'} итога.`;
+  // The printed total stays as a reference: a misread line or a store's rounding shows up here.
+  const printedNote = scan?.total && total !== null && !usesPrintedTotal && receiptItemsDiff(scan.total, [{ amount: total }]) !== '0'
+    ? `Итог на чеке: ${displayReceiptAmount(scan.total)}.`
+    : null;
   const meta = scan ? [scan.merchant, date ? formatDate(date) : null].filter(Boolean).join(' · ') : '';
 
+  const updateRow = (key: number, change: Partial<Row>) =>
+    setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...change } : row)));
+  const addRow = () => {
+    const key = nextKeyRef.current;
+    nextKeyRef.current += 1;
+    setRows((prev) => [...prev, { key, original: null, name: '', amount: '', negative: false }]);
+    setFocusKey(key);
+  };
+
   const apply = () => {
-    if (!scan) return;
+    if (!scan || !ready) return;
     onApply({
       amount: currencyOk ? amount : null,
       currency: currencyOk ? scan.currency : null,
       date,
-      comment: buildReceiptComment(scan.merchant, kept),
+      comment: buildReceiptComment(scan.merchant, signed),
     });
   };
 
@@ -187,7 +230,7 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     actions = (
       <>
         <button className="sh-btn sh-btn--ghost" type="button" onClick={pickPhoto}>Другое фото</button>
-        <button className="sh-btn sh-btn--primary" type="button" onClick={apply}>Подставить</button>
+        <button className="sh-btn sh-btn--primary" type="button" onClick={apply} disabled={!ready}>Подставить</button>
       </>
     );
   } else {
@@ -232,43 +275,55 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
         {scan && !isEmpty && (
           <>
             <div ref={lead} tabIndex={-1} className="sheet-stat">
-              <span className="sheet-stat__tag">Итог по чеку</span>
+              <span className="sheet-stat__tag">Итог</span>
               <div className="sheet-stat__num">
-                <span className="sheet-stat__val">{scan.total ? displayReceiptAmount(scan.total) : '—'}</span>
+                <span className="sheet-stat__val">{total !== null ? displayReceiptAmount(total) : '—'}</span>
                 {scan.currency && <span className="sheet-stat__sym">{scan.currency}</span>}
               </div>
             </div>
             {meta && <p className="rcpt-note">{meta}</p>}
             {hints.map((hint) => <p className="rcpt-note" key={hint}>{hint}</p>)}
             {/* Above the list, not under it: after 30 rows it would be off screen. */}
-            {diffText && <p className="rcpt-note">{diffText}</p>}
-            {kept.length > 0 && (
+            {printedNote && <p className="rcpt-note">{printedNote}</p>}
+            {rows.length > 0 && (
               <ul ref={listRef} className="rcpt-list" aria-label="Позиции чека">
-                {kept.map((item) => (
-                  <li className="rcpt-row" key={item.index}>
+                {rows.map((row, position) => (
+                  <li className="rcpt-row" key={row.key}>
                     <div className="rcpt-row__names">
                       <textarea
                         className="inp-v2 rcpt-row__name"
                         rows={1}
-                        value={names[item.index] ?? ''}
-                        aria-label={`Название позиции ${item.index + 1}`}
+                        data-key={row.key}
+                        value={row.name}
+                        placeholder="Название"
+                        aria-label={`Название позиции ${position + 1}`}
                         onChange={(event) => {
                           const field = event.target;
                           // One line in the comment: Enter or a pasted line break becomes a space.
                           if (/[\r\n]/.test(field.value)) field.value = field.value.replace(/[\r\n]+/g, ' ');
                           fitHeight(field);
-                          const value = field.value;
-                          setNames((prev) => prev.map((name, index) => (index === item.index ? value : name)));
+                          updateRow(row.key, { name: field.value });
                         }}
                       />
-                      {item.name !== scan.items[item.index].name_ru && <span className="rcpt-row__orig">{item.name}</span>}
+                      {row.original && <span className="rcpt-row__orig">{row.original}</span>}
                     </div>
-                    <span className="rcpt-row__amt">{displayReceiptAmount(item.amount)}</span>
+                    <div className="rcpt-row__amt">
+                      {row.negative && <span className="rcpt-row__sign" aria-hidden="true">−</span>}
+                      <input
+                        className="inp-v2 rcpt-row__amt-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={row.amount}
+                        aria-label={`Сумма позиции ${position + 1}${row.negative ? ', скидка' : ''}`}
+                        onChange={(event) => updateRow(row.key, { amount: sanitizeDecimalInput(event.target.value) })}
+                      />
+                    </div>
                     <button
                       className="rcpt-row__del"
                       type="button"
-                      aria-label={`Удалить позицию «${item.name_ru}»`}
-                      onClick={() => setRemoved((prev) => new Set(prev).add(item.index))}
+                      aria-label={`Удалить позицию «${row.name.trim() || 'без названия'}»`}
+                      onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
                     >
                       <X size={16} aria-hidden="true" />
                     </button>
@@ -276,6 +331,11 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
                 ))}
               </ul>
             )}
+            <button type="button" className="dlg-tag-btn rcpt-add" onClick={addRow}>
+              <Plus size={14} aria-hidden="true" />
+              Добавить позицию
+            </button>
+            {!ready && <p className="rcpt-note">Заполните название и сумму у каждой позиции.</p>}
           </>
         )}
       </div>

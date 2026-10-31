@@ -103,7 +103,7 @@ test('a scanned receipt fills the expense form and lands in history', async ({ p
   await expect(sheet).toBeHidden();
 
   const form = page.getByRole('dialog', { name: 'Продукты' });
-  await expect(form.getByPlaceholder('0')).toHaveValue('144.8');
+  await expect(form.getByPlaceholder('0')).toHaveValue('144.80');
   await expect(form.locator('input[type="date"]')).toHaveValue(yesterday);
   const comment = form.getByPlaceholder('Необязательно');
   await expect(comment).toHaveValue('Лавка у дома: Хлеб бородинский 54,90; Молоко 89,90');
@@ -170,16 +170,9 @@ test('amount is filled only for a recognised currency the account has', async ({
 
   // ...and a second one that cannot fill them takes them back instead of mixing.
   await form.getByRole('button', { name: 'Распознать чек' }).click();
-  const cases: [object, string][] = [
-    [{ ...RECEIPT, currency: null }, 'Валюта не распознана — введите сумму вручную.'],
-    [{ ...RECEIPT, total: null, date: null }, 'Итог не найден — введите сумму вручную.'],
-  ];
-  for (let index = 0; index < cases.length; index += 1) {
-    const [body, hint] = cases[index];
-    answer = body;
-    await choosePhoto(page, photo, index === 0 ? 'Выбрать фото' : 'Другое фото');
-    await expect(sheet.getByText(hint)).toBeVisible();
-  }
+  answer = { ...RECEIPT, currency: null, date: null };
+  await choosePhoto(page, photo);
+  await expect(sheet.getByText('Валюта не распознана — введите сумму вручную.')).toBeVisible();
   await sheet.getByRole('button', { name: 'Подставить' }).click();
   await expect(amountField).toHaveValue('');
   await expect(dateField).toHaveValue(formDate);
@@ -218,10 +211,81 @@ test('a total that does not add up is pointed out', async ({ page }, testInfo) =
   await openReceiptSheet(page);
   await choosePhoto(page, await photoWithExif(page));
   const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
-  await expect(sheet.getByText('Сумма позиций на 1 меньше итога.')).toBeVisible();
+  await expect(sheet.locator('.sheet-stat__val')).toHaveText('264,80');
+  await expect(sheet.getByText('Итог на чеке: 265,80.')).toBeVisible();
   // The pressed button is gone: focus lands on the total so a screen reader reads it.
   await expect(sheet.locator('.sheet-stat')).toBeFocused();
   await expect(sheet.getByRole('button', { name: 'Подставить' })).toBeEnabled();
+
+  // Every row removed: a total of zero is not put into the form.
+  for (const name of ['Хлеб бородинский', 'Молоко 3,2%', 'Чай зелёный']) {
+    await sheet.getByRole('button', { name: `Удалить позицию «${name}»` }).click();
+  }
+  await expect(sheet.locator('.sheet-stat__val')).toHaveText('0');
+  await expect(sheet.getByText('Итог должен быть больше нуля — введите сумму вручную.')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Подставить' }).click();
+  await expect(page.getByRole('dialog', { name: 'Продукты' }).getByPlaceholder('0')).toHaveValue('');
+});
+
+test('amounts can be edited, rows added by hand, and the total follows', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'light', 'form logic, one theme');
+  const items = [...RECEIPT.items, { name: 'СКИДКА', name_ru: 'Скидка', amount: '-20.00' }];
+  await mockScan(page, { ...RECEIPT, total: '244.80', items });
+  await openReceiptSheet(page);
+  await choosePhoto(page, await photoWithExif(page));
+  const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
+  const total = sheet.locator('.sheet-stat__val');
+  await expect(total).toHaveText('244,80');
+  await expect(sheet.getByText(/^Итог на чеке/)).toHaveCount(0);
+
+  // An edited amount moves the total; the printed one stays as a reference.
+  await sheet.getByLabel('Сумма позиции 3', { exact: true }).fill('100,00');
+  await expect(total).toHaveText('224,80');
+  await expect(sheet.getByText('Итог на чеке: 244,80.')).toBeVisible();
+  // A discount keeps its minus when its amount is edited.
+  await sheet.getByLabel('Сумма позиции 4, скидка').fill('30');
+  await expect(total).toHaveText('214,80');
+  // A removed row leaves the total.
+  await sheet.getByRole('button', { name: 'Удалить позицию «Хлеб бородинский»' }).click();
+  await expect(total).toHaveText('159,90');
+
+  // A row added by hand: «Подставить» waits until it has a name and an amount.
+  await sheet.getByRole('button', { name: 'Добавить позицию' }).click();
+  await expect(sheet.getByLabel('Название позиции 4', { exact: true })).toBeFocused();
+  await expect(sheet.getByRole('button', { name: 'Подставить' })).toBeDisabled();
+  await expect(sheet.getByText('Заполните название и сумму у каждой позиции.')).toBeVisible();
+  await page.keyboard.type('Пакет');
+  await sheet.getByLabel('Сумма позиции 4', { exact: true }).fill('9,99');
+  await expect(total).toHaveText('169,89');
+  await expect(sheet.getByText('Заполните название и сумму у каждой позиции.')).toHaveCount(0);
+
+  await sheet.getByRole('button', { name: 'Подставить' }).click();
+  const form = page.getByRole('dialog', { name: 'Продукты' });
+  await expect(form.getByPlaceholder('0')).toHaveValue('169.89');
+  await expect(form.getByPlaceholder('Необязательно')).toHaveValue(
+    'Лавка у дома: Молоко 3,2% 89,90; Чай зелёный 100,00; Скидка −30; Пакет 9,99',
+  );
+});
+
+test('a receipt without lines uses its total until a row is added', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'light', 'form logic, one theme');
+  await mockScan(page, { merchant: null, date: null, currency: 'RUB', total: '350.00', items: [] });
+  await openReceiptSheet(page);
+  await choosePhoto(page, await photoWithExif(page));
+  const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
+  const total = sheet.locator('.sheet-stat__val');
+  await expect(total).toHaveText('350,00');
+  await expect(sheet.getByText('Позиции не найдены — подставим итог с чека.')).toBeVisible();
+
+  await sheet.getByRole('button', { name: 'Добавить позицию' }).click();
+  await page.keyboard.type('Кофе');
+  await sheet.getByLabel('Сумма позиции 1', { exact: true }).fill('300');
+  await expect(total).toHaveText('300');
+  await expect(sheet.getByText('Итог на чеке: 350,00.')).toBeVisible();
+
+  // Without rows added by hand the printed total is used again.
+  await sheet.getByRole('button', { name: 'Удалить позицию «Кофе»' }).click();
+  await expect(total).toHaveText('350,00');
 });
 
 test('server errors, a broken photo and cancel while loading', async ({ page, consoleErrors }, testInfo) => {
@@ -282,7 +346,7 @@ test('receipt sheet matches the reference and passes axe', async ({ page }) => {
   await openReceiptSheet(page);
   await choosePhoto(page, await photoWithExif(page));
   const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
-  await expect(sheet.getByText('Сумма позиций на 10 меньше итога.')).toBeVisible();
+  await expect(sheet.getByText(/^Итог на чеке: 4\s122,50\.$/)).toBeVisible();
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
   await expect(sheet).toHaveScreenshot('receipt-sheet.png');
 
