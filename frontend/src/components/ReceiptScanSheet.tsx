@@ -225,6 +225,8 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
             </div>
             {meta && <p className="rcpt-note">{meta}</p>}
             {hints.map((hint) => <p className="rcpt-note" key={hint}>{hint}</p>)}
+            {/* Above the list, not under it: after 30 rows it would be off screen. */}
+            {diffText && <p className="rcpt-note">{diffText}</p>}
             {kept.length > 0 && (
               <ul ref={listRef} className="rcpt-list" aria-label="Позиции чека">
                 {kept.map((item) => (
@@ -259,7 +261,6 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
                 ))}
               </ul>
             )}
-            {diffText && <p className="rcpt-note">{diffText}</p>}
           </>
         )}
       </div>
