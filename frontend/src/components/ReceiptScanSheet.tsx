@@ -235,6 +235,8 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
   } else if (scan && !isEmpty) {
     actions = (
       <>
+        {/* Next to the disabled button, not under the list: after 30 rows the list end is off screen. */}
+        {!ready && <p className="rcpt-note rcpt-actions__note">Заполните название и сумму у каждой позиции.</p>}
         <button className="sh-btn sh-btn--ghost" type="button" onClick={pickPhoto}>Другое фото</button>
         <button className="sh-btn sh-btn--primary" type="button" onClick={apply} disabled={!ready}>Подставить</button>
       </>
@@ -341,7 +343,6 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
               <Plus size={14} aria-hidden="true" />
               Добавить позицию
             </button>
-            {!ready && <p className="rcpt-note">Заполните название и сумму у каждой позиции.</p>}
           </>
         )}
       </div>
