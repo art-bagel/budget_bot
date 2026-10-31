@@ -15,8 +15,8 @@ import type {
   FxRates,
   UserContext,
 } from '../types';
-import { currencyName, formatAmount, formatNumericAmount } from '../utils/format';
-import { sanitizeDecimalInput } from '../utils/validation';
+import { currencyFractionDigits, currencyName, formatAmount, formatRate } from '../utils/format';
+import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 
 
 export default function Exchange({ user, refreshToken }: { user: UserContext; refreshToken: number }) {
@@ -86,13 +86,19 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
     }
   }, [currencies, fromCurrencyCode, toCurrencyCode]);
 
+  const fromDigits = currencyFractionDigits(fromCurrencyCode);
+  const toDigits = currencyFractionDigits(toCurrencyCode);
+  const fromRead = readAmountField(fromAmount, fromDigits, fromCurrencyCode);
+  const toRead = readAmountField(toAmount, toDigits, toCurrencyCode);
+  const amountError = fromRead.error ?? toRead.error;
+
   const canSubmit =
     !submitting &&
     !!fromCurrencyCode &&
     !!toCurrencyCode &&
     fromCurrencyCode !== toCurrencyCode &&
-    parseFloat(fromAmount) > 0 &&
-    parseFloat(toAmount) > 0;
+    // An ambiguous amount keeps the button on so that pressing it explains why.
+    (amountError !== null || (fromRead.value > 0 && toRead.value > 0));
 
   const referenceRate = rates?.rub_per_unit[fromCurrencyCode] && rates?.rub_per_unit[toCurrencyCode]
     ? rates.rub_per_unit[fromCurrencyCode] / rates.rub_per_unit[toCurrencyCode]
@@ -100,6 +106,10 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
 
   const handleSubmit = async () => {
     if (!canSubmit) {
+      return;
+    }
+    if (amountError) {
+      setSubmitError(amountError);
       return;
     }
 
@@ -110,9 +120,9 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
       const result = await exchangeCurrency({
         bank_account_id: user.bank_account_id,
         from_currency_code: fromCurrencyCode,
-        from_amount: parseFloat(fromAmount),
+        from_amount: fromRead.value,
         to_currency_code: toCurrencyCode,
-        to_amount: parseFloat(toAmount),
+        to_amount: toRead.value,
         comment: comment.trim() || undefined,
       } as ExchangeCurrencyRequest);
 
@@ -200,7 +210,8 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
               inputMode="decimal"
               placeholder="Сколько отдали"
               value={fromAmount}
-              onChange={(event) => setFromAmount(sanitizeDecimalInput(event.target.value))}
+              onChange={(event) => setFromAmount(sanitizeDecimalInput(event.target.value, fromDigits))}
+              onBlur={() => setFromAmount(canonicalAmountInput(fromAmount, fromDigits))}
             />
           </div>
 
@@ -220,7 +231,8 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
               inputMode="decimal"
               placeholder="Сколько получили"
               value={toAmount}
-              onChange={(event) => setToAmount(sanitizeDecimalInput(event.target.value))}
+              onChange={(event) => setToAmount(sanitizeDecimalInput(event.target.value, toDigits))}
+              onBlur={() => setToAmount(canonicalAmountInput(toAmount, toDigits))}
             />
           </div>
 
@@ -241,7 +253,7 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
 
           {referenceRate && rates && (
             <p className="operations-hint">
-              Курс ЦБ на {rates.rate_date.split('-').reverse().join('.')}: 1 {fromCurrencyCode} = {formatNumericAmount(referenceRate, 4)} {toCurrencyCode}. Укажите фактические суммы обмена.
+              Курс ЦБ на {rates.rate_date.split('-').reverse().join('.')}: 1 {fromCurrencyCode} = {formatRate(referenceRate, 4)} {toCurrencyCode}. Укажите фактические суммы обмена.
             </p>
           )}
 

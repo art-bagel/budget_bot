@@ -4,8 +4,8 @@ import BottomSheet from './BottomSheet';
 import { fetchBankAccountSnapshot, fetchBankAccounts, fetchPortfolioPositions, transferBankCrypto, transferBetweenAccounts, transferCryptoToInvestment, transferCryptoFromInvestment, transferCryptoBetweenInvestmentAccounts, repayCreditAccount } from '../api';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { BankAccount, DashboardBankBalance, PortfolioPosition } from '../types';
-import { currencyName, currencySymbol, formatAmount, formatNumericAmount } from '../utils/format';
-import { sanitizeDecimalInput } from '../utils/validation';
+import { currencyFractionDigits, currencyName, currencySymbol, formatAmount, formatNumericAmount } from '../utils/format';
+import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 import { getCryptoIconUrl } from '../utils/cryptoAssets';
 import { getCryptoAssetId, getPositionMetadataText } from '../utils/portfolioPosition';
 
@@ -286,9 +286,14 @@ export default function AccountTransferDialog({
     if (!fromItem || !toItem) return null;
     return MODE_LABEL[`${fromItem.kind}>${toItem.kind}`] ?? null;
   }, [fromItem, toItem]);
-  const amountValue = parseFloat(amount) || 0;
+  // Fiat amounts are read by the currency's precision; crypto keeps plain decimals.
+  const amountDigits = fromItem && fromItem.assetType !== 'crypto' ? currencyFractionDigits(fromItem.currency) : undefined;
+  const amountRead = readAmountField(amount, amountDigits, fromItem?.currency ?? '');
+  const amountValue = amountRead.value || 0;
   const exceedsBalance = !!fromItem && amountValue > available(fromItem);
-  const canSubmit = !submitting && !loading && !!fromSel && !!toSel && Number.isFinite(amountValue) && amountValue > 0 && !exceedsBalance
+  // An ambiguous amount keeps the button on so that pressing it explains why.
+  const canSubmit = !submitting && !loading && !!fromSel && !!toSel
+    && (amountRead.error !== null || (Number.isFinite(amountValue) && amountValue > 0 && !exceedsBalance))
     && !!fromItem && !!toItem && compatiblePair(fromItem, toItem);
 
   const handleSelect = (role: 'from' | 'to', item: PickerItem) => {
@@ -313,6 +318,7 @@ export default function AccountTransferDialog({
   const cryptoRequest = useCryptoRequestKey('bank-crypto-transfer');
   const handleSubmit = async () => {
     if (!canSubmit || !fromSel || !toSel) return;
+    if (amountRead.error) { setError(amountRead.error); return; }
     setSubmitting(true); setError(null);
     try {
       if (fromItem?.positionId && toItem) {
@@ -556,7 +562,8 @@ export default function AccountTransferDialog({
                 inputMode="decimal"
                 placeholder="0"
                 value={amount}
-                onChange={e => setAmount(sanitizeDecimalInput(e.target.value))}
+                onChange={e => setAmount(sanitizeDecimalInput(e.target.value, amountDigits))}
+                onBlur={() => setAmount(canonicalAmountInput(amount, amountDigits))}
                 disabled={!fromSel || !toSel || submitting}
               />
               <span className="amt__cur">{fromItem ? assetCode(fromItem) : '₽'}</span>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAmountInput, parseAmountInput, sanitizeDecimalInput } from '../src/utils/validation.ts';
+import { canonicalAmountInput, normalizeAmountInput, readAmountField, sanitizeDecimalInput } from '../src/utils/validation.ts';
 
 // iOS decimal keypad in Russian gives a comma; the API accepts only a dot.
 test('comma from the keypad becomes a dot', () => {
@@ -25,13 +25,22 @@ test('whole-unit amounts resolve thousands and refuse fractions', () => {
   for (const ambiguous of ['12.5', '2.435060', '1.000,50', '']) {
     assert.equal(normalizeAmountInput(ambiguous, 0), null, ambiguous);
   }
-  assert.equal(parseAmountInput('2.435.060', 0), 2435060);
-  assert.ok(Number.isNaN(parseAmountInput('12.5', 0)));
+  assert.equal(canonicalAmountInput('45.000', 0), '45000');
+  assert.equal(canonicalAmountInput('12.5', 0), '12.5', 'left as typed for the form error');
+  assert.equal(canonicalAmountInput('20.5', 2), '20.5');
 });
 
 test('currencies with kopecks keep their text unless a dong entry is left over', () => {
   assert.equal(normalizeAmountInput('20.385', 2), '20.385');
   assert.equal(normalizeAmountInput('45,5', 2), '45.5');
   assert.equal(normalizeAmountInput('2.435.060', 2), null);
-  assert.equal(parseAmountInput('20.38', 2), 20.38);
+});
+
+test('an amount field reads once for previews, checks and the request', () => {
+  assert.deepEqual(readAmountField('2.435.060', 0, 'VND'), { text: '2435060', value: 2435060, error: null });
+  const fraction = readAmountField('12.5', 0, 'VND');
+  assert.ok(Number.isNaN(fraction.value));
+  assert.equal(fraction.error, 'Сумма в VND — без дробной части, например 45000');
+  assert.equal(readAmountField('', 0, 'VND').error, null, 'an empty field is not an error');
+  assert.deepEqual(readAmountField('0.00000001', undefined, ''), { text: '0.00000001', value: 1e-8, error: null });
 });

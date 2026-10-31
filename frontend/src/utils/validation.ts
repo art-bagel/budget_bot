@@ -31,8 +31,22 @@ export function normalizeAmountInput(text: string, fractionDigits: number): stri
   return /^(\d+)([.,]0*)?$/.exec(text)?.[1] ?? null;
 }
 
-/** normalizeAmountInput as a number; NaN when the text is ambiguous. */
-export function parseAmountInput(text: string, fractionDigits: number): number {
-  return parseFloat(normalizeAmountInput(text, fractionDigits) ?? '');
+/** Blur fixes a whole-unit entry to plain digits ("45.000" → "45000") before any currency switch. */
+export function canonicalAmountInput(text: string, fractionDigits: number | undefined): string {
+  return fractionDigits === 0 ? normalizeAmountInput(text, 0) ?? text : text;
 }
 
+/**
+ * One reading of an amount field for previews, checks and the request.
+ * Undefined digits (crypto) keep the plain decimal text.
+ */
+export function readAmountField(text: string, fractionDigits: number | undefined, currencyCode: string) {
+  const normalized = fractionDigits === undefined ? text : normalizeAmountInput(text, fractionDigits);
+  let error: string | null = null;
+  if (text !== '' && normalized === null && fractionDigits !== undefined) {
+    error = fractionDigits === 0
+      ? `Сумма в ${currencyCode} — без дробной части, например 45000`
+      : 'Проверьте сумму: лишние точки или запятые';
+  }
+  return { text: normalized, value: parseFloat(normalized ?? ''), error };
+}

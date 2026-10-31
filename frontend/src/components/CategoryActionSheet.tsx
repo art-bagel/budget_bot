@@ -6,8 +6,8 @@ import ReceiptScanSheet, { type ReceiptApplyResult } from './ReceiptScanSheet';
 import { Camera } from 'lucide-react';
 import { parseCategoryIcon, buildCategoryName, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
-import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
-import { sanitizeDecimalInput } from '../utils/validation';
+import { currencyFractionDigits, formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
+import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 import { replaceReceiptBlock } from '../utils/receiptScan';
 import {
   archiveCategory,
@@ -269,10 +269,13 @@ export default function CategoryActionSheet({
     return item.asset_type !== 'crypto' && item.currency_code === selectedExpenseAsset.code;
   });
   const showExpenseAvailability = selectedExpenseAsset.type === 'crypto' || selectedExpenseAsset.code !== user.base_currency_code;
+  // Fiat amounts are read by the currency's precision; crypto keeps plain decimals.
+  const expDigits = selectedExpenseAsset.type === 'fiat' ? currencyFractionDigits(selectedExpenseAsset.code) : undefined;
+  const expAmountRead = readAmountField(expAmount, expDigits, selectedExpenseAsset.type === 'fiat' ? selectedExpenseAsset.code : '');
 
   const canSubmitExpense =
     !expSubmitting &&
-    parseFloat(expAmount) > 0 &&
+    (expAmountRead.value > 0 || expAmountRead.error !== null) &&
     expAccountId !== null &&
     expAssetOptions.some((item) => item.value === expAssetCode);
 
@@ -295,13 +298,17 @@ export default function CategoryActionSheet({
 
   const handleSubmitExpense = async () => {
     if (!canSubmitExpense || expAccountId === null) return;
+    if (expAmountRead.error) {
+      setExpError(expAmountRead.error);
+      return;
+    }
     setExpSubmitting(true);
     setExpError(null);
     try {
       await recordExpense({
         bank_account_id: expAccountId,
         category_id: category.category_id,
-        amount: parseFloat(expAmount),
+        amount: expAmountRead.value,
         currency_code: selectedExpenseAsset.type === 'fiat' ? selectedExpenseAsset.code : undefined,
         crypto_asset_id: selectedExpenseAsset.type === 'crypto' ? selectedExpenseAsset.id : undefined,
         comment: expComment.trim() || undefined,
@@ -431,7 +438,9 @@ export default function CategoryActionSheet({
     ]).then(([loadedSchedules, loadedCurrencies]) => {
       setSchedules(loadedSchedules);
       setAccountCurrencies(loadedCurrencies);
-      if (loadedCurrencies.length > 0) setSfCurrencyCode(loadedCurrencies[0].code);
+      // Sorted by balance, so dong would outrank rubles: prefer the category's currency.
+      const preferred = loadedCurrencies.find((c) => c.code === category.currency_code) ?? loadedCurrencies[0];
+      if (preferred) setSfCurrencyCode(preferred.code);
     }).catch(() => {}).finally(() => setLoadingSchedules(false));
   }, [category.category_id, category.kind]);
 
@@ -731,7 +740,8 @@ export default function CategoryActionSheet({
                 inputMode="decimal"
                 placeholder="0"
                 value={expAmount}
-                onChange={(e) => setExpAmount(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => setExpAmount(sanitizeDecimalInput(e.target.value, expDigits))}
+                onBlur={() => setExpAmount(canonicalAmountInput(expAmount, expDigits))}
                 autoFocus
               />
               <CurrencyPicker
@@ -744,7 +754,7 @@ export default function CategoryActionSheet({
             </div>
             {showExpenseAvailability && selectedExpenseBalance && (
               <span className="amt__hint">
-                Доступно: {formatNumericAmount(selectedExpenseBalance.amount)} {selectedExpenseBalance.symbol ?? selectedExpenseBalance.currency_code}
+                Доступно: {formatNumericAmount(selectedExpenseBalance.amount, expDigits)} {selectedExpenseBalance.symbol ?? selectedExpenseBalance.currency_code}
               </span>
             )}
           </div>

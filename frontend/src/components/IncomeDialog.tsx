@@ -24,7 +24,8 @@ import type {
   RecordIncomeRequest,
   UserContext,
 } from '../types';
-import { sanitizeDecimalInput } from '../utils/validation';
+import { currencyFractionDigits } from '../utils/format';
+import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 
 
 interface PatternDraftLine {
@@ -122,7 +123,9 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const selectedSource = incomeSources.find((s) => String(s.id) === incomeSourceId);
   const hasPattern = pattern !== null;
   const personalAccount = bankAccounts.find((ba) => ba.id === user.bank_account_id);
-  const totalAmount = parseFloat(incomeAmount) || 0;
+  const incomeDigits = currencyFractionDigits(incomeCurrencyCode);
+  const incomeAmountRead = readAmountField(incomeAmount, incomeDigits, incomeCurrencyCode);
+  const totalAmount = incomeAmountRead.value || 0;
   const taxPercent = parseFloat(incomeTaxPercent) || 0;
   const hasTax = incomeTaxPercent.trim() !== '' && taxPercent > 0;
   const isTaxValid = incomeTaxPercent.trim() === '' || (taxPercent > 0 && taxPercent < 100);
@@ -135,7 +138,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const canSubmit =
     !submitting &&
     !!selectedSource &&
-    parseFloat(incomeAmount) > 0 &&
+    // An ambiguous amount keeps the button on so that pressing it explains why.
+    (totalAmount > 0 || incomeAmountRead.error !== null) &&
     (!isNonBase || parseFloat(incomeBudgetAmountInBase) > 0) &&
     isTaxValid;
 
@@ -179,6 +183,10 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
 
   const handleSubmit = async () => {
     if (!canSubmit || !selectedSource) return;
+    if (incomeAmountRead.error) {
+      setError(incomeAmountRead.error);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -524,7 +532,8 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 inputMode="decimal"
                 placeholder="0"
                 value={incomeAmount}
-                onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value, incomeDigits))}
+                onBlur={() => setIncomeAmount(canonicalAmountInput(incomeAmount, incomeDigits))}
                 autoFocus
               />
               <CurrencyPicker

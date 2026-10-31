@@ -6,8 +6,8 @@ import { exchangeCurrency, fetchCryptoAssets, fetchCurrencies, fetchCurrencyRate
 import { useModalOpen } from '../hooks/useModalOpen';
 import { hapticRigid } from '../telegram';
 import type { CryptoAsset, Currency, DashboardBankBalance, FxRates } from '../types';
-import { currencyName, formatNumericAmount } from '../utils/format';
-import { sanitizeDecimalInput } from '../utils/validation';
+import { currencyFractionDigits, currencyName, formatNumericAmount, formatRate } from '../utils/format';
+import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 import BottomSheet from './BottomSheet';
 import { IconArrowRightLeft } from './Icons';
 
@@ -132,8 +132,6 @@ export default function ExchangeSheet({
   /* ── derived helpers ───────────────────────────────── */
 
   const availableFromAmount = balanceByCode[fromCode]?.amount ?? 0;
-  const fromVal = parseFloat(fromAmount);
-  const toVal = parseFloat(toAmount);
   const parseAssetKey = (key: string) => {
     if (key.startsWith('crypto:')) {
       return { type: 'crypto' as const, id: Number(key.slice('crypto:'.length)) };
@@ -151,6 +149,14 @@ export default function ExchangeSheet({
   };
   const fromAsset = parseAssetKey(fromCode);
   const toAsset = parseAssetKey(toCode);
+  // Fiat amounts are read by the currency's precision; crypto keeps plain decimals.
+  const fromDigits = fromAsset.type === 'fiat' ? currencyFractionDigits(fromAsset.code) : undefined;
+  const toDigits = toAsset.type === 'fiat' ? currencyFractionDigits(toAsset.code) : undefined;
+  const fromRead = readAmountField(fromAmount, fromDigits, fromAsset.type === 'fiat' ? fromAsset.code : '');
+  const toRead = readAmountField(toAmount, toDigits, toAsset.type === 'fiat' ? toAsset.code : '');
+  const fromVal = fromRead.value;
+  const toVal = toRead.value;
+  const amountError = fromRead.error ?? toRead.error;
   const referenceRate = fromAsset.type === 'fiat' && toAsset.type === 'fiat'
     && rates?.rub_per_unit[fromAsset.code] && rates?.rub_per_unit[toAsset.code]
     ? rates.rub_per_unit[fromAsset.code] / rates.rub_per_unit[toAsset.code]
@@ -160,7 +166,7 @@ export default function ExchangeSheet({
     if (!fromCode || !toCode || fromCode === toCode) return null;
     if (!(fromVal > 0) || !(toVal > 0)) return null;
     const rate = toVal / fromVal;
-    return `Курс: 1 ${assetLabel(fromCode)} = ${formatNumericAmount(rate, 4)} ${assetLabel(toCode)}`;
+    return `Курс: 1 ${assetLabel(fromCode)} = ${formatRate(rate, 4)} ${assetLabel(toCode)}`;
   })();
 
   const canSubmit =
@@ -168,9 +174,8 @@ export default function ExchangeSheet({
     !!fromCode &&
     !!toCode &&
     fromCode !== toCode &&
-    fromVal > 0 &&
-    toVal > 0 &&
-    fromVal <= availableFromAmount + 1e-9;
+    // An ambiguous amount keeps the button on so that pressing it explains why.
+    (amountError !== null || (fromVal > 0 && toVal > 0 && fromVal <= availableFromAmount + 1e-9));
 
   const colorIndexOf = (code: string): number => {
     const idx = sortedHeld.findIndex((b) => (
@@ -193,15 +198,19 @@ export default function ExchangeSheet({
   const cryptoRequest = useCryptoRequestKey('bank-exchange');
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    if (amountError) {
+      setSubmitError(amountError);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
       const payload = {
         bank_account_id: bankAccountId,
         from_currency_code: fromAsset.type === 'fiat' ? fromAsset.code : undefined,
-        from_amount: fromAmount,
+        from_amount: fromRead.text ?? fromAmount,
         to_currency_code: toAsset.type === 'fiat' ? toAsset.code : undefined,
-        to_amount: toAmount,
+        to_amount: toRead.text ?? toAmount,
         from_crypto_asset_id: fromAsset.type === 'crypto' ? fromAsset.id : undefined,
         to_crypto_asset_id: toAsset.type === 'crypto' ? toAsset.id : undefined,
       };
@@ -287,13 +296,14 @@ export default function ExchangeSheet({
               type="text"
               inputMode="decimal"
               value={fromAmount}
-              onChange={(e) => setFromAmount(sanitizeDecimalInput(e.target.value))}
+              onChange={(e) => setFromAmount(sanitizeDecimalInput(e.target.value, fromDigits))}
+              onBlur={() => setFromAmount(canonicalAmountInput(fromAmount, fromDigits))}
               placeholder="0"
               aria-label="Сумма отдаёте"
             />
           </div>
           <span className="fx__hint">
-            Доступно: {formatNumericAmount(availableFromAmount)} {assetLabel(fromCode || `fiat:${baseCurrencyCode}`)}
+            Доступно: {formatNumericAmount(availableFromAmount, fromDigits)} {assetLabel(fromCode || `fiat:${baseCurrencyCode}`)}
           </span>
         </div>
 
@@ -327,7 +337,8 @@ export default function ExchangeSheet({
               type="text"
               inputMode="decimal"
               value={toAmount}
-              onChange={(e) => setToAmount(sanitizeDecimalInput(e.target.value))}
+              onChange={(e) => setToAmount(sanitizeDecimalInput(e.target.value, toDigits))}
+              onBlur={() => setToAmount(canonicalAmountInput(toAmount, toDigits))}
               placeholder="0"
               aria-label="Сумма получите"
             />
@@ -341,7 +352,7 @@ export default function ExchangeSheet({
       {fromAsset.type === 'fiat' && toAsset.type === 'fiat' && fromCode !== toCode && (
         <p className="fx__hint">
           {referenceRate && rates
-            ? `Курс ЦБ на ${rates.rate_date.split('-').reverse().join('.')}: 1 ${fromAsset.code} = ${formatNumericAmount(referenceRate, 4)} ${toAsset.code}. Укажите фактические суммы обмена.`
+            ? `Курс ЦБ на ${rates.rate_date.split('-').reverse().join('.')}: 1 ${fromAsset.code} = ${formatRate(referenceRate, 4)} ${toAsset.code}. Укажите фактические суммы обмена.`
             : ratesLoading ? 'Загружаем курс ЦБ…' : 'Курс ЦБ временно недоступен. Можно указать суммы обмена вручную.'}
         </p>
       )}
