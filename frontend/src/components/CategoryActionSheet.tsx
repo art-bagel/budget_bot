@@ -758,6 +758,8 @@ export default function CategoryActionSheet({
               </span>
             )}
           </div>
+          {/* Under the amount: at the bottom of this tall sheet the error hides behind the buttons. */}
+          {expError && <p className="dlg-error">{expError}</p>}
           <div className="field field--row">
             <div className="field field--col">
               <span className="fl">Дата</span>
@@ -775,7 +777,6 @@ export default function CategoryActionSheet({
               onKeyDown={(e) => e.key === 'Enter' && handleSubmitExpense()}
             />
           </div>
-          {expError && <p className="dlg-error">{expError}</p>}
           {expAccountId === null && <p className="dlg-error">Для этой категории не найден подходящий счёт.</p>}
         </div>
       )}
