@@ -14,6 +14,7 @@ XML = b'''<?xml version="1.0" encoding="windows-1251"?>
   <Valute><CharCode>EGP</CharCode><Nominal>10</Nominal><Value>16,0000</Value></Valute>
   <Valute><CharCode>TRY</CharCode><Nominal>10</Nominal><Value>20,0000</Value></Valute>
   <Valute><CharCode>JPY</CharCode><Nominal>100</Nominal><Value>50,0000</Value></Valute>
+  <Valute><CharCode>VND</CharCode><Nominal>10000</Nominal><Value>31,4223</Value></Valute>
 </ValCurs>'''
 
 
@@ -22,7 +23,8 @@ class CbrParsingTests(unittest.TestCase):
         date, rates = parse_cbr_rates(XML)
         self.assertEqual(date, '2026-10-03')
         self.assertEqual(rates, dict(RUB=Decimal(1), USD=Decimal(80), EUR=Decimal(90),
-                                     EGP=Decimal('1.6'), TRY=Decimal(2), JPY=Decimal('0.5')))
+                                     EGP=Decimal('1.6'), TRY=Decimal(2), JPY=Decimal('0.5'),
+                                     VND=Decimal('0.00314223')))
 
     def test_rejects_invalid_rate_data(self):
         for invalid in (b'0', b'-1', b'NaN', b'Infinity'):
