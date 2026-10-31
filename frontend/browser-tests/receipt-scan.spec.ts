@@ -171,6 +171,8 @@ test('a total that does not add up is pointed out', async ({ page }, testInfo) =
   await choosePhoto(page, await photoWithExif(page));
   const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
   await expect(sheet.getByText('Сумма позиций на 1 меньше итога.')).toBeVisible();
+  // The pressed button is gone: focus lands on the total so a screen reader reads it.
+  await expect(sheet.locator('.sheet-stat')).toBeFocused();
   await expect(sheet.getByRole('button', { name: 'Подставить' })).toBeEnabled();
 });
 
@@ -185,6 +187,7 @@ test('server errors, a broken photo and cancel while loading', async ({ page, co
 
   await choosePhoto(page, photo);
   await expect(sheet.getByRole('alert')).toHaveText('Не удалось распознать чек');
+  await expect(sheet.getByRole('alert')).toBeFocused();
 
   respond = (route) => route.fulfill({ status: 429, json: { detail: 'Слишком много чеков подряд, попробуйте через час' } });
   await choosePhoto(page, photo, 'Другое фото');
@@ -192,12 +195,14 @@ test('server errors, a broken photo and cancel while loading', async ({ page, co
   allowConsoleErrors(consoleErrors, /status of (502|429)/);
 
   await choosePhoto(page, Buffer.from('definitely not a picture'), 'Другое фото');
-  await expect(sheet.getByRole('alert')).toHaveText('Не удалось открыть фото — выберите другое.');
+  await expect(sheet.getByRole('alert')).toHaveText('Не удалось открыть фото — выберите другое');
+  await expect(sheet.getByRole('alert')).toBeFocused();
 
   // The model never answers: «Отмена» closes the sheet, the form stays.
   respond = () => new Promise<void>(() => {});
   await choosePhoto(page, photo, 'Другое фото');
   await expect(sheet.getByRole('status')).toHaveText('Распознаём чек…');
+  await expect(sheet.getByRole('button', { name: 'Отмена' })).toBeFocused();
   await sheet.getByRole('button', { name: 'Отмена' }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'Продукты' })).toBeVisible();

@@ -5636,6 +5636,8 @@ select.dlg-row__ghost option {
 .rcpt-actions { display: flex; gap: 8px; width: 100%; }
 .rcpt-actions .sh-btn--primary { flex: 1; }
 .rcpt-note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-2); }
+/* Focus is moved here by code (tabindex=-1) for screen readers, not reached by Tab. */
+.rcpt [tabindex="-1"]:focus { outline: none; }
 .rcpt-preview {
   width: 100%;
   height: 120px;

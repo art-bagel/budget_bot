@@ -57,7 +57,7 @@ async function toJpeg(file: File): Promise<Blob> {
 // Server texts are Russian; a raw network error ("Load failed") is not.
 function readableError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : '';
-  return /[а-яё]/i.test(message) ? message : 'Не удалось распознать чек. Проверьте связь и попробуйте ещё раз.';
+  return /[а-яё]/i.test(message) ? message : 'Не удалось распознать чек — проверьте связь и попробуйте ещё раз';
 }
 
 // A name field grows with its text, so a long translated name wraps instead of being cut.
@@ -81,6 +81,16 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
   const [removed, setRemoved] = useState<Set<number>>(() => new Set());
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // The button that was pressed disappears with each step, so focus would fall to
+  // <body> and a screen reader would not hear the result: move it to the new lead.
+  const leadRef = useRef<HTMLElement | null>(null);
+  const lead = (element: HTMLElement | null) => {
+    leadRef.current = element;
+  };
+  useEffect(() => {
+    if (step.kind !== 'pick') leadRef.current?.focus();
+  }, [step]);
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview);
   }, [preview]);
@@ -169,7 +179,7 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
       </>
     );
   } else if (step.kind === 'loading') {
-    actions = <button className="sh-btn sh-btn--ghost" type="button" onClick={close}>Отмена</button>;
+    actions = <button ref={lead} className="sh-btn sh-btn--ghost" type="button" onClick={close}>Отмена</button>;
   } else if (scan && !isEmpty) {
     actions = (
       <>
@@ -210,13 +220,15 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
           </>
         )}
         {step.kind === 'decode-error' && (
-          <p className="dlg-error" role="alert">Не удалось открыть фото — выберите другое.</p>
+          <p ref={lead} tabIndex={-1} className="dlg-error" role="alert">Не удалось открыть фото — выберите другое</p>
         )}
-        {step.kind === 'error' && <p className="dlg-error" role="alert">{step.message}</p>}
-        {isEmpty && <p className="rcpt-note">На фото не нашли чек. Попробуйте снять ближе и ровнее.</p>}
+        {step.kind === 'error' && <p ref={lead} tabIndex={-1} className="dlg-error" role="alert">{step.message}</p>}
+        {isEmpty && (
+          <p ref={lead} tabIndex={-1} className="rcpt-note">На фото не нашли чек. Попробуйте снять ближе и ровнее.</p>
+        )}
         {scan && !isEmpty && (
           <>
-            <div className="sheet-stat">
+            <div ref={lead} tabIndex={-1} className="sheet-stat">
               <span className="sheet-stat__tag">Итог по чеку</span>
               <div className="sheet-stat__num">
                 <span className="sheet-stat__val">{scan.total ? displayReceiptAmount(scan.total) : '—'}</span>
