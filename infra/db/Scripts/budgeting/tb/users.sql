@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS budgeting.users (
     -- установка падала на get__user_context.
     theme varchar(10) NOT NULL DEFAULT 'system'
         CHECK (theme IN ('light', 'dark', 'system')),
+    -- Миграция 057: включает только владелец прямо в базе, через API не меняется.
+    receipt_scan_enabled boolean NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT current_timestamp
 );
 

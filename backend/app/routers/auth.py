@@ -109,6 +109,8 @@ class RegisterResponse(BaseModel):
     base_currency_code: str
     hints_enabled: bool
     theme: str = Field(default='system')
+    # put__register_user_context does not return it: a new account starts with it off.
+    receipt_scan_enabled: bool = False
 
 
 class SessionResponse(BaseModel):

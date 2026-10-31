@@ -16,6 +16,7 @@ Table users {
   first_name varchar(100)
   last_name varchar(100)
   hints_enabled boolean [not null, default: true]
+  receipt_scan_enabled boolean [not null, default: false, note: "Распознавание чеков; включает только владелец в базе, API не меняет"]
   created_at timestamptz [not null, default: `now()`]
 }
 

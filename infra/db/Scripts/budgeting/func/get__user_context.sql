@@ -34,7 +34,8 @@ AS $function$
         'fx_result_category_id', budgeting.get__owner_system_category_id('user', u.id, NULL, 'FX Result'),
         'base_currency_code', u.base_currency_code,
         'hints_enabled', u.hints_enabled,
-        'theme', u.theme
+        'theme', u.theme,
+        'receipt_scan_enabled', u.receipt_scan_enabled
     )
     FROM budgeting.users u
     WHERE u.id = _user_id

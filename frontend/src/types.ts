@@ -7,6 +7,7 @@ export interface UserContext {
   base_currency_code: string;
   hints_enabled: boolean;
   theme: string;
+  receipt_scan_enabled?: boolean;
 }
 
 export interface Category {
