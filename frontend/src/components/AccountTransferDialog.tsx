@@ -562,7 +562,7 @@ export default function AccountTransferDialog({
                 inputMode="decimal"
                 placeholder="0"
                 value={amount}
-                onChange={e => setAmount(sanitizeDecimalInput(e.target.value, amountDigits))}
+                onChange={e => { setAmount(sanitizeDecimalInput(e.target.value, amountDigits)); setError(null); }}
                 onBlur={() => setAmount(canonicalAmountInput(amount, amountDigits))}
                 disabled={!fromSel || !toSel || submitting}
               />

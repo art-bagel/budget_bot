@@ -532,7 +532,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
                 inputMode="decimal"
                 placeholder="0"
                 value={incomeAmount}
-                onChange={(e) => setIncomeAmount(sanitizeDecimalInput(e.target.value, incomeDigits))}
+                onChange={(e) => { setIncomeAmount(sanitizeDecimalInput(e.target.value, incomeDigits)); setError(null); }}
                 onBlur={() => setIncomeAmount(canonicalAmountInput(incomeAmount, incomeDigits))}
                 autoFocus
               />

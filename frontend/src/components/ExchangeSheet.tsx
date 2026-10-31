@@ -296,7 +296,7 @@ export default function ExchangeSheet({
               type="text"
               inputMode="decimal"
               value={fromAmount}
-              onChange={(e) => setFromAmount(sanitizeDecimalInput(e.target.value, fromDigits))}
+              onChange={(e) => { setFromAmount(sanitizeDecimalInput(e.target.value, fromDigits)); setSubmitError(null); }}
               onBlur={() => setFromAmount(canonicalAmountInput(fromAmount, fromDigits))}
               placeholder="0"
               aria-label="Сумма отдаёте"
@@ -337,7 +337,7 @@ export default function ExchangeSheet({
               type="text"
               inputMode="decimal"
               value={toAmount}
-              onChange={(e) => setToAmount(sanitizeDecimalInput(e.target.value, toDigits))}
+              onChange={(e) => { setToAmount(sanitizeDecimalInput(e.target.value, toDigits)); setSubmitError(null); }}
               onBlur={() => setToAmount(canonicalAmountInput(toAmount, toDigits))}
               placeholder="0"
               aria-label="Сумма получите"

@@ -740,7 +740,7 @@ export default function CategoryActionSheet({
                 inputMode="decimal"
                 placeholder="0"
                 value={expAmount}
-                onChange={(e) => setExpAmount(sanitizeDecimalInput(e.target.value, expDigits))}
+                onChange={(e) => { setExpAmount(sanitizeDecimalInput(e.target.value, expDigits)); setExpError(null); }}
                 onBlur={() => setExpAmount(canonicalAmountInput(expAmount, expDigits))}
                 autoFocus
               />

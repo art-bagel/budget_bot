@@ -210,7 +210,7 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
               inputMode="decimal"
               placeholder="Сколько отдали"
               value={fromAmount}
-              onChange={(event) => setFromAmount(sanitizeDecimalInput(event.target.value, fromDigits))}
+              onChange={(event) => { setFromAmount(sanitizeDecimalInput(event.target.value, fromDigits)); setSubmitError(null); }}
               onBlur={() => setFromAmount(canonicalAmountInput(fromAmount, fromDigits))}
             />
           </div>
@@ -231,7 +231,7 @@ export default function Exchange({ user, refreshToken }: { user: UserContext; re
               inputMode="decimal"
               placeholder="Сколько получили"
               value={toAmount}
-              onChange={(event) => setToAmount(sanitizeDecimalInput(event.target.value, toDigits))}
+              onChange={(event) => { setToAmount(sanitizeDecimalInput(event.target.value, toDigits)); setSubmitError(null); }}
               onBlur={() => setToAmount(canonicalAmountInput(toAmount, toDigits))}
             />
           </div>
