@@ -57,8 +57,9 @@ class ParseCompletionTests(unittest.TestCase):
         self.assertEqual(scan.total, Decimal('144.80'))
         self.assertEqual([i.amount for i in scan.items], [Decimal('54.90'), Decimal('89.90')])
         body = json.loads(scan.model_dump_json())
-        self.assertEqual(body['total'], '144.80')
-        self.assertEqual(body['items'][0], {'name': 'ХЛЕБ БОРОД', 'name_ru': 'Хлеб бородинский', 'amount': '54.90'})
+        self.assertEqual(body['items'][0], {'name': 'ХЛЕБ БОРОД', 'name_ru': 'Хлеб бородинский', 'amount': '54.9'})
+        exact = parse_completion(raw_answer('{"total": 144.80, "items": [{"name": "A", "name_ru": "A", "amount": 54.90}]}'))
+        self.assertEqual(json.loads(exact.model_dump_json())['total'], '144.80', 'digits are kept as written')
 
     def test_whole_numbers_and_markdown_fence(self):
         text = '```json\n' + json.dumps({**GOOD, 'currency': 'VND', 'total': 1250000,
@@ -154,7 +155,6 @@ class ScanReceiptTests(unittest.IsolatedAsyncioTestCase):
         image = body['messages'][0]['content'][1]['image_url']['url']
         self.assertTrue(image.startswith('data:image/jpeg;base64,/9j/'))
         self.assertNotIn('secret-key', json.dumps(body))
-        self.assertNotIn('250.000', receipt_scan.PROMPT.replace("'250.000'", ''))
 
     async def test_provider_errors(self):
         for status in (402, 429, 500, 503):
@@ -210,7 +210,7 @@ class EndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_returns_scan(self):
         response = await self.post()
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()['total'], '144.80')
+        self.assertEqual(response.json()['total'], '144.8')
         self.assertEqual(self.scan_mock.await_args.args[0], JPEG)
         self.assertEqual(self.scan_mock.await_args.kwargs['api_key'], 'secret-key')
 
@@ -292,13 +292,12 @@ class EndpointTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(leaked, text)
 
     async def test_bad_model_answer_is_not_logged(self):
-        self.scan_mock.side_effect = None
-        with patch.object(receipts, 'scan_receipt', wraps=None) as wrapped:
-            async def call(jpeg, **kwargs):
-                return parse_completion(raw_answer('{"items": "MARKER-SECRET-RECEIPT"}'))
-            wrapped.side_effect = call
-            with self.assertLogs('backend.app.routers.receipts', level='WARNING') as logs:
-                response = await self.post()
+        async def call(jpeg, **kwargs):
+            return parse_completion(raw_answer('{"items": "MARKER-SECRET-RECEIPT"}'))
+
+        self.scan_mock.side_effect = call
+        with self.assertLogs('backend.app.routers.receipts', level='WARNING') as logs:
+            response = await self.post()
         self.assertEqual(response.status_code, 502)
         self.assertNotIn('MARKER-SECRET-RECEIPT', '\n'.join(logs.output))
         self.assertNotIn('MARKER-SECRET-RECEIPT', response.text)

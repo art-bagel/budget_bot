@@ -69,7 +69,7 @@ frontend_deps() {
 
 ruff_check() { "$VENV/bin/ruff" check backend storage; }
 
-unit_tests() { "$PY" -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard; }
+unit_tests() { "$PY" -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard backend.tests.test_receipt_scan; }
 
 py_compile_all() {
     find backend storage -name '*.py' -not -path '*/.cache/*' -print0 \
@@ -151,7 +151,7 @@ api_tests() {
     APP_ENV=development APP_HOST=127.0.0.1 APP_PORT=8000 \
     DB_HOST=127.0.0.1 DB_PORT="$PGPORT" DB_SCHEMA=budgeting POSTGRES_PASSWORD=budget_ci \
     TELEGRAM_BOT_TOKEN=ci-test-bot-token SIGNUP_INVITE_CODE=ci-test-invite-code \
-    FRONTEND_ORIGINS= CREDENTIALS_ENCRYPTION_KEY= \
+    FRONTEND_ORIGINS= CREDENTIALS_ENCRYPTION_KEY= RECEIPT_SCAN_API_KEY= \
         "$PY" -m backend.tests.test_auth_api
 }
 

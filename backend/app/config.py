@@ -13,6 +13,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 MIN_SIGNUP_INVITE_CODE_LENGTH = 16
 
+# Receipt scanning: switching the model is a change here plus a deploy.
+# qwen3.7-flash is the cheaper fallback (same amounts, worse translation).
+RECEIPT_SCAN_MODEL = 'claude-haiku-5.5'
+RECEIPT_SCAN_API_URL = 'https://api.aitunnel.ru/v1'
+
 load_dotenv(BACKEND_ROOT / '.env')
 
 
@@ -27,6 +32,7 @@ class Settings:
     session_ttl_seconds: int
     signup_invite_code: str | None
     credentials_encryption_key: str | None
+    receipt_scan_api_key: str | None
     db_host: str
     db_port: int
     db_database: str
@@ -60,6 +66,8 @@ settings = Settings(
     # любой, кто знает домен, заводит себе аккаунт в чужом финансовом API.
     signup_invite_code=os.getenv('SIGNUP_INVITE_CODE') or None,
     credentials_encryption_key=os.getenv('CREDENTIALS_ENCRYPTION_KEY') or None,
+    # Не обязателен: без ключа распознавание чеков отвечает 503, остальное работает.
+    receipt_scan_api_key=os.getenv('RECEIPT_SCAN_API_KEY') or None,
     db_host=os.getenv('DB_HOST'),
     db_port=int(os.getenv('DB_PORT')),
     db_database=os.getenv('DB_DATABASE'),

@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
 from backend.app.config import settings
-from backend.app.routers import auth, bank_accounts, categories, crypto, currencies, dashboard, families, groups, income_sources, operations, portfolio, user_settings, scheduled_expenses, tinkoff
+from backend.app.routers import auth, bank_accounts, categories, crypto, currencies, dashboard, families, groups, income_sources, operations, portfolio, receipts, user_settings, scheduled_expenses, tinkoff
 from backend.app import storage as app_storage
 from backend.app.scheduler import scheduler_loop
 
@@ -64,6 +64,7 @@ app.include_router(groups.router)
 app.include_router(income_sources.router)
 app.include_router(operations.router)
 app.include_router(portfolio.router)
+app.include_router(receipts.router)
 app.include_router(user_settings.router)
 app.include_router(scheduled_expenses.router)
 app.include_router(tinkoff.router)

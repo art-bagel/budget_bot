@@ -11,11 +11,14 @@
 Тест пишет в базу и удаляет созданные аккаунты за собой — гонять на dev.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
 import os
 import urllib.parse
+
+import asyncpg
 
 os.environ.setdefault('TELEGRAM_BOT_TOKEN', 'test-bot-token')
 os.environ.setdefault('SIGNUP_INVITE_CODE', 'test-invite')
@@ -51,6 +54,27 @@ def telegram_init_data(user_id: int) -> str:
     secret = hmac.new(b'WebAppData', settings.telegram_bot_token.encode(), hashlib.sha256).digest()
     fields['hash'] = hmac.new(secret, data_check_string.encode(), hashlib.sha256).hexdigest()
     return urllib.parse.urlencode(fields)
+
+
+def enable_receipt_scan(user_id: int) -> None:
+    """
+    Включает распознавание чеков так, как это делает владелец: прямо в базе.
+    API для флага нет намеренно.
+    :param user_id: Идентификатор аккаунта.
+    """
+    async def run() -> None:
+        connection = await asyncpg.connect(
+            host=settings.db_host, port=settings.db_port, user=settings.postgres_user,
+            password=settings.postgres_password, database=settings.db_database,
+        )
+        try:
+            await connection.execute(
+                f'UPDATE {settings.db_schema}.users SET receipt_scan_enabled = true WHERE id = $1', user_id,
+            )
+        finally:
+            await connection.close()
+
+    asyncio.run(run())
 
 
 def delete_account(client: TestClient, headers: dict) -> None:
@@ -127,6 +151,24 @@ def main() -> None:
         assert response.json()['base_currency_code'] == 'RUB', response.text
         assert response.json()['bank_account_id'], 'у нового аккаунта есть основной счет'
         assert response.json()['unallocated_category_id'], 'и системные категории'
+
+        # 3a. Распознавание чеков выключено, пока владелец не включит его в базе.
+        assert response.json()['receipt_scan_enabled'] is False, response.text
+        assert not settings.receipt_scan_api_key, 'тест не должен видеть ключ модели (check.sh обнуляет его)'
+        jpeg = {'content': b'\xff\xd8\xff\xe0' + b'\x00' * 16, 'headers': {'Content-Type': 'image/jpeg'}}
+        assert client.post('/api/v1/receipts/scan', **jpeg).status_code == 401
+        session = {'Authorization': 'Bearer ' + token}
+        response = client.post('/api/v1/receipts/scan', **{**jpeg, 'headers': {**jpeg['headers'], **session}})
+        assert response.status_code == 403 and 'недоступно' in response.text, response.text
+        response = client.patch('/api/v1/user/settings', headers=session,
+                                json={'hints_enabled': True, 'receipt_scan_enabled': True})
+        assert response.status_code == 200, response.text
+        assert client.get('/api/v1/auth/context', headers=session).json()['receipt_scan_enabled'] is False, \
+            'флаг не меняется через API'
+        enable_receipt_scan(email_user_id)
+        assert client.get('/api/v1/auth/context', headers=session).json()['receipt_scan_enabled'] is True
+        response = client.post('/api/v1/receipts/scan', **{**jpeg, 'headers': {**jpeg['headers'], **session}})
+        assert response.status_code == 503 and 'не настроено' in response.text, response.text
 
         # 4. Сессия пускает, мусорный токен — нет.
         assert client.get('/api/v1/auth/methods', headers=auth_headers).status_code == 200
