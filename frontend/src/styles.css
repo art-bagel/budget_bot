@@ -5662,6 +5662,10 @@ select.dlg-row__ghost option {
   grid-template-columns: subgrid;
   align-items: start;
 }
+/* Android WebView before 117 has no subgrid: each row keeps the same columns on its own. */
+@supports not (grid-template-columns: subgrid) {
+  .rcpt-row { grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 8px; }
+}
 .rcpt-row__names { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .rcpt-row__name { display: block; padding: 10px 12px; line-height: 20px; resize: none; overflow: hidden; }
 .rcpt-row__orig { padding: 0 4px; font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; }
