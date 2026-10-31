@@ -1282,3 +1282,22 @@ OK    docker compose config (0s)
   вырезаются.
 - **П. 16.** Пункт VND в `docs/TODO.md` ссылается на ветку
   `claude/vnd-currency`, а не на файл, которого здесь нет.
+
+## Деплой (01.11.2026)
+
+- Владелец дал аппрув на мерж. `git push origin HEAD:main` прошёл без
+  `--force`: `380243b..34e0f95`, rebase не понадобился, `origin/main` не
+  двигался.
+- GitHub Actions, [run 41249129468](https://github.com/art-bagel/budget_bot/actions/runs/41249129468):
+  «Verify Project» — success (4 мин), «Deploy To Server» — success (2,5 мин).
+- Прод после деплоя:
+  - `GET /health` — 200 `{"status":"ok"}`;
+  - `POST /api/v1/receipts/scan` без входа — 401, маршрут на месте;
+  - синтетическое тело 3,9 МБ без входа — 401, Nginx Proxy Manager и
+    контейнерный nginx его пропускают. 5 МБ — 413, и 1,5 МБ на
+    `/api/v1/operations/expense` — 413: у остального API по-прежнему 1 МБ;
+  - readonly-база: колонка `users.receipt_scan_enabled` —
+    `boolean NOT NULL DEFAULT false`, `get__user_context` возвращает флаг,
+    флаг включён у 0 из 10 пользователей.
+- Таймаут Nginx Proxy Manager на долгий ответ не проверен: для этого нужен
+  настоящий вызов модели, а секрета `RECEIPT_SCAN_API_KEY` на проде ещё нет.
