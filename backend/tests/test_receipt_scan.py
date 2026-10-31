@@ -284,7 +284,7 @@ class EndpointTests(unittest.IsolatedAsyncioTestCase):
         first = asyncio.ensure_future(self.post())
         # A regression must fail the test, not hang the CI job.
         await asyncio.wait_for(started.wait(), 5)
-        others = await asyncio.gather(*(self.post() for _ in range(24)))
+        others = await asyncio.wait_for(asyncio.gather(*(self.post() for _ in range(24))), 5)
         self.assertEqual({r.status_code for r in others}, {429})
         self.assertEqual(others[0].json()['detail'], 'Чек уже распознаётся')
         release.set()

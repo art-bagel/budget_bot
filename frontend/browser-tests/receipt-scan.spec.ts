@@ -151,7 +151,17 @@ test('amount is filled only for a recognised currency the account has', async ({
   const formDate = await dateField.inputValue();
   const photo = await photoWithExif(page);
 
-  // A first receipt fills amount, currency and date...
+  // A currency the account does not have never reaches the amount field.
+  answer = { ...RECEIPT, currency: 'VND' };
+  await choosePhoto(page, photo);
+  await expect(sheet.getByText('На выбранном счёте нет VND — введите сумму вручную.')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Подставить' }).click();
+  await expect(amountField).toHaveValue('');
+  await expect(form.getByRole('button', { name: 'RUB' })).toBeVisible();
+
+  // A receipt in the account's currency fills amount, currency and date...
+  answer = RECEIPT;
+  await form.getByRole('button', { name: 'Распознать чек' }).click();
   await choosePhoto(page, photo);
   await sheet.getByRole('button', { name: 'Подставить' }).click();
   await expect(amountField).toHaveValue('264.80');
@@ -162,7 +172,6 @@ test('amount is filled only for a recognised currency the account has', async ({
   await form.getByRole('button', { name: 'Распознать чек' }).click();
   const cases: [object, string][] = [
     [{ ...RECEIPT, currency: null }, 'Валюта не распознана — введите сумму вручную.'],
-    [{ ...RECEIPT, currency: 'VND' }, 'На выбранном счёте нет VND — введите сумму вручную.'],
     [{ ...RECEIPT, total: null, date: null }, 'Итог не найден — введите сумму вручную.'],
   ];
   for (let index = 0; index < cases.length; index += 1) {
