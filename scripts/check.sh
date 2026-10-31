@@ -61,6 +61,9 @@ skip() {
 
 in_frontend() { (cd frontend && "$@"); }
 
+# The glob must expand inside frontend/, so not via in_frontend.
+frontend_unit_tests() { (cd frontend && node --test tests/*.test.ts); }
+
 frontend_deps() {
     # Как CI: после смены lock-файла (rebase на свежий main) ставим заново.
     [ frontend/node_modules/.package-lock.json -nt frontend/package-lock.json ] && return 0
@@ -164,12 +167,14 @@ if [ "$MODE" = fast ]; then
     step "ruff" ruff_check
     step "frontend typecheck" in_frontend npm run --silent typecheck
     step "frontend lint" in_frontend npm run --silent lint
+    step "frontend unit tests" frontend_unit_tests
     step "css hex colors" css_hex
     step "backend unit tests" unit_tests
 else
     step "frontend deps" frontend_deps
     step "frontend build" in_frontend npm run --silent build
     step "frontend lint" in_frontend npm run --silent lint
+    step "frontend unit tests" frontend_unit_tests
     step "ruff" ruff_check
     step "backend unit tests" unit_tests
     step "py_compile" py_compile_all

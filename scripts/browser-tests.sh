@@ -42,13 +42,15 @@ export APP_ENV=development APP_HOST=127.0.0.1 APP_PORT=$API_PORT \
     DB_HOST=127.0.0.1 DB_PORT="$PGPORT" DB_DATABASE=$DB DB_SCHEMA=budgeting \
     POSTGRES_PASSWORD="$PGPASSWORD" \
     TELEGRAM_BOT_TOKEN=ui-test-bot-token SIGNUP_INVITE_CODE=ui-test-invite-code \
-    FRONTEND_ORIGINS= CREDENTIALS_ENCRYPTION_KEY=
+    FRONTEND_ORIGINS= CREDENTIALS_ENCRYPTION_KEY= RECEIPT_SCAN_API_KEY=
 # Offline: outbound HTTP (CBR, Bybit, tonapi, CoinGecko) from the seed and the
 # API goes to a dead proxy and fails at once, so screens never depend on the
 # internet or live prices.
 export HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 NO_PROXY=127.0.0.1,localhost
 
 "$PY" scripts/seed_ui_test.py
+# The flag has no API (only the owner sets it in the database); the seed user gets it here.
+psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d $DB -c "UPDATE budgeting.users SET receipt_scan_enabled = true"
 
 PIDS=()
 cleanup() { [ ${#PIDS[@]} -gt 0 ] && kill "${PIDS[@]}" 2> /dev/null; true; }
