@@ -140,7 +140,7 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     if (scan.total === null) hints.push('Итог не найден — введите сумму вручную.');
     else if (!scan.currency) hints.push('Валюта не распознана — введите сумму вручную.');
     else if (!currencyOk) hints.push(`На выбранном счёте нет ${scan.currency} — введите сумму вручную.`);
-    else if (amount === null) hints.push('Удалённые строки больше итога — введите сумму вручную.');
+    else if (amount === null) hints.push('Удалённые позиции стоят не меньше итога — введите сумму вручную.');
     if (scan.date && date === null) hints.push(`Дата на чеке ${formatDate(scan.date)} — проверьте.`);
     if (scan.items.length === 0) hints.push('Позиции не найдены — подставим только сумму.');
   }
