@@ -141,17 +141,29 @@ test('a scanned receipt fills the expense form and lands in history', async ({ p
 
 test('amount is filled only for a recognised currency the account has', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'light', 'form logic, one theme');
-  let answer: object = { ...RECEIPT, currency: null };
+  let answer: object = RECEIPT;
   await page.route('**/api/v1/receipts/scan', (route) => route.fulfill({ json: answer }));
   await openReceiptSheet(page);
   const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
   const form = page.getByRole('dialog', { name: 'Продукты' });
+  const amountField = form.getByPlaceholder('0');
+  const dateField = form.locator('input[type="date"]');
+  const formDate = await dateField.inputValue();
   const photo = await photoWithExif(page);
 
+  // A first receipt fills amount, currency and date...
+  await choosePhoto(page, photo);
+  await sheet.getByRole('button', { name: 'Подставить' }).click();
+  await expect(amountField).toHaveValue('264.80');
+  await expect(form.getByRole('button', { name: 'RUB' })).toBeVisible();
+  await expect(dateField).toHaveValue(yesterday);
+
+  // ...and a second one that cannot fill them takes them back instead of mixing.
+  await form.getByRole('button', { name: 'Распознать чек' }).click();
   const cases: [object, string][] = [
     [{ ...RECEIPT, currency: null }, 'Валюта не распознана — введите сумму вручную.'],
     [{ ...RECEIPT, currency: 'VND' }, 'На выбранном счёте нет VND — введите сумму вручную.'],
-    [{ ...RECEIPT, total: null }, 'Итог не найден — введите сумму вручную.'],
+    [{ ...RECEIPT, total: null, date: null }, 'Итог не найден — введите сумму вручную.'],
   ];
   for (let index = 0; index < cases.length; index += 1) {
     const [body, hint] = cases[index];
@@ -160,8 +172,35 @@ test('amount is filled only for a recognised currency the account has', async ({
     await expect(sheet.getByText(hint)).toBeVisible();
   }
   await sheet.getByRole('button', { name: 'Подставить' }).click();
-  await expect(form.getByPlaceholder('0')).toHaveValue('');
-  await expect(form.getByPlaceholder('Необязательно')).toHaveValue(/^Лавка у дома: Хлеб бородинский 54,90/);
+  await expect(amountField).toHaveValue('');
+  await expect(dateField).toHaveValue(formDate);
+  await expect(form.getByPlaceholder('Необязательно')).toHaveValue(
+    'Лавка у дома: Хлеб бородинский 54,90; Молоко 3,2% 89,90; Чай зелёный 120,00',
+  );
+});
+
+test('an old receipt date is not used and a photo without a receipt says so', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'light', 'form logic, one theme');
+  let answer: object = { ...RECEIPT, date: '2020-01-01' };
+  await page.route('**/api/v1/receipts/scan', (route) => route.fulfill({ json: answer }));
+  await openReceiptSheet(page);
+  const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
+  const form = page.getByRole('dialog', { name: 'Продукты' });
+  const dateField = form.locator('input[type="date"]');
+  const formDate = await dateField.inputValue();
+  const photo = await photoWithExif(page);
+
+  await choosePhoto(page, photo);
+  await expect(sheet.getByText('Дата на чеке 01.01.2020 — проверьте.')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Подставить' }).click();
+  await expect(dateField).toHaveValue(formDate);
+
+  answer = { merchant: null, date: null, currency: null, total: null, items: [] };
+  await form.getByRole('button', { name: 'Распознать чек' }).click();
+  await choosePhoto(page, photo);
+  await expect(sheet.getByText('На фото не нашли чек. Попробуйте снять ближе и ровнее.')).toBeFocused();
+  await expect(sheet.getByRole('button', { name: 'Подставить' })).toHaveCount(0);
+  await expect(sheet.getByRole('button', { name: 'Другое фото' })).toBeVisible();
 });
 
 test('a total that does not add up is pointed out', async ({ page }, testInfo) => {
@@ -203,7 +242,9 @@ test('server errors, a broken photo and cancel while loading', async ({ page, co
   await choosePhoto(page, photo, 'Другое фото');
   await expect(sheet.getByRole('status')).toHaveText('Распознаём чек…');
   await expect(sheet.getByRole('button', { name: 'Отмена' })).toBeFocused();
+  const aborted = page.waitForEvent('requestfailed', { predicate: (r) => r.url().includes('/receipts/scan'), timeout: 5000 });
   await sheet.getByRole('button', { name: 'Отмена' }).click();
+  await aborted;
   await expect(sheet).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'Продукты' })).toBeVisible();
 });

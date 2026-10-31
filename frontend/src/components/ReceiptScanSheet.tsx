@@ -99,18 +99,21 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
+    // Taken before re-encoding: closing the sheet or picking another photo while
+    // the canvas works must not let this one reach the paid model call.
     abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     let photo: Blob;
     try {
       photo = await toJpeg(file);
     } catch {
-      setStep({ kind: 'decode-error' });
+      if (!controller.signal.aborted) setStep({ kind: 'decode-error' });
       return;
     }
+    if (controller.signal.aborted) return;
     setPreview(URL.createObjectURL(photo));
     setStep({ kind: 'loading' });
-    const controller = new AbortController();
-    abortRef.current = controller;
     try {
       const scan = await scanReceipt(photo, controller.signal);
       if (controller.signal.aborted) return;

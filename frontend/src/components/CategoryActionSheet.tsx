@@ -162,8 +162,14 @@ export default function CategoryActionSheet({
   const [expSubmitting, setExpSubmitting] = useState(false);
   const [expError, setExpError] = useState<string | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
-  // The block the last receipt put into the comment: a repeat replaces it, not appends.
-  const [receiptBlock, setReceiptBlock] = useState<string | null>(null);
+  // What the last receipt put into the form: the next one replaces it instead of
+  // mixing with it (its comment block, and amount/date it no longer provides).
+  const [receiptFill, setReceiptFill] = useState<{
+    block: string;
+    amount: string | null;
+    date: string | null;
+    dateBefore: string;
+  } | null>(null);
   const receiptScanEnabled = user.receipt_scan_enabled === true;
 
   const defaultCashAccountId = category.owner_type === 'family' ? familyBankAccountId : user.bank_account_id;
@@ -271,13 +277,19 @@ export default function CategoryActionSheet({
     expAssetOptions.some((item) => item.value === expAssetCode);
 
   const handleReceiptApply = (result: ReceiptApplyResult) => {
-    if (result.amount !== null && result.currency !== null) {
-      setExpAmount(result.amount);
+    const previous = receiptFill;
+    const amount = result.currency !== null ? result.amount : null;
+    if (amount !== null) {
+      setExpAmount(amount);
       setExpAssetCode(`fiat:${result.currency}`);
+    } else if (previous?.amount && expAmount === previous.amount) {
+      setExpAmount('');
     }
+    const dateBefore = previous ? previous.dateBefore : expDate;
     if (result.date) setExpDate(result.date);
-    setExpComment((prev) => replaceReceiptBlock(prev, receiptBlock, result.comment));
-    setReceiptBlock(result.comment || null);
+    else if (previous?.date && expDate === previous.date) setExpDate(dateBefore);
+    setExpComment((prev) => replaceReceiptBlock(prev, previous?.block || null, result.comment));
+    setReceiptFill({ block: result.comment, amount, date: result.date, dateBefore });
     setReceiptOpen(false);
   };
 
