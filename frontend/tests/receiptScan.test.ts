@@ -35,6 +35,9 @@ test('total is the sum of the current rows, keeping cents', () => {
   assert.equal(receiptRowsTotal([bread, { ...milk, amount: '' }, { ...milk, amount: '12.' }]), '54.90', 'unfinished rows skipped');
   assert.equal(receiptRowsTotal([]), '0');
   assert.equal(receiptRowsTotal([discount]), '-10');
+  assert.equal(receiptRowsTotal([{ amount: '300' }], 2), '300.00', 'cents of the printed total');
+  assert.equal(receiptRowsTotal([bread], 0), '54.90', 'a row with more digits wins');
+  assert.equal(receiptRowsTotal([], 2), '0.00');
 });
 
 test('rows are ready when every row has a name and an amount', () => {

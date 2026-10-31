@@ -103,7 +103,10 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
   const [preview, setPreview] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const nextKeyRef = useRef(0);
-  const [focusKey, setFocusKey] = useState<number | null>(null);
+  // Where focus goes after the list changes: a new row's name, the next row's «×»
+  // (not its name: that would pop up the iOS keyboard after every delete), or «add».
+  const [focusTarget, setFocusTarget] = useState<{ name: number } | { remove: number } | 'add' | null>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -174,15 +177,19 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     list.querySelectorAll('textarea').forEach(fitHeight);
   }, [scan, amountChars]);
   useEffect(() => {
-    if (focusKey === null) return;
-    listRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-key="${focusKey}"]`)?.focus();
-    setFocusKey(null);
-  }, [focusKey]);
+    if (focusTarget === null) return;
+    if (focusTarget === 'add') addRef.current?.focus();
+    else if ('name' in focusTarget) listRef.current?.querySelector<HTMLElement>(`textarea[data-key="${focusTarget.name}"]`)?.focus();
+    else listRef.current?.querySelector<HTMLElement>(`button[data-key="${focusTarget.remove}"]`)?.focus();
+    setFocusTarget(null);
+  }, [focusTarget]);
 
   // The total is the rows as they are now; the printed one only stays while the
   // model found no lines at all (a terminal screen) and none were added by hand.
   const usesPrintedTotal = scan !== null && scan.items.length === 0 && rows.length === 0;
-  const total = scan ? (usesPrintedTotal ? scan.total : receiptRowsTotal(signed)) : null;
+  // Cents as on the receipt: rows typed as «300» still show «300,00» next to «350,00».
+  const printedScale = scan?.total?.split('.')[1]?.length ?? 0;
+  const total = scan ? (usesPrintedTotal ? scan.total : receiptRowsTotal(signed, printedScale)) : null;
   const ready = receiptRowsReady(signed);
   const amount = receiptExpenseAmount(total);
   const currencyOk = Boolean(scan?.currency && availableCurrencies.includes(scan.currency));
@@ -193,7 +200,8 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     // total is null only for an empty scan, which has its own state above.
     if (!scan.currency) hints.push('Валюта не распознана — введите сумму вручную.');
     else if (!currencyOk) hints.push(`На выбранном счёте нет ${scan.currency} — введите сумму вручную.`);
-    else if (amount === null) hints.push('Итог должен быть больше нуля — введите сумму вручную.');
+    // Not while a row is still being typed: its amount is what makes the total.
+    else if (amount === null && ready) hints.push('Итог должен быть больше нуля — введите сумму вручную.');
     if (scan.date && date === null) hints.push(`Дата на чеке ${formatDate(scan.date)} — проверьте.`);
     if (usesPrintedTotal) hints.push('Позиции не найдены — подставим итог с чека.');
   }
@@ -209,7 +217,12 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     const key = nextKeyRef.current;
     nextKeyRef.current += 1;
     setRows((prev) => [...prev, { key, original: null, name: '', amount: '', negative: false }]);
-    setFocusKey(key);
+    setFocusTarget({ name: key });
+  };
+  const removeRow = (key: number) => {
+    const next = rows[rows.findIndex((row) => row.key === key) + 1];
+    setRows((prev) => prev.filter((row) => row.key !== key));
+    setFocusTarget(next ? { remove: next.key } : 'add');
   };
 
   const apply = () => {
@@ -330,8 +343,9 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
                     <button
                       className="rcpt-row__del"
                       type="button"
+                      data-key={row.key}
                       aria-label={`Удалить позицию «${row.name.trim() || 'без названия'}»`}
-                      onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
+                      onClick={() => removeRow(row.key)}
                     >
                       <X size={16} aria-hidden="true" />
                     </button>
@@ -339,7 +353,7 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
                 ))}
               </ul>
             )}
-            <button type="button" className="dlg-tag-btn rcpt-add" onClick={addRow}>
+            <button ref={addRef} type="button" className="dlg-tag-btn rcpt-add" onClick={addRow}>
               <Plus size={14} aria-hidden="true" />
               Добавить позицию
             </button>

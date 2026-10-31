@@ -221,7 +221,7 @@ test('a total that does not add up is pointed out', async ({ page }, testInfo) =
   for (const name of ['Хлеб бородинский', 'Молоко 3,2%', 'Чай зелёный']) {
     await sheet.getByRole('button', { name: `Удалить позицию «${name}»` }).click();
   }
-  await expect(sheet.locator('.sheet-stat__val')).toHaveText('0');
+  await expect(sheet.locator('.sheet-stat__val')).toHaveText('0,00');
   await expect(sheet.getByText('Итог должен быть больше нуля — введите сумму вручную.')).toBeVisible();
   await sheet.getByRole('button', { name: 'Подставить' }).click();
   await expect(page.getByRole('dialog', { name: 'Продукты' }).getByPlaceholder('0')).toHaveValue('');
@@ -248,6 +248,8 @@ test('amounts can be edited, rows added by hand, and the total follows', async (
   // A removed row leaves the total.
   await sheet.getByRole('button', { name: 'Удалить позицию «Хлеб бородинский»' }).click();
   await expect(total).toHaveText('159,90');
+  // Focus stays in the list on the next row's «×», not in a field that would open the keyboard.
+  await expect(sheet.getByRole('button', { name: 'Удалить позицию «Молоко 3,2%»' })).toBeFocused();
 
   // A row added by hand: «Подставить» waits until it has a name and an amount.
   await sheet.getByRole('button', { name: 'Добавить позицию' }).click();
@@ -279,13 +281,16 @@ test('a receipt without lines uses its total until a row is added', async ({ pag
 
   await sheet.getByRole('button', { name: 'Добавить позицию' }).click();
   await page.keyboard.type('Кофе');
+  // The «above zero» hint waits while the new row's amount is still empty.
+  await expect(sheet.getByText('Итог должен быть больше нуля — введите сумму вручную.')).toHaveCount(0);
   await sheet.getByLabel('Сумма позиции 1', { exact: true }).fill('300');
-  await expect(total).toHaveText('300');
+  await expect(total).toHaveText('300,00');
   await expect(sheet.getByText('Итог на чеке: 350,00.')).toBeVisible();
 
-  // Without rows added by hand the printed total is used again.
+  // Without rows added by hand the printed total is used again; focus moves to «add».
   await sheet.getByRole('button', { name: 'Удалить позицию «Кофе»' }).click();
   await expect(total).toHaveText('350,00');
+  await expect(sheet.getByRole('button', { name: 'Добавить позицию' })).toBeFocused();
 });
 
 test('server errors, a broken photo and cancel while loading', async ({ page, consoleErrors }, testInfo) => {

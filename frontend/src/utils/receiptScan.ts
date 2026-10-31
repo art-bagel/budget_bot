@@ -47,8 +47,9 @@ export function receiptItemsDiff(total: string, items: Amount[]): string {
 }
 
 /** Sum of the rows as they are now (edited, removed, added); rows still being typed are skipped. */
-export function receiptRowsTotal(rows: Amount[]): string {
-  const amounts = rows.map((row) => row.amount).filter(isAmount);
+export function receiptRowsTotal(rows: Amount[], minScale = 0): string {
+  // A zero of the wanted scale pads the result to it: «300» → «300.00».
+  const amounts = [`0${minScale > 0 ? `.${'0'.repeat(minScale)}` : ''}`, ...rows.map((row) => row.amount).filter(isAmount)];
   return sum(amounts, amounts.map(() => 1), true);
 }
 
