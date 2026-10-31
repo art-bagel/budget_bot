@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
 import CurrencyPicker, { type CurrencyPickerOption } from './CurrencyPicker';
 import EmojiPicker from './EmojiPicker';
+import ReceiptScanSheet, { type ReceiptApplyResult } from './ReceiptScanSheet';
+import { Camera } from 'lucide-react';
 import { parseCategoryIcon, buildCategoryName, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
 import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
+import { replaceReceiptBlock } from '../utils/receiptScan';
 import {
   archiveCategory,
   fetchCategoryParentGroups,
@@ -158,6 +161,10 @@ export default function CategoryActionSheet({
   const [expAccountId, setExpAccountId] = useState<number | null>(null);
   const [expSubmitting, setExpSubmitting] = useState(false);
   const [expError, setExpError] = useState<string | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  // The block the last receipt put into the comment: a repeat replaces it, not appends.
+  const [receiptBlock, setReceiptBlock] = useState<string | null>(null);
+  const receiptScanEnabled = user.receipt_scan_enabled === true;
 
   const defaultCashAccountId = category.owner_type === 'family' ? familyBankAccountId : user.bank_account_id;
 
@@ -262,6 +269,17 @@ export default function CategoryActionSheet({
     parseFloat(expAmount) > 0 &&
     expAccountId !== null &&
     expAssetOptions.some((item) => item.value === expAssetCode);
+
+  const handleReceiptApply = (result: ReceiptApplyResult) => {
+    if (result.amount !== null && result.currency !== null) {
+      setExpAmount(result.amount);
+      setExpAssetCode(`fiat:${result.currency}`);
+    }
+    if (result.date) setExpDate(result.date);
+    setExpComment((prev) => replaceReceiptBlock(prev, receiptBlock, result.comment));
+    setReceiptBlock(result.comment || null);
+    setReceiptOpen(false);
+  };
 
   const handleSubmitExpense = async () => {
     if (!canSubmitExpense || expAccountId === null) return;
@@ -595,6 +613,7 @@ export default function CategoryActionSheet({
   );
 
   return (
+    <>
     <BottomSheet
       open
       tag={sheetTag}
@@ -682,7 +701,17 @@ export default function CategoryActionSheet({
             </select>
           </div>
           <div className="field">
-            <span className="fl">Сумма</span>
+            {receiptScanEnabled ? (
+              <div className="fl-row">
+                <span className="fl">Сумма</span>
+                <button type="button" className="dlg-tag-btn" onClick={() => setReceiptOpen(true)} disabled={expSubmitting}>
+                  <Camera size={14} aria-hidden="true" />
+                  Распознать чек
+                </button>
+              </div>
+            ) : (
+              <span className="fl">Сумма</span>
+            )}
             <div className="amt">
               <input
                 className="amt__inp"
@@ -1112,5 +1141,14 @@ export default function CategoryActionSheet({
         </div>
       )}
     </BottomSheet>
+    {/* A sibling, not a child: .sheet is transformed, so a nested fixed sheet would be clipped. */}
+    {receiptOpen && (
+      <ReceiptScanSheet
+        availableCurrencies={expAssetOptions.filter((o) => o.value.startsWith('fiat:')).map((o) => o.value.slice('fiat:'.length))}
+        onApply={handleReceiptApply}
+        onClose={() => setReceiptOpen(false)}
+      />
+    )}
+    </>
   );
 }

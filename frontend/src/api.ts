@@ -16,6 +16,7 @@ import type {
   OperationAnalyticsResponse,
   RecordExpenseRequest,
   RecordExpenseResponse,
+  ReceiptScan,
   ExchangeCurrencyRequest,
   ExchangeCurrencyResponse,
   RecordIncomeRequest,
@@ -683,6 +684,16 @@ export async function recordExpense(data: RecordExpenseRequest): Promise<RecordE
   return apiFetch<RecordExpenseResponse>('/operations/expense', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+/** Raw JPEG body: the server reads it only after the auth check. Nothing is stored. */
+export async function scanReceipt(photo: Blob, signal?: AbortSignal): Promise<ReceiptScan> {
+  return apiFetch<ReceiptScan>('/receipts/scan', {
+    method: 'POST',
+    body: photo,
+    headers: { 'Content-Type': 'image/jpeg' },
+    signal,
   });
 }
 

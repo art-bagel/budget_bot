@@ -10,6 +10,21 @@ export interface UserContext {
   receipt_scan_enabled?: boolean;
 }
 
+/** Suggestion from POST /receipts/scan. Amounts are exact decimal strings. */
+export interface ReceiptScanItem {
+  name: string;
+  name_ru: string;
+  amount: string;
+}
+
+export interface ReceiptScan {
+  merchant: string | null;
+  date: string | null;
+  currency: string | null;
+  total: string | null;
+  items: ReceiptScanItem[];
+}
+
 export interface Category {
   id: number;
   name: string;

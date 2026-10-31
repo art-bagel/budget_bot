@@ -5630,6 +5630,40 @@ select.dlg-row__ghost option {
   font-weight: 600;
   color: var(--text-2);
 }
+
+/* ── Receipt scan sheet (ReceiptScanSheet) ── */
+.rcpt { display: flex; flex-direction: column; gap: 10px; }
+.rcpt-actions { display: flex; gap: 8px; width: 100%; }
+.rcpt-actions .sh-btn--primary { flex: 1; }
+.rcpt-note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-2); }
+.rcpt-preview {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+.rcpt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rcpt-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rcpt-row__names { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rcpt-row__name { padding: 9px 12px; }
+.rcpt-row__orig { padding: 0 4px; font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.rcpt-row__amt { flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rcpt-row__del {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.rcpt-row__del:active { background: var(--line); }
+.rcpt-row__del:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: 1px; }
 .sheet-stat__meta { padding-top: 6px; }
 
 .cat-actions {

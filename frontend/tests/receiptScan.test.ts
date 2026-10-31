@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  buildReceiptComment,
+  localToday,
+  receiptDateForExpense,
+  receiptExpenseAmount,
+  receiptItemsDiff,
+  replaceReceiptBlock,
+} from '../src/utils/receiptScan.ts';
+
+// Made-up receipt: amounts arrive from the API as exact decimal strings.
+const bread = { name: 'ХЛЕБ', name_ru: 'Хлеб', amount: '54.90' };
+const milk = { name: 'МОЛОКО', name_ru: 'Молоко', amount: '89.9' };
+const discount = { name: 'СКИДКА', name_ru: 'Скидка', amount: '-10' };
+
+test('items diff is exact across scales and signs', () => {
+  assert.equal(receiptItemsDiff('144.80', [bread, milk]), '0');
+  assert.equal(receiptItemsDiff('134.80', [bread, milk, discount]), '0');
+  assert.equal(receiptItemsDiff('0.3', [{ ...bread, amount: '0.1' }, { ...milk, amount: '0.2' }]), '0');
+  assert.equal(receiptItemsDiff('150', [bread, milk]), '5.2');
+  assert.equal(receiptItemsDiff('140', [bread, milk]), '-4.8');
+  assert.equal(receiptItemsDiff('2435060', [{ ...bread, amount: '2435062' }]), '-2');
+  assert.equal(receiptItemsDiff('99.99', []), '99.99');
+});
+
+test('expense amount is the total minus removed rows', () => {
+  assert.equal(receiptExpenseAmount('144.80', []), '144.80');
+  assert.equal(receiptExpenseAmount('144.80', [milk]), '54.9');
+  assert.equal(receiptExpenseAmount('144.80', [discount]), '154.8');
+  assert.equal(receiptExpenseAmount(null, []), null);
+  assert.equal(receiptExpenseAmount('50', [milk]), null, 'nothing left to spend');
+  assert.equal(receiptExpenseAmount('89.9', [milk]), null);
+});
+
+test('comment lists Russian names with comma amounts', () => {
+  assert.equal(buildReceiptComment('Лавка', [bread, milk]), 'Лавка: Хлеб 54,90; Молоко 89,9', 'digits as printed');
+  assert.equal(buildReceiptComment(null, [discount]), 'Скидка −10');
+  assert.equal(buildReceiptComment('Лавка', []), '');
+  const big = { ...bread, amount: '1250000' };
+  assert.equal(buildReceiptComment(null, [big]), 'Хлеб 1 250 000');
+});
+
+test('comment is capped at 1000 chars on a whole item', () => {
+  const items = Array.from({ length: 200 }, (_, n) => ({ name: 'X', name_ru: `Товар номер ${n}`, amount: '100' }));
+  const comment = buildReceiptComment('Лавка', items);
+  assert.ok(comment.length <= 1000, String(comment.length));
+  assert.ok(comment.endsWith('; …'), comment.slice(-20));
+  assert.match(comment, /Товар номер \d+ 100; …$/);
+});
+
+test('repeated apply replaces the inserted block and keeps own text', () => {
+  assert.equal(replaceReceiptBlock('', null, 'Лавка: Хлеб 54,9'), 'Лавка: Хлеб 54,9');
+  assert.equal(replaceReceiptBlock('на ужин', null, 'Лавка: Хлеб 54,9'), 'на ужин · Лавка: Хлеб 54,9');
+  assert.equal(
+    replaceReceiptBlock('на ужин · Лавка: Хлеб 54,9', 'Лавка: Хлеб 54,9', 'Лавка: Молоко 89,9'),
+    'на ужин · Лавка: Молоко 89,9',
+  );
+  assert.equal(replaceReceiptBlock('Лавка: Хлеб 54,9', 'Лавка: Хлеб 54,9', ''), '');
+  assert.equal(replaceReceiptBlock('на ужин', 'старый блок', 'новый'), 'на ужин · новый', 'edited away');
+  assert.equal(replaceReceiptBlock('на ужин', null, ''), 'на ужин');
+});
+
+test('receipt date is used only within the last 31 days', () => {
+  assert.equal(receiptDateForExpense('2026-10-31', '2026-10-31'), '2026-10-31');
+  assert.equal(receiptDateForExpense('2026-09-30', '2026-10-31'), '2026-09-30');
+  assert.equal(receiptDateForExpense('2026-09-29', '2026-10-31'), null);
+  assert.equal(receiptDateForExpense('2026-11-01', '2026-10-31'), null);
+  assert.equal(receiptDateForExpense(null, '2026-10-31'), null);
+});
+
+test('today is the local date, not UTC', () => {
+  // 00:30 local on Nov 1 is still Oct 31 in UTC east of Greenwich.
+  const justAfterMidnight = new Date(2026, 10, 1, 0, 30);
+  assert.equal(localToday(justAfterMidnight), '2026-11-01');
+});
