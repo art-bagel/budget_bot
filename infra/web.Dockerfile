@@ -1,4 +1,5 @@
-FROM node:20-alpine AS builder
+# Same major as CI (.github/workflows/budget_bot_ci_cd.yml): 22.18+ also runs frontend/tests.
+FROM node:22-alpine AS builder
 
 WORKDIR /app/frontend
 
