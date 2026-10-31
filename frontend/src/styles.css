@@ -5643,21 +5643,35 @@ select.dlg-row__ghost option {
   border-radius: var(--r-md);
   background: var(--surface-inset);
 }
-.rcpt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.rcpt-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.rcpt-row__names { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.rcpt-row__name { padding: 9px 12px; }
+/* Rows share the list's columns: every name field has the same width and the
+   amounts line up. Amount and × sit level with the name field (40px), not
+   centred on the field plus the original line under it. */
+.rcpt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px 8px;
+}
+.rcpt-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: start;
+}
+.rcpt-row__names { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rcpt-row__name { padding: 10px 12px; line-height: 20px; }
 .rcpt-row__orig { padding: 0 4px; font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; }
-.rcpt-row__amt { flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rcpt-row__amt { padding-top: 10px; line-height: 20px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rcpt-row__del {
-  flex-shrink: 0;
   width: 40px;
   height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
