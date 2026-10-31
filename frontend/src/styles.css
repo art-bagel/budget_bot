@@ -5669,7 +5669,8 @@ select.dlg-row__ghost option {
 .rcpt-row__names { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .rcpt-row__name { display: block; padding: 10px 12px; line-height: 20px; resize: none; overflow: hidden; }
 .rcpt-row__orig { padding: 0 4px; font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; }
-.rcpt-row__amt { display: flex; align-items: center; gap: 4px; }
+/* Fields keep to the right edge, so a discount's minus hangs left of the column. */
+.rcpt-row__amt { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .rcpt-row__sign { font-weight: 600; color: var(--text-2); }
 .rcpt-row__amt-input {
   width: 96px;
