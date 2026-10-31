@@ -6,7 +6,7 @@ Project budget_bot {
 Table currencies {
   code char(3) [pk, not null]
   name varchar(100) [not null]
-  scale smallint [not null, default: 2]
+  scale smallint [not null, default: 2, note: "Знаков после запятой для показа и ввода (VND — 0); суммы на счетах хранятся до 8 знаков"]
 }
 
 Table users {

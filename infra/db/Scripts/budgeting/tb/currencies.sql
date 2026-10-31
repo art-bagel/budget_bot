@@ -14,5 +14,6 @@ VALUES
     ('EGP', 'Egyptian Pound', 2),
     ('CNY', 'Chinese Yuan', 2),
     ('KZT', 'Kazakhstani Tenge', 2),
-    ('TRY', 'Turkish Lira', 2)
+    ('TRY', 'Turkish Lira', 2),
+    ('VND', 'Vietnamese Dong', 0)
 ON CONFLICT (code) DO NOTHING;
