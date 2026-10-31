@@ -5677,7 +5677,7 @@ select.dlg-row__ghost option {
   cursor: pointer;
 }
 .rcpt-row__del:active { background: var(--line); }
-.rcpt-row__del:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: 1px; }
+.rcpt-row__del:focus-visible { outline: 2px solid var(--yellow-deep); outline-offset: -2px; }
 .sheet-stat__meta { padding-top: 6px; }
 
 .cat-actions {
