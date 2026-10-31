@@ -5672,8 +5672,10 @@ select.dlg-row__ghost option {
 /* Fields keep to the right edge, so a discount's minus hangs left of the column. */
 .rcpt-row__amt { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .rcpt-row__sign { font-weight: 600; color: var(--text-2); }
+/* Every field is as wide as the longest amount in the list (--rcpt-amt-chars,
+   set by ReceiptScanSheet), 96–150px: 125000000.00 is not cut at 375px. */
 .rcpt-row__amt-input {
-  width: 96px;
+  width: clamp(96px, calc(var(--rcpt-amt-chars, 0) * 1ch + 28px), 150px);
   padding: 10px 12px;
   line-height: 20px;
   text-align: right;

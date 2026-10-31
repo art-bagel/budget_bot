@@ -163,10 +163,16 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     amount: row.amount === '' ? '' : `${row.negative ? '-' : ''}${row.amount}`,
   }));
   // Rows keep their fields across scans («Другое фото»), so every scan refits them all.
+  // The amount column grows with the longest sum, so a long one is not cut; that
+  // narrows the names, so they are refitted then too.
   const listRef = useRef<HTMLUListElement>(null);
+  const amountChars = Math.max(0, ...rows.map((row) => row.amount.length));
   useLayoutEffect(() => {
-    if (scan) listRef.current?.querySelectorAll('textarea').forEach(fitHeight);
-  }, [scan]);
+    const list = listRef.current;
+    if (!scan || !list) return;
+    list.style.setProperty('--rcpt-amt-chars', String(amountChars));
+    list.querySelectorAll('textarea').forEach(fitHeight);
+  }, [scan, amountChars]);
   useEffect(() => {
     if (focusKey === null) return;
     listRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-key="${focusKey}"]`)?.focus();
