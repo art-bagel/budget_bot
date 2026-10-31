@@ -5661,7 +5661,7 @@ select.dlg-row__ghost option {
   align-items: start;
 }
 .rcpt-row__names { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.rcpt-row__name { padding: 10px 12px; line-height: 20px; }
+.rcpt-row__name { display: block; padding: 10px 12px; line-height: 20px; resize: none; overflow: hidden; }
 .rcpt-row__orig { padding: 0 4px; font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; }
 .rcpt-row__amt { padding-top: 10px; line-height: 20px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rcpt-row__del {

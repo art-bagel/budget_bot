@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import BottomSheet from './BottomSheet';
 
@@ -60,6 +60,13 @@ function readableError(reason: unknown): string {
   return /[а-яё]/i.test(message) ? message : 'Не удалось распознать чек. Проверьте связь и попробуйте ещё раз.';
 }
 
+// A name field grows with its text, so a long translated name wraps instead of being cut.
+function fitHeight(field: HTMLTextAreaElement | null) {
+  if (!field) return;
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight}px`;
+}
+
 function formatDate(iso: string): string {
   const [year, month, day] = iso.split('-');
   return `${day}.${month}.${year}`;
@@ -118,6 +125,11 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
       .map((item, index) => ({ ...item, name_ru: names[index]?.trim() || item.name_ru, index }))
       .filter((item) => !removed.has(item.index))
     : [];
+  // Rows keep their fields across scans («Другое фото»), so every scan refits them all.
+  const listRef = useRef<HTMLUListElement>(null);
+  useLayoutEffect(() => {
+    if (scan) listRef.current?.querySelectorAll('textarea').forEach(fitHeight);
+  }, [scan]);
   const removedItems = scan ? scan.items.filter((_, index) => removed.has(index)) : [];
   const amount = scan ? receiptExpenseAmount(scan.total, removedItems) : null;
   const currencyOk = Boolean(scan?.currency && availableCurrencies.includes(scan.currency));
@@ -214,17 +226,21 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
             {meta && <p className="rcpt-note">{meta}</p>}
             {hints.map((hint) => <p className="rcpt-note" key={hint}>{hint}</p>)}
             {kept.length > 0 && (
-              <ul className="rcpt-list" aria-label="Позиции чека">
+              <ul ref={listRef} className="rcpt-list" aria-label="Позиции чека">
                 {kept.map((item) => (
                   <li className="rcpt-row" key={item.index}>
                     <div className="rcpt-row__names">
-                      <input
+                      <textarea
                         className="inp-v2 rcpt-row__name"
-                        type="text"
+                        rows={1}
                         value={names[item.index] ?? ''}
                         aria-label={`Название позиции ${item.index + 1}`}
                         onChange={(event) => {
-                          const value = event.target.value;
+                          const field = event.target;
+                          // One line in the comment: Enter or a pasted line break becomes a space.
+                          if (/[\r\n]/.test(field.value)) field.value = field.value.replace(/[\r\n]+/g, ' ');
+                          fitHeight(field);
+                          const value = field.value;
                           setNames((prev) => prev.map((name, index) => (index === item.index ? value : name)));
                         }}
                       />
