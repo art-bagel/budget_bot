@@ -20,7 +20,7 @@ test('items diff is exact across scales and signs', () => {
   assert.equal(receiptItemsDiff('0.3', [{ ...bread, amount: '0.1' }, { ...milk, amount: '0.2' }]), '0');
   assert.equal(receiptItemsDiff('150', [bread, milk]), '5.2');
   assert.equal(receiptItemsDiff('140', [bread, milk]), '-4.8');
-  assert.equal(receiptItemsDiff('2435060', [{ ...bread, amount: '2435062' }]), '-2');
+  assert.equal(receiptItemsDiff('1250000', [{ ...bread, amount: '1250002' }]), '-2');
   assert.equal(receiptItemsDiff('99.99', []), '99.99');
 });
 
@@ -59,6 +59,11 @@ test('repeated apply replaces the inserted block and keeps own text', () => {
   assert.equal(replaceReceiptBlock('Лавка: Хлеб 54,9', 'Лавка: Хлеб 54,9', ''), '');
   assert.equal(replaceReceiptBlock('на ужин', 'старый блок', 'новый'), 'на ужин · новый', 'edited away');
   assert.equal(replaceReceiptBlock('на ужин', null, ''), 'на ужин');
+  assert.equal(
+    replaceReceiptBlock('на ужин · Лавка: Хлеб 54,9 · с гостями', 'Лавка: Хлеб 54,9', 'Лавка: Сыр 300'),
+    'на ужин · с гостями · Лавка: Сыр 300',
+    'no double separator when the block was in the middle',
+  );
 });
 
 test('receipt date is used only within the last 31 days', () => {
@@ -70,7 +75,15 @@ test('receipt date is used only within the last 31 days', () => {
 });
 
 test('today is the local date, not UTC', () => {
-  // 00:30 local on Nov 1 is still Oct 31 in UTC east of Greenwich.
-  const justAfterMidnight = new Date(2026, 10, 1, 0, 30);
-  assert.equal(localToday(justAfterMidnight), '2026-11-01');
+  // CI runs in UTC, where local and UTC dates match: pin a zone east of Greenwich.
+  const savedZone = process.env.TZ;
+  process.env.TZ = 'Europe/Moscow';
+  try {
+    const justAfterMidnight = new Date(2026, 10, 1, 0, 30);
+    assert.equal(justAfterMidnight.toISOString().slice(0, 10), '2026-10-31', 'still Oct 31 in UTC');
+    assert.equal(localToday(justAfterMidnight), '2026-11-01');
+  } finally {
+    if (savedZone === undefined) delete process.env.TZ;
+    else process.env.TZ = savedZone;
+  }
 });

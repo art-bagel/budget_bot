@@ -1,5 +1,5 @@
 // Pure helpers for the receipt sheet. Amounts arrive from the API as exact
-// decimal strings ("54.90", "-10", "2435060") and are added as BigInt, never
+// decimal strings ("54.90", "-10", "1250000") and are added as BigInt, never
 // as floats, so a rounding difference on the receipt is shown as it is.
 
 interface Amount {
@@ -50,7 +50,7 @@ export function receiptExpenseAmount(total: string | null, removed: Amount[]): s
   return rest.startsWith('-') || rest === '0' ? null : rest;
 }
 
-/** 2435060 → "2 435 060", -10 → "−10", 54.90 → "54,90" (digits as printed). */
+/** 1250000 → "1 250 000", -10 → "−10", 54.90 → "54,90" (digits as printed). */
 export function displayReceiptAmount(value: string): string {
   const match = DECIMAL.exec(value.trim());
   if (!match) return value;
@@ -78,11 +78,15 @@ export function buildReceiptComment(merchant: string | null, items: NamedAmount[
 
 /** Puts the receipt block into the comment, replacing the one inserted before and keeping the user's own text. */
 export function replaceReceiptBlock(comment: string, previousBlock: string | null, nextBlock: string): string {
-  let base = comment;
+  let base = comment.trim();
   if (previousBlock && base.includes(previousBlock)) {
-    base = base.replace(previousBlock, '').replace(/\s*·\s*$/, '').replace(/^\s*·\s*/, '');
+    // The block may sit between the user's own parts: rejoin them with one separator.
+    base = base
+      .replace(previousBlock, '')
+      .split(/\s*·\s*/)
+      .filter((part) => part.trim() !== '')
+      .join(SEPARATOR);
   }
-  base = base.trim();
   if (!nextBlock) return base;
   return base ? `${base}${SEPARATOR}${nextBlock}` : nextBlock;
 }
