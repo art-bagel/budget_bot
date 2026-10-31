@@ -6868,14 +6868,10 @@ select.dlg-row__ghost option {
 .pf-pos__title {
   font-size: 13.5px;
   font-weight: 500;
-  color: rgba(10, 11, 13, 0.85);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-[data-theme='dark'] .pf-pos__title {
-  color: var(--text);
 }
 
 .pf-pos__sub {
