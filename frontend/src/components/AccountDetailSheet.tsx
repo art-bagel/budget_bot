@@ -4,7 +4,7 @@ import { mergeBankCryptoAsset } from '../api';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import type { DashboardBankBalance } from '../types';
-import { currencyName, currencySymbol, formatNumericAmount } from '../utils/format';
+import { currencyFractionDigits, currencyName, currencySymbol, formatNumericAmount } from '../utils/format';
 import { cryptoNetworkSuffix } from '../utils/cryptoAssetLabel';
 import BottomSheet from './BottomSheet';
 
@@ -92,7 +92,7 @@ export default function AccountDetailSheet({
         <span className={`comp__dot comp__dot--c${colorIndex}`} />
         <span className="comp__name">{label}</span>
         <span className="comp__native">
-          {formatNumericAmount(b.amount, b.asset_type === 'crypto' ? 8 : 2)} {b.asset_type === 'crypto' ? (b.symbol ?? b.currency_code) : currencySymbol(b.currency_code)}
+          {formatNumericAmount(b.amount, b.asset_type === 'crypto' ? 8 : currencyFractionDigits(b.currency_code))} {b.asset_type === 'crypto' ? (b.symbol ?? b.currency_code) : currencySymbol(b.currency_code)}
           {!isBase && (
             <span className="comp__conv">
               {formatBase(b.historical_cost_in_base)} {currencySymbol(baseCurrencyCode)}

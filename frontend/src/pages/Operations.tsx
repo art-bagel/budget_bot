@@ -24,7 +24,7 @@ import type {
   CancelCheckResponse,
   UserContext,
 } from '../types';
-import { currencySymbol, formatAmount, pluralRu } from '../utils/format';
+import { currencyFractionDigits, currencySymbol, formatAmount, pluralRu } from '../utils/format';
 
 
 const HISTORY_PAGE_SIZE = 20;
@@ -336,7 +336,7 @@ function formatSignedAmount(amount: number, currencyCode: string): string {
   const absAmount = Math.abs(amount);
   const prefix = amount > 0 ? '+' : amount < 0 ? '−' : '';
   return prefix + new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: 2,
+    maximumFractionDigits: currencyFractionDigits(currencyCode),
   }).format(absAmount) + ' ' + currencySymbol(currencyCode);
 }
 

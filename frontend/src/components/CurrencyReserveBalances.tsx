@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import type { PortfolioSummaryItem } from '../types';
-import { currencyName, currencySymbol, formatAmount, formatNumericAmount } from '../utils/format';
+import { currencyName, currencySymbol, formatAmount, formatNumericAmount, formatRate } from '../utils/format';
 import type { DollarDisplay } from './CurrencySwitch';
 
 // Issuer's flag for each currency, from the same CDN as the coin icons; pinned version.
 const CURRENCY_COUNTRY: Record<string, string> = {
   RUB: 'ru', USD: 'us', EUR: 'eu', GBP: 'gb', CNY: 'cn', JPY: 'jp', CHF: 'ch', TRY: 'tr',
-  KZT: 'kz', UAH: 'ua', BYN: 'by', AMD: 'am', GEL: 'ge', AZN: 'az', UZS: 'uz', EGP: 'eg',
+  KZT: 'kz', UAH: 'ua', BYN: 'by', AMD: 'am', GEL: 'ge', AZN: 'az', UZS: 'uz', EGP: 'eg', VND: 'vn',
 };
 
 function CurrencyEmblem({ code }: { code: string }) {
@@ -39,7 +39,7 @@ export default function CurrencyReserveBalances({ summary, display }: {
                 <div className="pf-pos__title">{currencyName(balance.currency_code)}</div>
                 <div className="pf-pos__sub">
                   {formatAmount(balance.amount, balance.currency_code)}
-                  {balance.rate !== null && ` · курс ${formatNumericAmount(balance.rate, balance.rate >= 1 ? 2 : 4)} ${currencySymbol(balance.base_currency_code)}`}
+                  {balance.rate !== null && ` · курс ${formatRate(balance.rate, 2)} ${currencySymbol(balance.base_currency_code)}`}
                 </div>
               </div>
             </div>
