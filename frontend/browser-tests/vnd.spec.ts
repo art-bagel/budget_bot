@@ -36,8 +36,10 @@ test('exchange sheet reads a dong amount with thousands dots', async ({ page }) 
 });
 
 test('dong exchange and expense keep whole amounts and are cancelled back', async ({ page }, testInfo) => {
-  // The flow changes shared seed data: once per run is enough.
-  test.skip(testInfo.project.name !== 'light', 'data flow runs in one theme');
+  // The flow changes shared seed data: once per run is enough. Its cancelled
+  // rows top the history, so it runs in the last project, after every
+  // screenshot of the operations list (cancel.spec.ts in dark shifted).
+  test.skip(testInfo.project.name !== 'dark', 'data flow runs in one theme');
   const { api, headers } = await apiSession(page);
 
   // currencies.scale and the ISO digits Intl uses for display agree.
