@@ -56,7 +56,12 @@ SCHEMA = {
     'required': ['merchant', 'date', 'currency', 'total', 'items'],
 }
 
+# Control characters become spaces (a line break must not glue two words); bidi
+# overrides and zero-width characters are dropped: they could reorder or hide text
+# in operations.comment.
 _CONTROL = re.compile(r'[\x00-\x1f\x7f-\x9f]')
+_INVISIBLE = re.compile('[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]')
+_SPACES = re.compile(r'\s+')
 _CURRENCY = re.compile(r'[A-Z]{3}')
 _FENCE = re.compile(r'^```(?:json)?\s*|\s*```$')
 
@@ -90,7 +95,7 @@ def _reject_constant(name: str):
 def _text(value, limit: int) -> Optional[str]:
     if not isinstance(value, str):
         return None
-    cleaned = _CONTROL.sub('', value).strip()[:limit].strip()
+    cleaned = _SPACES.sub(' ', _CONTROL.sub(' ', _INVISIBLE.sub('', value))).strip()[:limit].strip()
     return cleaned or None
 
 
@@ -161,7 +166,8 @@ def parse_completion(raw) -> ReceiptScan:
         data = json.loads(_FENCE.sub('', content.strip()), parse_float=Decimal, parse_constant=_reject_constant)
     except ValueError:
         raise ReceiptScanError('bad json') from None
-    if not isinstance(data, dict) or not isinstance(data.get('items'), list):
+    # items: null is a receipt without readable lines (a terminal screen), not garbage.
+    if not isinstance(data, dict) or not isinstance(data.get('items') or [], list):
         raise ReceiptScanError('bad json')
 
     return ReceiptScan(
@@ -169,7 +175,7 @@ def parse_completion(raw) -> ReceiptScan:
         date=_date(data.get('date')),
         currency=_currency(data.get('currency')),
         total=_amount(data.get('total'), allow_negative=False),
-        items=_items(data['items']),
+        items=_items(data.get('items') or []),
     )
 
 

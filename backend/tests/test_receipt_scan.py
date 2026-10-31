@@ -73,7 +73,6 @@ class ParseCompletionTests(unittest.TestCase):
             raw_answer('{"total": NaN, "items": []}'),
             raw_answer('{"total": Infinity, "items": []}'),
             raw_answer(json.dumps({**GOOD, 'items': 'none'})),
-            raw_answer(json.dumps({key: value for key, value in GOOD.items() if key != 'items'})),
             raw_answer('[]'),
             completion(''),
             completion(None),
@@ -122,6 +121,19 @@ class ParseCompletionTests(unittest.TestCase):
             [('ХЛЕБ', 'ХЛЕБ', '54.9'), ('Молоко', 'Молоко', '89.9'), ('СКИДКА', 'Скидка', '-10'),
              ('Д' * 200, 'Д' * 200, '5')],
         )
+
+    def test_missing_items_is_an_empty_list(self):
+        for data in ({**GOOD, 'items': None}, {key: value for key, value in GOOD.items() if key != 'items'}):
+            with self.subTest(keys=sorted(data)):
+                scan = parse_completion(raw_answer(json.dumps(data)))
+                self.assertEqual(scan.items, [])
+                self.assertEqual(scan.total, Decimal('144.8'))
+
+    def test_line_breaks_become_spaces_and_invisible_characters_go(self):
+        items = [{'name': 'ХЛЕБ\nБОРОД\tИНСКИЙ', 'name_ru': 'Хлеб\u202e бородинский\u200b', 'amount': 1}]
+        [item] = parse_completion(answer(items=items, merchant='Лавка\r\nу дома\u2066')).items
+        self.assertEqual((item.name, item.name_ru), ('ХЛЕБ БОРОД ИНСКИЙ', 'Хлеб бородинский'))
+        self.assertEqual(parse_completion(answer(merchant='Лавка\r\nу дома\u2066')).merchant, 'Лавка у дома')
 
     def test_at_most_200_items(self):
         items = [{'name': f'Товар {n}', 'name_ru': f'Товар {n}', 'amount': 1} for n in range(300)]
@@ -270,12 +282,13 @@ class EndpointTests(unittest.IsolatedAsyncioTestCase):
 
         self.scan_mock.side_effect = slow
         first = asyncio.ensure_future(self.post())
-        await started.wait()
+        # A regression must fail the test, not hang the CI job.
+        await asyncio.wait_for(started.wait(), 5)
         others = await asyncio.gather(*(self.post() for _ in range(24)))
         self.assertEqual({r.status_code for r in others}, {429})
         self.assertEqual(others[0].json()['detail'], 'Чек уже распознаётся')
         release.set()
-        self.assertEqual((await first).status_code, 200)
+        self.assertEqual((await asyncio.wait_for(first, 5)).status_code, 200)
         self.assertEqual(self.scan_mock.await_count, 1)
         self.assertEqual((await self.post()).status_code, 200, 'slot is released')
 
