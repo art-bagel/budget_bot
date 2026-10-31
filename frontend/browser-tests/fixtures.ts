@@ -26,6 +26,13 @@ export async function openOverview(page: Page) {
   );
 }
 
+// A test that provokes an error on purpose (an HTTP 502 the UI must show)
+// takes exactly those messages out before the fixture checks the rest.
+export function allowConsoleErrors(errors: string[], pattern: RegExp) {
+  const rest = errors.filter((message) => !pattern.test(message));
+  errors.splice(0, errors.length, ...rest);
+}
+
 // Fails any test that logs a console error or throws in the page.
 export const test = base.extend<{ consoleErrors: string[] }>({
   consoleErrors: [
