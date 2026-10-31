@@ -80,8 +80,10 @@ async function mockScan(page: Page, body: object, status = 200) {
 }
 
 test('a scanned receipt fills the expense form and lands in history', async ({ page }, testInfo) => {
-  // Records and then cancels a real expense in the shared seed: one theme is enough.
-  test.skip(testInfo.project.name !== 'light', 'data flow runs in one theme');
+  // Records and then cancels a real expense in the shared seed: once per run, in the
+  // dark project, so it runs after both cancel.spec screenshots of the history list
+  // (the extra rows would shift them by a few pixels).
+  test.skip(testInfo.project.name !== 'dark', 'data flow runs in one theme');
   const sent = await mockScan(page, RECEIPT);
   await openReceiptSheet(page);
   const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
