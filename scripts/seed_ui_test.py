@@ -101,11 +101,18 @@ def seed(client) -> None:
     gifts = call('POST', '/api/v1/bank-accounts', json={
         'name': 'Тестовые подарки', 'account_kind': 'investment', 'investment_asset_type': 'collectible',
     })['id']
-    call('POST', '/api/v1/portfolio/positions', json={
+    gift = call('POST', '/api/v1/portfolio/positions', json={
         'request_id': '00000000-0000-4000-8000-0000000000a1', 'received_free': True,
         'investment_account_id': gifts, 'asset_type_code': 'collectible', 'title': 'Тестовый подарок',
         'quantity': 1, 'amount_in_currency': 0, 'currency_code': 'RUB', 'opened_at': '2026-01-12',
         'metadata': {'item_kind': 'telegram_gift'},
+    })['id']
+    # A transfer fee on the free gift: the shelf and the card show fees as part of the costs.
+    call('POST', '/api/v1/operations/account-transfer', json={
+        'from_account_id': account, 'to_account_id': gifts, 'currency_code': 'RUB', 'amount': 500,
+    })
+    call('POST', '/api/v1/portfolio/positions/{}/fee'.format(gift), json={
+        'amount': 50, 'currency_code': 'RUB', 'charged_at': '2026-01-13', 'comment': 'Комиссия сети',
     })
 
 

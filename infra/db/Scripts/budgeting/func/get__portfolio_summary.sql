@@ -113,6 +113,9 @@ BEGIN
                                       0)
                     WHEN pe.event_type = 'adjustment' AND (pe.metadata ->> 'action') = 'cancel_income'
                         THEN COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
+                    -- A fee is a realized cost of the position; crypto fees are counted by the crypto flows.
+                    WHEN pp.asset_type_code <> 'crypto' AND pe.event_type = 'fee'
+                        THEN -COALESCE((pe.metadata ->> 'amount_in_base')::numeric, 0)
                     ELSE 0
                 END
             ), 0) AS realized_income_in_base

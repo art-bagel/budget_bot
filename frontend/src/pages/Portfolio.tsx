@@ -98,7 +98,7 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { collectibleFeesInBase, collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
 import { defaultPositionCurrency } from '../utils/collectibleCurrency';
 import { telegramGiftLink, telegramGiftTitle } from '../utils/telegramGift';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
@@ -671,11 +671,14 @@ function canRecordPositionIncome(position: PortfolioPosition): boolean {
     || position.asset_type_code === 'other';
 }
 
+// Fees are a realized cost of the position, so they come out of its result
+// (crypto fees are counted by the crypto flows instead).
 function getPositionRealizedResult(position: PortfolioPosition): number {
   if (position.asset_type_code === 'crypto') {
     return 0;
   }
-  return Number(position.metadata?.income_in_base ?? 0) + Number(position.metadata?.realized_result_in_base ?? 0);
+  return Number(position.metadata?.income_in_base ?? 0) + Number(position.metadata?.realized_result_in_base ?? 0)
+    - collectibleFeesInBase(position);
 }
 
 // Collection items are acquired, invested in and sold rather than opened and topped up.
@@ -3605,7 +3608,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                     );
                   })}
                   {isCollectionAccount && group.positions.length > 0 ? (
-                    <CollectionShelf positions={group.positions} onOpen={(id) => void handleOpenPositionDetails(id)} />
+                    <CollectionShelf positions={group.positions} baseCurrencyCode={user.base_currency_code} onOpen={(id) => void handleOpenPositionDetails(id)} />
                   ) : sections.map((section) => (
                     <div key={section.code}>
                       {section.positions.length > 0 && (sections.length > 1
@@ -4422,9 +4425,15 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-dcond__row-value">{formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
                     </div>
                   ) : null}
+                  {collectibleFeesInBase(selectedPosition) > 0 && getPositionInvestedPrincipal(selectedPosition) > 0 ? (
+                    <div className="pf-dcond__row">
+                      <span className="pf-dcond__row-label">Затраты всего</span>
+                      <span className="pf-dcond__row-value">{formatAmount(getPositionInvestedPrincipal(selectedPosition) + collectibleFeesInBase(selectedPosition), user.base_currency_code)}</span>
+                    </div>
+                  ) : null}
                   {getPositionRealizedResult(selectedPosition) !== 0 ? (
                     <div className="pf-dcond__row">
-                      <span className="pf-dcond__row-label">Реализованный результат</span>
+                      <span className="pf-dcond__row-label">{collectibleFeesInBase(selectedPosition) > 0 ? 'Результат после комиссий' : 'Реализованный результат'}</span>
                       <span className={`pf-dcond__row-value pf-dcond__row-value--${getPositionRealizedResult(selectedPosition) >= 0 ? 'pos' : 'neg'}`}>
                         {getPositionRealizedResult(selectedPosition) >= 0 ? '+' : ''}{formatAmount(getPositionRealizedResult(selectedPosition), user.base_currency_code)}
                       </span>

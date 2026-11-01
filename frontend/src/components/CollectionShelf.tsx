@@ -21,7 +21,7 @@ export function NftMark({ metadata }: { metadata?: Record<string, unknown> }) {
 }
 
 // Items of one collection account as a showcase: kinds as tabs, sealed packs first, then a shelf per collection.
-export default function CollectionShelf({ positions, onOpen }: { positions: PortfolioPosition[]; onOpen: (id: number) => void }) {
+export default function CollectionShelf({ positions, baseCurrencyCode, onOpen }: { positions: PortfolioPosition[]; baseCurrencyCode: string; onOpen: (id: number) => void }) {
   const kinds = useMemo(() => COLLECTIBLE_KINDS
     .map((kind) => ({ ...kind, items: positions.filter((p) => (p.metadata?.item_kind ?? 'other') === kind.value) }))
     .filter((kind) => kind.items.length > 0), [positions]);
@@ -61,14 +61,14 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
     const quantity = Number(item.quantity ?? 1);
     return (
       <button key={item.id} type="button" className="clx-tile" onClick={() => onOpen(item.id)}
-        aria-label={`${item.title}, ${collectibleCostsLabel([item])}`}>
+        aria-label={`${item.title}, ${collectibleCostsLabel([item], baseCurrencyCode)}`}>
         <span className="clx-tile__art">
           <CollectibleImage metadata={item.metadata} className="clx-tile__img" />
           <NftMark metadata={item.metadata} />
           {quantity > 1 && <span className="clx-tile__qty">×{formatNumericAmount(quantity, 0)}</span>}
         </span>
         {caption && <span className="clx-tile__cap">{caption}</span>}
-        <span className={`clx-tile__sub${item.metadata?.acquisition_kind === 'unknown' ? ' clx-tile__sub--unknown' : ''}`}>{collectibleCostsLabel([item])}</span>
+        <span className={`clx-tile__sub${item.metadata?.acquisition_kind === 'unknown' ? ' clx-tile__sub--unknown' : ''}`}>{collectibleCostsLabel([item], baseCurrencyCode)}</span>
       </button>
     );
   };
@@ -98,9 +98,9 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
               const name = collectibleShelf(pack.metadata, pack.title);
               return (
                 <button key={pack.id} type="button" className="clx-packtile" onClick={() => onOpen(pack.id)}
-                  aria-label={`Неоткрытый пак ${name}, ${collectibleCostsLabel([pack])}`}>
+                  aria-label={`Неоткрытый пак ${name}, ${collectibleCostsLabel([pack], baseCurrencyCode)}`}>
                   <CollectibleImage metadata={pack.metadata} packName={name} className="clx-packtile__art" />
-                  <span className="clx-tile__sub">{collectibleCostsLabel([pack])}</span>
+                  <span className="clx-tile__sub">{collectibleCostsLabel([pack], baseCurrencyCode)}</span>
                 </button>
               );
             })}
@@ -162,7 +162,7 @@ export default function CollectionShelf({ positions, onOpen }: { positions: Port
                   </span>
                   <span className="clx-tile__cap">{stack.name}</span>
                   <span className="clx-tile__sub">
-                    {collectibleCostsLabel(stack.items)}
+                    {collectibleCostsLabel(stack.items, baseCurrencyCode)}
                   </span>
                 </button>,
               ];

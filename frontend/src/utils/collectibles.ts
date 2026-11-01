@@ -2,6 +2,9 @@ import type { PortfolioPosition } from '../types';
 import giftOriginals from '../data/telegramGiftOriginals.json';
 import { currencySymbol, formatNumericAmount } from './format';
 import { telegramGiftSlug } from './telegramGift';
+import { collectibleCostsLabel as costsLabelWithFees } from './collectibleCosts';
+
+export { collectibleFeesInBase } from './collectibleCosts';
 
 const normalizedGiftName = (name: string) => name.toLowerCase().replace(/[\s’'_-]/g, '');
 const giftOriginalIds = new Map(giftOriginals.flatMap((gift) =>
@@ -174,18 +177,7 @@ export function collectibleUnits(items: PortfolioPosition[]): number {
   return items.reduce((sum, item) => sum + Number(item.quantity ?? 1), 0);
 }
 
-// Different currencies are shown separately; unknown purchases retain their known costs.
-export function collectibleCostsLabel(items: PortfolioPosition[]): string {
-  const totals = new Map<string, number>();
-  for (const item of items) {
-    totals.set(item.currency_code, (totals.get(item.currency_code) ?? 0) + Number(item.amount_in_currency));
-  }
-  const unknown = items.some(item => item.metadata?.acquisition_kind === 'unknown');
-  const free = items.every(item => item.metadata?.acquisition_kind === 'free');
-  const hasCosts = [...totals.values()].some(amount => amount !== 0);
-  const amounts = [...totals].filter(([, amount]) => amount !== 0)
-    .map(([currency, amount]) => `${formatNumericAmount(amount)} ${currencySymbol(currency)}`).join(' + ');
-  if (unknown) return hasCosts ? `известно ${amounts} · цена неизвестна` : 'цена неизвестна';
-  if (free) return hasCosts ? `бесплатно · затраты ${amounts}` : 'бесплатно';
-  return amounts || `0 ${currencySymbol(items[0]?.currency_code ?? '')}`;
+// Costs with fees, per currency; see collectibleCosts.ts for the rules.
+export function collectibleCostsLabel(items: PortfolioPosition[], baseCurrency: string): string {
+  return costsLabelWithFees(items, baseCurrency, (amount, currency) => `${formatNumericAmount(amount)} ${currencySymbol(currency)}`);
 }

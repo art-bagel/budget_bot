@@ -115,4 +115,46 @@ BEGIN
  ASSERT history->0->'portfolio_events'->0->>'position_title'='History item','collection item title available';
  ASSERT (history->-1->>'operated_at')::date=current_date-3,'operation date kept, sorted by it';
 END $$;
+-- Fees are a realized cost: they reduce the account's realized income for every type but crypto.
+DO $$
+DECLARE uid bigint:=990000000907; me jsonb; bank bigint; coll bigint; dep bigint; coin bigint; item jsonb; pos jsonb; fee_sid bigint;
+ payload jsonb; got numeric;
+BEGIN
+ me:=put__register_user_context(uid,'RUB',NULL,'Fee','Result');
+ bank:=(me->>'bank_account_id')::bigint;
+ coll:=(put__create_bank_account(uid,'Collection','user','investment','collectible')->>'id')::bigint;
+ dep:=(put__create_bank_account(uid,'Deposit','user','investment','deposit')->>'id')::bigint;
+ PERFORM put__record_income(uid,bank,30000,'RUB');
+ PERFORM put__transfer_between_accounts(uid,bank,coll,'RUB',5000);
+ PERFORM put__transfer_between_accounts(uid,bank,dep,'RUB',10000);
+ -- Fiat: bought for 100, fee 15, sold for 110 → −5; without the fee → +10.
+ item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_buy',jsonb_build_object('investment_account_id',coll,'title','Fee item','quantity',1,'amount_in_currency',100,'currency_code','RUB','metadata','{"item_kind":"nft"}'::jsonb),current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_fee',jsonb_build_object('position_id',item->'id','amount',15,'currency_code','RUB'),current_date);
+ fee_sid:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
+ SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
+ ASSERT got=-15,'fee alone is a realized cost: '||got;
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',jsonb_build_object('position_id',item->'id','close_amount_in_currency',110,'close_currency_code','RUB'),current_date);
+ SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
+ ASSERT got=-5,'sale result after fee: '||got;
+ ASSERT (SELECT (metadata->>'realized_result_in_base')::numeric FROM portfolio_positions WHERE id=(item->>'id')::bigint)=10,'ledger result stays gross';
+ PERFORM put__delete_crypto_source(uid,fee_sid,gen_random_uuid());
+ SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
+ ASSERT got=10,'deleted fee restores the gross result: '||got;
+ -- Coins: a coin fee counts at once; a coin sale defers its own result to the coin lot.
+ coin:=(put__ensure_crypto_asset('FEEC','Test','test','collectible-fee',9::smallint,'{}')->>'id')::bigint;
+ PERFORM put__buy_crypto_asset(uid,bank,'RUB',1000,coin,100);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_transfer',jsonb_build_object('from_account_id',bank,'to_account_id',coll,'crypto_asset_id',coin,'amount','100'),current_date);
+ item:=put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_buy',jsonb_build_object('investment_account_id',coll,'crypto_asset_id',coin,'crypto_quantity','40','title','Coin item','quantity','1','metadata','{"item_kind":"nft"}'::jsonb),current_date);
+ payload:=jsonb_build_object('position_id',item->'id','crypto_asset_id',coin);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_coin_fee',payload||'{"crypto_quantity":"1"}',current_date);
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_sell',payload||'{"crypto_quantity":"50"}',current_date);
+ SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
+ ASSERT got=0,'coin fee of 10 after the fiat +10: '||got;
+ -- Deposit: the same rule holds for other position types.
+ pos:=put__create_portfolio_position(uid,dep,'deposit','Fee deposit',NULL,5000,'RUB');
+ PERFORM put__record_portfolio_fee(uid,(pos->>'id')::bigint,20,'RUB');
+ PERFORM put__close_portfolio_position(uid,(pos->>'id')::bigint,5100,'RUB');
+ SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=dep;
+ ASSERT got=80,'deposit result after fee: '||got;
+END $$;
 ROLLBACK;
