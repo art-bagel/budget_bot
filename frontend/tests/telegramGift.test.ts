@@ -17,6 +17,8 @@ test('the public page link follows collection and number', () => {
 test('the t.me slug drops spaces and dashes and allows only Latin letters and digits', () => {
   assert.equal(telegramGiftSlug('Vice Cream'), 'ViceCream');
   assert.equal(telegramGiftSlug('B-Day Candle'), 'BDayCandle');
+  assert.equal(telegramGiftSlug('Durov’s Cap'), 'DurovsCap');
+  assert.equal(telegramGiftSlug("Durov's Cap"), 'DurovsCap');
   assert.equal(telegramGiftSlug('Плюшевый Пепе'), null);
   assert.equal(telegramGiftSlug('../x'), null);
 });

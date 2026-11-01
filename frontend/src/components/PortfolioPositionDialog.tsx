@@ -173,7 +173,8 @@ export default function PortfolioPositionDialog({
     const timer = setTimeout(() => {
       fetchTelegramGift(giftSlug ?? '', giftNumber).then((gift) => {
         if (cancelled) return;
-        giftLookedUp.current = giftKey;
+        // Remember the canonical pair ("007" comes back as #7), so the write-back does not search again.
+        giftLookedUp.current = `${telegramGiftSlug(gift.collection)?.toLowerCase()}-${gift.number}`;
         setItemAttributes((prev) => ({
           ...prev, collection: gift.collection, number: gift.number, upgraded: 'yes',
           model: gift.model ?? '', backdrop: gift.backdrop ?? '', symbol: gift.symbol ?? '',
@@ -416,7 +417,8 @@ export default function PortfolioPositionDialog({
       {isCollectible && (
         <div className="apf-field">
           <label className="apf-label">Вид предмета</label>
-          <ApfSelect value={itemKind} options={COLLECTIBLE_KINDS} onChange={setItemKind} disabled={submitting} />
+          <ApfSelect value={itemKind} options={COLLECTIBLE_KINDS} disabled={submitting}
+            onChange={(value) => { setItemKind(value); setItemAttributes({}); setItemLink(''); giftLookedUp.current = ''; }} />
         </div>
       )}
 

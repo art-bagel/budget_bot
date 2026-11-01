@@ -1,8 +1,8 @@
 // Pure helpers for Telegram gifts, kept import-free so node runs their tests.
 
-// The t.me/nft slug of a collection: its name without spaces and dashes, Latin letters and digits only.
+// The t.me/nft slug of a collection: its name without spaces, dashes and apostrophes ("Durov’s Cap" is DurovsCap).
 export function telegramGiftSlug(collection: string): string | null {
-  const slug = collection.replace(/[ -]/g, '');
+  const slug = collection.replace(/[\s’'_-]/g, '');
   return /^[A-Za-z0-9]{1,64}$/.test(slug) ? slug : null;
 }
 

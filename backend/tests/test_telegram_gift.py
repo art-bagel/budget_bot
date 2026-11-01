@@ -31,13 +31,17 @@ class TelegramGiftTests(unittest.IsolatedAsyncioTestCase):
             'link': 'https://t.me/nft/PlushPepe-1',
         })
         self.assertIsNone(parse_telegram_gift(MISSING))
+        durov = parse_telegram_gift(PAGE.replace('Plush Pepe #1', 'Durov’s Cap #1'))
+        self.assertEqual((durov['collection'], durov['link']), ('Durov’s Cap', 'https://t.me/nft/DurovsCap-1'))
 
     async def test_lookup_builds_canonical_link_from_loose_input(self):
         factory, get = fetched(PAGE)
         with factory as client:
             client.return_value.__aenter__.return_value.get = get
-            gift = await telegram_gift(collection='plush pepe', number='1', user=None)
-        self.assertEqual(get.await_args.args[0], 'https://t.me/nft/plushpepe-1')
+            gift = await telegram_gift(collection="plush pepe", number='1', user=None)
+            await telegram_gift(collection="durov's cap", number='1', user=None)
+        self.assertEqual([call.args[0] for call in get.await_args_list],
+                         ['https://t.me/nft/plushpepe-1', 'https://t.me/nft/durovscap-1'])
         self.assertEqual((gift.title, gift.link), ('Plush Pepe #1', 'https://t.me/nft/PlushPepe-1'))
 
     async def test_missing_gift_and_network_errors_are_not_found(self):
@@ -53,7 +57,7 @@ class TelegramGiftTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejects_anything_but_a_slug_and_digits(self):
         with patch('backend.app.routers.portfolio.httpx.AsyncClient') as client:
-            for collection, number in (('../x', '1'), ('Plush Pepe', '1a'), ('Плюш', '1'), ('PlushPepe', '')):
+            for collection, number in (('../x', '1'), ('Plush Pepe', '1a'), ('Плюш', '1'), ('PlushPepe', ''), ('PlushPepe', '1234567890')):
                 with self.assertRaises(HTTPException) as error:
                     await telegram_gift(collection=collection, number=number, user=None)
                 self.assertEqual(error.exception.status_code, 400)

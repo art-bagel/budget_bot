@@ -729,6 +729,11 @@ class TelegramGiftItem(BaseModel):
     link: str
 
 
+# Telegram's slug drops spaces, dashes and apostrophes: "Durov’s Cap" is DurovsCap.
+def _gift_slug(collection: str) -> str:
+    return re.sub(r"[\s’'_-]", '', collection)
+
+
 _GIFT_TRAIT = re.compile(r'<tr><th>(Model|Backdrop|Symbol)</th><td>(.*?)</td></tr>', re.S)
 
 
@@ -747,16 +752,16 @@ def parse_telegram_gift(page: str) -> dict[str, str | None] | None:
         'title': f'{name} #{number}', 'collection': name, 'number': number,
         'model': clean.get('model'), 'backdrop': clean.get('backdrop'), 'symbol': clean.get('symbol'),
         # The page echoes the slug as requested, so the canonical one is rebuilt from the title.
-        'link': f'https://t.me/nft/{re.sub(r"[ -]", "", name)}-{number}',
+        'link': f'https://t.me/nft/{_gift_slug(name)}-{number}',
     }
 
 
 @router.get('/telegram-gift', response_model=TelegramGiftItem)
 async def telegram_gift(
-    collection: str = Query(..., max_length=80), number: str = Query(..., max_length=9),
+    collection: str = Query(...), number: str = Query(...),
     user: CurrentUser = Depends(get_current_user),
 ) -> TelegramGiftItem:
-    slug = re.sub(r'[ -]', '', collection)
+    slug = _gift_slug(collection)
     if not re.fullmatch(r'[A-Za-z0-9]{1,64}', slug) or not re.fullmatch(r'\d{1,9}', number):
         raise HTTPException(status_code=400, detail='Коллекция — латиницей, номер — цифрами')
     # The host is fixed and the path is validated above, so the request cannot be steered elsewhere.
