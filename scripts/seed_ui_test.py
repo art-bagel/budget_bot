@@ -91,6 +91,12 @@ def seed(client) -> None:
         }}],
     })
 
+    # GRAM in the coin reference only (manual network: no price lookups, local icon):
+    # the sale form of a free gift starts with it.
+    call('POST', '/api/v1/crypto/assets', json={
+        'symbol': 'GRAM', 'name': 'Gram', 'network_code': 'manual', 'decimals': 9,
+    })
+
     # A collection with one free gift: browser tests sell it by mistake and undo it.
     gifts = call('POST', '/api/v1/bank-accounts', json={
         'name': 'Тестовые подарки', 'account_kind': 'investment', 'investment_asset_type': 'collectible',
