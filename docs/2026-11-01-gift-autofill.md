@@ -53,7 +53,7 @@ Slug — имя коллекции без пробелов и дефисов, р
 | Критерий | Тест |
 |---|---|
 | 2, 3, 4 | `backend/tests/test_telegram_gift.py`: разбор страницы из строки-фикстуры; страница без таблицы → 404; плохой slug/номер → 400; `httpx` замокан, сеть не нужна |
-| 1, 5 | `frontend/tests/collectibles.test.ts`: `telegramGiftTitle(attributes, fallback)` |
+| 1, 5 | `frontend/tests/telegramGift.test.ts`: `telegramGiftTitle(attributes, fallback)`, `telegramGiftLink`, `telegramGiftSlug` |
 | 1, 6 | ручная проверка формы в браузере (390px), скриншот в отчёте |
 
 Браузерные тесты и сид не меняются: сид-подарок без коллекции сохраняет
@@ -238,3 +238,114 @@ Slug — имя коллекции без пробелов и дефисов, р
 Долг вне задачи (из дизайн-ревью): подписи `.apf-label` в форме позиции и в
 `.clx-editor` не связаны с полями через `htmlFor`; в дереве доступности поля
 называются по плейсхолдеру.
+
+## Финальное ревью
+
+Свежая сессия (скилл `impl-review`), 01.11.2026. Дифф `origin/main...HEAD`
+(7 коммитов, 349e720 → 74fd6d9), worktree `.worktrees/claude-gift-autofill`.
+
+**Что прогнано:**
+
+- `scripts/check.sh --fast` — GREEN (ruff, typecheck, lint, hex, юниты:
+  36 backend-тестов, `node --test` для `tests/*.test.ts`).
+- Полный `scripts/check.sh` после последнего коммита 74fd6d9 — GREEN:
+  frontend build/lint/unit, ruff, backend unit, py_compile, shell syntax,
+  css hex, schema from scratch, sql tests, api tests, browser tests (170 с),
+  docker compose config. Браузерные снимки не менялись — шторка новой
+  позиции и редактор карточки в них не открываются.
+- `/code-review` (medium) по диффу — 6 находок, разобраны ниже.
+- `/security-review` по `GET /api/v1/portfolio/telegram-gift` и форме —
+  уязвимостей HIGH/MEDIUM нет: авторизация та же `get_current_user`, хост
+  и схема фиксированы, путь собирается из `[A-Za-z0-9]{1,64}` и `\d{1,9}`,
+  `follow_redirects=False`, таймаут 8 с, текст ошибки постоянный; значения
+  с t.me очищаются от тегов, режутся до 200 символов, проходят
+  `calc__collectible_metadata`, в DOM идут как текст (в репозитории нет
+  `dangerouslySetInnerHTML`), ссылка — через `safeItemLink` (`^https://\S+$`).
+- Живая проверка t.me (`curl`, без авторизации): `DurovsCap-1` → 200,
+  `og:title` = `Durov’s Cap #1`; `Durov’sCap-1` → 302 на telegram.org;
+  `plushpepe-007` → 200 с `og:title` = `Plush Pepe #7`.
+- Скриншоты в `docs/assets/2026-11-01-gift-autofill/` — тестовый счёт
+  «Тестовые подарки», 0 ₽, реальных данных нет. `before-form-light-found.jpg`
+  и `after-form-light-found.jpg` — один и тот же файл (md5 совпадает);
+  это не ошибка, «после» для этого состояния не менялось.
+
+**Критерии приёмки:**
+
+| № | Статус | Доказательство |
+|---|---|---|
+| 1 | ок | `PortfolioPositionDialog.tsx`: поле «Название» под `!isCrypto && !isGift`; `positionTitle = telegramGiftTitle(itemAttributes, '')` → `canSubmit` требует непустой `positionTitle`, то есть коллекцию. Тест `telegramGift.test.ts` («Vice Cream #12323», без номера — «Plush Pepe»). |
+| 2 | ок / замечание 1 | Эффект с `setTimeout(500)` → `fetchTelegramGift(slug, number)`; ответ пишет `collection`, `number`, `model/backdrop/symbol`, `upgraded: 'yes'`, `setItemLink(gift.link)`. Бэкенд-тест `test_lookup_builds_canonical_link_from_loose_input`: `plush pepe` → `Plush Pepe`, ссылка `PlushPepe-1`. Поля остаются обычными `input`. Ломается для коллекций с апострофом — см. замечание 1. |
+| 3 | ок | `catch` → `setGiftLookup('missing')`, подсказка «В Telegram не найден, заполните вручную»; `canSubmit` от `giftLookup` не зависит. Бэкенд-тест `test_missing_gift_and_network_errors_are_not_found` (страница без таблицы и `ConnectError` → 404). Очистка чужих признаков после прежнего успеха — из дизайн-ревью, проверена по коду. |
+| 4 | ок / замечание 2 | `Depends(get_current_user)`; `re.fullmatch` на slug и номер → 400 (`test_rejects_anything_but_a_slug_and_digits`, `AsyncClient` не вызывается); URL `https://t.me/nft/{slug}-{number}`, `follow_redirects=False`, `timeout=8`; ответ `TelegramGiftItem` с нужными полями; не-200, нет таблицы или `httpx.HTTPError` → 404. Исключение: длина сверх `Query(max_length)` даёт 422, а не 400 — замечание 2. |
+| 5 | ок | `Portfolio.tsx` ~4331: поле «Название» скрыто для `telegram_gift`, `title: telegramGiftTitle(attributes, selectedPosition.title)`; без коллекции — прежнее название. Тест `telegramGift.test.ts` (`{number:'5'}`, «Тестовый подарок» → «Тестовый подарок»). Сид-подарок без коллекции в браузерных тестах жив (full check зелёный). |
+| 6 | ок | Для остальных видов `positionTitle = title.trim()`, поле «Название» на месте; в редакторе `text('title')` для всех видов, кроме подарка. Автотеста нет (ручная проверка по плану); дифф других веток формы не трогает. |
+
+**Соседи и вызывающие:** `collectibleImageUrl` переведён на `telegramGiftSlug`
+— прежняя проверка `[a-z0-9]+` после `toLowerCase()` эквивалентна новой;
+`.apf-balance` — класс только переиспользован, CSS не менялся; маршрут
+`/telegram-gift` объявлен последним в роутере, но ни один `GET` с параметром
+пути на этом уровне (`/positions/{id}/events`) его не перехватывает.
+`backend.tests.test_telegram_gift` добавлен и в `check.sh`, и в CI одним
+коммитом. Тесты честные: на `origin/main` падают на импорте
+(`parse_telegram_gift`, `telegramGift.ts` не существуют), а
+`test_rejects_anything_but_a_slug_and_digits` проверяет, что сеть не
+трогается. `KNOWN` в `a11y.spec.ts` не менялся.
+
+**Документация и процесс:** отчёт содержит цель, что сделано, откат, риски,
+открытые вопросы, дизайн-ревью и исправления; `BUSINESS_LOGIC.md` дополнен;
+`CLAUDE.md` описывает `backend-alt`. В таблице «Тесты» плана стоял
+`collectibles.test.ts` — поправлено на фактический `telegramGift.test.ts`
+этим коммитом. Коммиты — один шаг на коммит, английские повелительные
+сообщения, секретов и реальных данных в диффе нет.
+
+**Замечания:**
+
+1. **исправить** — коллекции с апострофом (`Durov's Cap`, `Durov's Glasses`,
+   `Khabib's Papakha` — все три есть в `telegramGiftOriginals.json`).
+   Канонический slug у Telegram — `DurovsCap`, а `og:title` отдаёт
+   `Durov’s Cap`. `parse_telegram_gift` собирает ссылку через
+   `re.sub(r"[ -]", "", name)` → `https://t.me/nft/Durov’sCap-1`, которая
+   редиректит на telegram.org; на фронте `telegramGiftSlug('Durov’s Cap')`
+   возвращает `null`, поэтому после успешного поиска по `DurovsCap`
+   коллекция переписывается в `Durov’s Cap`, `giftKey` становится пустым,
+   подсказка пропадает, картинка с fragment не строится, а в редакторе
+   ссылка не пересчитывается; ввод имени с апострофом руками поиск не
+   запускает вовсе. Починка — убирать те же символы, что уже убирает
+   `normalizedGiftName` в `collectibles.ts` (`[\s’'_-]`), в трёх местах:
+   `telegramGiftSlug` и два `re.sub` в `portfolio.py`; плюс по строке в
+   `test_parse_traits_with_rarity` и `telegramGift.test.ts` с `Durov’s Cap`.
+2. **исправить** — критерий 4 обещает 400 на плохой ввод, но
+   `Query(max_length=80/9)` отдаёт 422 с английским текстом раньше, чем
+   сработает своя проверка: `number=1234567890` → 422. Регулярки уже
+   ограничивают длину, так что `max_length` можно просто убрать. На
+   пользователя не влияет (`catch` в форме текст не читает), но критерий
+   должен совпадать с кодом.
+3. **исправить (по желанию)** — `giftLookedUp.current` запоминает ключ,
+   который ввёл пользователь, а не канонический из ответа: номер `007` →
+   запрос `plushpepe-007`, t.me отдаёт `Plush Pepe #7`, номер переписывается
+   в `7`, ключ не совпадает — второй такой же запрос и мигание «Ищем…».
+   Хранить в ref ключ из `gift.collection`/`gift.number`.
+4. **исправить (по желанию)** — после найденного подарка смена вида
+   («Подарок Telegram» → стикер) оставляет `itemLink` на `t.me/nft/…`:
+   атрибуты при отправке фильтруются по полям вида, а ссылка — нет.
+   Сбрасывать `itemLink` и `giftLookedUp` при смене `itemKind`.
+5. **замечание** — в редакторе карточки, если у подарка с t.me-ссылкой
+   стереть номер, название становится «Vice Cream», а ссылка остаётся на
+   старый номер (`telegramGiftLink` → `null`, берётся прежняя). Редкий
+   ручной сценарий; можно оставить до «Обновить из Telegram».
+6. **замечание** — `\d{1,9}` в Python принимает и не-ASCII цифры; URL при
+   этом всё равно уходит на t.me с percent-encoding, безопасности не
+   касается. `[0-9]` точнее и совпадает с фронтовой проверкой.
+7. **замечание** — `catch` в форме считает «не найден» любую ошибку
+   (сеть, 401). Бэкенд и сам отдаёт 404 на недоступный t.me, так что
+   различать на клиенте почти нечего; очистка чужих признаков при этом
+   корректна — признаки подарка A подарку B не принадлежат.
+8. **замечание** — `.claude/launch.json`: запятая вынесена на отдельную
+   строку перед новым блоком; JSON валиден, но читается странно.
+9. **замечание** — в `Portfolio.tsx` предикат `item_kind === 'telegram_gift'`
+   повторён в `onSubmit` и в JSX; одна константа `isGift` рядом с формой.
+
+**Вердикт:** блокеров безопасности нет, проверки зелёные, критерии 1, 3, 5,
+6 закрыты. До мержа нужно закрыть замечания 1 и 2: первое ломает сценарий
+для трёх реальных коллекций (битая ссылка сохраняется в позицию), второе —
+расхождение критерия 4 с кодом. Остальное — по желанию автора.
