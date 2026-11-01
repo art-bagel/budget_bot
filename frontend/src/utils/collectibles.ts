@@ -93,25 +93,29 @@ export function safeItemLink(value: unknown): URL | null {
   }
 }
 
-// Prefer a canonical item link to guessing names with punctuation or aliases.
-export function collectibleImageUrl(metadata: Record<string, unknown> | undefined): string | null {
+// Candidate pictures, best first; the component falls through on a load error.
+// Fragment's 640px render beats the 160px preview t.me pages carry, so a stored preview
+// is only a fallback for collections fragment does not list (yet).
+export function collectibleImageUrls(metadata: Record<string, unknown> | undefined): string[] {
+  const urls: string[] = [];
   const explicit = safeItemLink(metadata?.image_url);
-  if (explicit && !explicit.username && !explicit.password) return explicit.href;
+  const preview = explicit?.hostname.endsWith('.telesco.pe') ?? false;
+  if (explicit && !explicit.username && !explicit.password && !preview) urls.push(explicit.href);
+  // Prefer a canonical item link to guessing names with punctuation or aliases.
   const link = safeItemLink(metadata?.item_link);
-  if (link && ['t.me', 'telegram.me'].includes(link.hostname)) {
-    const match = link.pathname.match(/^\/nft\/([a-zA-Z0-9]+-\d+)\/?$/);
-    if (match) return `https://nft.fragment.com/gift/${match[1].toLowerCase()}.medium.jpg`;
-  }
+  const linked = link && ['t.me', 'telegram.me'].includes(link.hostname) ? link.pathname.match(/^\/nft\/([a-zA-Z0-9]+-\d+)\/?$/) : null;
   const attrs = metadata?.item_attributes as Record<string, unknown> | undefined;
-  if (isPlainGift(metadata) && typeof attrs?.collection === 'string') {
+  if (linked) {
+    urls.push(`https://nft.fragment.com/gift/${linked[1].toLowerCase()}.large.jpg`);
+  } else if (isPlainGift(metadata) && typeof attrs?.collection === 'string') {
     const id = giftOriginalIds.get(normalizedGiftName(attrs.collection));
-    return id ? `/gifts/originals/${id}.webp` : null;
-  }
-  if (metadata?.item_kind === 'telegram_gift' && typeof attrs?.collection === 'string' && /^\d+$/.test(String(attrs.number ?? ''))) {
+    if (id) urls.push(`/gifts/originals/${id}.webp`);
+  } else if (metadata?.item_kind === 'telegram_gift' && typeof attrs?.collection === 'string' && /^\d+$/.test(String(attrs.number ?? ''))) {
     const slug = telegramGiftSlug(attrs.collection);
-    if (slug) return `https://nft.fragment.com/gift/${slug.toLowerCase()}-${attrs.number}.medium.jpg`;
+    if (slug) urls.push(`https://nft.fragment.com/gift/${slug.toLowerCase()}-${attrs.number}.large.jpg`);
   }
-  return null;
+  if (explicit && preview) urls.push(explicit.href);
+  return urls;
 }
 
 function attributes(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
