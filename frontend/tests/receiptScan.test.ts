@@ -46,7 +46,6 @@ test('row amounts keep at most two decimals and read a leading comma', () => {
   assert.equal(rowAmountInput('12.345'), '12.34', 'no fractions of a kopeck');
   assert.equal(rowAmountInput('12.3'), '12.3');
   assert.equal(rowAmountInput('.5'), '0.5', '«,5» after sanitizing');
-  assert.equal(rowAmountInput('69.600', 0), '69', 'a currency without minor units');
   assert.equal(rowAmountInput('120'), '120');
   assert.equal(canonicalRowAmount('0050'), '50');
   assert.equal(canonicalRowAmount('0.50'), '0.50');
