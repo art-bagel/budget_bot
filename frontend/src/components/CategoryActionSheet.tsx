@@ -444,14 +444,19 @@ export default function CategoryActionSheet({
     }).catch(() => {}).finally(() => setLoadingSchedules(false));
   }, [category.category_id, category.kind]);
 
+  // Same reading as the expense amount: a comma from the iOS keypad, dong without kopecks.
+  const sfDigits = currencyFractionDigits(sfCurrencyCode);
+  const sfAmountRead = readAmountField(sfAmount, sfDigits, sfCurrencyCode);
+
   const handleAddSchedule = async () => {
-    if (!sfAmount || Number(sfAmount) <= 0) { setScheduleError('Укажите сумму больше нуля.'); return; }
+    if (sfAmountRead.error) { setScheduleError(sfAmountRead.error); return; }
+    if (!(sfAmountRead.value > 0)) { setScheduleError('Укажите сумму больше нуля.'); return; }
     setSavingSchedule(true);
     setScheduleError(null);
     try {
       await createScheduledExpense({
         category_id: category.category_id,
-        amount: Number(sfAmount),
+        amount: sfAmountRead.value,
         currency_code: sfCurrencyCode,
         frequency: sfFrequency,
         day_of_week: sfFrequency === 'weekly' ? sfDayOfWeek : undefined,
@@ -1072,7 +1077,8 @@ export default function CategoryActionSheet({
                         inputMode="decimal"
                         placeholder="0"
                         value={sfAmount}
-                        onChange={(e) => setSfAmount(e.target.value)}
+                        onChange={(e) => { setSfAmount(sanitizeDecimalInput(e.target.value, sfDigits)); setScheduleError(null); }}
+                        onBlur={() => setSfAmount(canonicalAmountInput(sfAmount, sfDigits))}
                         disabled={savingSchedule}
                       />
                       <CurrencyPicker
