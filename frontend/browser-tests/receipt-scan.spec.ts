@@ -152,7 +152,9 @@ test('amount is filled only for a recognised currency the account has', async ({
   const photo = await photoWithExif(page);
 
   // A currency the account does not have never reaches the amount field.
-  answer = { ...RECEIPT, currency: 'VND' };
+  // Dong has no minor units, so its rows are whole numbers.
+  const dongItems = RECEIPT.items.map((item, index) => ({ ...item, amount: String((index + 1) * 50000) }));
+  answer = { ...RECEIPT, currency: 'VND', total: '300000', items: dongItems };
   await choosePhoto(page, photo);
   await expect(sheet.getByText('На выбранном счёте нет VND — введите сумму вручную.')).toBeVisible();
   await sheet.getByRole('button', { name: 'Подставить' }).click();
@@ -309,6 +311,32 @@ test('a receipt without a printed total uses the sum of its rows', async ({ page
   await expect(page.getByRole('dialog', { name: 'Продукты' }).getByPlaceholder('0')).toHaveValue('264.80');
 });
 
+test('row fields of a dong receipt have no minor units', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'light', 'form logic, one theme');
+  const items = [
+    { name: 'COM GA', name_ru: 'Курица с рисом', amount: '65000' },
+    { name: 'TRA DA', name_ru: 'Чай со льдом', amount: '15000' },
+  ];
+  await mockScan(page, { merchant: 'Quán', date: null, currency: 'VND', total: '80000', items });
+  await openReceiptSheet(page);
+  await choosePhoto(page, await photoWithExif(page));
+  const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
+  const total = sheet.locator('.sheet-stat__val');
+  await expect(total).toHaveText('80\u00a0000');
+
+  // «69.600» is 69 600 dong, as in the expense amount field.
+  const tea = sheet.getByLabel('Сумма позиции 2', { exact: true });
+  await tea.fill('69.600');
+  await tea.blur();
+  await expect(tea).toHaveValue('69600');
+  await expect(total).toHaveText('134\u00a0600');
+
+  // A fraction of a dong is refused, with the reason next to the disabled button.
+  await tea.fill('12.5');
+  await expect(sheet.getByRole('button', { name: 'Подставить' })).toBeDisabled();
+  await expect(sheet.getByText('Сумма в VND — без дробной части, например 45000')).toBeVisible();
+});
+
 test('server errors, a broken photo and cancel while loading', async ({ page, consoleErrors }, testInfo) => {
   test.skip(testInfo.project.name !== 'light', 'error states, one theme');
   let respond: (route: Route) => Promise<void> = (route) =>
@@ -348,12 +376,15 @@ test('without the flag there is no receipt button', async ({ page }) => {
     const api = process.env.PLAYWRIGHT_API_URL;
     const url = new URL(route.request().url());
     const response = await route.fetch(api ? { url: api + url.pathname } : undefined);
-    await route.fulfill({ response, json: { ...(await response.json()), receipt_scan_enabled: false } });
+    // Status and body only: the fetched response object may already be disposed
+    // when a late context request races the end of the test.
+    await route.fulfill({ status: response.status(), json: { ...(await response.json()), receipt_scan_enabled: false } });
   });
   await openOverview(page);
   await page.getByRole('button', { name: /^Продукты/ }).click();
   await expect(page.getByRole('dialog', { name: 'Продукты' }).getByText('Сумма', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Распознать чек' })).toHaveCount(0);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
 test('receipt sheet matches the reference and passes axe', async ({ page }) => {

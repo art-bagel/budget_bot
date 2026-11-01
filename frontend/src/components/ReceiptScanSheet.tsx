@@ -17,7 +17,8 @@ import {
   canonicalRowAmount,
   rowAmountInput,
 } from '../utils/receiptScan';
-import { sanitizeDecimalInput } from '../utils/validation';
+import { currencyFractionDigits } from '../utils/format';
+import { canonicalAmountInput, normalizeAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 
 export interface ReceiptApplyResult {
   /** Only set when the currency was recognised and the account has it. */
@@ -164,9 +165,16 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
 
   const scan = step.kind === 'result' ? step.scan : null;
   const isEmpty = scan !== null && scan.total === null && scan.items.length === 0;
+  // Row fields follow the receipt currency: dong has no minor units, so «69.600»
+  // is 69 600 and «12.5» is refused, the same reading as the expense amount field.
+  const digits = scan?.currency ? currencyFractionDigits(scan.currency) : 2;
+  const plainAmount = (text: string) => (digits === 0 ? normalizeAmountInput(text, 0) ?? '' : text);
+  const rowError = digits === 0
+    ? rows.map((row) => readAmountField(row.amount, 0, scan?.currency ?? '').error).find(Boolean) ?? null
+    : null;
   const signed = rows.map((row) => ({
     name_ru: row.name.trim(),
-    amount: row.amount === '' ? '' : `${row.negative ? '-' : ''}${row.amount}`,
+    amount: plainAmount(row.amount) === '' ? '' : `${row.negative ? '-' : ''}${plainAmount(row.amount)}`,
   }));
   // Rows keep their fields across scans («Другое фото»), so every scan refits them all.
   // The amount column grows with the longest sum, so a long one is not cut; that
@@ -252,7 +260,11 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     actions = (
       <>
         {/* Next to the disabled button, not under the list: after 30 rows the list end is off screen. */}
-        {!ready && <p id={notReadyId} className="rcpt-note rcpt-actions__note">Заполните название и сумму у каждой позиции.</p>}
+        {!ready && (
+          <p id={notReadyId} className="rcpt-note rcpt-actions__note">
+            {rowError ?? 'Заполните название и сумму у каждой позиции.'}
+          </p>
+        )}
         <button className="sh-btn sh-btn--ghost" type="button" onClick={pickPhoto}>Другое фото</button>
         <button
           className="sh-btn sh-btn--primary"
@@ -348,8 +360,14 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
                         placeholder="0"
                         value={row.amount}
                         aria-label={`Сумма позиции ${position + 1}${row.negative ? ', скидка' : ''}`}
-                        onChange={(event) => updateRow(row.key, { amount: rowAmountInput(sanitizeDecimalInput(event.target.value)) })}
-                        onBlur={() => updateRow(row.key, { amount: canonicalRowAmount(row.amount) })}
+                        onChange={(event) => updateRow(row.key, {
+                          amount: digits === 0
+                            ? sanitizeDecimalInput(event.target.value, 0)
+                            : rowAmountInput(sanitizeDecimalInput(event.target.value)),
+                        })}
+                        onBlur={() => updateRow(row.key, {
+                          amount: digits === 0 ? canonicalAmountInput(row.amount, 0) : canonicalRowAmount(row.amount),
+                        })}
                       />
                     </div>
                     <button
