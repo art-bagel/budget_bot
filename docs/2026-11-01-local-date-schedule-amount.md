@@ -51,3 +51,16 @@
 ## Откат
 
 `git revert` коммитов задачи. Миграций нет.
+
+## Деплой (01.11.2026)
+
+- Аппрув владельца («Да, мержи»). `git push origin HEAD:main` без `--force`:
+  `6ce3b9f..c1789e7`. Тем же пушем ушла запись о деплое правки позиций чека
+  (`2b24381`).
+- GitHub Actions, [run 41304716580](https://github.com/art-bagel/budget_bot/actions/runs/41304716580):
+  «Verify Project» — success (5 мин), «Deploy To Server» — success (1 мин).
+- Прод: `GET /health` — 200, отдаётся новый бандл `index-DubfRpNb.js`.
+  Единственный `toISOString().slice(0, 10)` в нём — в `receiptDateForExpense`:
+  там это намеренная арифметика над полуночью по UTC.
+- Ветка `claude/local-date-schedule-amount` и worktree удалены, в GitHub
+  ветка не пушилась.
