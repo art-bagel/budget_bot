@@ -56,3 +56,12 @@
   отдельная задача с новой библиотекой и ссылками с токеном.
 - Прямой `UPDATE` на проде обошёл `calc__collectible_metadata`; значения —
   https-ссылки короче 400 символов, в пределах тех же проверок.
+
+## Деплой (02.11.2026)
+
+Аппрув владельца получен, `origin/main` после полного `check.sh` не двигался,
+пуш `9b3e899..df1f21a`.
+[Run 41350941054](https://github.com/art-bagel/budget_bot/actions/runs/41350941054)
+успешен, `/health` отвечает 200, бандл `index-C5k8cAbu.js`; чанк `Portfolio-*.js`
+содержит `large.jpg` и `telesco.pe`, `medium.jpg` в нём больше нет. Worktree и
+ветка `claude/gift-image-fallback` удалены.
