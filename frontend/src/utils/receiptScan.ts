@@ -53,6 +53,19 @@ export function receiptRowsTotal(rows: Amount[], minScale = 0): string {
   return sum(amounts, amounts.map(() => 1), true);
 }
 
+/** A row amount while typing: at most `digits` decimals, «,5» read as «0.5» (input already sanitized). */
+export function rowAmountInput(sanitized: string, digits = 2): string {
+  const value = sanitized.startsWith('.') ? `0${sanitized}` : sanitized;
+  const [whole, fraction] = value.split('.');
+  if (fraction === undefined) return value;
+  return digits === 0 ? whole : `${whole}.${fraction.slice(0, digits)}`;
+}
+
+/** A finished row amount, as it goes into the comment: no leading zeros, no dangling point. */
+export function canonicalRowAmount(value: string): string {
+  return value.replace(/\.$/, '').replace(/^0+(?=\d)/, '');
+}
+
 /** Every row has a name and a finished amount, so the comment and total can be applied. */
 export function receiptRowsReady(rows: NamedAmount[]): boolean {
   return rows.every((row) => row.name_ru.trim() !== '' && isAmount(row.amount));

@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import BottomSheet from './BottomSheet';
 
@@ -14,6 +14,8 @@ import {
   receiptItemsDiff,
   receiptRowsReady,
   receiptRowsTotal,
+  canonicalRowAmount,
+  rowAmountInput,
 } from '../utils/receiptScan';
 import { sanitizeDecimalInput } from '../utils/validation';
 
@@ -102,6 +104,7 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
   const [step, setStep] = useState<Step>({ kind: 'pick' });
   const [preview, setPreview] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
+  const notReadyId = useId();
   const nextKeyRef = useRef(0);
   // Where focus goes after the list changes: a new row's name, the next row's «×»
   // (not its name: that would pop up the iOS keyboard after every delete), or «add».
@@ -249,9 +252,17 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
     actions = (
       <>
         {/* Next to the disabled button, not under the list: after 30 rows the list end is off screen. */}
-        {!ready && <p className="rcpt-note rcpt-actions__note">Заполните название и сумму у каждой позиции.</p>}
+        {!ready && <p id={notReadyId} className="rcpt-note rcpt-actions__note">Заполните название и сумму у каждой позиции.</p>}
         <button className="sh-btn sh-btn--ghost" type="button" onClick={pickPhoto}>Другое фото</button>
-        <button className="sh-btn sh-btn--primary" type="button" onClick={apply} disabled={!ready}>Подставить</button>
+        <button
+          className="sh-btn sh-btn--primary"
+          type="button"
+          onClick={apply}
+          disabled={!ready}
+          aria-describedby={ready ? undefined : notReadyId}
+        >
+          Подставить
+        </button>
       </>
     );
   } else {
@@ -337,7 +348,8 @@ export default function ReceiptScanSheet({ availableCurrencies, onApply, onClose
                         placeholder="0"
                         value={row.amount}
                         aria-label={`Сумма позиции ${position + 1}${row.negative ? ', скидка' : ''}`}
-                        onChange={(event) => updateRow(row.key, { amount: sanitizeDecimalInput(event.target.value) })}
+                        onChange={(event) => updateRow(row.key, { amount: rowAmountInput(sanitizeDecimalInput(event.target.value)) })}
+                        onBlur={() => updateRow(row.key, { amount: canonicalRowAmount(row.amount) })}
                       />
                     </div>
                     <button

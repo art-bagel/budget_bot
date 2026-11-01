@@ -5,7 +5,9 @@ import {
   localToday,
   receiptDateForExpense,
   receiptExpenseAmount,
+  canonicalRowAmount,
   receiptItemsDiff,
+  rowAmountInput,
   receiptRowsReady,
   receiptRowsTotal,
   replaceReceiptBlock,
@@ -38,6 +40,18 @@ test('total is the sum of the current rows, keeping cents', () => {
   assert.equal(receiptRowsTotal([{ amount: '300' }], 2), '300.00', 'cents of the printed total');
   assert.equal(receiptRowsTotal([bread], 0), '54.90', 'a row with more digits wins');
   assert.equal(receiptRowsTotal([], 2), '0.00');
+});
+
+test('row amounts keep at most two decimals and read a leading comma', () => {
+  assert.equal(rowAmountInput('12.345'), '12.34', 'no fractions of a kopeck');
+  assert.equal(rowAmountInput('12.3'), '12.3');
+  assert.equal(rowAmountInput('.5'), '0.5', '«,5» after sanitizing');
+  assert.equal(rowAmountInput('69.600', 0), '69', 'a currency without minor units');
+  assert.equal(rowAmountInput('120'), '120');
+  assert.equal(canonicalRowAmount('0050'), '50');
+  assert.equal(canonicalRowAmount('0.50'), '0.50');
+  assert.equal(canonicalRowAmount('12.'), '12');
+  assert.equal(canonicalRowAmount('0'), '0');
 });
 
 test('rows are ready when every row has a name and an amount', () => {

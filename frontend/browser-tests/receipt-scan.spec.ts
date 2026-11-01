@@ -293,6 +293,22 @@ test('a receipt without lines uses its total until a row is added', async ({ pag
   await expect(sheet.getByRole('button', { name: 'Добавить позицию' })).toBeFocused();
 });
 
+test('a receipt without a printed total uses the sum of its rows', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'light', 'form logic, one theme');
+  await mockScan(page, { ...RECEIPT, total: null });
+  await openReceiptSheet(page);
+  await choosePhoto(page, await photoWithExif(page));
+  const sheet = page.getByRole('dialog', { name: 'Распознать чек' });
+  await expect(sheet.locator('.sheet-stat__val')).toHaveText('264,80');
+  await expect(sheet.getByText(/^Итог на чеке/)).toHaveCount(0);
+  // At most two decimals: no fractions of a kopeck reach the form.
+  const tea = sheet.getByLabel('Сумма позиции 3', { exact: true });
+  await tea.fill('120,005');
+  await expect(tea).toHaveValue('120.00');
+  await sheet.getByRole('button', { name: 'Подставить' }).click();
+  await expect(page.getByRole('dialog', { name: 'Продукты' }).getByPlaceholder('0')).toHaveValue('264.80');
+});
+
 test('server errors, a broken photo and cancel while loading', async ({ page, consoleErrors }, testInfo) => {
   test.skip(testInfo.project.name !== 'light', 'error states, one theme');
   let respond: (route: Route) => Promise<void> = (route) =>
