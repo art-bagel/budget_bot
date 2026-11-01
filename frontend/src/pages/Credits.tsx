@@ -79,7 +79,7 @@ import type {
   DashboardBankBalance,
   UserContext,
 } from '../types';
-import { formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
+import { formatAmount, formatNumericAmount, currencySymbol, isoDate } from '../utils/format';
 
 type CreditKind = 'loan' | 'credit_card' | 'mortgage';
 
@@ -128,9 +128,6 @@ function resolveKindFromFilterTab(tab: FilterTab): CreditKind | null {
   return null;
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
@@ -216,7 +213,7 @@ function buildRepayDraft(
     currencyCode,
     fromAccountId: String(defaultAccount?.id ?? ''),
     comment: '',
-    paymentAt: todayIso(),
+    paymentAt: isoDate(),
     paymentKind: 'scheduled',
     recalcOption: 'term',
   };
@@ -1487,7 +1484,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
               {isTerm && (
                 <div className="apf-field">
                   <label className="apf-label">Дата платежа</label>
-                  <input className="apf-input" type="date" value={repayDrafts[selectedCredit.account.id]?.paymentAt ?? todayIso()} max={todayIso()} onChange={(e) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], paymentAt: e.target.value } }))} disabled={submittingRepayId === selectedCredit.account.id} />
+                  <input className="apf-input" type="date" value={repayDrafts[selectedCredit.account.id]?.paymentAt ?? isoDate()} max={isoDate()} onChange={(e) => setRepayDrafts((prev) => ({ ...prev, [selectedCredit.account.id]: { ...prev[selectedCredit.account.id], paymentAt: e.target.value } }))} disabled={submittingRepayId === selectedCredit.account.id} />
                 </div>
               )}
               <div className="apf-field">

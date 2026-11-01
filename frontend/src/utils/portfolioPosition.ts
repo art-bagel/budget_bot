@@ -32,8 +32,11 @@ export function isSameAccountOwner(account: BankAccount, position: PortfolioPosi
 }
 
 
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+// Same as isoDate() in ./format, repeated because node --test loads this module
+// without a bundler and cannot resolve an extensionless relative import.
+export function todayIso(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 

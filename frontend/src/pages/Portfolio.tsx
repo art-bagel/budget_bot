@@ -100,7 +100,7 @@ import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } fr
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
-import { formatAmount, formatNumericAmount, currencySymbol, pluralRu } from '../utils/format';
+import { formatAmount, formatNumericAmount, currencySymbol, isoDate, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
 import { defiCoinSymbols, getCryptoIconUrl } from '../utils/cryptoAssets';
 import { CoinStack } from '../components/CoinStack';
@@ -361,8 +361,8 @@ function getAnalyticsPeriodRange(
   }
 
   return {
-    dateFrom: start.toISOString().slice(0, 10),
-    dateTo: end.toISOString().slice(0, 10),
+    dateFrom: isoDate(start),
+    dateTo: isoDate(end),
     label,
   };
 }
@@ -372,9 +372,6 @@ function incomeKindLabel(kind: string): string {
 }
 
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function ApfSelect<T extends string>({
   value,
@@ -567,13 +564,13 @@ function getDepositCloseInfo(
 }
 
 function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
-  const info = getDepositCloseInfo(position, todayIso());
+  const info = getDepositCloseInfo(position, isoDate());
   return {
     amount: info.isDeposit ? formatAmountInput(info.suggestedAmount) : '',
     amountEdited: false,
     currencyCode: position.currency_code,
     baseAmount: '',
-    closedAt: todayIso(),
+    closedAt: isoDate(),
     comment: '',
   };
 }
@@ -592,7 +589,7 @@ function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
           ? 'reward'
           : 'other',
     destination: position.asset_type_code === 'deposit' || position.asset_type_code === 'crypto' ? 'position' : 'account',
-    receivedAt: todayIso(),
+    receivedAt: isoDate(),
     comment: '',
     fee: EMPTY_FEE_DRAFT,
   };
@@ -603,7 +600,7 @@ function createInitialTopUpDraft(position: PortfolioPosition): TopUpDraft {
     amount: '',
     quantity: '',
     currencyCode: position.currency_code,
-    toppedUpAt: todayIso(),
+    toppedUpAt: isoDate(),
     comment: '',
   };
 }
@@ -616,7 +613,7 @@ function createInitialPartialCloseDraft(position: PortfolioPosition): PartialClo
     principalReduction: '',
     principalEditedManually: false,
     closedQuantity: '',
-    closedAt: todayIso(),
+    closedAt: isoDate(),
     comment: '',
   };
 }
@@ -625,7 +622,7 @@ function createInitialFeeDraft(position: PortfolioPosition): FeeDraft {
   return {
     amount: '',
     currencyCode: position.currency_code,
-    chargedAt: todayIso(),
+    chargedAt: isoDate(),
     comment: '',
   };
 }
@@ -637,7 +634,7 @@ function createInitialStakingCreateDraft(defaultSourcePositionId?: number): Stak
     protocolName: '',
     quantity: '',
     rewardsUnclaimedInBase: '',
-    depositedAt: todayIso(),
+    depositedAt: isoDate(),
     comment: '',
     apr: '',
     borrowedCryptoAssetId: '',
@@ -660,7 +657,7 @@ function createInitialStakingUpdateDraft(position: CryptoProtocolPosition): Stak
 function createInitialStakingCloseDraft(position: CryptoProtocolPosition): StakingCloseDraft {
   return {
     returnQuantity: trimDecimal(position.current_quantity_exact ?? (position.current_quantity != null ? String(position.current_quantity) : '')),
-    withdrawnAt: todayIso(),
+    withdrawnAt: isoDate(),
     comment: '',
   };
 }
@@ -1570,7 +1567,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       status: 'open',
       amount_in_currency: 0,
       currency_code: user.base_currency_code,
-      opened_at: todayIso(),
+      opened_at: isoDate(),
       metadata: {},
       created_by_user_id: user.user_id,
       created_at: '',
@@ -1728,7 +1725,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
         amountEdited: false,
         currencyCode: positions.find((position) => position.id === positionId)?.currency_code ?? user.base_currency_code,
         baseAmount: '',
-        closedAt: todayIso(),
+        closedAt: isoDate(),
         comment: '',
       };
       const next: CloseDraft = { ...base, ...patch };
@@ -2221,7 +2218,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             current_value_in_base: 0,
             rewards_claimed_in_base: 0,
             rewards_unclaimed_in_base: 0,
-            deposited_at: todayIso(),
+            deposited_at: isoDate(),
             metadata: {},
             created_by_user_id: user.user_id,
             created_at: '',
@@ -2252,7 +2249,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
             current_value_in_base: 0,
             rewards_claimed_in_base: 0,
             rewards_unclaimed_in_base: 0,
-            deposited_at: todayIso(),
+            deposited_at: isoDate(),
             metadata: {},
             created_by_user_id: user.user_id,
             created_at: '',
@@ -4449,7 +4446,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         ...prev,
                         [selectedPosition.id]: {
                           newRate: String(selectedPosition.metadata?.interest_rate ?? ''),
-                          effectiveDate: todayIso(),
+                          effectiveDate: isoDate(),
                         },
                       }));
                     },

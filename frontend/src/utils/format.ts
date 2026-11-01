@@ -60,3 +60,13 @@ export function pluralRu(value: number, forms: [string, string, string]): string
   if (mod10 >= 2 && mod10 <= 4) return forms[1];
   return forms[2];
 }
+
+/**
+ * Local calendar date as YYYY-MM-DD. toISOString() gives the UTC date, which
+ * east of Greenwich is still yesterday until 03:00 (Moscow) and shifts
+ * new Date(year, month, 1) to the last day of the previous month.
+ */
+export function isoDate(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}

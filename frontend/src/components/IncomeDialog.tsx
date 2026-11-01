@@ -24,7 +24,7 @@ import type {
   RecordIncomeRequest,
   UserContext,
 } from '../types';
-import { currencyFractionDigits } from '../utils/format';
+import { currencyFractionDigits, isoDate } from '../utils/format';
 import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -65,7 +65,7 @@ export default function IncomeDialog({ user, onClose, onSuccess }: Props) {
   const [incomeBudgetAmountInBase, setIncomeBudgetAmountInBase] = useState('');
   const [incomeTaxPercent, setIncomeTaxPercent] = useState('');
   const [incomeComment, setIncomeComment] = useState('');
-  const [incomeDate, setIncomeDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [incomeDate, setIncomeDate] = useState(() => isoDate());
   const [submitting, setSubmitting] = useState(false);
   const [creatingSource, setCreatingSource] = useState(false);
   const [archivingSource, setArchivingSource] = useState(false);

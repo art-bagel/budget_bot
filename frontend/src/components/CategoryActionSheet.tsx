@@ -6,7 +6,7 @@ import ReceiptScanSheet, { type ReceiptApplyResult } from './ReceiptScanSheet';
 import { Camera } from 'lucide-react';
 import { parseCategoryIcon, buildCategoryName, categoryDisplayName } from '../utils/categoryIcon';
 import { CategorySvgIcon } from './CategorySvgIcon';
-import { currencyFractionDigits, formatAmount, formatNumericAmount, currencySymbol } from '../utils/format';
+import { currencyFractionDigits, formatAmount, formatNumericAmount, currencySymbol, isoDate } from '../utils/format';
 import { canonicalAmountInput, readAmountField, sanitizeDecimalInput } from '../utils/validation';
 import { replaceReceiptBlock } from '../utils/receiptScan';
 import {
@@ -157,7 +157,7 @@ export default function CategoryActionSheet({
   const [expAmount, setExpAmount] = useState('');
   const [expAssetCode, setExpAssetCode] = useState(`fiat:${user.base_currency_code}`);
   const [expComment, setExpComment] = useState('');
-  const [expDate, setExpDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expDate, setExpDate] = useState(() => isoDate());
   const [expAccountId, setExpAccountId] = useState<number | null>(null);
   const [expSubmitting, setExpSubmitting] = useState(false);
   const [expError, setExpError] = useState<string | null>(null);

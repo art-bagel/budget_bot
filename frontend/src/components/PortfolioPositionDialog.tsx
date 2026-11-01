@@ -6,7 +6,7 @@ import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { useMoexSearch } from '../hooks/useMoexSearch';
 import type { BankAccount, Currency, DashboardBankBalance, UserContext } from '../types';
-import { formatAmount } from '../utils/format';
+import { formatAmount, isoDate } from '../utils/format';
 import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
@@ -59,9 +59,6 @@ const CAPITALIZATION_PERIOD_OPTIONS = [
 type CapitalizationPeriod = (typeof CAPITALIZATION_PERIOD_OPTIONS)[number]['value'];
 
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function ApfSelect<T extends string>({
   value,
@@ -141,7 +138,7 @@ export default function PortfolioPositionDialog({
   const [quantity, setQuantity] = useState(defaultAssetTypeCode === 'collectible' ? '1' : '');
   const [amount, setAmount] = useState('');
   const [currencyCode, setCurrencyCode] = useState(user.base_currency_code);
-  const [openedAt, setOpenedAt] = useState(todayIso());
+  const [openedAt, setOpenedAt] = useState(isoDate());
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +158,7 @@ export default function PortfolioPositionDialog({
   const itemLinkValid = !itemLink.trim() || !!safeItemLink(itemLink.trim());
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
-  const [endDate, setEndDate] = useState(todayIso());
+  const [endDate, setEndDate] = useState(isoDate());
   const [interestPayout, setInterestPayout] = useState<InterestPayout>('capitalize');
   const [capitalizationPeriod, setCapitalizationPeriod] = useState<CapitalizationPeriod>('monthly');
 
@@ -256,7 +253,7 @@ export default function PortfolioPositionDialog({
         metadata = {
           deposit_kind: depositKind,
           interest_rate: Number(interestRate),
-          last_accrual_date: openedAt || todayIso(),
+          last_accrual_date: openedAt || isoDate(),
           ...(depositKind === 'term_deposit'
             ? {
                 end_date: endDate,
@@ -320,7 +317,7 @@ export default function PortfolioPositionDialog({
   const depositProjection = isDeposit && parseFloat(amount) > 0 && parseFloat(interestRate) > 0
     ? (() => {
         const proj = depositKind === 'term_deposit' && endDate
-          ? calculateProjectedInterest({ depositKind, principal: Number(amount), annualRate: Number(interestRate), startDate: openedAt || todayIso(), endDate, interestPayout, capitalizationPeriod })
+          ? calculateProjectedInterest({ depositKind, principal: Number(amount), annualRate: Number(interestRate), startDate: openedAt || isoDate(), endDate, interestPayout, capitalizationPeriod })
           : null;
         const total = proj !== null ? Number(amount) + proj : null;
         return proj !== null
