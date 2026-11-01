@@ -11,6 +11,7 @@ os.environ.setdefault('DB_PORT', '5432')
 from backend.app.routers.portfolio import parse_telegram_gift, telegram_gift  # noqa: E402
 
 PAGE = '''<meta property="og:title" content="Plush Pepe #1">
+<meta property="og:image" content="https://cdn4.telesco.pe/file/py_abc.jpg">
 <table class="table tgme_gift_table"><tbody>
 <tr><th>Owner</th><td><span dir="auto">Pavel Durov</span></td></tr><tr><th>Model</th><td>Pumpkin <mark>3%</mark></td></tr><tr><th>Backdrop</th><td>Onyx Black <mark>2%</mark></td></tr><tr><th>Symbol</th><td>Illuminati <mark>0.5%</mark></td></tr><tr><th>Quantity</th><td>2 825/2 861 issued</td></tr>
 </tbody></table>'''
@@ -28,9 +29,11 @@ class TelegramGiftTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parse_telegram_gift(PAGE), {
             'title': 'Plush Pepe #1', 'collection': 'Plush Pepe', 'number': '1',
             'model': 'Pumpkin 3%', 'backdrop': 'Onyx Black 2%', 'symbol': 'Illuminati 0.5%',
-            'link': 'https://t.me/nft/PlushPepe-1',
+            'link': 'https://t.me/nft/PlushPepe-1', 'image': 'https://cdn4.telesco.pe/file/py_abc.jpg',
         })
         self.assertIsNone(parse_telegram_gift(MISSING))
+        # A preview that is not an https link is dropped rather than stored.
+        self.assertIsNone(parse_telegram_gift(PAGE.replace('https://cdn4', 'http://cdn4'))['image'])
         durov = parse_telegram_gift(PAGE.replace('Plush Pepe #1', 'Durov’s Cap #1'))
         self.assertEqual((durov['collection'], durov['link']), ('Durov’s Cap', 'https://t.me/nft/DurovsCap-1'))
 

@@ -1324,7 +1324,7 @@ export async function setCollectibleAcquiredAt(positionId: number, data: {
 }
 
 export type TelegramGift = {
-  title: string; collection: string; number: string; link: string;
+  title: string; collection: string; number: string; link: string; image: string | null;
   model: string | null; backdrop: string | null; symbol: string | null;
 };
 export function fetchTelegramGift(collection: string, number: string): Promise<TelegramGift> {

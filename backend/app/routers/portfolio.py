@@ -727,6 +727,7 @@ class TelegramGiftItem(BaseModel):
     backdrop: str | None = None
     symbol: str | None = None
     link: str
+    image: str | None = None
 
 
 # Telegram's slug drops spaces, dashes and apostrophes: "Durov’s Cap" is DurovsCap.
@@ -748,7 +749,10 @@ def parse_telegram_gift(page: str) -> dict[str, str | None] | None:
         return None
     # A trait reads "Pumpkin <mark>3%</mark>": kept as "Pumpkin 3%", the form the rarity parser expects.
     clean = {key.lower(): ' '.join(html.unescape(re.sub(r'<[^>]+>', ' ', value)).split())[:200] for key, value in traits}
+    # Fragment has no pictures for some collections, so the page's own preview is kept as the image.
+    image = re.search(r'<meta property="og:image" content="(https://[^"\s]{1,990})"', page)
     return {
+        'image': html.unescape(image.group(1)) if image else None,
         'title': f'{name} #{number}', 'collection': name, 'number': number,
         'model': clean.get('model'), 'backdrop': clean.get('backdrop'), 'symbol': clean.get('symbol'),
         # The page echoes the slug as requested, so the canonical one is rebuilt from the title.

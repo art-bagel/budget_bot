@@ -160,6 +160,7 @@ export default function PortfolioPositionDialog({
   // A Telegram gift is named like Telegram names it, and its traits come from the public t.me page.
   const isGift = isCollectible && itemKind === 'telegram_gift';
   const [giftLookup, setGiftLookup] = useState<'idle' | 'loading' | 'found' | 'missing'>('idle');
+  const [giftImage, setGiftImage] = useState('');
   const giftLookedUp = useRef('');
   const giftSlug = isGift ? telegramGiftSlug(itemAttributes.collection?.trim() ?? '') : null;
   const giftNumber = itemAttributes.number?.trim() ?? '';
@@ -180,6 +181,7 @@ export default function PortfolioPositionDialog({
           model: gift.model ?? '', backdrop: gift.backdrop ?? '', symbol: gift.symbol ?? '',
         }));
         setItemLink(gift.link);
+        setGiftImage(gift.image ?? '');
         setGiftLookup('found');
       }).catch(() => {
         if (cancelled) return;
@@ -188,6 +190,7 @@ export default function PortfolioPositionDialog({
           giftLookedUp.current = '';
           setItemAttributes((prev) => ({ ...prev, model: '', backdrop: '', symbol: '', upgraded: '' }));
           setItemLink('');
+          setGiftImage('');
         }
         setGiftLookup('missing');
       });
@@ -311,6 +314,7 @@ export default function PortfolioPositionDialog({
             .map((field) => [field.key, field.flag ? (itemAttributes[field.key] === 'yes' ? 'yes' : 'no') : itemAttributes[field.key]?.trim() ?? ''])
             .filter(([, value]) => value)),
           ...(itemLink.trim() ? { item_link: itemLink.trim() } : {}),
+          ...(isGift && giftImage ? { image_url: giftImage } : {}),
         };
       }
 
@@ -418,7 +422,7 @@ export default function PortfolioPositionDialog({
         <div className="apf-field">
           <label className="apf-label">Вид предмета</label>
           <ApfSelect value={itemKind} options={COLLECTIBLE_KINDS} disabled={submitting}
-            onChange={(value) => { setItemKind(value); setItemAttributes({}); setItemLink(''); giftLookedUp.current = ''; }} />
+            onChange={(value) => { setItemKind(value); setItemAttributes({}); setItemLink(''); setGiftImage(''); giftLookedUp.current = ''; }} />
         </div>
       )}
 
