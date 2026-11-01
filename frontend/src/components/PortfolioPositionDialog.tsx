@@ -167,7 +167,7 @@ export default function PortfolioPositionDialog({
   useEffect(() => {
     if (!giftKey) { setGiftLookup('idle'); return; }
     // The canonical name written back by a lookup must not trigger a second one.
-    if (giftKey === giftLookedUp.current) return;
+    if (giftKey === giftLookedUp.current) { setGiftLookup('found'); return; }
     setGiftLookup('loading');
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -180,7 +180,16 @@ export default function PortfolioPositionDialog({
         }));
         setItemLink(gift.link);
         setGiftLookup('found');
-      }).catch(() => { if (!cancelled) setGiftLookup('missing'); });
+      }).catch(() => {
+        if (cancelled) return;
+        // Traits of the previous match must not travel to a gift that was not found.
+        if (giftLookedUp.current) {
+          giftLookedUp.current = '';
+          setItemAttributes((prev) => ({ ...prev, model: '', backdrop: '', symbol: '', upgraded: '' }));
+          setItemLink('');
+        }
+        setGiftLookup('missing');
+      });
     }, 500);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [giftKey, giftSlug, giftNumber]);

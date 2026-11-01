@@ -99,7 +99,7 @@ import type {
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
-import { telegramGiftTitle } from '../utils/telegramGift';
+import { telegramGiftLink, telegramGiftTitle } from '../utils/telegramGift';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, isoDate, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -4325,9 +4325,12 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             else if (value) attributes[field.key] = value; else delete attributes[field.key];
                           }
                           const isGift = selectedPosition.metadata?.item_kind === 'telegram_gift';
+                          // A t.me link follows the edited number; a link to anywhere else is the user's.
+                          const link = text('item_link');
+                          const giftLink = isGift && (!link || link.startsWith('https://t.me/nft/')) ? telegramGiftLink(attributes) : null;
                           const details = { title: isGift ? telegramGiftTitle(attributes, selectedPosition.title) : text('title'), comment: text('comment') || null,
                             acquired_at: text('acquired_at') || null, item_kind: String(selectedPosition.metadata?.item_kind ?? 'other'),
-                            item_link: text('item_link') || null, image_url: text('image_url') || null, item_attributes: attributes };
+                            item_link: giftLink ?? (link || null), image_url: text('image_url') || null, item_attributes: attributes };
                           const positionId = selectedPosition.id;
                           setCollectibleDateSaving(true); setCollectibleDateError(null);
                           try {
