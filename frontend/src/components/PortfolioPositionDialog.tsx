@@ -472,12 +472,12 @@ export default function PortfolioPositionDialog({
         <div className="apf-field" key={field.key}>
           <label className="apf-label">{field.label}</label>
           <input className="apf-input" type="text" maxLength={200} placeholder={field.placeholder ?? 'Необязательно'}
-            value={itemAttributes[field.key] ?? ''}
+            autoFocus={isGift && field.key === 'collection'} value={itemAttributes[field.key] ?? ''}
             onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.value }))}
             disabled={submitting} />
           {isGift && field.key === 'number' && giftLookup !== 'idle' && (
-            <div className="apf-balance">
-              {giftLookup === 'loading' ? 'Ищу в Telegram…' : giftLookup === 'found' ? `Найден ${positionTitle}` : 'В Telegram не найден, заполните вручную'}
+            <div className="apf-balance" role="status">
+              {giftLookup === 'loading' ? 'Ищем в Telegram…' : giftLookup === 'found' ? `Найден ${positionTitle}` : 'В Telegram не найден, заполните вручную'}
             </div>
           )}
         </div>
