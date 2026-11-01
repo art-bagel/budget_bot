@@ -133,13 +133,15 @@ BEGIN
  fee_sid:=(SELECT max(id) FROM crypto_source_events WHERE created_by_user_id=uid);
  SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
  ASSERT got=-15,'fee alone is a realized cost: '||got;
+ -- A deleted fee leaves no trace in the result (the journal only deletes the latest operation first).
+ PERFORM put__delete_crypto_source(uid,fee_sid,gen_random_uuid());
+ SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
+ ASSERT got=0,'deleted fee restores the result: '||got;
+ PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_fee',jsonb_build_object('position_id',item->'id','amount',15,'currency_code','RUB'),current_date);
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_fiat_close',jsonb_build_object('position_id',item->'id','close_amount_in_currency',110,'close_currency_code','RUB'),current_date);
  SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
  ASSERT got=-5,'sale result after fee: '||got;
  ASSERT (SELECT (metadata->>'realized_result_in_base')::numeric FROM portfolio_positions WHERE id=(item->>'id')::bigint)=10,'ledger result stays gross';
- PERFORM put__delete_crypto_source(uid,fee_sid,gen_random_uuid());
- SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
- ASSERT got=10,'deleted fee restores the gross result: '||got;
  -- Coins: a coin fee counts at once; a coin sale defers its own result to the coin lot.
  coin:=(put__ensure_crypto_asset('FEEC','Test','test','collectible-fee',9::smallint,'{}')->>'id')::bigint;
  PERFORM put__buy_crypto_asset(uid,bank,'RUB',1000,coin,100);
@@ -149,7 +151,7 @@ BEGIN
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_coin_fee',payload||'{"crypto_quantity":"1"}',current_date);
  PERFORM put__manual_collectible_movement(uid,gen_random_uuid(),'collectible_sell',payload||'{"crypto_quantity":"50"}',current_date);
  SELECT (value->>'realized_income_in_base')::numeric INTO got FROM jsonb_array_elements(get__portfolio_summary(uid)) WHERE (value->>'investment_account_id')::bigint=coll;
- ASSERT got=0,'coin fee of 10 after the fiat +10: '||got;
+ ASSERT got=-15,'coin fee of 10 on top of the fiat −5, the coin sale defers its result: '||got;
  -- Deposit: the same rule holds for other position types.
  pos:=put__create_portfolio_position(uid,dep,'deposit','Fee deposit',NULL,5000,'RUB');
  PERFORM put__record_portfolio_fee(uid,(pos->>'id')::bigint,20,'RUB');
