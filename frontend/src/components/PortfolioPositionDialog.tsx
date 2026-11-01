@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-import { buyCollectibleWithCrypto, createPortfolioPosition } from '../api';
+import { buyCollectibleWithCrypto, createPortfolioPosition, fetchTelegramGift } from '../api';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { useMoexSearch } from '../hooks/useMoexSearch';
@@ -11,6 +11,7 @@ import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink } from '../utils/collectibles';
+import { telegramGiftSlug, telegramGiftTitle } from '../utils/telegramGift';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -156,6 +157,34 @@ export default function PortfolioPositionDialog({
   const [itemLink, setItemLink] = useState('');
   const itemFields = getCollectibleKind(itemKind)?.fields ?? [];
   const itemLinkValid = !itemLink.trim() || !!safeItemLink(itemLink.trim());
+  // A Telegram gift is named like Telegram names it, and its traits come from the public t.me page.
+  const isGift = isCollectible && itemKind === 'telegram_gift';
+  const [giftLookup, setGiftLookup] = useState<'idle' | 'loading' | 'found' | 'missing'>('idle');
+  const giftLookedUp = useRef('');
+  const giftSlug = isGift ? telegramGiftSlug(itemAttributes.collection?.trim() ?? '') : null;
+  const giftNumber = itemAttributes.number?.trim() ?? '';
+  const giftKey = giftSlug && /^\d{1,9}$/.test(giftNumber) ? `${giftSlug.toLowerCase()}-${giftNumber}` : '';
+  useEffect(() => {
+    if (!giftKey) { setGiftLookup('idle'); return; }
+    // The canonical name written back by a lookup must not trigger a second one.
+    if (giftKey === giftLookedUp.current) return;
+    setGiftLookup('loading');
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      fetchTelegramGift(giftSlug ?? '', giftNumber).then((gift) => {
+        if (cancelled) return;
+        giftLookedUp.current = giftKey;
+        setItemAttributes((prev) => ({
+          ...prev, collection: gift.collection, number: gift.number, upgraded: 'yes',
+          model: gift.model ?? '', backdrop: gift.backdrop ?? '', symbol: gift.symbol ?? '',
+        }));
+        setItemLink(gift.link);
+        setGiftLookup('found');
+      }).catch(() => { if (!cancelled) setGiftLookup('missing'); });
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [giftKey, giftSlug, giftNumber]);
+  const positionTitle = isGift ? telegramGiftTitle(itemAttributes, '') : title.trim();
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
   const [endDate, setEndDate] = useState(isoDate());
@@ -220,7 +249,7 @@ export default function PortfolioPositionDialog({
   const canSubmit = !submitting
     && !isCrypto
     && !!investmentAccountId
-    && !!title.trim()
+    && !!positionTitle
     && ((isCollectible && (receivedFree || costUnknown)) || parseFloat(amount) > 0)
     && (!isDeposit || parseFloat(interestRate) >= 0)
     && itemLinkValid
@@ -280,7 +309,7 @@ export default function PortfolioPositionDialog({
           investment_account_id: Number(investmentAccountId),
           crypto_asset_id: payCoinId,
           crypto_quantity: amount,
-          title: title.trim(),
+          title: positionTitle,
           quantity: quantity.trim() ? Number(quantity) : undefined,
           opened_at: undefined,
           comment: comment.trim() || undefined,
@@ -294,7 +323,7 @@ export default function PortfolioPositionDialog({
       const purchase = {
         investment_account_id: Number(investmentAccountId),
         asset_type_code: defaultAssetTypeCode,
-        title: title.trim(),
+        title: positionTitle,
         quantity: (!isDeposit && quantity.trim()) ? Number(quantity) : undefined,
         amount_in_currency: isCollectible && (receivedFree || costUnknown) ? 0 : Number(amount),
         received_free: isCollectible && receivedFree,
@@ -424,7 +453,7 @@ export default function PortfolioPositionDialog({
         </div>
       )}
 
-      {!isCrypto && (
+      {!isCrypto && !isGift && (
       <div className="apf-field">
         <label className="apf-label">Название</label>
         <input className="apf-input" type="text" autoFocus
@@ -446,6 +475,11 @@ export default function PortfolioPositionDialog({
             value={itemAttributes[field.key] ?? ''}
             onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.value }))}
             disabled={submitting} />
+          {isGift && field.key === 'number' && giftLookup !== 'idle' && (
+            <div className="apf-balance">
+              {giftLookup === 'loading' ? 'Ищу в Telegram…' : giftLookup === 'found' ? `Найден ${positionTitle}` : 'В Telegram не найден, заполните вручную'}
+            </div>
+          )}
         </div>
       ))}
 

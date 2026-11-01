@@ -1,6 +1,7 @@
 import type { PortfolioPosition } from '../types';
 import giftOriginals from '../data/telegramGiftOriginals.json';
 import { currencySymbol, formatNumericAmount } from './format';
+import { telegramGiftSlug } from './telegramGift';
 
 const normalizedGiftName = (name: string) => name.toLowerCase().replace(/[\s’'_-]/g, '');
 const giftOriginalIds = new Map(giftOriginals.flatMap((gift) =>
@@ -19,10 +20,10 @@ export const COLLECTIBLE_KINDS: CollectibleKind[] = [
     plural: 'Подарки',
     fields: [
       { key: 'collection', label: 'Коллекция', placeholder: 'Plush Pepe' },
+      { key: 'number', label: 'Номер', placeholder: '1234' },
       { key: 'model', label: 'Модель' },
       { key: 'backdrop', label: 'Фон' },
       { key: 'symbol', label: 'Узор' },
-      { key: 'number', label: 'Номер', placeholder: '1234' },
       { key: 'upgraded', label: 'Улучшенный', flag: true },
       { key: 'nft', label: 'Выпущен как NFT', flag: true },
     ],
@@ -107,8 +108,8 @@ export function collectibleImageUrl(metadata: Record<string, unknown> | undefine
     return id ? `/gifts/originals/${id}.webp` : null;
   }
   if (metadata?.item_kind === 'telegram_gift' && typeof attrs?.collection === 'string' && /^\d+$/.test(String(attrs.number ?? ''))) {
-    const slug = attrs.collection.replace(/[ -]/g, '').toLowerCase();
-    if (/^[a-z0-9]+$/.test(slug)) return `https://nft.fragment.com/gift/${slug}-${attrs.number}.medium.jpg`;
+    const slug = telegramGiftSlug(attrs.collection);
+    if (slug) return `https://nft.fragment.com/gift/${slug.toLowerCase()}-${attrs.number}.medium.jpg`;
   }
   return null;
 }

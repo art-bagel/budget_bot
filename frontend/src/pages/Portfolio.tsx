@@ -99,6 +99,7 @@ import type {
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { telegramGiftTitle } from '../utils/telegramGift';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, isoDate, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -4323,7 +4324,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             if (field.flag) attributes[field.key] = value ? 'yes' : 'no';
                             else if (value) attributes[field.key] = value; else delete attributes[field.key];
                           }
-                          const details = { title: text('title'), comment: text('comment') || null,
+                          const isGift = selectedPosition.metadata?.item_kind === 'telegram_gift';
+                          const details = { title: isGift ? telegramGiftTitle(attributes, selectedPosition.title) : text('title'), comment: text('comment') || null,
                             acquired_at: text('acquired_at') || null, item_kind: String(selectedPosition.metadata?.item_kind ?? 'other'),
                             item_link: text('item_link') || null, image_url: text('image_url') || null, item_attributes: attributes };
                           const positionId = selectedPosition.id;
@@ -4335,7 +4337,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                           } catch (reason: unknown) { setCollectibleDateError(reason instanceof Error ? reason.message : String(reason)); }
                           finally { setCollectibleDateSaving(false); }
                         }}>
-                          <label className="apf-label">Название<input className="apf-input" name="title" defaultValue={selectedPosition.title} required maxLength={200} autoFocus={!collectibleOpeningPack} /></label>
+                          {selectedPosition.metadata?.item_kind !== 'telegram_gift' && <label className="apf-label">Название<input className="apf-input" name="title" defaultValue={selectedPosition.title} required maxLength={200} autoFocus={!collectibleOpeningPack} /></label>}
                           <label className="apf-label">Дата приобретения<input className="apf-input" type="date" name="acquired_at" defaultValue={String(selectedPosition.metadata?.acquired_at ?? '')} /></label>
                           {(getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []).map(field => field.flag
                             ? <label className="apf-check" key={field.key}><input type="checkbox" name={`attribute-${field.key}`} value="yes" defaultChecked={collectibleFlag(selectedPosition.metadata, field.key) && !(field.key === 'sealed' && collectibleOpeningPack)} />{field.label}</label>

@@ -735,9 +735,8 @@ _GIFT_TRAIT = re.compile(r'<tr><th>(Model|Backdrop|Symbol)</th><td>(.*?)</td></t
 def parse_telegram_gift(page: str) -> dict[str, str | None] | None:
     """Traits of an upgraded gift from its public t.me/nft page; None for a page without the gift table."""
     title = re.search(r'<meta property="og:title" content="([^"]*)"', page)
-    slug = re.search(r'tg://nft\?slug=([A-Za-z0-9]+-\d+)', page)
     traits = _GIFT_TRAIT.findall(page)
-    if 'tgme_gift_table' not in page or not title or not slug or not traits:
+    if 'tgme_gift_table' not in page or not title or not traits:
         return None
     name, _, number = html.unescape(title.group(1)).rpartition(' #')
     if not name or not number.isdigit():
@@ -747,7 +746,8 @@ def parse_telegram_gift(page: str) -> dict[str, str | None] | None:
     return {
         'title': f'{name} #{number}', 'collection': name, 'number': number,
         'model': clean.get('model'), 'backdrop': clean.get('backdrop'), 'symbol': clean.get('symbol'),
-        'link': f'https://t.me/nft/{slug.group(1)}',
+        # The page echoes the slug as requested, so the canonical one is rebuilt from the title.
+        'link': f'https://t.me/nft/{re.sub(r"[ -]", "", name)}-{number}',
     }
 
 

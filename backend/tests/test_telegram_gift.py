@@ -13,8 +13,7 @@ from backend.app.routers.portfolio import parse_telegram_gift, telegram_gift  # 
 PAGE = '''<meta property="og:title" content="Plush Pepe #1">
 <table class="table tgme_gift_table"><tbody>
 <tr><th>Owner</th><td><span dir="auto">Pavel Durov</span></td></tr><tr><th>Model</th><td>Pumpkin <mark>3%</mark></td></tr><tr><th>Backdrop</th><td>Onyx Black <mark>2%</mark></td></tr><tr><th>Symbol</th><td>Illuminati <mark>0.5%</mark></td></tr><tr><th>Quantity</th><td>2 825/2 861 issued</td></tr>
-</tbody></table>
-<a href="tg://nft?slug=PlushPepe-1">View in Telegram</a>'''
+</tbody></table>'''
 MISSING = '<meta property="og:title" content="Telegram – a new era of messaging">'
 
 

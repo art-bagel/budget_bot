@@ -1323,6 +1323,14 @@ export async function setCollectibleAcquiredAt(positionId: number, data: {
   return apiFetch(`/portfolio/positions/${positionId}/acquired-at`, { method: 'POST', body: JSON.stringify(data) });
 }
 
+export type TelegramGift = {
+  title: string; collection: string; number: string; link: string;
+  model: string | null; backdrop: string | null; symbol: string | null;
+};
+export function fetchTelegramGift(collection: string, number: string): Promise<TelegramGift> {
+  return apiFetch(`/portfolio/telegram-gift?${new URLSearchParams({ collection, number })}`);
+}
+
 export async function editCollectibleDetails(positionId: number, data: {
   request_id: string; title: string; comment: string | null; acquired_at: string | null;
   item_kind: string; item_link: string | null; image_url: string | null; item_attributes: Record<string, string>;
