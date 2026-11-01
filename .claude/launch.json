@@ -19,5 +19,12 @@
       "runtimeArgs": ["backend.app.main:app", "--reload", "--port", "8000"],
       "port": 8000
     }
+,
+    {
+      "name": "backend-alt",
+      "runtimeExecutable": "./venv/bin/uvicorn",
+      "runtimeArgs": ["backend.app.main:app", "--reload", "--port", "8001"],
+      "port": 8001
+    }
   ]
 }

@@ -4,5 +4,5 @@
 
 - Новый файл, который должен быть в git, сразу добавляйте через `git add <file>`. Сгенерированные файлы, секреты, кэши и конфиги IDE — в `.gitignore`.
 - PostToolUse-хук `.claude/hooks/post_edit_check.sh` после каждой правки запускает tsc + biome (frontend) или ruff (backend). Ошибку хука исправляйте сразу. Это быстрая проверка одного файла; итог задачи — `scripts/check.sh` (см. AGENTS.md «Проверки»).
-- Dev-серверы для превью описаны в `.claude/launch.json`: `frontend` на :5173, `frontend-docker` (фронт к docker API на :8001), `backend` на :8000. Docker-стек обычно занимает :8000/:8080.
+- Dev-серверы для превью описаны в `.claude/launch.json`: `frontend` на :5173, `frontend-docker` (фронт к docker API на :8001), `backend` на :8000, `backend-alt` на :8001 (когда :8000 занят docker-стеком; к нему подходит `frontend-docker`). Docker-стек обычно занимает :8000/:8080.
 - Скилл `prod-to-dev` обновляет dev-базу копией прода.
