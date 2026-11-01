@@ -363,3 +363,26 @@ Slug — имя коллекции без пробелов и дефисов, р
    повторного запроса после записи значений нет.
 4. Смена вида предмета очищает атрибуты, ссылку и ключ поиска: ссылка
    найденного подарка не уезжает в стикер.
+
+### Перепроверка исправлений (финальное ревью, второй раунд)
+
+Коммит `083e300`, проверены только замечания 1–4; `scripts/check.sh --fast`
+— GREEN.
+
+1. **ок** — `_gift_slug` в роутере и `telegramGiftSlug` на фронте убирают
+   `[\s’'_-]`; ссылка в `parse_telegram_gift` строится через ту же функцию.
+   Тесты: `Durov’s Cap #1` → `https://t.me/nft/DurovsCap-1` в
+   `test_parse_traits_with_rarity`, запрос `durov's cap` → `durovscap-1` в
+   `test_lookup_builds_canonical_link_from_loose_input`, оба написания
+   апострофа в `telegramGift.test.ts`. `collectibleImageUrl` получает тот же
+   slug для fragment.
+2. **ок** — `Query(...)` без `max_length`; `('PlushPepe', '1234567890')` →
+   400 в `test_rejects_anything_but_a_slug_and_digits`, сеть не трогается.
+3. **ок** — ref хранит `${telegramGiftSlug(gift.collection).toLowerCase()}-${gift.number}`,
+   что совпадает с `giftKey` после записи канонических значений (ключ тоже
+   из `telegramGiftSlug(...).toLowerCase()`), второго запроса нет.
+4. **ок** — `onChange` вида предмета сбрасывает `itemAttributes` в `{}` (как
+   начальное состояние), `itemLink` и `giftLookedUp`.
+
+**Вердикт:** замечания «исправить» закрыты, блокеров нет — можно выносить на
+аппрув мержа владельцу.
