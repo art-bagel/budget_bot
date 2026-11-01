@@ -386,3 +386,16 @@ Slug — имя коллекции без пробелов и дефисов, р
 
 **Вердикт:** замечания «исправить» закрыты, блокеров нет — можно выносить на
 аппрув мержа владельцу.
+
+## Деплой (01.11.2026)
+
+- Аппрув владельца («Да, мержи»). `origin/main` не двигался, rebase не
+  понадобился; повторный полный `check.sh` — GREEN. `git push origin HEAD:main`
+  без `--force`: `c1789e7..96bc354`.
+- GitHub Actions, [run 41340543911](https://github.com/art-bagel/budget_bot/actions/runs/41340543911):
+  «Verify Project» — success (4 мин 27 с), «Deploy To Server» — success (1 мин 7 с).
+- Прод: `GET /health` — 200, отдаётся новый бандл `index-DyzJLlHS.js`, в нём
+  есть вызов `telegram-gift`.
+- Ветка `claude/gift-autofill` и worktree удалены, в GitHub ветка не пушилась.
+- В локальной dev-базе остался тестовый аккаунт `gift-autofill-test@example.test`
+  (счёт «Тестовые подарки», один подарок); следующий `prod-to-dev` его сотрёт.
