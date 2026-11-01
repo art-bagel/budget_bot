@@ -1,8 +1,11 @@
+import html
+import re
 from uuid import UUID, uuid4
 from datetime import date
 from decimal import Decimal
 from typing import Any, List, Literal, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
@@ -714,3 +717,55 @@ async def edit_collectible_details(
     result = await ledger.call_function('budgeting.put__manual_collectible_movement', user.user_id,
         body.request_id, 'collectible_details', payload, None)
     return PortfolioPositionItem(**result)
+
+
+class TelegramGiftItem(BaseModel):
+    title: str
+    collection: str
+    number: str
+    model: str | None = None
+    backdrop: str | None = None
+    symbol: str | None = None
+    link: str
+
+
+_GIFT_TRAIT = re.compile(r'<tr><th>(Model|Backdrop|Symbol)</th><td>(.*?)</td></tr>', re.S)
+
+
+def parse_telegram_gift(page: str) -> dict[str, str | None] | None:
+    """Traits of an upgraded gift from its public t.me/nft page; None for a page without the gift table."""
+    title = re.search(r'<meta property="og:title" content="([^"]*)"', page)
+    slug = re.search(r'tg://nft\?slug=([A-Za-z0-9]+-\d+)', page)
+    traits = _GIFT_TRAIT.findall(page)
+    if 'tgme_gift_table' not in page or not title or not slug or not traits:
+        return None
+    name, _, number = html.unescape(title.group(1)).rpartition(' #')
+    if not name or not number.isdigit():
+        return None
+    # A trait reads "Pumpkin <mark>3%</mark>": kept as "Pumpkin 3%", the form the rarity parser expects.
+    clean = {key.lower(): ' '.join(html.unescape(re.sub(r'<[^>]+>', ' ', value)).split())[:200] for key, value in traits}
+    return {
+        'title': f'{name} #{number}', 'collection': name, 'number': number,
+        'model': clean.get('model'), 'backdrop': clean.get('backdrop'), 'symbol': clean.get('symbol'),
+        'link': f'https://t.me/nft/{slug.group(1)}',
+    }
+
+
+@router.get('/telegram-gift', response_model=TelegramGiftItem)
+async def telegram_gift(
+    collection: str = Query(..., max_length=80), number: str = Query(..., max_length=9),
+    user: CurrentUser = Depends(get_current_user),
+) -> TelegramGiftItem:
+    slug = re.sub(r'[ -]', '', collection)
+    if not re.fullmatch(r'[A-Za-z0-9]{1,64}', slug) or not re.fullmatch(r'\d{1,9}', number):
+        raise HTTPException(status_code=400, detail='Коллекция — латиницей, номер — цифрами')
+    # The host is fixed and the path is validated above, so the request cannot be steered elsewhere.
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
+            response = await client.get(f'https://t.me/nft/{slug}-{number}')
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=404, detail='Подарок не найден') from error
+    gift = parse_telegram_gift(response.text) if response.status_code == 200 else None
+    if gift is None:
+        raise HTTPException(status_code=404, detail='Подарок не найден')
+    return TelegramGiftItem(**gift)

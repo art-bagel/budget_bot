@@ -72,7 +72,7 @@ frontend_deps() {
 
 ruff_check() { "$VENV/bin/ruff" check backend storage; }
 
-unit_tests() { "$PY" -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard backend.tests.test_receipt_scan; }
+unit_tests() { "$PY" -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard backend.tests.test_receipt_scan backend.tests.test_telegram_gift; }
 
 py_compile_all() {
     find backend storage -name '*.py' -not -path '*/.cache/*' -print0 \

@@ -88,7 +88,7 @@ jobs:
         run: ruff check backend storage
 
       - name: Backend unit tests
-        run: python -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard backend.tests.test_receipt_scan
+        run: python -m unittest backend.tests.test_fx_rates backend.tests.test_bank_account_response backend.tests.test_seed_ui_guard backend.tests.test_receipt_scan backend.tests.test_telegram_gift
 
       - name: Validate backend modules
         run: |
