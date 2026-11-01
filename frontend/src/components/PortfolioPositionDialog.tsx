@@ -12,6 +12,7 @@ import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink } from '../utils/collectibles';
 import { telegramGiftSlug, telegramGiftTitle } from '../utils/telegramGift';
+import { defaultPurchaseCurrency } from '../utils/collectibleCurrency';
 import { sanitizeDecimalInput } from '../utils/validation';
 
 
@@ -252,6 +253,12 @@ export default function PortfolioPositionDialog({
   // A collection account also pays with the coins it holds: value `crypto:<asset id>`.
   const payCoinId = currencyCode.startsWith('crypto:') ? Number(currencyCode.slice(7)) : null;
   const heldCoins = isCollectible ? selectedAccountBalances.filter((b) => b.asset_type === 'crypto' && b.crypto_asset_id && b.amount > 0) : [];
+  // Items are mostly bought with the account's GRAM: preselect it until the user picks a currency.
+  const currencyTouched = useRef(false);
+  const purchaseDefault = isCollectible && !(receivedFree || costUnknown) ? defaultPurchaseCurrency(heldCoins, user.base_currency_code) : null;
+  useEffect(() => {
+    if (purchaseDefault && !currencyTouched.current) setCurrencyCode(purchaseDefault);
+  }, [purchaseDefault]);
   const selectedCurrencyBalance = useMemo(
     () => selectedAccountBalances.find((balance) => payCoinId
       ? balance.crypto_asset_id === payCoinId
@@ -531,7 +538,7 @@ export default function PortfolioPositionDialog({
               ...currencies.map((c) => ({ value: c.code, label: c.code })),
               ...heldCoins.map((b) => ({ value: `crypto:${b.crypto_asset_id}`, label: b.symbol ?? b.currency_code })),
             ]}
-            onChange={setCurrencyCode}
+            onChange={(value) => { currencyTouched.current = true; setCurrencyCode(value); }}
             disabled={submitting}
           />
         </div>

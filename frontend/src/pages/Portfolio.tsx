@@ -99,6 +99,7 @@ import type {
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { defaultPositionCurrency } from '../utils/collectibleCurrency';
 import { telegramGiftLink, telegramGiftTitle } from '../utils/telegramGift';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, isoDate, pluralRu } from '../utils/format';
@@ -564,12 +565,12 @@ function getDepositCloseInfo(
   return { isDeposit: true, capitalized, body, interest, suggestedAmount, totalToAccount };
 }
 
-function createInitialCloseDraft(position: PortfolioPosition): CloseDraft {
+function createInitialCloseDraft(position: PortfolioPosition, currencyCode = position.currency_code): CloseDraft {
   const info = getDepositCloseInfo(position, isoDate());
   return {
     amount: info.isDeposit ? formatAmountInput(info.suggestedAmount) : '',
     amountEdited: false,
-    currencyCode: position.currency_code,
+    currencyCode,
     baseAmount: '',
     closedAt: isoDate(),
     comment: '',
@@ -596,20 +597,20 @@ function createInitialIncomeDraft(position: PortfolioPosition): IncomeDraft {
   };
 }
 
-function createInitialTopUpDraft(position: PortfolioPosition): TopUpDraft {
+function createInitialTopUpDraft(position: PortfolioPosition, currencyCode = position.currency_code): TopUpDraft {
   return {
     amount: '',
     quantity: '',
-    currencyCode: position.currency_code,
+    currencyCode,
     toppedUpAt: isoDate(),
     comment: '',
   };
 }
 
-function createInitialPartialCloseDraft(position: PortfolioPosition): PartialCloseDraft {
+function createInitialPartialCloseDraft(position: PortfolioPosition, returnCurrencyCode = position.currency_code): PartialCloseDraft {
   return {
     returnAmount: '',
-    returnCurrencyCode: position.currency_code,
+    returnCurrencyCode,
     returnBaseAmount: '',
     principalReduction: '',
     principalEditedManually: false,
@@ -619,10 +620,10 @@ function createInitialPartialCloseDraft(position: PortfolioPosition): PartialClo
   };
 }
 
-function createInitialFeeDraft(position: PortfolioPosition): FeeDraft {
+function createInitialFeeDraft(position: PortfolioPosition, currencyCode = position.currency_code): FeeDraft {
   return {
     amount: '',
-    currencyCode: position.currency_code,
+    currencyCode,
     chargedAt: isoDate(),
     comment: '',
   };
@@ -1677,10 +1678,22 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
     setRateChangeDrafts(omit);
   };
 
+  // A collection form starts with the coin the item was bought with, when the form offers it.
+  // `all` is the coin reference (sale), otherwise the coins the account holds; fiat-only forms pass none.
+  const collectibleFormCurrency = (position: PortfolioPosition, coins: 'all' | 'held' | 'none') => {
+    if (position.asset_type_code !== 'collectible') return position.currency_code;
+    const coinOptions = coins === 'all'
+      ? cryptoAssets.map((asset) => ({ value: `crypto:${asset.id}`, symbol: asset.symbol }))
+      : coins === 'held'
+        ? (coinBalancesByAccountId.get(position.investment_account_id) ?? []).map((coin) => ({ value: `crypto:${coin.crypto_asset_id}`, symbol: coin.symbol }))
+        : [];
+    return defaultPositionCurrency(position, [...currencies.map((currency) => ({ value: currency.code })), ...coinOptions]);
+  };
+
   const handleOpenCloseForm = (position: PortfolioPosition) => {
     clearPositionDrafts(position.id);
     setCloseError(null);
-    setCloseDrafts((prev) => ({ ...prev, [position.id]: createInitialCloseDraft(position) }));
+    setCloseDrafts((prev) => ({ ...prev, [position.id]: createInitialCloseDraft(position, collectibleFormCurrency(position, 'all')) }));
   };
 
   const handleOpenIncomeForm = (position: PortfolioPosition) => {
@@ -1692,19 +1705,19 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   const handleOpenTopUpForm = (position: PortfolioPosition) => {
     clearPositionDrafts(position.id);
     setTopUpError(null);
-    setTopUpDrafts((prev) => ({ ...prev, [position.id]: createInitialTopUpDraft(position) }));
+    setTopUpDrafts((prev) => ({ ...prev, [position.id]: createInitialTopUpDraft(position, collectibleFormCurrency(position, 'held')) }));
   };
 
   const handleOpenPartialCloseForm = (position: PortfolioPosition) => {
     clearPositionDrafts(position.id);
     setPartialCloseError(null);
-    setPartialCloseDrafts((prev) => ({ ...prev, [position.id]: createInitialPartialCloseDraft(position) }));
+    setPartialCloseDrafts((prev) => ({ ...prev, [position.id]: createInitialPartialCloseDraft(position, collectibleFormCurrency(position, 'none')) }));
   };
 
   const handleOpenFeeForm = (position: PortfolioPosition) => {
     clearPositionDrafts(position.id);
     setFeeError(null);
-    setFeeDrafts((prev) => ({ ...prev, [position.id]: createInitialFeeDraft(position) }));
+    setFeeDrafts((prev) => ({ ...prev, [position.id]: createInitialFeeDraft(position, collectibleFormCurrency(position, 'held')) }));
   };
 
 
