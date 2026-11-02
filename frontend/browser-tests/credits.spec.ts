@@ -4,8 +4,9 @@ import { expect, openOverview, test } from './fixtures';
 // The seed overpays «Тестовая кредитка» by 1 500 ₽ (limit 50 000 ₽).
 test('an overpaid credit card shows the overpayment', async ({ page }) => {
   await openOverview(page);
-  // Own money on the card has its own hero row: the rows add up to the total.
-  await expect(page.locator('.hero__row', { hasText: 'Переплата по картам' })).toContainText(/1\s500/);
+  // The overpayment is part of the credits row, which then reads as a plus.
+  await expect(page.locator('.hero__row', { hasText: 'Переплата по картам' })).toHaveCount(0);
+  await expect(page.locator('.hero__row', { hasText: 'Кредиты' }).locator('.hero__row-amount')).toHaveText(/^\+1\s500₽$/);
   await page.getByRole('button', { name: 'Кредиты', exact: true }).click();
   const tile = page.locator('.tile--card', { hasText: 'Тестовая кредитка' });
   await expect(tile.locator('.tile__debt')).toHaveText(/^\+1\s500\s₽$/);
@@ -34,4 +35,23 @@ test('the transfer form labels an overpaid card as an overpayment', async ({ pag
   // The card as a source shows what is available; as a target, the overpayment instead of debt.
   await expect(dialog.getByRole('button', { name: /^Тестовая кредитка Доступно: 51\s500\s₽/ })).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: /^Тестовая кредитка Переплата: 1\s500\s₽/ })).toBeVisible();
+});
+
+test('switching credits off takes the overpayment out of the total', async ({ page }) => {
+  await openOverview(page);
+  const total = async () => Number((await page.locator('.hero__value').innerText()).replace(/\s/g, ''));
+  const withCredits = await total();
+  await page.locator('.chiptog', { hasText: 'кредиты' }).click();
+  await expect.poll(total).toBe(withCredits - 1500);
+});
+
+test('the transfer form does not move card money to an investment account', async ({ page }) => {
+  await openOverview(page);
+  await page.getByRole('button', { name: 'Перевод', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('.atx__trigger').filter({ has: page.locator('.atx__tag', { hasText: /^Откуда$/ }) }).click();
+  await dialog.getByRole('button', { name: /^Тестовая кредитка Доступно/ }).click();
+  await dialog.locator('.atx__trigger').filter({ has: page.locator('.atx__tag', { hasText: /^Куда$/ }) }).click();
+  // Both lists stay in the DOM; the target one marks the account as not allowed.
+  await expect(dialog.getByRole('button', { name: /^Тестовые подарки .*нельзя$/ })).toBeDisabled();
 });

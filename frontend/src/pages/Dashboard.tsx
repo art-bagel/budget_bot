@@ -51,7 +51,7 @@ import { categoryDisplayName, parseCategoryIcon } from '../utils/categoryIcon';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
-import { creditTotals } from '../utils/creditCard';
+import { creditNet } from '../utils/creditCard';
 
 type DashboardViewTab = 'budget' | 'operations' | 'analytics';
 
@@ -59,9 +59,8 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
-  const [totalCreditDebtInBase, setTotalCreditDebtInBase] = useState(0);
-  // Own money on credit cards: counted in the total even with credits switched off.
-  const [creditOverpaymentInBase, setCreditOverpaymentInBase] = useState(0);
+  // Debts minus overpayments of all credit accounts: negative is debt.
+  const [creditNetInBase, setCreditNetInBase] = useState(0);
   const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
@@ -158,9 +157,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           return acc;
         }, {}),
       );
-      const credit = creditTotals(creditSnapshots);
-      setTotalCreditDebtInBase(credit.debt);
-      setCreditOverpaymentInBase(credit.overpayment);
+      setCreditNetInBase(creditNet(creditSnapshots));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -422,7 +419,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     (sum, account) => sum + getInvestmentAccountMarketTotal(account.id),
     0,
   );
-  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal + creditOverpaymentInBase - (includeCredits ? totalCreditDebtInBase : 0);
+  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal + (includeCredits ? creditNetInBase : 0);
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
@@ -600,34 +597,16 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
               <span className="hero__row-chev"><IconChevronRight /></span>
             </span>
           </button>
-          {/* The total includes it, so the rows still add up; «Кредиты» stays debt only. */}
-          {creditOverpaymentInBase > 0 && (
-            <button
-              type="button"
-              className="hero__row"
-              onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('credits'); }}
-            >
-              <span className="hero__row-label"><span className="hero__mark hero__mark--ink" />&nbsp;Переплата по картам</span>
-              <span className="hero__row-value">
-                <span className="hero__row-amount">
-                  {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(creditOverpaymentInBase)}
-                  <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
-                </span>
-                <span className="hero__row-chev"><IconChevronRight /></span>
-              </span>
-            </button>
-          )}
           <button
             type="button"
-            className={`hero__row${totalCreditDebtInBase > 0 ? ' hero__row--neg' : ''}`}
+            className={`hero__row${creditNetInBase < 0 ? ' hero__row--neg' : ''}`}
             onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('credits'); }}
           >
-            <span className="hero__row-label"><span className={`hero__mark${totalCreditDebtInBase > 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</span>
+            <span className="hero__row-label"><span className={`hero__mark${creditNetInBase < 0 ? ' hero__mark--warn' : ' hero__mark--ink'}`} />&nbsp;Кредиты</span>
             <span className="hero__row-value">
               <span className="hero__row-amount">
-                {totalCreditDebtInBase > 0
-                  ? `−${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(totalCreditDebtInBase)}`
-                  : '0'}
+                {creditNetInBase < 0 ? '−' : creditNetInBase > 0 ? '+' : ''}
+                {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.abs(creditNetInBase))}
                 <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
               </span>
               <span className="hero__row-chev"><IconChevronRight /></span>

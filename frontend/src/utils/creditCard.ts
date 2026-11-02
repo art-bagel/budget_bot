@@ -18,14 +18,8 @@ export function creditCardView(balances: CreditBalance[], limit: number) {
   };
 }
 
-// Debt and overpayment are summed per account: one card's overpayment does
-// not hide another card's debt.
-export function creditTotals(accounts: CreditBalance[][]) {
-  return accounts.reduce(
-    (acc, balances) => {
-      const view = creditCardView(balances, 0);
-      return { debt: acc.debt + view.used, overpayment: acc.overpayment + view.overpayment };
-    },
-    { debt: 0, overpayment: 0 },
-  );
+// All credit accounts together, rounded to the rouble shown: debts minus
+// overpayments, so a near-zero sum never reads as «−0».
+export function creditNet(accounts: CreditBalance[][]) {
+  return Math.round(accounts.reduce((sum, balances) => sum + balanceOf(balances), 0)) || 0;
 }

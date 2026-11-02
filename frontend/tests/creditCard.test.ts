@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { creditCardView, creditTotals } from '../src/utils/creditCard.ts';
+import { creditCardView, creditNet } from '../src/utils/creditCard.ts';
 
 const bal = (amount: number) => [{ historical_cost_in_base: amount }];
 
@@ -12,6 +12,9 @@ test('debt uses the limit, overpayment adds to what is available', () => {
 test('a card without a limit still shows its overpayment', () => {
   assert.deepEqual(creditCardView(bal(159), 0), { used: 0, overpayment: 159, available: 159, usedPct: 0, canArchive: false });
 });
-test('one card overpayment does not hide another card debt', () => {
-  assert.deepEqual(creditTotals([bal(-50000), bal(1500), []]), { debt: 50000, overpayment: 1500 });
+test('credits net debts against overpayments, rounded to the rouble', () => {
+  assert.equal(creditNet([bal(-50000), bal(1500), []]), -48500);
+  assert.equal(creditNet([bal(1500)]), 1500);
+  assert.equal(creditNet([]), 0);
+  assert.ok(Object.is(creditNet([bal(-0.3)]), 0));
 });

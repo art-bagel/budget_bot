@@ -42,7 +42,7 @@ interface PickerItem {
 const COMPAT: Record<AcctKind, Partial<Record<AcctKind, boolean>>> = {
   cash:       { cash: true, investment: true, credit: true },
   investment: { cash: true, investment: true, credit: true },
-  credit:     { cash: true, investment: true },
+  credit:     { cash: true },
 };
 const KIND_ORDER: AcctKind[] = ['cash', 'investment', 'credit'];
 const KIND_LABEL: Record<AcctKind, string> = {
@@ -53,7 +53,6 @@ const MODE_LABEL: Partial<Record<string, string>> = {
   'cash>investment': 'Пополнение инвестиций',
   'investment>cash': 'Вывод из инвестиций',
   'credit>cash': 'Перевод с кредитного счёта',
-  'credit>investment': 'Перевод с кредитного счёта',
   'cash>credit': 'Погашение долга',
   'investment>credit': 'Погашение долга',
   'investment>investment': 'Перевод между инвестиционными счетами',
@@ -262,6 +261,8 @@ export default function AccountTransferDialog({
         && ((from.kind === 'cash' && to.kind === 'cash') || sameOwner(from.account, to.account));
     }
     if (from.kind === 'credit' && (from.account.credit_kind !== 'credit_card' || from.currency !== baseCurrencyCode)) return false;
+    // A card's budget debt only moves through a cash account; loans are repaid from investments.
+    if (from.kind === 'investment' && to.account.credit_kind === 'credit_card') return false;
     if (to.account.investment_asset_type === 'crypto') return false;
     return !!COMPAT[from.kind]?.[to.kind]
       && (from.kind === 'cash' || to.kind === 'cash' || sameOwner(from.account, to.account));
