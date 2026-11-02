@@ -36,7 +36,7 @@ def assert_test_database(env) -> None:
 
 def seed(client) -> None:
     """
-    Fills the account with fictional RUB money, budget categories, a credit and a crypto position.
+    Fills the account with fictional RUB money, budget categories, an overpaid credit card and a crypto position.
     :param client: TestClient of the application.
     """
     def call(method: str, url: str, **kwargs):
@@ -70,9 +70,13 @@ def seed(client) -> None:
             'currency_code': 'RUB', 'operated_at': '2026-01-10',
         })
 
-    call('POST', '/api/v1/bank-accounts/credit', json={
+    card = call('POST', '/api/v1/bank-accounts/credit', json={
         'name': 'Тестовая кредитка', 'credit_kind': 'credit_card', 'currency_code': 'RUB',
         'credit_limit': 50000, 'interest_rate': 24.9, 'payment_day': 15,
+    })['id']
+    # Overpaid card: own money on it shows as an overpayment, not as debt.
+    call('POST', '/api/v1/operations/account-transfer', json={
+        'from_account_id': account, 'to_account_id': card, 'currency_code': 'RUB', 'amount': '1500',
     })
 
     # Fictional coin without a price source: no exchange lookups, stable screenshots.
