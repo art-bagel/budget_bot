@@ -190,3 +190,13 @@
 `scripts/check.sh` (полный, 02.11.2026) — GREEN: схема с нуля, SQL-, API- и
 браузерные тесты. Финальная версия `credit_card_repay_reversal.sql` после
 правок по ревью отдельно прогнана на одноразовой `postgres:17` — PASS.
+
+## Деплой
+
+02.11.2026: `717c3b8` запушен в `main`. GitHub Actions «Deploy Budget Bot»
+(run 41458414754) — success. `https://budget.mrbagel.ru/health` → 200. На
+прод-БД `put__transfer_between_accounts` содержит новое условие (проверено
+readonly-запросом к `pg_proc`).
+
+Владельцу осталось: отменить погашение 2025154 (106 275,69, карта *1233) и
+ввести его заново.
