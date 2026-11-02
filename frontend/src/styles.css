@@ -12107,7 +12107,16 @@ svg.clx-tile__img { width: 34%; height: 34%; color: var(--t-v-f); opacity: .5; }
   text-overflow: ellipsis;
 }
 .clx-tile__cap { font-size: 12.5px; font-weight: 600; color: var(--text); }
-.clx-tile__sub { font-size: 11.5px; color: var(--text-2); }
+/* Costs with fees («бесплатно · затраты 50 ₽») do not fit one 96px line: wrap to two. */
+.clx-tile__sub {
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+}
 .clx-tile__sub--unknown { color: var(--warn); }
 
 /* Sealed packs: a horizontal rack above the shelves. */
