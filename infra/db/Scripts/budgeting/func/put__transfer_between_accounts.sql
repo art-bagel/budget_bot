@@ -26,6 +26,7 @@ DECLARE
     _from_owner_family_id bigint;
     _from_account_kind    text;
     _from_credit_limit    numeric(20, 2);
+    _from_credit_kind     text;
     _to_owner_type        text;
     _to_owner_user_id     bigint;
     _to_owner_family_id   bigint;
@@ -59,8 +60,8 @@ BEGIN
         RAISE EXCEPTION 'Source and target accounts must be different';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit
-    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind, _from_credit_limit
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit, credit_kind
+    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind, _from_credit_limit, _from_credit_kind
     FROM bank_accounts
     WHERE id = _from_account_id AND is_active;
 
@@ -100,6 +101,13 @@ BEGIN
     -- Into a credit account too, or the money could never be moved out again.
     IF (_from_account_kind = 'credit' OR _to_account_kind = 'credit') AND _currency_code <> _base_currency_code THEN
         RAISE EXCEPTION 'Переводы с кредитным счётом — только в базовой валюте';
+    END IF;
+
+    -- Investment money is outside the budget, so such a transfer would change the
+    -- card balance without its budget debt. Route it through a cash account.
+    IF (_from_credit_kind = 'credit_card' AND _to_account_kind = 'investment')
+       OR (_from_account_kind = 'investment' AND _to_credit_kind = 'credit_card') THEN
+        RAISE EXCEPTION 'Кредитная карта пополняется и выводится только через обычный счёт';
     END IF;
 
     IF _from_account_kind = 'cash' THEN

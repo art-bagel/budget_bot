@@ -28,6 +28,7 @@ DECLARE
     _from_account_kind   text;
     _investment_account_kind text;
     _from_credit_limit   numeric(20, 2);
+    _from_credit_kind    text;
     _from_unallocated_id bigint;
     _bank_balance        numeric(20, 8);
     _cost_base           numeric(20, 2) := 0;
@@ -46,8 +47,8 @@ BEGIN
         RAISE EXCEPTION 'Transfer amount must be positive';
     END IF;
 
-    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit
-    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind, _from_credit_limit
+    SELECT owner_type, owner_user_id, owner_family_id, account_kind, credit_limit, credit_kind
+    INTO _from_owner_type, _from_owner_user_id, _from_owner_family_id, _from_account_kind, _from_credit_limit, _from_credit_kind
     FROM bank_accounts
     WHERE id = _from_account_id AND is_active;
 
@@ -72,6 +73,12 @@ BEGIN
         _user_id, _investment_owner_type, _investment_owner_user_id, _investment_owner_family_id
     ) THEN
         RAISE EXCEPTION 'Access denied to investment account %', _investment_account_id;
+    END IF;
+
+    -- Same rule as put__transfer_between_accounts: a card has budget debt, and
+    -- investment money is outside the budget.
+    IF _from_credit_kind = 'credit_card' THEN
+        RAISE EXCEPTION 'Кредитная карта пополняется и выводится только через обычный счёт';
     END IF;
 
     _base_currency_code := budgeting.get__owner_base_currency(_from_owner_type, _from_owner_user_id, _from_owner_family_id);

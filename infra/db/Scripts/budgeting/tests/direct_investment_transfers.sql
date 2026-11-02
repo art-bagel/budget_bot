@@ -16,11 +16,30 @@ BEGIN
  loan := (put__create_credit_account(uid,'Loan','loan','RUB',10000,bank,'user',36.5,NULL::smallint,current_date-10)->>'id')::bigint;
  before_budget := (SELECT amount FROM current_budget_balances WHERE category_id=free);
 
- -- Move liquid cash between investment accounts and draw / repay card funds.
+ -- Move liquid cash between investment accounts.
  PERFORM put__transfer_between_accounts(uid,deposit,coll,'RUB',1000);
- PERFORM put__transfer_between_accounts(uid,card,deposit,'RUB',2000);
- PERFORM put__transfer_between_accounts(uid,deposit,card,'RUB',2000);
- ASSERT COALESCE((SELECT amount FROM current_bank_balances WHERE bank_account_id=card AND currency_code='RUB'),0)=0,'card repaid';
+ -- A card has budget debt and investment money is outside the budget, so a card
+ -- reaches an investment account only through a cash account.
+ err := '';
+ BEGIN PERFORM put__transfer_between_accounts(uid,card,deposit,'RUB',2000);
+ EXCEPTION WHEN raise_exception THEN err := SQLERRM; END;
+ ASSERT err LIKE '%через обычный счёт%','card to investment rejected';
+ err := '';
+ BEGIN PERFORM put__transfer_between_accounts(uid,card,coll,'RUB',500);
+ EXCEPTION WHEN raise_exception THEN err := SQLERRM; END;
+ ASSERT err LIKE '%через обычный счёт%','card to collectible rejected';
+ err := '';
+ BEGIN PERFORM put__transfer_between_accounts(uid,deposit,card,'RUB',2000);
+ EXCEPTION WHEN raise_exception THEN err := SQLERRM; END;
+ ASSERT err LIKE '%через обычный счёт%','investment to card rejected';
+ -- The broker import path too, even from a card with an overpayment.
+ PERFORM put__transfer_between_accounts(uid,bank,card,'RUB',1000);
+ err := '';
+ BEGIN PERFORM put__record_broker_transfer_in(uid,'user',uid,NULL,card,deposit,'RUB',500);
+ EXCEPTION WHEN raise_exception THEN err := SQLERRM; END;
+ ASSERT err LIKE '%через обычный счёт%','broker transfer from card rejected';
+ PERFORM put__transfer_between_accounts(uid,card,bank,'RUB',1000);
+ ASSERT COALESCE((SELECT amount FROM current_bank_balances WHERE bank_account_id=card AND currency_code='RUB'),0)=0,'card untouched';
  ASSERT (SELECT amount FROM current_bank_balances WHERE bank_account_id=deposit AND currency_code='RUB')=9000,'deposit free cash';
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=before_budget,'no artificial bank budget movements';
 
@@ -52,5 +71,9 @@ BEGIN
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=before_budget-1100,'cash repayment budget';
  PERFORM put__reverse_operation(uid,op);
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=before_budget,'cash reversal budget';
+
+ -- A term loan still pays out to an investment account: it has no budget debt.
+ PERFORM put__create_credit_account(uid,'Loan2','loan','RUB',3000,deposit,'user',12,NULL::smallint,current_date);
+ ASSERT (SELECT amount FROM current_bank_balances WHERE bank_account_id=deposit AND currency_code='RUB')=12000,'loan paid out to investment';
 END $$;
 ROLLBACK;
