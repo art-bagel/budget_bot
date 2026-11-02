@@ -47,6 +47,7 @@ DECLARE
     _lot                  record;
     _credit_card_budget_debt_base numeric(20, 2) := 0;
     _budget_debit_base    numeric(20, 2) := 0;
+    _budget_credit_base   numeric(20, 2) := 0;
 BEGIN
     SET search_path TO budgeting;
 
@@ -93,6 +94,11 @@ BEGIN
         _to_owner_type, _to_owner_user_id, _to_owner_family_id
     ) THEN
         RAISE EXCEPTION 'У счетов разная базовая валюта';
+    END IF;
+
+    -- Credit accounts hold no FX lots of borrowed money, so their cost is only defined in base currency.
+    IF _from_account_kind = 'credit' AND _currency_code <> _base_currency_code THEN
+        RAISE EXCEPTION 'Перевод с кредитного счёта возможен только в базовой валюте';
     END IF;
 
     IF _from_account_kind = 'cash' THEN
@@ -196,6 +202,14 @@ BEGIN
         _budget_debit_base := _cost_base;
     END IF;
 
+    IF _to_account_kind = 'cash' AND _from_account_kind = 'credit' THEN
+        -- An overpayment on the card is own money already in the budget; only
+        -- the part that takes the card below zero is new money (and new debt).
+        _budget_credit_base := round(_amount - GREATEST(0, LEAST(_amount, _bank_balance)), 2);
+    ELSIF _to_account_kind = 'cash' THEN
+        _budget_credit_base := _cost_base;
+    END IF;
+
     INSERT INTO operations (actor_user_id, owner_type, owner_user_id, owner_family_id, type, comment, operated_on)
     VALUES (
         _user_id, _from_owner_type, _from_owner_user_id, _from_owner_family_id,
@@ -213,9 +227,9 @@ BEGIN
         VALUES (_operation_id, _from_unallocated_id, _base_currency_code, -_budget_debit_base);
     END IF;
 
-    IF _to_account_kind = 'cash' THEN
+    IF _budget_credit_base > 0 THEN
         INSERT INTO budget_entries (operation_id, category_id, currency_code, amount)
-        VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _cost_base);
+        VALUES (_operation_id, _to_unallocated_id, _base_currency_code, _budget_credit_base);
     END IF;
 
     PERFORM budgeting.put__apply_current_bank_delta(_from_account_id, _currency_code, -_amount, -_cost_base);
@@ -225,8 +239,8 @@ BEGIN
         PERFORM budgeting.put__apply_current_budget_delta(_from_unallocated_id, _base_currency_code, -_budget_debit_base);
     END IF;
 
-    IF _to_account_kind = 'cash' THEN
-        PERFORM budgeting.put__apply_current_budget_delta(_to_unallocated_id, _base_currency_code, _cost_base);
+    IF _budget_credit_base > 0 THEN
+        PERFORM budgeting.put__apply_current_budget_delta(_to_unallocated_id, _base_currency_code, _budget_credit_base);
     END IF;
 
     IF _currency_code <> _base_currency_code THEN

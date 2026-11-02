@@ -47,6 +47,11 @@ BEGIN
         RAISE EXCEPTION 'Cannot archive: credit account still has debt';
     END IF;
 
+    -- An archived account accepts no transfers, so an overpayment would be lost.
+    IF _balance > 0 THEN
+        RAISE EXCEPTION 'На карте переплата — сначала переведите её на счёт';
+    END IF;
+
     _archive_suffix := ' [archived ' || _bank_account_id || ']';
     _archived_name  := left(_account_name, 100 - length(_archive_suffix)) || _archive_suffix;
 
