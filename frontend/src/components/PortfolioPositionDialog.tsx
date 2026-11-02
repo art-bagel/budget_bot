@@ -256,9 +256,13 @@ export default function PortfolioPositionDialog({
   // Items are mostly bought with the account's GRAM: preselect it until the user picks a currency.
   const currencyTouched = useRef(false);
   const purchaseDefault = isCollectible && !(receivedFree || costUnknown) ? defaultPurchaseCurrency(heldCoins, user.base_currency_code) : null;
+  const heldCoinValues = heldCoins.map((b) => `crypto:${b.crypto_asset_id}`).join(',');
   useEffect(() => {
-    if (purchaseDefault && !currencyTouched.current) setCurrencyCode(purchaseDefault);
-  }, [purchaseDefault]);
+    if (!purchaseDefault) return;
+    // A coin picked by hand gives way only when the chosen account does not hold it.
+    const stale = currencyCode.startsWith('crypto:') && !heldCoinValues.split(',').includes(currencyCode);
+    if (!currencyTouched.current || stale) setCurrencyCode(purchaseDefault);
+  }, [purchaseDefault, heldCoinValues, currencyCode]);
   const selectedCurrencyBalance = useMemo(
     () => selectedAccountBalances.find((balance) => payCoinId
       ? balance.crypto_asset_id === payCoinId
@@ -518,7 +522,7 @@ export default function PortfolioPositionDialog({
         <div className="apf-field">
           <label className="apf-label">Получение</label>
           <ApfSelect value={costUnknown ? 'unknown' : receivedFree ? 'free' : 'buy'} options={[{ value: 'buy', label: 'Покупка' }, { value: 'free', label: 'Получено бесплатно' }, { value: 'unknown', label: 'Цена покупки неизвестна' }]}
-            onChange={(value) => { setReceivedFree(value === 'free'); setCostUnknown(value === 'unknown'); setCurrencyCode(user.base_currency_code); }} disabled={submitting} />
+            onChange={(value) => { setReceivedFree(value === 'free'); setCostUnknown(value === 'unknown'); setCurrencyCode(user.base_currency_code); currencyTouched.current = false; }} disabled={submitting} />
         </div>
       )}
       {/* Amount + Currency */}
