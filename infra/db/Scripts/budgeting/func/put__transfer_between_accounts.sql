@@ -97,8 +97,9 @@ BEGIN
     END IF;
 
     -- Credit accounts hold no FX lots of borrowed money, so their cost is only defined in base currency.
-    IF _from_account_kind = 'credit' AND _currency_code <> _base_currency_code THEN
-        RAISE EXCEPTION 'Перевод с кредитного счёта возможен только в базовой валюте';
+    -- Into a credit account too, or the money could never be moved out again.
+    IF (_from_account_kind = 'credit' OR _to_account_kind = 'credit') AND _currency_code <> _base_currency_code THEN
+        RAISE EXCEPTION 'Переводы с кредитным счётом — только в базовой валюте';
     END IF;
 
     IF _from_account_kind = 'cash' THEN

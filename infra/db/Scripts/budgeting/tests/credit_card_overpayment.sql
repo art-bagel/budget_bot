@@ -66,13 +66,19 @@ BEGIN
  PERFORM put__transfer_between_accounts(uid,card,bank,'RUB',1200);
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=100000,'card back to zero';
 
- -- 7. Credit accounts transfer only in the base currency.
+ -- 7. Credit accounts transfer only in the base currency, both ways.
  raised := false;
  BEGIN
   PERFORM put__transfer_between_accounts(uid,card,bank,'USD',10);
  EXCEPTION WHEN OTHERS THEN raised := SQLERRM LIKE '%базовой валюте%';
  END;
  ASSERT raised,'foreign currency transfer from a credit account is rejected';
+ raised := false;
+ BEGIN
+  PERFORM put__transfer_between_accounts(uid,bank,card,'USD',10);
+ EXCEPTION WHEN OTHERS THEN raised := SQLERRM LIKE '%базовой валюте%';
+ END;
+ ASSERT raised,'foreign currency transfer into a credit account is rejected';
 
  -- 8. Only a card at zero can be archived: an overpayment would be lost.
  PERFORM put__transfer_between_accounts(uid,bank,card,'RUB',100);

@@ -14,7 +14,7 @@ export function creditCardView(balances: CreditBalance[], limit: number) {
     available: Math.max(0, limit + balance),
     usedPct: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
     // Archived accounts accept no transfers, so only a card at zero can go.
-    canArchive: balance === 0,
+    canArchive: Math.round(balance * 100) === 0,
   };
 }
 
