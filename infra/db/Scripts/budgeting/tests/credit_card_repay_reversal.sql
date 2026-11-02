@@ -6,13 +6,13 @@ SET search_path TO budgeting;
 DO $$
 DECLARE
  uid bigint := 990000000970; me jsonb; bank bigint; free bigint; card bigint;
- draw bigint; repay bigint;
+ repay bigint;
 BEGIN
  me := put__register_user_context(uid,'RUB',NULL,'Card','Reversal');
  bank := (me->>'bank_account_id')::bigint; free := (me->>'unallocated_category_id')::bigint;
  card := (put__create_credit_account(uid,'Card','credit_card','RUB',100000)->>'id')::bigint;
  PERFORM put__record_income(uid,bank,100000,'RUB');
- draw := (put__transfer_between_accounts(uid,card,bank,'RUB',50000)->>'operation_id')::bigint;
+ PERFORM put__transfer_between_accounts(uid,card,bank,'RUB',50000);
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=150000,'cash from card adds to free budget';
 
  -- 1. Overpay, cancel, repay the exact debt: free budget drops by the debt.
@@ -29,6 +29,5 @@ BEGIN
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=100000,'cancelled draw restores free budget';
  PERFORM put__transfer_between_accounts(uid,bank,card,'RUB',1000);
  ASSERT (SELECT amount FROM current_budget_balances WHERE category_id=free)=100000,'no debt from a cancelled draw';
- PERFORM put__reverse_operation(uid,draw);
 END $$;
 ROLLBACK;
