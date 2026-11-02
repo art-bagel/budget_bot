@@ -673,12 +673,18 @@ function canRecordPositionIncome(position: PortfolioPosition): boolean {
 
 // Fees are a realized cost of the position, so they come out of its result
 // (crypto fees are counted by the crypto flows instead).
+function getPositionGrossResult(position: PortfolioPosition): number {
+  if (position.asset_type_code === 'crypto') {
+    return 0;
+  }
+  return Number(position.metadata?.income_in_base ?? 0) + Number(position.metadata?.realized_result_in_base ?? 0);
+}
+
 function getPositionRealizedResult(position: PortfolioPosition): number {
   if (position.asset_type_code === 'crypto') {
     return 0;
   }
-  return Number(position.metadata?.income_in_base ?? 0) + Number(position.metadata?.realized_result_in_base ?? 0)
-    - collectibleFeesInBase(position);
+  return getPositionGrossResult(position) - collectibleFeesInBase(position);
 }
 
 // Collection items are acquired, invested in and sold rather than opened and topped up.
@@ -4431,7 +4437,8 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-dcond__row-value">{formatAmount(getPositionInvestedPrincipal(selectedPosition) + collectibleFeesInBase(selectedPosition), user.base_currency_code)}</span>
                     </div>
                   ) : null}
-                  {getPositionRealizedResult(selectedPosition) !== 0 ? (
+                  {/* A fee alone is already the «Комиссии» row: the result appears once something was sold or earned. */}
+                  {getPositionGrossResult(selectedPosition) !== 0 ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">{collectibleFeesInBase(selectedPosition) > 0 ? 'Результат после комиссий' : 'Реализованный результат'}</span>
                       <span className={`pf-dcond__row-value pf-dcond__row-value--${getPositionRealizedResult(selectedPosition) >= 0 ? 'pos' : 'neg'}`}>
@@ -5101,7 +5108,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         ? `Вложено: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}` : null,
                       selectedPosition.asset_type_code !== 'crypto' && !coinLabel && (item.event_type === 'close' || item.event_type === 'partial_close')
                         && typeof item.metadata?.realized_result_in_base === 'number'
-                        ? `Результат: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}` : null,
+                        ? `${collectibleFeesInBase(selectedPosition) > 0 ? 'Результат до комиссий' : 'Результат'}: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}` : null,
                       item.comment && !item.comment_is_system ? item.comment : null,
                     ].filter(Boolean);
                     return (
