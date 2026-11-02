@@ -185,7 +185,11 @@ BEGIN
          AND credit_be.bank_account_id = _to_account_id
         JOIN budget_entries bue
           ON bue.operation_id = o.id
-        WHERE o.type = 'account_transfer';
+        WHERE o.type = 'account_transfer'
+          -- A cancelled transfer and its reversal net to zero; skip both.
+          AND NOT EXISTS (
+              SELECT 1 FROM operations r WHERE r.reversal_of_operation_id = o.id
+          );
 
         _budget_debit_base := LEAST(_cost_base, _credit_card_budget_debt_base);
     ELSIF _from_account_kind = 'cash' THEN
