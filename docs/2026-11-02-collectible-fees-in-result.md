@@ -483,3 +483,13 @@ SQL, и в карточке, и в сумме группы (`Portfolio.tsx:2923`
 есть.
 
 Вердикт: **готово к мержу**. Замечаний нет; остаётся аппрув владельца.
+
+## Деплой (02.11.2026)
+
+Аппрув владельца получен. Ветка перебазирована на `origin/main` 582d422
+(два конфликта импортов в `Portfolio.tsx`, разрешены объединением строк),
+полный `check.sh` на перебазированном HEAD зелёный, пуш `582d422..23c642e`.
+[Run 41406483251](https://github.com/art-bagel/budget_bot/actions/runs/41406483251)
+успешен, `/health` отвечает 200, бандл `index-Ch4eHVmd.js`, чанк
+`Portfolio-*.js` содержит строку «Затраты всего». Worktree и ветки
+`claude/collectible-fees-result`, `claude/collectible-default-coin` удалены.
