@@ -4,8 +4,6 @@ import { currencySymbol, formatNumericAmount } from './format';
 import { telegramGiftSlug } from './telegramGift';
 import { collectibleCostsLabel as costsLabelWithFees } from './collectibleCosts';
 
-export { collectibleFeesInBase } from './collectibleCosts';
-
 const normalizedGiftName = (name: string) => name.toLowerCase().replace(/[\s’'_-]/g, '');
 const giftOriginalIds = new Map(giftOriginals.flatMap((gift) =>
   [gift.id, gift.name, ...gift.aliases].filter(Boolean).map((name) => [normalizedGiftName(name), gift.id] as const)));

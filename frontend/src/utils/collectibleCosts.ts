@@ -6,7 +6,7 @@ type CostItem = {
   metadata?: Record<string, unknown>;
 };
 
-export function collectibleFeesInBase(item: Pick<CostItem, 'metadata'>): number {
+export function positionFeesInBase(item: Pick<CostItem, 'metadata'>): number {
   return Number(item.metadata?.fees_in_base ?? 0) || 0;
 }
 
@@ -16,7 +16,7 @@ export function collectibleCostTotals(items: CostItem[], baseCurrency: string): 
   const totals = new Map<string, number>();
   for (const item of items) {
     totals.set(item.currency_code, (totals.get(item.currency_code) ?? 0) + Number(item.amount_in_currency));
-    const fees = collectibleFeesInBase(item);
+    const fees = positionFeesInBase(item);
     if (fees) totals.set(baseCurrency, (totals.get(baseCurrency) ?? 0) + fees);
   }
   return [...totals].filter(([, amount]) => amount !== 0);

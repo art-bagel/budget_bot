@@ -98,7 +98,8 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { collectibleFeesInBase, collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { positionFeesInBase } from '../utils/collectibleCosts';
 import { defaultPositionCurrency } from '../utils/collectibleCurrency';
 import { telegramGiftLink, telegramGiftTitle } from '../utils/telegramGift';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
@@ -681,10 +682,7 @@ function getPositionGrossResult(position: PortfolioPosition): number {
 }
 
 function getPositionRealizedResult(position: PortfolioPosition): number {
-  if (position.asset_type_code === 'crypto') {
-    return 0;
-  }
-  return getPositionGrossResult(position) - collectibleFeesInBase(position);
+  return getPositionGrossResult(position) - positionFeesInBase(position);
 }
 
 // Collection items are acquired, invested in and sold rather than opened and topped up.
@@ -4425,22 +4423,23 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       <span className="pf-dcond__row-value">{formatAmount(getPositionMetadataNumber(selectedPosition, 'accrued_interest_paid_in_base') ?? 0, user.base_currency_code)}</span>
                     </div>
                   ) : null}
-                  {typeof selectedPosition.metadata?.fees_in_base === 'number' && Number(selectedPosition.metadata.fees_in_base) > 0 ? (
+                  {positionFeesInBase(selectedPosition) > 0 ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">Комиссии</span>
-                      <span className="pf-dcond__row-value">{formatAmount(Number(selectedPosition.metadata.fees_in_base), user.base_currency_code)}</span>
+                      <span className="pf-dcond__row-value">{formatAmount(positionFeesInBase(selectedPosition), user.base_currency_code)}</span>
                     </div>
                   ) : null}
-                  {collectibleFeesInBase(selectedPosition) > 0 && getPositionInvestedPrincipal(selectedPosition) > 0 ? (
+                  {positionFeesInBase(selectedPosition) > 0 && getPositionInvestedPrincipal(selectedPosition) > 0 ? (
                     <div className="pf-dcond__row">
                       <span className="pf-dcond__row-label">Затраты всего</span>
-                      <span className="pf-dcond__row-value">{formatAmount(getPositionInvestedPrincipal(selectedPosition) + collectibleFeesInBase(selectedPosition), user.base_currency_code)}</span>
+                      <span className="pf-dcond__row-value">{formatAmount(getPositionInvestedPrincipal(selectedPosition) + positionFeesInBase(selectedPosition), user.base_currency_code)}</span>
                     </div>
                   ) : null}
-                  {/* A fee alone is already the «Комиссии» row: the result appears once something was sold or earned. */}
-                  {getPositionGrossResult(selectedPosition) !== 0 ? (
+                  {/* A fee alone is already the «Комиссии» row: the result appears once something was sold or earned,
+                      and always on a closed position so its fees are not lost from view. */}
+                  {getPositionGrossResult(selectedPosition) !== 0 || (selectedPosition.status !== 'open' && positionFeesInBase(selectedPosition) > 0) ? (
                     <div className="pf-dcond__row">
-                      <span className="pf-dcond__row-label">{collectibleFeesInBase(selectedPosition) > 0 ? 'Результат после комиссий' : 'Реализованный результат'}</span>
+                      <span className="pf-dcond__row-label">{positionFeesInBase(selectedPosition) > 0 ? 'Результат после комиссий' : 'Реализованный результат'}</span>
                       <span className={`pf-dcond__row-value pf-dcond__row-value--${getPositionRealizedResult(selectedPosition) >= 0 ? 'pos' : 'neg'}`}>
                         {getPositionRealizedResult(selectedPosition) >= 0 ? '+' : ''}{formatAmount(getPositionRealizedResult(selectedPosition), user.base_currency_code)}
                       </span>
@@ -5108,7 +5107,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         ? `Вложено: ${formatAmount(Number(item.metadata.principal_amount_in_currency), selectedPosition.currency_code)}` : null,
                       selectedPosition.asset_type_code !== 'crypto' && !coinLabel && (item.event_type === 'close' || item.event_type === 'partial_close')
                         && typeof item.metadata?.realized_result_in_base === 'number'
-                        ? `${collectibleFeesInBase(selectedPosition) > 0 ? 'Результат до комиссий' : 'Результат'}: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}` : null,
+                        ? `${positionFeesInBase(selectedPosition) > 0 ? 'Результат до комиссий' : 'Результат'}: ${formatAmount(Number(item.metadata.realized_result_in_base), user.base_currency_code)}` : null,
                       item.comment && !item.comment_is_system ? item.comment : null,
                     ].filter(Boolean);
                     return (
