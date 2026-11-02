@@ -80,6 +80,7 @@ import type {
   UserContext,
 } from '../types';
 import { formatAmount, formatNumericAmount, currencySymbol, isoDate } from '../utils/format';
+import { creditCardView } from '../utils/creditCard';
 
 type CreditKind = 'loan' | 'credit_card' | 'mortgage';
 
@@ -1023,6 +1024,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
                         {kindItems.map((item) => {
                           const debt = getCreditDebt(item);
                           const limit = item.account.credit_limit ?? 0;
+                          const { overpayment } = creditCardView(item.balances, limit);
                           const utilPct = kind === 'credit_card' && limit > 0
                             ? Math.min(100, Math.round((debt / limit) * 100))
                             : 0;
@@ -1045,8 +1047,17 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
                                   <span className="tile__name">{item.account.name}</span>
                                 </div>
                                 <div className="tile__amount">
-                                  <span className="tile__debt">{debt > 0 ? '−' : ''}{formatAmount(debt, user.base_currency_code)}</span>
-                                  <span className="tile__debt-label">{kind === 'credit_card' ? 'использовано' : 'остаток долга'}</span>
+                                  {overpayment > 0 ? (
+                                    <>
+                                      <span className="tile__debt">+{formatAmount(overpayment, user.base_currency_code)}</span>
+                                      <span className="tile__debt-label">переплата</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="tile__debt">{debt > 0 ? '−' : ''}{formatAmount(debt, user.base_currency_code)}</span>
+                                      <span className="tile__debt-label">{kind === 'credit_card' ? 'использовано' : 'остаток долга'}</span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
 
@@ -1185,6 +1196,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
         const totalDue  = isTerm && selectedSummary ? selectedSummary.total_due_as_of : debtNow;
         const ccy = isTerm && selectedSummary ? selectedSummary.currency_code : user.base_currency_code;
         const creditLimit = selectedCredit.account.credit_limit ?? 0;
+        const card = creditCardView(selectedCredit.balances, creditLimit);
         const usedPct = isCard && creditLimit > 0
           ? Math.min(100, Math.round((debtNow / creditLimit) * 100))
           : 0;
@@ -1259,8 +1271,14 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
                     <div className={`credits-util__fill credits-util__fill--${utilLvl}`} style={{ width: `${Math.max(2, usedPct)}%` }} />
                   </div>
                   <span className="credits-util__legend">
-                    Использовано <strong>{formatAmount(debtNow, ccy)}</strong> · доступно <strong>{formatAmount(creditLimit - debtNow, ccy)}</strong> из <strong>{formatAmount(creditLimit, ccy)}</strong>
+                    Использовано <strong>{formatAmount(debtNow, ccy)}</strong> · доступно <strong>{formatAmount(card.available, ccy)}</strong>
+                    {card.overpayment === 0 && <> из <strong>{formatAmount(creditLimit, ccy)}</strong></>}
                   </span>
+                  {card.overpayment > 0 && (
+                    <span className="credits-util__legend">
+                      Переплата <strong>{formatAmount(card.overpayment, ccy)}</strong> — ваши деньги на карте
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -1405,7 +1423,7 @@ export default function Credits({ user, refreshToken }: { user: UserContext; ref
               </div>
 
               {archiveError && <p style={{ color: 'var(--neg)', fontSize: '0.85rem' }}>{archiveError}</p>}
-              {getCreditDebt(selectedCredit) === 0 && (
+              {card.canArchive && (
                 <button className="credits-archive-btn" type="button" onClick={() => void handleArchive(selectedCredit.account.id)} disabled={archiving}>
                   <Trash2 size={15} strokeWidth={2} /> {archiving ? 'Архивируем...' : 'Перенести в архив'}
                 </button>

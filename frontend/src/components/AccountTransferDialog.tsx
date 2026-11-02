@@ -81,6 +81,9 @@ function AcctIcon({ kind }: { kind: AcctKind }) {
   );
 }
 
+// A credit account with a plus holds an overpayment, not debt.
+const creditToLabel = (balance: number) => (balance > 0 ? 'Переплата' : 'Задолженность');
+
 function assetKeyOfBalance(balance: DashboardBankBalance): string {
   return balance.asset_type === 'crypto' && balance.crypto_asset_id
     ? `crypto:${balance.crypto_asset_id}`
@@ -384,8 +387,8 @@ export default function AccountTransferDialog({
     }
     const siblings = allItems.filter(pi => pi.account.id === item.account.id);
     const isMulti  = siblings.length > 1;
-    const subLabel = item.kind === 'credit' && role === 'to' ? 'Задолженность' : (role === 'from' ? 'Доступно' : 'Остаток');
     const bal      = (balancesMap[sel.accountId] ?? []).find(b => assetKeyOfBalance(b) === sel.assetKey);
+    const subLabel = item.kind === 'credit' && role === 'to' ? creditToLabel(bal ? bal.amount : item.balance) : (role === 'from' ? 'Доступно' : 'Остаток');
     return (
       <span className="atx__sel">
         <span className={`sheet-ico sheet-ico--sm ${acctIcoClass(item.account, item.kind)}`}>
@@ -418,7 +421,7 @@ export default function AccountTransferDialog({
           : toSel?.accountId   === item.account.id && toSel?.assetKey   === item.assetKey;
         const siblings = items.filter(pi => pi.account.id === item.account.id);
         const isMulti  = siblings.length > 1;
-        const subLabel = item.kind === 'credit' ? (role === 'to' ? 'Задолженность' : 'Доступно') : 'Остаток';
+        const subLabel = item.kind === 'credit' ? (role === 'to' ? creditToLabel(item.balance) : 'Доступно') : 'Остаток';
         const icoClass = acctIcoClass(item.account, item.kind);
         const key      = `${item.account.id}-${item.assetKey}`;
 

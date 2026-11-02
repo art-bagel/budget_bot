@@ -51,6 +51,7 @@ import { categoryDisplayName, parseCategoryIcon } from '../utils/categoryIcon';
 import { CategorySvgIcon } from '../components/CategorySvgIcon';
 import { useHints } from '../hooks/useHints';
 import { hapticRigid } from '../telegram';
+import { creditTotals } from '../utils/creditCard';
 
 type DashboardViewTab = 'budget' | 'operations' | 'analytics';
 
@@ -59,6 +60,8 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
   const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
   const [totalCreditDebtInBase, setTotalCreditDebtInBase] = useState(0);
+  // Own money on credit cards: counted in the total even with credits switched off.
+  const [creditOverpaymentInBase, setCreditOverpaymentInBase] = useState(0);
   const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
   const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
   const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
@@ -155,11 +158,9 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           return acc;
         }, {}),
       );
-      // Credit balances are negative (debt = negative balance), so negate the sum
-      const creditDebt = -creditSnapshots
-        .flat()
-        .reduce((sum, b) => sum + b.historical_cost_in_base, 0);
-      setTotalCreditDebtInBase(Math.max(0, creditDebt));
+      const credit = creditTotals(creditSnapshots);
+      setTotalCreditDebtInBase(credit.debt);
+      setCreditOverpaymentInBase(credit.overpayment);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -421,7 +422,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     (sum, account) => sum + getInvestmentAccountMarketTotal(account.id),
     0,
   );
-  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal - (includeCredits ? totalCreditDebtInBase : 0);
+  const totalBankWithInvestments = overview.total_bank_historical_in_base + investmentBankTotal + creditOverpaymentInBase - (includeCredits ? totalCreditDebtInBase : 0);
   const regularBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'regular');
   const groupBudgetCategories = overview.budget_categories.filter((category) => category.kind === 'group');
   const personalRegular = hasFamily ? regularBudgetCategories.filter((c) => c.owner_type === 'user') : regularBudgetCategories;
