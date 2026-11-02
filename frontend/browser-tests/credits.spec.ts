@@ -4,6 +4,8 @@ import { expect, openOverview, test } from './fixtures';
 // The seed overpays «Тестовая кредитка» by 1 500 ₽ (limit 50 000 ₽).
 test('an overpaid credit card shows the overpayment', async ({ page }) => {
   await openOverview(page);
+  // Own money on the card has its own hero row: the rows add up to the total.
+  await expect(page.locator('.hero__row', { hasText: 'Переплата по картам' })).toContainText(/1\s500/);
   await page.getByRole('button', { name: 'Кредиты', exact: true }).click();
   const tile = page.locator('.tile--card', { hasText: 'Тестовая кредитка' });
   await expect(tile.locator('.tile__debt')).toHaveText(/^\+1\s500\s₽$/);

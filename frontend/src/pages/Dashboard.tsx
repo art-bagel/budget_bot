@@ -600,6 +600,23 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
               <span className="hero__row-chev"><IconChevronRight /></span>
             </span>
           </button>
+          {/* The total includes it, so the rows still add up; «Кредиты» stays debt only. */}
+          {creditOverpaymentInBase > 0 && (
+            <button
+              type="button"
+              className="hero__row"
+              onClick={() => { if (Date.now() < suppressClickUntilRef.current) return; onNavigate?.('credits'); }}
+            >
+              <span className="hero__row-label"><span className="hero__mark hero__mark--ink" />&nbsp;Переплата по картам</span>
+              <span className="hero__row-value">
+                <span className="hero__row-amount">
+                  {new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(creditOverpaymentInBase)}
+                  <span className="hero__row-sym">{currencySymbol(overview.base_currency_code)}</span>
+                </span>
+                <span className="hero__row-chev"><IconChevronRight /></span>
+              </span>
+            </button>
+          )}
           <button
             type="button"
             className={`hero__row${totalCreditDebtInBase > 0 ? ' hero__row--neg' : ''}`}
