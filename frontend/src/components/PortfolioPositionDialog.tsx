@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-import { buyCollectibleWithCrypto, createPortfolioPosition, fetchTelegramGift } from '../api';
+import { buyCollectibleWithCrypto, createPortfolioPosition } from '../api';
 import { useCryptoRequestKey } from '../hooks/useCryptoRequestKey';
 import { useModalOpen } from '../hooks/useModalOpen';
 import { useMoexSearch } from '../hooks/useMoexSearch';
@@ -11,7 +11,8 @@ import { groupToSecurityKind } from '../utils/moex';
 import type { MoexMarket, MoexSecurityInfo } from '../utils/moex';
 import { calculateProjectedInterest } from '../utils/depositInterest';
 import { COLLECTIBLE_KINDS, getCollectibleKind, safeItemLink } from '../utils/collectibles';
-import { telegramGiftSlug, telegramGiftTitle } from '../utils/telegramGift';
+import { telegramGiftTitle, telegramGiftTraits } from '../utils/telegramGift';
+import { giftLookupLabel, useTelegramGiftLookup } from '../hooks/useTelegramGiftLookup';
 import { defaultPurchaseCurrency } from '../utils/collectibleCurrency';
 import { sanitizeDecimalInput } from '../utils/validation';
 
@@ -160,44 +161,11 @@ export default function PortfolioPositionDialog({
   const itemLinkValid = !itemLink.trim() || !!safeItemLink(itemLink.trim());
   // A Telegram gift is named like Telegram names it, and its traits come from the public t.me page.
   const isGift = isCollectible && itemKind === 'telegram_gift';
-  const [giftLookup, setGiftLookup] = useState<'idle' | 'loading' | 'found' | 'missing'>('idle');
   const [giftImage, setGiftImage] = useState('');
-  const giftLookedUp = useRef('');
-  const giftSlug = isGift ? telegramGiftSlug(itemAttributes.collection?.trim() ?? '') : null;
-  const giftNumber = itemAttributes.number?.trim() ?? '';
-  const giftKey = giftSlug && /^\d{1,9}$/.test(giftNumber) ? `${giftSlug.toLowerCase()}-${giftNumber}` : '';
-  useEffect(() => {
-    if (!giftKey) { setGiftLookup('idle'); return; }
-    // The canonical name written back by a lookup must not trigger a second one.
-    if (giftKey === giftLookedUp.current) { setGiftLookup('found'); return; }
-    setGiftLookup('loading');
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      fetchTelegramGift(giftSlug ?? '', giftNumber).then((gift) => {
-        if (cancelled) return;
-        // Remember the canonical pair ("007" comes back as #7), so the write-back does not search again.
-        giftLookedUp.current = `${telegramGiftSlug(gift.collection)?.toLowerCase()}-${gift.number}`;
-        setItemAttributes((prev) => ({
-          ...prev, collection: gift.collection, number: gift.number, upgraded: 'yes',
-          model: gift.model ?? '', backdrop: gift.backdrop ?? '', symbol: gift.symbol ?? '',
-        }));
-        setItemLink(gift.link);
-        setGiftImage(gift.image ?? '');
-        setGiftLookup('found');
-      }).catch(() => {
-        if (cancelled) return;
-        // Traits of the previous match must not travel to a gift that was not found.
-        if (giftLookedUp.current) {
-          giftLookedUp.current = '';
-          setItemAttributes((prev) => ({ ...prev, model: '', backdrop: '', symbol: '', upgraded: '' }));
-          setItemLink('');
-          setGiftImage('');
-        }
-        setGiftLookup('missing');
-      });
-    }, 500);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [giftKey, giftSlug, giftNumber]);
+  const giftLookup = useTelegramGiftLookup({
+    collection: isGift ? itemAttributes.collection : '', number: isGift ? itemAttributes.number : '',
+    onResult: (gift) => { setItemAttributes((prev) => ({ ...prev, ...telegramGiftTraits(gift) })); setItemLink(gift?.link ?? ''); setGiftImage(gift?.image ?? ''); },
+  });
   const positionTitle = isGift ? telegramGiftTitle(itemAttributes, '') : title.trim();
   const [depositKind, setDepositKind] = useState<DepositKind>('term_deposit');
   const [interestRate, setInterestRate] = useState('');
@@ -433,7 +401,7 @@ export default function PortfolioPositionDialog({
         <div className="apf-field">
           <label className="apf-label">Вид предмета</label>
           <ApfSelect value={itemKind} options={COLLECTIBLE_KINDS} disabled={submitting}
-            onChange={(value) => { setItemKind(value); setItemAttributes({}); setItemLink(''); setGiftImage(''); giftLookedUp.current = ''; }} />
+            onChange={(value) => { setItemKind(value); setItemAttributes({}); setItemLink(''); setGiftImage(''); giftLookup.reset(); }} />
         </div>
       )}
 
@@ -501,10 +469,8 @@ export default function PortfolioPositionDialog({
             autoFocus={isGift && field.key === 'collection'} value={itemAttributes[field.key] ?? ''}
             onChange={(e) => setItemAttributes((prev) => ({ ...prev, [field.key]: e.target.value }))}
             disabled={submitting} />
-          {isGift && field.key === 'number' && giftLookup !== 'idle' && (
-            <div className="apf-balance" role="status">
-              {giftLookup === 'loading' ? 'Ищем в Telegram…' : giftLookup === 'found' ? `Найден ${positionTitle}` : 'В Telegram не найден, заполните вручную'}
-            </div>
+          {isGift && field.key === 'number' && giftLookup.status !== 'idle' && (
+            <div className="apf-balance" role="status">{giftLookupLabel(giftLookup.status, positionTitle)}</div>
           )}
         </div>
       ))}

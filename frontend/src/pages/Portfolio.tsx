@@ -3,6 +3,7 @@ import { portfolioCashValue, currencyReserveResult } from '../utils/currencyRese
 import InvestmentCostAnalytics from '../components/InvestmentCostAnalytics';
 import CurrencySwitch, { CurrencyNote, useDollarDisplay } from '../components/CurrencySwitch';
 import PaRow, { PA_COLORS } from '../components/PaRow';
+import CollectibleDetailsForm from '../components/CollectibleDetailsForm';
 import CollectibleImage from '../components/CollectibleImage';
 import CollectionShelf, { CollectibleHero } from '../components/CollectionShelf';
 import { cryptoAssetLabel, cryptoNetworkLabel, cryptoNetworkSuffix, cryptoPriceSourceLabel, cryptoQuoteTime } from '../utils/cryptoAssetLabel';
@@ -20,7 +21,6 @@ import { CategorySvgIcon } from '../components/CategorySvgIcon';
 
 import {
   cancelPortfolioIncome,
-  editCollectibleDetails,
   changeDepositRate,
   closePortfolioPosition,
   createBankAccount,
@@ -98,10 +98,9 @@ import type {
 } from '../types';
 import { PROTOCOL_TYPE_LABELS, getLendingMetadata, getLiquidityPoolMetadata } from '../types';
 import { calculateProjectedInterest } from '../utils/depositInterest';
-import { collectibleSaleLabel, collectibleFlag, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
+import { collectibleSaleLabel, getCollectibleKind, isSealedPack, safeItemLink } from '../utils/collectibles';
 import { positionFeesInBase } from '../utils/collectibleCosts';
 import { defaultPositionCurrency } from '../utils/collectibleCurrency';
-import { telegramGiftLink, telegramGiftTitle } from '../utils/telegramGift';
 import type { DepositKind, InterestPayout, CapitalizationPeriod } from '../utils/depositInterest';
 import { formatAmount, formatNumericAmount, currencySymbol, isoDate, pluralRu } from '../utils/format';
 import { sanitizeDecimalInput } from '../utils/validation';
@@ -819,13 +818,10 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
   // New investment account form
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
   const collectionActionRequest = useCryptoRequestKey('collectible-action');
-  const collectibleDateRequest = useCryptoRequestKey('collectible-date');
   const [collectibleEditingId, setCollectibleEditingId] = useState<number | null>(null);
   const [collectibleOpeningPack, setCollectibleOpeningPack] = useState(false);
   // Base-currency amounts on this page can be shown in dollars at today's rate.
   const display = useDollarDisplay(user.base_currency_code);
-  const [collectibleDateSaving, setCollectibleDateSaving] = useState(false);
-  const [collectibleDateError, setCollectibleDateError] = useState<string | null>(null);
   const [collectionSoldQuantity, setCollectionSoldQuantity] = useState('');
   const collectibleSaleRequest = useCryptoRequestKey('collectible-sell');
   const [newAccountStep, setNewAccountStep] = useState<'pick' | 'form'>('pick');
@@ -4237,7 +4233,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                 <span className="sec-tag">Параметры</span>
                 {selectedPosition.asset_type_code === 'collectible' && collectibleEditingId !== selectedPosition.id && (
                   <button type="button" className="clx-pencil" aria-label="Изменить описание"
-                    onClick={() => { setCollectibleOpeningPack(false); setCollectibleEditingId(selectedPosition.id); setCollectibleDateError(null); }}>
+                    onClick={() => { setCollectibleOpeningPack(false); setCollectibleEditingId(selectedPosition.id); }}>
                     <Pencil strokeWidth={2} />
                   </button>
                 )}
@@ -4331,46 +4327,11 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                         )}
                         {collectibleEditingId !== selectedPosition.id && isSealedPack(selectedPosition.metadata) && (
                           <div className="clx-edit-actions">
-                            <button className="sh-btn clx-open-btn" type="button" onClick={() => { setCollectibleOpeningPack(true); setCollectibleEditingId(selectedPosition.id); setCollectibleDateError(null); }}>Пак открыт</button>
+                            <button className="sh-btn clx-open-btn" type="button" onClick={() => { setCollectibleOpeningPack(true); setCollectibleEditingId(selectedPosition.id); }}>Пак открыт</button>
                           </div>
                         )}
-                        {collectibleEditingId === selectedPosition.id && <form className="clx-editor" key={`details-${selectedPosition.id}-${collectibleOpeningPack}`} onSubmit={async (event) => {
-                          event.preventDefault();
-                          const form = new FormData(event.currentTarget);
-                          const text = (key: string) => String(form.get(key) ?? '').trim();
-                          const attributes = { ...(selectedPosition.metadata?.item_attributes as Record<string, string> ?? {}) };
-                          for (const field of getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []) {
-                            const value = text(`attribute-${field.key}`);
-                            if (field.flag) attributes[field.key] = value ? 'yes' : 'no';
-                            else if (value) attributes[field.key] = value; else delete attributes[field.key];
-                          }
-                          const isGift = selectedPosition.metadata?.item_kind === 'telegram_gift';
-                          // A t.me link follows the edited number; a link to anywhere else is the user's.
-                          const link = text('item_link');
-                          const giftLink = isGift && (!link || link.startsWith('https://t.me/nft/')) ? telegramGiftLink(attributes) : null;
-                          const details = { title: isGift ? telegramGiftTitle(attributes, selectedPosition.title) : text('title'), comment: text('comment') || null,
-                            acquired_at: text('acquired_at') || null, item_kind: String(selectedPosition.metadata?.item_kind ?? 'other'),
-                            item_link: giftLink ?? (link || null), image_url: text('image_url') || null, item_attributes: attributes };
-                          const positionId = selectedPosition.id;
-                          setCollectibleDateSaving(true); setCollectibleDateError(null);
-                          try {
-                            await editCollectibleDetails(positionId, { ...details, request_id: collectibleDateRequest.requestId({ positionId, ...details }) });
-                            collectibleDateRequest.completed(); setCollectibleEditingId(null);
-                            await loadPortfolio();
-                          } catch (reason: unknown) { setCollectibleDateError(reason instanceof Error ? reason.message : String(reason)); }
-                          finally { setCollectibleDateSaving(false); }
-                        }}>
-                          {selectedPosition.metadata?.item_kind !== 'telegram_gift' && <label className="apf-label">Название<input className="apf-input" name="title" defaultValue={selectedPosition.title} required maxLength={200} autoFocus={!collectibleOpeningPack} /></label>}
-                          <label className="apf-label">Дата приобретения<input className="apf-input" type="date" name="acquired_at" defaultValue={String(selectedPosition.metadata?.acquired_at ?? '')} /></label>
-                          {(getCollectibleKind(selectedPosition.metadata?.item_kind)?.fields ?? []).map(field => field.flag
-                            ? <label className="apf-check" key={field.key}><input type="checkbox" name={`attribute-${field.key}`} value="yes" defaultChecked={collectibleFlag(selectedPosition.metadata, field.key) && !(field.key === 'sealed' && collectibleOpeningPack)} />{field.label}</label>
-                            : <label className="apf-label" key={field.key}>{field.label}<input className="apf-input" name={`attribute-${field.key}`} maxLength={200} autoFocus={field.key === 'number' && collectibleOpeningPack} defaultValue={String((selectedPosition.metadata?.item_attributes as Record<string, unknown>)?.[field.key] ?? '')} /></label>)}
-                          <label className="apf-label">Ссылка на предмет<input className="apf-input" type="url" name="item_link" defaultValue={String(selectedPosition.metadata?.item_link ?? '')} /></label>
-                          <label className="apf-label">Ссылка на изображение или видео<input className="apf-input" type="url" name="image_url" defaultValue={String(selectedPosition.metadata?.image_url ?? '')} /></label>
-                          <label className="apf-label">Комментарий<textarea className="apf-input" name="comment" maxLength={2000} defaultValue={selectedPosition.comment ?? ''} /></label>
-                          <div className="clx-edit-actions"><button type="button" className="sh-btn sh-btn--ghost" disabled={collectibleDateSaving} onClick={() => setCollectibleEditingId(null)}>Отмена</button><button type="submit" className="sh-btn sh-btn--primary" disabled={collectibleDateSaving}>Сохранить</button></div>
-                          {collectibleDateError && <div className="apf-error">{collectibleDateError}</div>}
-                        </form>}
+                        {collectibleEditingId === selectedPosition.id && <CollectibleDetailsForm key={`details-${selectedPosition.id}-${collectibleOpeningPack}`} position={selectedPosition} openingPack={collectibleOpeningPack}
+                          onCancel={() => setCollectibleEditingId(null)} onSaved={async () => { setCollectibleEditingId(null); await loadPortfolio(); }} />}
                       </>
                     );
                   })() : null}
@@ -4892,8 +4853,9 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                   )}
                   {selectedPosition.metadata?.acquisition_kind === 'unknown' && <label className="apf-label"><input type="checkbox" checked={topUpDrafts[selectedPosition.id].resolvePurchasePrice ?? false} onChange={e => handleTopUpDraftChange(selectedPosition.id, { resolvePurchasePrice: e.target.checked, allocationPositionIds: [], quantity: '' })} /> Это найденная цена покупки</label>}
                   {selectedPosition.asset_type_code === 'collectible' && !topUpDrafts[selectedPosition.id].resolvePurchasePrice && topUpDrafts[selectedPosition.id].currencyCode.startsWith('crypto:') && (
-                    <div className="apf-field">
-                      <label className="apf-label">Распределить затраты поровну на единицу</label>
+                    <details className="apf-field pf-split">
+                      <summary className="apf-label">Разделить сумму на несколько предметов</summary>
+                      <p className="pf-split__hint">Монеты спишутся один раз, а их стоимость разойдётся поровну по единицам выбранных предметов.</p>
                       <button className="sh-btn sh-btn--ghost" type="button" disabled={submittingTopUpId === selectedPosition.id}
                         onClick={() => handleTopUpDraftChange(selectedPosition.id, { allocationPositionIds: positions.filter((p) => p.asset_type_code === 'collectible' && p.status === 'open' && p.investment_account_id === selectedPosition.investment_account_id && p.id !== selectedPosition.id).map((p) => p.id) })}>Выбрать все</button>
                       <span>{selectedPosition.title}</span>
@@ -4907,7 +4869,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                             }} /> {p.title}
                         </label>
                       ))}
-                    </div>
+                    </details>
                   )}
                   <div className="apf-field">
                     <label className="apf-label">{selectedPosition.asset_type_code === 'collectible' ? 'Сумма в стоимость предмета' : 'Сумма пополнения'}</label>

@@ -21,3 +21,18 @@ export function telegramGiftTitle(attributes: Record<string, unknown>, fallback:
   if (!collection) return fallback;
   return number ? `${collection} #${number}` : collection;
 }
+
+// Lookup key of a gift, "plushpepe-7"; empty until both parts are usable.
+export function telegramGiftKey(collection: string, number: string): string {
+  const slug = telegramGiftSlug(collection.trim());
+  return slug && /^\d{1,9}$/.test(number.trim()) ? `${slug.toLowerCase()}-${number.trim()}` : '';
+}
+
+// Attributes a lookup writes into a form; null is a gift found earlier that is lost again,
+// so its traits do not travel to a number that was not found.
+export function telegramGiftTraits(
+  gift: { collection: string; number: string; model: string | null; backdrop: string | null; symbol: string | null } | null,
+): Record<string, string> {
+  if (!gift) return { model: '', backdrop: '', symbol: '', upgraded: '' };
+  return { collection: gift.collection, number: gift.number, upgraded: 'yes', model: gift.model ?? '', backdrop: gift.backdrop ?? '', symbol: gift.symbol ?? '' };
+}
