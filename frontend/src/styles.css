@@ -12351,8 +12351,3 @@ svg.clx-hero__img { width: 30%; height: 30%; color: var(--t-v-f); opacity: .45; 
 .pf-alloc__head:has(.ica-cur) .pf-alloc__meta { margin-left: auto; }
 .pf-tsum__grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pf-tsum__grid--two .pf-tsum__cell + .pf-tsum__cell { border-left: 1px solid var(--line, rgba(0,0,0,.08)); }
-
-/* Splitting a top-up across several items is the rare case: collapsed until asked for. */
-.pf-split > summary { cursor: pointer; }
-.pf-split__body { margin-top: 6px; }
-.pf-split__hint { margin: 0; font-size: 12.5px; color: var(--text-2); }

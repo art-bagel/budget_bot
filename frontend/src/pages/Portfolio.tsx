@@ -140,7 +140,6 @@ type IncomeDraft = {
 
 type TopUpDraft = {
   resolvePurchasePrice?: boolean;
-  allocationPositionIds?: number[];
   amount: string;
   quantity: string;
   currencyCode: string;
@@ -1896,7 +1895,6 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
       if (position.asset_type_code === 'collectible' && draft.currencyCode.startsWith('crypto:')) {
         const payload = { crypto_asset_id: Number(draft.currencyCode.slice(7)), crypto_quantity: draft.amount,
           resolve_purchase_price: draft.resolvePurchasePrice ?? false,
-          allocation_position_ids: draft.allocationPositionIds?.length ? [position.id, ...draft.allocationPositionIds] : undefined,
           kind: 'topup' as const, operated_at: draft.toppedUpAt || undefined, comment: draft.comment.trim() || undefined };
         await chargeCollectibleCoin(position.id, { ...payload, request_id: collectionActionRequest.requestId({ positionId: position.id, ...payload }) });
         collectionActionRequest.completed();
@@ -4851,28 +4849,7 @@ export default function Portfolio({ user, refreshToken }: { user: UserContext; r
                       </select>
                     </div>
                   )}
-                  {selectedPosition.metadata?.acquisition_kind === 'unknown' && <label className="apf-label"><input type="checkbox" checked={topUpDrafts[selectedPosition.id].resolvePurchasePrice ?? false} onChange={e => handleTopUpDraftChange(selectedPosition.id, { resolvePurchasePrice: e.target.checked, allocationPositionIds: [], quantity: '' })} /> Это найденная цена покупки</label>}
-                  {selectedPosition.asset_type_code === 'collectible' && !topUpDrafts[selectedPosition.id].resolvePurchasePrice && topUpDrafts[selectedPosition.id].currencyCode.startsWith('crypto:') && (
-                    <details className="pf-split">
-                      <summary className="apf-label">Разделить сумму на несколько предметов</summary>
-                      <div className="apf-field pf-split__body">
-                      <p className="pf-split__hint">Монеты спишутся один раз, а их стоимость разойдётся поровну по единицам выбранных предметов.</p>
-                      <button className="sh-btn sh-btn--ghost" type="button" disabled={submittingTopUpId === selectedPosition.id}
-                        onClick={() => handleTopUpDraftChange(selectedPosition.id, { allocationPositionIds: positions.filter((p) => p.asset_type_code === 'collectible' && p.status === 'open' && p.investment_account_id === selectedPosition.investment_account_id && p.id !== selectedPosition.id).map((p) => p.id) })}>Выбрать все</button>
-                      <span>{selectedPosition.title}</span>
-                      {positions.filter((p) => p.asset_type_code === 'collectible' && p.status === 'open' && p.investment_account_id === selectedPosition.investment_account_id && p.id !== selectedPosition.id).map((p) => (
-                        <label key={p.id}>
-                          <input type="checkbox" disabled={submittingTopUpId === selectedPosition.id}
-                            checked={topUpDrafts[selectedPosition.id].allocationPositionIds?.includes(p.id) ?? false}
-                            onChange={(event) => {
-                              const ids = topUpDrafts[selectedPosition.id].allocationPositionIds ?? [];
-                              handleTopUpDraftChange(selectedPosition.id, { allocationPositionIds: event.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id) });
-                            }} /> {p.title}
-                        </label>
-                      ))}
-                      </div>
-                    </details>
-                  )}
+                  {selectedPosition.metadata?.acquisition_kind === 'unknown' && <label className="apf-label"><input type="checkbox" checked={topUpDrafts[selectedPosition.id].resolvePurchasePrice ?? false} onChange={e => handleTopUpDraftChange(selectedPosition.id, { resolvePurchasePrice: e.target.checked, quantity: '' })} /> Это найденная цена покупки</label>}
                   <div className="apf-field">
                     <label className="apf-label">{selectedPosition.asset_type_code === 'collectible' ? 'Сумма в стоимость предмета' : 'Сумма пополнения'}</label>
                     <input
