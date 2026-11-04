@@ -95,6 +95,13 @@ S 'sudo -u deploy sh -c "cd /home/deploy/apps/budget_bot && PROJECT_DIR=\$PWD ba
 - Почему MinIO отвечал «unwritable» и «Insufficient permissions» — вопрос к
   `home_network`; здесь видна только сторона клиента.
 
+## Деплой
+
+2026-11-04 22:14–22:20 UTC, коммит `3364fe5`, run `41923475452`: `Verify
+Project` и `Deploy To Server` успешны с первой попытки. `/health` →
+`{"status":"ok"}`, `api` и `web` перезапущены, `db` не трогалась. Скрипт
+лежит на хосте в `/home/deploy/apps/budget_bot/scripts/`. Миграций нет.
+
 ## Известные уязвимости / осознанные риски
 
 - Во время проверки полный дамп прода с реальными финансовыми данными
