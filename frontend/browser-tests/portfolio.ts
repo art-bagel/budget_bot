@@ -90,9 +90,6 @@ export async function expectCash(api: PortfolioApi, account: string, before: num
 const KNOWN = [
   // «Удалить позицию» and similar text buttons: --neg on the sheet background.
   /^color-contrast \.credits-textbtn$/,
-  // Green amounts (--pos) on a light card: the token issue of operations rows
-  // too (cancel.spec.ts), one fix in the design guide task.
-  /^color-contrast \.pf-pos__pnl$/,
 ];
 
 // The fixed bottom bar lies over long lists in element screenshots.
