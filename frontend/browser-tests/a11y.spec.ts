@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, openOverview, test } from './fixtures';
+import { allowConsoleErrors, expect, openOverview, test } from './fixtures';
 
 // Deliberate exceptions, see docs/design-guide.md «Доступность». Anything
 // else fails; a new exception needs the owner's decision and a reason here.
@@ -20,6 +20,21 @@ async function newViolations(page: Page) {
 test('overview screen has no new WCAG A/AA violations', async ({ page }) => {
   await openOverview(page);
   expect(await newViolations(page)).toEqual([]);
+});
+
+// The note appears only when a refresh fails over cached data.
+test('overview with the refresh error note has no new WCAG A/AA violations', async ({ page, consoleErrors }) => {
+  await openOverview(page);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('budget_start_cache'))).not.toBeNull();
+  await page.route('**/api/v1/dashboard/overview?*', (route) => route.fulfill({ status: 502, json: { detail: 'Bad gateway' } }));
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText('Не удалось обновить');
+  // Entrance animations fade colors in; axe must see the final ones.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Number.POSITIVE_INFINITY),
+  );
+  expect(await newViolations(page)).toEqual([]);
+  allowConsoleErrors(consoleErrors, /status of 502/);
 });
 
 // The ink hero shares .hero__row with the overview: its rows are filter toggles.
