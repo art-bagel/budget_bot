@@ -178,13 +178,21 @@ test('another user behind the login never sees the snapshot (7)', async ({ page 
     const json = await response.json();
     await route.fulfill({ response, json: { ...json, user_id: json.user_id + 1000 } });
   });
-  const overview = hold(page, OVERVIEW);
+  // Every overview request waits, not only the first: the pages remount for
+  // the new user and ask again, and that answer would write the new user's
+  // snapshot before the check below sees the old one gone.
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(OVERVIEW, async (route) => {
+    await gate;
+    await route.fallback();
+  });
 
   await page.reload();
   await expect(page.locator('.splash')).toBeVisible();
   await expect(groceries(page)).toHaveCount(0);
   await expect.poll(() => cacheEntry(page)).toBeNull();
-  overview.release();
+  release();
   await expect(groceries(page)).toBeVisible();
 });
 
