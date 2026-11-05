@@ -108,7 +108,9 @@ export async function newViolations(page: Page, include: string) {
 }
 
 // Flows write into the one shared database: a name per repeat keeps
-// `--repeat-each` runs from finding an earlier run's position.
+// `--repeat-each` runs from finding an earlier run's position. Retries and a
+// second run on the same database are not covered: there are none, the
+// database is new for every run.
 export function unique(name: string, testInfo: TestInfo) {
   return `${name} ${testInfo.repeatEachIndex + 1}`;
 }
