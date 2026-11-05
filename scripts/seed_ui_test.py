@@ -17,6 +17,10 @@ from pathlib import Path
 
 EMAIL = 'ui-test@example.com'
 PASSWORD = 'ui-test-password-0000'
+# Second fictional user: every portfolio asset type, kept apart so the first
+# user's overview numbers and screenshots stay as they are.
+PORTFOLIO_EMAIL = 'ui-portfolio@example.com'
+PORTFOLIO_PASSWORD = 'ui-portfolio-password-0000'
 LOCAL_HOSTS = {'127.0.0.1', 'localhost'}
 
 
@@ -34,9 +38,9 @@ def assert_test_database(env) -> None:
         )
 
 
-def seed(client) -> None:
+def caller(client):
     """
-    Fills the account with fictional RUB money, budget categories, an overpaid credit card and a crypto position.
+    Returns a request helper that stops the seed on any HTTP error.
     :param client: TestClient of the application.
     """
     def call(method: str, url: str, **kwargs):
@@ -44,13 +48,32 @@ def seed(client) -> None:
         if response.status_code >= 400:
             raise SystemExit(f'seed_ui_test: {method} {url} -> {response.status_code} {response.text}')
         return response.json()
+    return call
 
+
+def sign_up(client, email: str, password: str) -> dict:
+    """
+    Creates a user, makes the client act as them and returns their context.
+    :param client: TestClient of the application.
+    :param email: Fictional email.
+    :param password: Fictional password.
+    """
+    call = caller(client)
     session = call('POST', '/api/v1/auth/signup', json={
-        'email': EMAIL, 'password': PASSWORD, 'base_currency_code': 'RUB',
+        'email': email, 'password': password, 'base_currency_code': 'RUB',
         'invite_code': os.environ['SIGNUP_INVITE_CODE'],
     })
     client.headers['Authorization'] = f"Bearer {session['token']}"
-    context = call('GET', '/api/v1/auth/context')
+    return call('GET', '/api/v1/auth/context')
+
+
+def seed(client) -> None:
+    """
+    Fills the account with fictional RUB money, budget categories, an overpaid credit card and a crypto position.
+    :param client: TestClient of the application.
+    """
+    call = caller(client)
+    context = sign_up(client, EMAIL, PASSWORD)
     account = context['bank_account_id']
     unallocated = context['unallocated_category_id']
 
@@ -113,6 +136,72 @@ def seed(client) -> None:
     })
 
 
+def seed_portfolio(client) -> None:
+    """
+    Second user with one account of every portfolio asset type the browser tests cover.
+    No MOEX tickers and only manual coins: the screen makes no outside requests.
+    :param client: TestClient of the application.
+    """
+    call = caller(client)
+    context = sign_up(client, PORTFOLIO_EMAIL, PORTFOLIO_PASSWORD)
+    account = context['bank_account_id']
+    call('POST', '/api/v1/operations/income', json={
+        'bank_account_id': account, 'amount': 500000, 'currency_code': 'RUB',
+        'comment': 'Зарплата', 'operated_at': '2026-01-05',
+    })
+
+    def investment(name: str, asset_type: str, funding: int = 0) -> int:
+        account_id = call('POST', '/api/v1/bank-accounts', json={
+            'name': name, 'account_kind': 'investment', 'investment_asset_type': asset_type,
+        })['id']
+        if funding:
+            call('POST', '/api/v1/operations/account-transfer', json={
+                'from_account_id': account, 'to_account_id': account_id, 'currency_code': 'RUB', 'amount': str(funding),
+            })
+        return account_id
+
+    def position(account_id: int, asset_type: str, title: str, amount: int, metadata: dict, **extra) -> int:
+        return call('POST', '/api/v1/portfolio/positions', json={
+            'investment_account_id': account_id, 'asset_type_code': asset_type, 'title': title,
+            'amount_in_currency': amount, 'currency_code': 'RUB', 'opened_at': '2026-01-12',
+            'metadata': metadata, **extra,
+        })['id']
+
+    broker = investment('Тестовый брокер', 'security', 100000)
+    position(broker, 'security', 'Тестовая облигация', 40000, {'security_kind': 'bond'}, quantity=40)
+    fund = position(broker, 'security', 'Тестовый фонд', 20000, {'security_kind': 'fund'}, quantity=100)
+    call('POST', f'/api/v1/portfolio/positions/{fund}/income', json={
+        'amount': 1500, 'currency_code': 'RUB', 'income_kind': 'dividend', 'received_at': '2026-01-15',
+    })
+
+    deposit = investment('Тестовый вклад', 'deposit', 60000)
+    position(deposit, 'deposit', 'Тестовый накопительный', 50000, {
+        'deposit_kind': 'savings_account', 'interest_rate': 12, 'last_accrual_date': '2026-01-12',
+        'capitalization_period': 'daily',
+    })
+
+    other = investment('Тестовый краудлендинг', 'other', 30000)
+    position(other, 'other', 'Тестовый займ', 20000, {})
+
+    wallet = investment('Тестовый кошелёк', 'crypto')
+    investment('Второй кошелёк', 'crypto')
+    coin = call('POST', '/api/v1/crypto/assets', json={
+        'symbol': 'TSTP', 'name': 'Test Portfolio Coin', 'network_code': 'manual', 'decimals': 8,
+    })['id']
+    call('POST', '/api/v1/crypto/source-events', json={
+        'anchor_account_id': wallet, 'source_namespace': 'ui-test-seed', 'source_id': 'portfolio-buy-1',
+        'occurred_at': '2026-01-12T12:00:00Z', 'order_in_timestamp': 0, 'accounting_date': '2026-01-12',
+        'commands': [{'kind': 'buy_fiat', 'payload': {
+            'investment_account_id': wallet, 'bank_account_id': account, 'crypto_asset_id': coin,
+            'quantity': '10', 'fiat_currency_code': 'RUB', 'fiat_amount': '20000',
+        }}],
+    })
+
+    collection = investment('Тестовая коллекция', 'collectible', 10000)
+    position(collection, 'collectible', 'Тестовая открытка', 3000, {'item_kind': 'other', 'item_attributes': {}},
+             request_id='00000000-0000-4000-8000-0000000000b1', quantity=1)
+
+
 def main() -> None:
     assert_test_database(os.environ)
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -123,7 +212,8 @@ def main() -> None:
 
     with TestClient(app) as client:
         seed(client)
-    print(f'seed_ui_test: seeded {EMAIL} in {os.environ["DB_DATABASE"]}')
+        seed_portfolio(client)
+    print(f'seed_ui_test: seeded {EMAIL} and {PORTFOLIO_EMAIL} in {os.environ["DB_DATABASE"]}')
 
 
 if __name__ == '__main__':
