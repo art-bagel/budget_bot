@@ -74,6 +74,10 @@ test('first start shows the overview without an artificial pause (1)', async ({ 
   await page.clock.pauseAt(new Date(Date.now() + 60_000));
   await login(page);
   await expect(groceries(page)).toBeVisible();
+  // Let the background price requests finish: a page closed under the
+  // fixture's API route fails it with a disposed response.
+  await expect(page.locator('.refresh-bar')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
 });
 
 test('a second start shows the cached overview, then the fresh one (2, 3)', async ({ page }) => {
