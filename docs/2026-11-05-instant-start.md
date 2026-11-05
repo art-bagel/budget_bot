@@ -830,3 +830,17 @@ try { localStorage.removeItem('budget_start_cache'); } catch { /* ignore */ }
 
 **Вердикт:** блокеров нет. Замечания 1–4 закрыты, `check.sh` зелёный. Два
 пункта «по желанию» мерж не держат.
+
+## Деплой
+
+05.11.2026, с аппрувом владельца. Ветка `claude/instant-start` (24 коммита)
+легла на `origin/main` (`3364fe5`) без rebase. Полный `scripts/check.sh`
+на финальном коммите зелёный: 15 шагов, браузерные тесты 70 passed и
+12 skipped. Затем `git push origin HEAD:main`, коммит `42f2b9c`.
+
+- GitHub Actions «Deploy Budget Bot», run 42003779251, попытка 1: `Verify
+  Project` и `Deploy To Server` прошли успешно (09:36–09:42 UTC).
+- `https://budget.mrbagel.ru/health` → `{"status":"ok"}`.
+- На проде бандл `index-BRu82l8G.js`, тот же, что в локальной сборке этого
+  коммита. В нём есть ключ `budget_start_cache`.
+- Миграций нет, бэкенд не менялся.
