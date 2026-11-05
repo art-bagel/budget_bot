@@ -4,8 +4,6 @@ import { hasSession } from '../session';
 import { hasTelegramContext } from '../telegram';
 import type { UserContext } from '../types';
 
-const MIN_SPLASH_MS = 2000;
-
 export function useAuth() {
   const [user, setUser] = useState<UserContext | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,8 +26,6 @@ export function useAuth() {
     setNeedsAccount(false);
     setError(null);
 
-    const start = Date.now();
-
     getUserContext()
       .then(setUser)
       .catch((e: Error) => {
@@ -51,10 +47,7 @@ export function useAuth() {
 
         setError(e.message);
       })
-      .finally(() => {
-        const remaining = MIN_SPLASH_MS - (Date.now() - start);
-        setTimeout(() => setLoading(false), Math.max(0, remaining));
-      });
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(load, [load]);
