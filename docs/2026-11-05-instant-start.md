@@ -283,6 +283,45 @@ try { localStorage.removeItem('budget_start_cache'); } catch { /* ignore */ }
 05.11.2026 владелец утвердил план: срок жизни кэша 72 часа, в плашке ошибки
 показывается время данных («Данные от …»).
 
+## Что сделано
+
+Коммиты ветки по шагам плана:
+
+1. `useAuth` — убраны `MIN_SPLASH_MS` и `setTimeout`.
+2. `api.ts` — `ApiError` со `status` и `isAuthError()` (401/403).
+3. `startCache.ts` — запись, чтение, билеты, поколение, срок 72 ч, `Map`
+   массивами пар; `setSessionToken` и `deleteAccount` вызывают `clearStart()`.
+   Юнит-тест `frontend/tests/startCache.test.ts`.
+4. `useAuth`, `App` (`<Fragment key={user.user_id}>`), `Dashboard`,
+   `ErrorBoundary`, `.stale-note` в `styles.css` — по разделу «Как устроено».
+5. `frontend/browser-tests/instant-start.spec.ts` — критерии 1–12, снимок
+   плашки `stale-note-{light,dark}-linux.png`; axe для экрана с плашкой — в
+   `a11y.spec.ts`.
+6. `docs/design-guide.md` §7, `DEVELOPMENT_GUIDELINES.md` §9a (правило
+   `CACHE_VERSION` и стирания), `docs/TODO.md`.
+
+Отступления от плана:
+
+- **Проверка `identity` при записи** не делается, достаточно поколения.
+  `identity` не меняется без `clearStart()`: новый токен проходит через
+  `setSessionToken`, а Telegram id постоянен для страницы. Комментарий — в
+  `newTicket`.
+- **`groupMembersByGroupId` тоже в снимке.** Иначе групповые категории на
+  экране из кэша показывались бы без участников до свежего обзора.
+- **«`setSessionToken` стирает запись»** проверяется не юнит-тестом, а e2e
+  (выход, 401 по контексту и по обзору). `node --test` не грузит
+  `session.ts`: у него runtime-импорт без расширения `.ts`, как и у других
+  модулей, которые тесты не трогают.
+- Строка в плашке — «Данные от 20 янв., 10:00» (`Intl` ru-RU, `day`,
+  `month: 'short'`, время).
+
+Проверка тестов на регрессию (вручную, в коммиты не вошло): с возвращённой
+паузой 2 с падает тест критерия 1; без проверки номера запроса в
+`loadOverview` падает тест критерия 9 («Продукты 11 111 ₽» вместо
+«21 550 ₽»).
+
+Прогон `instant-start.spec.ts` и `a11y.spec.ts` в обеих темах — 28 из 28.
+
 ## Ревью плана
 
 Прочитано: план, `AGENTS.md`, `DEVELOPMENT_GUIDELINES.md`, `docs/design-guide.md`
