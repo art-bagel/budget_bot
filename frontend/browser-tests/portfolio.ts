@@ -8,19 +8,13 @@ export const FIXED_NOW = new Date('2026-01-20T12:00:00+03:00');
 
 type Position = { id: number; title: string; status: string; amount_in_currency: number; quantity: number | null; metadata: Record<string, unknown> };
 
-// Logged in as the portfolio user on «Портфель». Returns the MOEX requests the
-// page tried: MOEX is fetched by the browser itself, past the offline test API.
+// Logged in as the portfolio user on «Портфель». The fixture fails a test
+// that asks MOEX anything (fixtures.ts).
 export async function openPortfolio(page: Page, { fixedClock = true } = {}) {
   if (fixedClock) await page.clock.setFixedTime(FIXED_NOW);
-  const moex: string[] = [];
-  await page.route('https://iss.moex.com/**', (route) => {
-    moex.push(route.request().url());
-    return route.abort();
-  });
   await login(page, PORTFOLIO_USER);
   await page.getByRole('button', { name: 'Портфель', exact: true }).click();
   await expect(page.locator('.pf-grp').first()).toBeVisible();
-  return moex;
 }
 
 export async function settled(page: Page) {
@@ -33,13 +27,15 @@ export function assetTab(page: Page, name: string) {
   return page.getByRole('tab', { name, exact: true }).first();
 }
 
+const exactText = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+
 export function group(page: Page, account: string) {
-  return page.locator('.pf-grp', { has: page.locator('.pf-grp__title', { hasText: new RegExp(`^${account}$`) }) });
+  return page.locator('.pf-grp', { has: page.locator('.pf-grp__title', { hasText: exactText(account) }) });
 }
 
 // Form labels are not tied to their inputs, so getByLabel finds nothing.
 export function field(scope: Locator, label: string) {
-  const exact = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+  const exact = exactText(label);
   return scope.locator('.apf-field, .field', { has: scope.page().locator('.apf-label, .fl', { hasText: exact }) }).locator('input, select').first();
 }
 

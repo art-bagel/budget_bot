@@ -31,7 +31,7 @@ async function submit(sheet: import('@playwright/test').Locator, tile: string, f
 }
 
 test('security position sheet matches the reference', async ({ page }) => {
-  const moex = await openPortfolio(page);
+  await openPortfolio(page);
   await assetTab(page, 'Ценные бумаги').click();
   const sheet = await openPosition(page, 'Тестовая облигация');
   await expect(sheet.locator('.pf-dstats__cell', { hasText: 'Вложено' })).toContainText(/40\s000/);
@@ -41,12 +41,11 @@ test('security position sheet matches the reference', async ({ page }) => {
   await expect(sheet).toHaveScreenshot('security-position-sheet.png');
 
   expect(await newViolations(page, '[role="dialog"]')).toEqual([]);
-  expect(moex).toEqual([]);
 });
 
 test.describe('money flows @flow', () => {
   test('a security position goes from open to closed', async ({ page }, testInfo) => {
-    const moex = await openPortfolio(page);
+    await openPortfolio(page);
     const api = await portfolioApi(page);
     const broker = 'Тестовый брокер';
     const title = unique('Сценарная акция', testInfo);
@@ -91,7 +90,6 @@ test.describe('money flows @flow', () => {
     await expect(page.locator('.pf-pos', { hasText: title })).toHaveCount(0);
     await page.getByRole('button', { name: /^Закрытые \(\d+\)$/ }).click();
     await expect(page.locator('.pf-pos', { hasText: title })).toBeVisible();
-    expect(moex).toEqual([]);
   });
 
   test('a savings deposit changes its rate and takes a top-up', async ({ page }, testInfo) => {
@@ -140,7 +138,11 @@ test.describe('money flows @flow', () => {
     // The profit lands in the period's deals of «Разное». Only this flow
     // closes positions there, once per repeat on a fresh seed.
     await page.keyboard.press('Escape');
+    // The scenario's own operations are listed in the portfolio operations.
+    await page.getByRole('tab', { name: 'Операции', exact: true }).last().click();
+    await expect(page.locator('.op-row', { hasText: title }).first()).toBeVisible();
     await page.getByRole('tab', { name: 'Аналитика', exact: true }).click();
+    await expect(page.getByText('Собираем аналитику…')).toHaveCount(0);
     const deals = new Intl.NumberFormat('ru-RU').format(1500 * (testInfo.repeatEachIndex + 1)).replace(/\s/g, '\\s');
     await expect(page.locator('.pf-view')).toContainText(new RegExp(`Сделки \\+${deals}\\s₽`));
   });

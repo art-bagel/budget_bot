@@ -78,12 +78,20 @@ export const test = base.extend<{ consoleErrors: string[] }>({
           },
         }),
       );
+      // MOEX is fetched by the browser itself, past the offline test API: no
+      // seed security has a ticker, so no test may ask it anything.
+      const moex: string[] = [];
+      await page.route('https://iss.moex.com/**', (route) => {
+        moex.push(route.request().url());
+        return route.abort();
+      });
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
         if (message.type() === 'error') errors.push(message.text());
       });
       await use(errors);
+      expect(moex, 'requests to iss.moex.com').toEqual([]);
       expect(errors).toEqual([]);
     },
     { auto: true },

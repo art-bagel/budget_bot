@@ -8,7 +8,7 @@ import { assetTab, group, hideBottomNav, newViolations, openPortfolio, portfolio
 const TABS = ['Все', 'Ценные бумаги', 'Депозит', 'Криптовалюта', 'Разное', 'Коллекции'];
 
 test('portfolio shows every asset type of the seed', async ({ page }) => {
-  const moex = await openPortfolio(page);
+  await openPortfolio(page);
   await expect(page.getByRole('tablist').first().getByRole('tab')).toHaveText(TABS);
 
   // Group total = positions + rubles left on the account.
@@ -34,7 +34,6 @@ test('portfolio shows every asset type of the seed', async ({ page }) => {
   // browser clock cannot pin.
   await hideBottomNav(page);
   await expect(page.locator('.pf-view')).toHaveScreenshot('portfolio-all.png', { mask: [page.locator('.pf-pos__pnl')] });
-  expect(moex).toEqual([]);
 });
 
 test('a hero row opens the accounts of its asset type', async ({ page }) => {
@@ -60,7 +59,9 @@ test('operations and analytics views of the portfolio', async ({ page }) => {
   await expect(page.locator('.op-row', { hasText: '1 500' }).first()).toBeVisible();
 
   await page.getByRole('tab', { name: 'Аналитика', exact: true }).click();
-  await expect(page.locator('.pf-view')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Доход за период' })).toBeVisible();
+  await expect(page.getByText('Собираем аналитику…')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Крупнейшие позиции' })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
