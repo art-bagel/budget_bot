@@ -3821,7 +3821,6 @@ select.dlg-row__ghost option {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 12px;
   padding: 0 4px;
   font-size: 13px;
   color: var(--neg-text);
