@@ -6,6 +6,8 @@
  * заменить хранилище потом можно в одном месте.
  */
 
+import { clearStart } from './startCache';
+
 const TOKEN_KEY = 'budget_session_token';
 
 let cachedToken: string | null | undefined;
@@ -26,6 +28,9 @@ export function getSessionToken(): string | null {
 }
 
 export function setSessionToken(token: string | null): void {
+  // Login, logout and a 401 all land here: the overview snapshot of the
+  // previous login must not outlive it.
+  clearStart();
   cachedToken = token;
 
   try {

@@ -92,6 +92,7 @@ import type {
 } from './types';
 import { getTelegramInitData, getTelegramUserId } from './telegram';
 import { getSessionToken, setSessionToken } from './session';
+import { clearStart } from './startCache';
 
 const API_BASE = '/api/v1';
 
@@ -433,10 +434,14 @@ export async function requestAccountDeletion(): Promise<{ confirm_token: string;
 }
 
 export async function deleteAccount(confirmToken: string): Promise<{ status: string; user_id: number }> {
-  return apiFetch<{ status: string; user_id: number }>(
+  const result = await apiFetch<{ status: string; user_id: number }>(
     `/auth/account?confirm_token=${encodeURIComponent(confirmToken)}`,
     { method: 'DELETE' },
   );
+  // The session token survives the deletion until the next 401, so the
+  // snapshot of the deleted account is wiped here, before the page reloads.
+  clearStart();
+  return result;
 }
 
 export async function fetchCurrencies(): Promise<Currency[]> {
