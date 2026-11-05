@@ -13,6 +13,7 @@ must never write into the dev copy of prod or into prod itself.
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 EMAIL = 'ui-test@example.com'
@@ -175,8 +176,10 @@ def seed_portfolio(client) -> None:
     })
 
     deposit = investment('Тестовый вклад', 'deposit', 60000)
+    # The API accrues interest up to its own today; accrued from the seed's day
+    # it stays zero for the run instead of growing in the screenshots.
     position(deposit, 'deposit', 'Тестовый накопительный', 50000, {
-        'deposit_kind': 'savings_account', 'interest_rate': 12, 'last_accrual_date': '2026-01-12',
+        'deposit_kind': 'savings_account', 'interest_rate': 12, 'last_accrual_date': date.today().isoformat(),
         'capitalization_period': 'daily',
     })
 
