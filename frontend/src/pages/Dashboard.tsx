@@ -606,7 +606,12 @@ export default function Dashboard({ user, onNavigate, refreshToken, cacheTicket,
         <div className="stale-note" role="alert">
           <span>
             Не удалось обновить.
-            {lastLoadedAt !== null && ` Данные от ${STALE_TIME_FORMAT.format(lastLoadedAt)}`}
+            {lastLoadedAt !== null && (
+              <>
+                {' '}
+                <span className="stale-note__time">Данные от {STALE_TIME_FORMAT.format(lastLoadedAt)}</span>
+              </>
+            )}
           </span>
           <button
             type="button"

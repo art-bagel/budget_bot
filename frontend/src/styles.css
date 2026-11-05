@@ -3831,6 +3831,11 @@ select.dlg-row__ghost option {
   flex-shrink: 0;
 }
 
+/* Wraps as a whole: «Данные от» never parts from the date on 375–390px. */
+.stale-note__time {
+  white-space: nowrap;
+}
+
 /* ── Settings page ───────────────────────────────── */
 
 .page-title {
