@@ -83,12 +83,14 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [page]);
 
+  // Only from a fresh context (cacheTicket is set then): the cached user is
+  // as old as the snapshot and would bring back a theme changed since.
   useEffect(() => {
-    if (user) {
+    if (user && cacheTicket) {
       localStorage.setItem('budget_hints_enabled', String(user.hints_enabled));
       syncFromServer(user.theme as Theme);
     }
-  }, [user]);
+  }, [user, cacheTicket]);
 
   if (loading) {
     return <SplashScreen />;
