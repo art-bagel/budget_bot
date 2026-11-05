@@ -3815,6 +3815,22 @@ select.dlg-row__ghost option {
   padding: 0 4px;
 }
 
+/* Overview refresh failed while data from the cache or an earlier load is on screen. */
+.stale-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--neg-text);
+}
+
+.stale-note .btn {
+  flex-shrink: 0;
+}
+
 /* ── Settings page ───────────────────────────────── */
 
 .page-title {

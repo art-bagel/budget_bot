@@ -14,7 +14,9 @@ import {
   fetchPortfolioPositions,
   fetchPortfolioSummary,
   fetchTinkoffLivePrices,
+  isAuthError,
 } from '../api';
+import { type Ticket, clearStart, startSnapshot, writeStart } from '../startCache';
 import type {
   BankAccount,
   CryptoLivePrice,
@@ -55,21 +57,46 @@ import { creditNet } from '../utils/creditCard';
 
 type DashboardViewTab = 'budget' | 'operations' | 'analytics';
 
-export default function Dashboard({ user, onNavigate, refreshToken }: { user: UserContext; onNavigate?: (page: 'exchange' | 'portfolio' | 'credits') => void; refreshToken: number }) {
-  const [overview, setOverview] = useState<DashboardOverviewType | null>(null);
-  const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>([]);
-  const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>({});
+type DashboardProps = {
+  user: UserContext;
+  onNavigate?: (page: 'exchange' | 'portfolio' | 'credits') => void;
+  refreshToken: number;
+  // Set once the user context is fresh from the server; only then the
+  // overview is written to the start cache.
+  cacheTicket: Ticket | null;
+  contextError: string | null;
+  onRetryContext: () => void;
+};
+
+const STALE_TIME_FORMAT = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+});
+
+export default function Dashboard({ user, onNavigate, refreshToken, cacheTicket, contextError, onRetryContext }: DashboardProps) {
+  // The overview of the previous start, shown until the fresh one arrives.
+  const [cached] = useState(() => {
+    const snapshot = startSnapshot();
+    return snapshot?.user.user_id === user.user_id ? snapshot : null;
+  });
+  const [overview, setOverview] = useState<DashboardOverviewType | null>(cached?.dashboard.overview ?? null);
+  const [investmentAccounts, setInvestmentAccounts] = useState<BankAccount[]>(cached?.dashboard.investmentAccounts ?? []);
+  const [investmentBalancesByAccountId, setInvestmentBalancesByAccountId] = useState<Record<number, DashboardBankBalance[]>>(cached?.dashboard.investmentBalancesByAccountId ?? {});
   // Debts minus overpayments of all credit accounts: negative is debt.
-  const [creditNetInBase, setCreditNetInBase] = useState(0);
-  const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>([]);
-  const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>([]);
-  const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(new Map());
-  const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(new Map());
-  const [cryptoLivePrices, setCryptoLivePrices] = useState<Map<number, CryptoLivePrice>>(new Map());
-  const [cryptoProtocolPositions, setCryptoProtocolPositions] = useState<CryptoProtocolPosition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [creditNetInBase, setCreditNetInBase] = useState(cached?.dashboard.creditNetInBase ?? 0);
+  const [portfolioSummaryItems, setPortfolioSummaryItems] = useState<PortfolioSummaryItem[]>(cached?.dashboard.portfolioSummaryItems ?? []);
+  const [openPositions, setOpenPositions] = useState<PortfolioPosition[]>(cached?.dashboard.openPositions ?? []);
+  const [moexPrices, setMoexPrices] = useState<Map<string, MoexPrice>>(cached?.dashboard.moexPrices ?? new Map());
+  const [tinkoffLivePrices, setTinkoffLivePrices] = useState<Map<number, TinkoffLivePrice>>(cached?.dashboard.tinkoffLivePrices ?? new Map());
+  const [cryptoLivePrices, setCryptoLivePrices] = useState<Map<number, CryptoLivePrice>>(cached?.dashboard.cryptoLivePrices ?? new Map());
+  const [cryptoProtocolPositions, setCryptoProtocolPositions] = useState<CryptoProtocolPosition[]>(cached?.dashboard.cryptoProtocolPositions ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The data on screen came from the server in this session, not from the
+  // cache: price and group requests wait for it, so a start makes one wave.
+  const [fresh, setFresh] = useState(false);
+  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(cached?.savedAt ?? null);
+  const loadSeqRef = useRef(0);
   const { hintsEnabled } = useHints();
   const [includeCredits, setIncludeCredits] = useState<boolean>(() => {
     try { return localStorage.getItem('dashboard_include_credits') !== 'false'; } catch { return true; }
@@ -113,7 +140,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   const [transferInitialSourceId, setTransferInitialSourceId] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DashboardBudgetCategory | null>(null);
   const suppressClickUntilRef = useRef(0);
-  const [groupMembersByGroupId, setGroupMembersByGroupId] = useState<Record<number, GroupMember[]>>({});
+  const [groupMembersByGroupId, setGroupMembersByGroupId] = useState<Record<number, GroupMember[]>>(cached?.dashboard.groupMembersByGroupId ?? {});
   const [createDialogKind, setCreateDialogKind] = useState<'regular' | 'group' | null>(null);
 
   const activeSourceId = draggedCategoryId;
@@ -123,6 +150,10 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   /* ── data loading ───────────────────────────────── */
 
   const loadOverview = async () => {
+    // Only the latest request may touch the screen: a late answer of an
+    // earlier one (the start, before an operation) would put back an old
+    // balance and drop the refresh bar too early.
+    const seq = ++loadSeqRef.current;
     setRefreshing(true);
     setError(null);
 
@@ -146,6 +177,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           loadedCreditAccounts.map((account) => fetchBankAccountSnapshot(account.id)),
         ),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setOverview(result);
       setInvestmentAccounts(loadedInvestmentAccounts);
       setPortfolioSummaryItems(loadedPortfolioSummary);
@@ -158,11 +190,22 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
         }, {}),
       );
       setCreditNetInBase(creditNet(creditSnapshots));
+      setFresh(true);
+      setLastLoadedAt(Date.now());
     } catch (reason: unknown) {
+      if (seq !== loadSeqRef.current) return;
+      // A refused login hides the sums at once, like before the cache; a
+      // network failure or 5xx keeps them under the error note.
+      if (isAuthError(reason)) {
+        clearStart();
+        setOverview(null);
+      }
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -170,7 +213,10 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
     void loadOverview();
   }, [user.bank_account_id, refreshToken]);
 
+  // Prices wait for the fresh overview: the cached one carries its own, and
+  // a failed request keeps the prices on screen instead of zeroing them.
   useEffect(() => {
+    if (!fresh) return;
     if (openPositions.length === 0) {
       setTinkoffLivePrices(new Map());
       return;
@@ -178,10 +224,11 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
 
     void fetchTinkoffLivePrices()
       .then((items) => setTinkoffLivePrices(new Map(items.map((item) => [item.position_id, item]))))
-      .catch(() => setTinkoffLivePrices(new Map()));
-  }, [openPositions]);
+      .catch(() => {});
+  }, [fresh, openPositions]);
 
   useEffect(() => {
+    if (!fresh) return;
     const assetIds = new Set<number>();
     for (const pos of openPositions) {
       if (pos.asset_type_code !== 'crypto') continue;
@@ -207,10 +254,11 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
 
     void fetchCryptoLivePrices(Array.from(assetIds), user.base_currency_code)
       .then((items) => setCryptoLivePrices(new Map(items.map((item) => [item.crypto_asset_id, item]))))
-      .catch(() => setCryptoLivePrices(new Map()));
-  }, [openPositions, cryptoProtocolPositions, investmentBalancesByAccountId, user.base_currency_code]);
+      .catch(() => {});
+  }, [fresh, openPositions, cryptoProtocolPositions, investmentBalancesByAccountId, user.base_currency_code]);
 
   useEffect(() => {
+    if (!fresh) return;
     const sharesTickers: string[] = [];
     const bondsTickers: string[] = [];
     for (const pos of openPositions) {
@@ -225,9 +273,10 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
       fetchMoexPrices(sharesTickers, 'shares'),
       fetchMoexPrices(bondsTickers, 'bonds'),
     ]).then(([s, b]) => setMoexPrices(new Map([...s, ...b]))).catch(() => {});
-  }, [openPositions]);
+  }, [fresh, openPositions]);
 
   useEffect(() => {
+    if (!fresh) return;
     if (!overview) {
       setGroupMembersByGroupId({});
       return;
@@ -258,16 +307,36 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
           }, {}),
         );
       })
-      .catch(() => {
-        if (!cancelled) {
-          setGroupMembersByGroupId({});
-        }
-      });
+      // Keep the members on screen; the next overview retries.
+      .catch(() => {});
 
     return () => {
       cancelled = true;
     };
-  }, [overview]);
+  }, [fresh, overview]);
+
+  // The start cache holds what this screen shows, written only from server
+  // data under a fresh context; savedAt is when that data was loaded.
+  useEffect(() => {
+    if (!fresh || !cacheTicket || !overview || lastLoadedAt === null) return;
+    writeStart(cacheTicket, user, {
+      overview,
+      investmentAccounts,
+      investmentBalancesByAccountId,
+      creditNetInBase,
+      portfolioSummaryItems,
+      openPositions,
+      cryptoProtocolPositions,
+      groupMembersByGroupId,
+      moexPrices,
+      tinkoffLivePrices,
+      cryptoLivePrices,
+    }, lastLoadedAt);
+  }, [
+    fresh, cacheTicket, user, overview, lastLoadedAt, investmentAccounts, investmentBalancesByAccountId,
+    creditNetInBase, portfolioSummaryItems, openPositions, cryptoProtocolPositions, groupMembersByGroupId,
+    moexPrices, tinkoffLivePrices, cryptoLivePrices,
+  ]);
 
   /* ── desktop DnD handlers ──────────────────────── */
 
@@ -332,7 +401,7 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   // Дальше страница рендерится всегда: обновление данных показывается
   // полосой сверху, а не подменой всего экрана сплэшем.
 
-  if (error || !overview) {
+  if (!overview) {
     return (
       <div className="status-screen">
         <h1>Не удалось загрузить обзор</h1>
@@ -533,6 +602,24 @@ export default function Dashboard({ user, onNavigate, refreshToken }: { user: Us
   return (
     <>
       <RefreshBar active={refreshing} />
+      {(error || contextError) && (
+        <div className="stale-note" role="alert">
+          <span>
+            Не удалось обновить.
+            {lastLoadedAt !== null && ` Данные от ${STALE_TIME_FORMAT.format(lastLoadedAt)}`}
+          </span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              onRetryContext();
+              void loadOverview();
+            }}
+          >
+            Повторить
+          </button>
+        </div>
+      )}
       {/* Hero — yellow capital card */}
       <article className="hero">
         <div className="hero__head">

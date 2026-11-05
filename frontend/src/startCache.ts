@@ -17,6 +17,7 @@ import type {
   CryptoProtocolPosition,
   DashboardBankBalance,
   DashboardOverview,
+  GroupMember,
   PortfolioPosition,
   PortfolioSummaryItem,
   TinkoffLivePrice,
@@ -38,6 +39,7 @@ export type DashboardSnapshot = {
   portfolioSummaryItems: PortfolioSummaryItem[];
   openPositions: PortfolioPosition[];
   cryptoProtocolPositions: CryptoProtocolPosition[];
+  groupMembersByGroupId: Record<number, GroupMember[]>;
   moexPrices: Map<string, MoexPrice>;
   tinkoffLivePrices: Map<number, TinkoffLivePrice>;
   cryptoLivePrices: Map<number, CryptoLivePrice>;

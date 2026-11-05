@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Fragment, Suspense, lazy, useEffect, useState } from 'react';
 import { fetchCurrencyRates } from './api';
 import SplashScreen from './components/SplashScreen';
 import Layout from './components/Layout';
@@ -29,7 +29,7 @@ export default function App() {
     dashboard: 0, exchange: 0, portfolio: 0, credits: 0, settings: 0,
   });
   const [familyBadge, setFamilyBadge] = useState(0);
-  const { user, loading, error, needsLogin, needsAccount, refresh } = useAuth();
+  const { user, loading, error, needsLogin, needsAccount, refresh, cacheTicket, contextError, retryContext } = useAuth();
   const { syncFromServer } = useTheme();
   const userId = user?.user_id;
 
@@ -114,11 +114,23 @@ export default function App() {
 
   return (
     <Layout page={page} onNavigate={handleNavigate} onRefresh={handleRefresh} badges={{ settings: familyBadge }}>
+      {/* Keyed by user: a snapshot of someone else must not survive into the
+          next user's pages (docs/2026-11-05-instant-start.md). */}
+      <Fragment key={user.user_id}>
       {PAGE_IDS.map((id) => visited.has(id) ? (
         <div key={id} className="page-wrap" style={id !== page ? { display: 'none' } : undefined}>
           <ErrorBoundary>
             <Suspense fallback={<SplashScreen />}>
-              {id === 'dashboard' && <Dashboard user={user} onNavigate={handleNavigate} refreshToken={refreshKeys[id]} />}
+              {id === 'dashboard' && (
+                <Dashboard
+                  user={user}
+                  onNavigate={handleNavigate}
+                  refreshToken={refreshKeys[id]}
+                  cacheTicket={cacheTicket}
+                  contextError={contextError}
+                  onRetryContext={retryContext}
+                />
+              )}
               {id === 'exchange' && <Exchange user={user} refreshToken={refreshKeys[id]} />}
               {id === 'portfolio' && <Portfolio user={user} refreshToken={refreshKeys[id]} />}
               {id === 'credits' && <Credits user={user} refreshToken={refreshKeys[id]} />}
@@ -134,6 +146,7 @@ export default function App() {
           </ErrorBoundary>
         </div>
       ) : null)}
+      </Fragment>
     </Layout>
   );
 }

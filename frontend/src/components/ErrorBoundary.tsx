@@ -1,5 +1,6 @@
 import { Component, Fragment } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { clearStart } from '../startCache';
 
 interface Props {
   children: ReactNode;
@@ -23,6 +24,9 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info.componentStack);
+    // A start snapshot of an outdated shape may be what broke the render:
+    // wipe it, so "try again" and the next start load from the server.
+    clearStart();
   }
 
   render() {

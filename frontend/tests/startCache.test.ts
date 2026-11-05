@@ -36,6 +36,7 @@ function dashboard(): DashboardSnapshot {
     portfolioSummaryItems: [],
     openPositions: [],
     cryptoProtocolPositions: [],
+    groupMembersByGroupId: {},
     moexPrices: new Map([['SBER', { price: 300 } as never]]),
     tinkoffLivePrices: new Map([[11, { position_id: 11 } as never]]),
     cryptoLivePrices: new Map([[42, { crypto_asset_id: 42, price: 2.5 } as never]]),
