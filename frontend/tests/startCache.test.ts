@@ -8,6 +8,7 @@ import {
   type DashboardSnapshot,
   cacheIdentity,
   clearStart,
+  dropStartTickets,
   newTicket,
   readStart,
   startSnapshot,
@@ -120,6 +121,16 @@ test('a ticket taken before clear writes nothing', () => {
 
   writeStart(newTicket('tg:1')!, user, dashboard(), 3_000);
   assert.ok(storage.getItem(CACHE_KEY));
+});
+
+test('a login change in another tab stales tickets but keeps the record', () => {
+  const storage = freshStorage();
+  writeStart(newTicket('session')!, user, dashboard(), 1_000);
+  const stale = newTicket('session')!;
+  dropStartTickets();
+  assert.ok(storage.getItem(CACHE_KEY), 'the record may already be the next user\'s');
+  writeStart(stale, { ...user, user_id: 8 }, dashboard(), 2_000);
+  assert.equal(JSON.parse(storage.getItem(CACHE_KEY)!).user.user_id, 7);
 });
 
 test('no ticket without an identity', () => {

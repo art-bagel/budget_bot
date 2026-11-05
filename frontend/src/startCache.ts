@@ -119,6 +119,16 @@ export function writeStart(ticket: Ticket, user: UserContext, dashboard: Dashboa
   }
 }
 
+/**
+ * Another tab changed the login (storage event from session.ts): tickets of
+ * this tab become stale, but the record — maybe already the next user's —
+ * stays.
+ */
+export function dropStartTickets(): void {
+  generation += 1;
+  snapshot = null;
+}
+
 export function clearStart(): void {
   generation += 1;
   snapshot = null;

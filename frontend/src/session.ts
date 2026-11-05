@@ -6,7 +6,7 @@
  * заменить хранилище потом можно в одном месте.
  */
 
-import { clearStart } from './startCache';
+import { CACHE_KEY, clearStart, dropStartTickets } from './startCache';
 
 const TOKEN_KEY = 'budget_session_token';
 
@@ -46,4 +46,15 @@ export function setSessionToken(token: string | null): void {
 
 export function hasSession(): boolean {
   return Boolean(getSessionToken());
+}
+
+// A login change in another tab (sign-out, sign-in as someone else) must stop
+// this tab's late answers from writing the previous login's overview back.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === TOKEN_KEY || event.key === null || (event.key === CACHE_KEY && event.newValue === null)) {
+      cachedToken = undefined;
+      dropStartTickets();
+    }
+  });
 }
