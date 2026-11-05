@@ -150,6 +150,27 @@ test('a refused context drops the snapshot, an outage keeps it (6)', async ({ pa
   allowConsoleErrors(consoleErrors, /status of (503|401)/);
 });
 
+// 401 by session is wiped by apiFetch itself; 403 and a missing account go
+// through the new wipes in useAuth (they also cover login by initData).
+test('a forbidden context or a missing account drops the snapshot (6)', async ({ page, consoleErrors }) => {
+  await cachedOverview(page);
+  await page.route(CONTEXT, (route) => route.fulfill({ status: 403, json: { detail: 'Forbidden' } }));
+  await page.reload();
+  await expect(page.getByText('Ошибка', { exact: true })).toBeVisible();
+  await expect(groceries(page)).toHaveCount(0);
+  expect(await cacheEntry(page)).toBeNull();
+
+  await page.unroute(CONTEXT);
+  await page.reload();
+  await expect.poll(() => cacheEntry(page)).not.toBeNull();
+  await page.route(CONTEXT, (route) => route.fulfill({ status: 404, json: { detail: 'Аккаунт не найден' } }));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Аккаунта ещё нет' })).toBeVisible();
+  await expect(groceries(page)).toHaveCount(0);
+  expect(await cacheEntry(page)).toBeNull();
+  allowConsoleErrors(consoleErrors, /status of (403|404)/);
+});
+
 test('another user behind the login never sees the snapshot (7)', async ({ page }) => {
   await cachedOverview(page);
   await page.route(CONTEXT, async (route) => {
@@ -256,10 +277,11 @@ test('a failed refresh keeps the data under a note, a refused one hides it (12)'
   await page.getByRole('button', { name: 'Повторить' }).click();
   await expect(note).toHaveCount(0);
 
-  await page.route(OVERVIEW, (route) => route.fulfill({ status: 401, json: { detail: 'Unauthorized' } }));
+  // 403 keeps the session token, so only the Dashboard's own wipe removes the record.
+  await page.route(OVERVIEW, (route) => route.fulfill({ status: 403, json: { detail: 'Forbidden' } }));
   await page.getByRole('button', { name: 'Обзор', exact: true }).click();
   await expect(page.getByText('Не удалось загрузить обзор')).toBeVisible();
   await expect(groceries(page)).toHaveCount(0);
   expect(await cacheEntry(page)).toBeNull();
-  allowConsoleErrors(consoleErrors, /status of (502|401)/);
+  allowConsoleErrors(consoleErrors, /status of (502|403)/);
 });
