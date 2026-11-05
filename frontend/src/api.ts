@@ -290,6 +290,21 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return handleApiResponse<T>(response);
 }
 
+/** HTTP error with its status, so callers can tell a lost login from an outage. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** The server refused the login itself, not just this request. */
+export function isAuthError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
 async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
@@ -304,7 +319,7 @@ async function handleApiResponse<T>(response: Response): Promise<T> {
       // Plain text error response is also valid.
     }
 
-    throw new Error(normalizeApiErrorMessage(errorText, response.status));
+    throw new ApiError(normalizeApiErrorMessage(errorText, response.status), response.status);
   }
   return response.json();
 }
