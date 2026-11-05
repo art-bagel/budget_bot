@@ -1,12 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
-import { EMAIL, PASSWORD, expect, login, test } from './fixtures';
-
-async function apiSession(page: import('@playwright/test').Page) {
-  const api = process.env.PLAYWRIGHT_API_URL ?? '';
-  const session = await page.request.post(`${api}/api/v1/auth/login`, { data: { email: EMAIL, password: PASSWORD } });
-  return { api, headers: { Authorization: `Bearer ${(await session.json()).token}` } };
-}
+import { apiSession, expect, login, test } from './fixtures';
 
 // Bank model: a gift sold for rubles by mistake is cancelled from its unfolded
 // row in the operations list; the row stays, marked cancelled, the gift is back.

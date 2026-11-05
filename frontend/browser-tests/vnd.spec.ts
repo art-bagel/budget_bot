@@ -1,15 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { EMAIL, PASSWORD, expect, openOverview, test } from './fixtures';
+import { apiSession, expect, openOverview, test } from './fixtures';
 
 // The dong has no minor units and Vietnamese receipts group thousands with a
 // dot: "2.435.060" is 2 435 060 dong, never 2,43 of anything.
-
-async function apiSession(page: Page) {
-  const api = process.env.PLAYWRIGHT_API_URL ?? '';
-  const session = await page.request.post(`${api}/api/v1/auth/login`, { data: { email: EMAIL, password: PASSWORD } });
-  return { api, headers: { Authorization: `Bearer ${(await session.json()).token}` } };
-}
 
 async function openDongExchange(page: Page) {
   await page.getByRole('button', { name: 'Обмен', exact: true }).click();

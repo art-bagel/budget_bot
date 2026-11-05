@@ -1,17 +1,28 @@
 import { test as base, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
-// Synthetic user from scripts/seed_ui_test.py.
+// Synthetic users from scripts/seed_ui_test.py.
 export const EMAIL = 'ui-test@example.com';
 export const PASSWORD = 'ui-test-password-0000';
+export type SeedUser = { email: string; password: string };
+const MAIN_USER: SeedUser = { email: EMAIL, password: PASSWORD };
+// Every portfolio asset type, apart from the main user's overview numbers.
+export const PORTFOLIO_USER: SeedUser = { email: 'ui-portfolio@example.com', password: 'ui-portfolio-password-0000' };
 
-export async function login(page: Page) {
+export async function login(page: Page, user: SeedUser = MAIN_USER) {
   await page.goto('/');
-  await page.getByLabel('Email', { exact: true }).fill(EMAIL);
-  await page.getByLabel('Пароль', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Email', { exact: true }).fill(user.email);
+  await page.getByLabel('Пароль', { exact: true }).fill(user.password);
   await page.getByRole('button', { name: 'Войти', exact: true }).click();
   // The first test of a run hits a freshly started API (cold DB pools).
   await expect(page.getByRole('button', { name: 'Портфель', exact: true })).toBeVisible({ timeout: 15_000 });
+}
+
+// Direct API access as a seed user, for setup and for checking what the UI wrote.
+export async function apiSession(page: Page, user: SeedUser = MAIN_USER) {
+  const api = process.env.PLAYWRIGHT_API_URL ?? '';
+  const session = await page.request.post(`${api}/api/v1/auth/login`, { data: user });
+  return { api, headers: { Authorization: `Bearer ${(await session.json()).token}` } };
 }
 
 // Overview loaded and entrance animations finished (they fade colors in).
