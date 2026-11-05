@@ -45,7 +45,14 @@ export const test = base.extend<{ consoleErrors: string[] }>({
       if (api) {
         await page.route('**/api/**', async (route) => {
           const url = new URL(route.request().url());
-          await route.fulfill({ response: await route.fetch({ url: api + url.pathname + url.search }) });
+          try {
+            await route.fulfill({ response: await route.fetch({ url: api + url.pathname + url.search }) });
+          } catch (error) {
+            // A background request (prices, groups) still in flight when the
+            // test ends: its page is gone, nobody waits for the answer.
+            if (page.isClosed() || /disposed|closed/i.test(String(error))) return;
+            throw error;
+          }
         });
       }
       // The test API is offline (scripts/browser-tests.sh): CBR rates come
