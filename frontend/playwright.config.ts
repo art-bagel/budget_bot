@@ -18,8 +18,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide' } },
+  // Tests tagged @flow write into the shared seed. They run once, in their own
+  // project after both themes, so no screenshot sees what they wrote.
   projects: [
-    { name: 'light', use: { colorScheme: 'light' } },
-    { name: 'dark', use: { colorScheme: 'dark' } },
+    { name: 'light', grepInvert: /@flow/, use: { colorScheme: 'light' } },
+    { name: 'dark', grepInvert: /@flow/, use: { colorScheme: 'dark' } },
+    { name: 'flows', grep: /@flow/, dependencies: ['light', 'dark'], use: { colorScheme: 'dark' } },
   ],
 });
